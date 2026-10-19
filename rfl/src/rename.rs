@@ -179,6 +179,7 @@ impl Workspace {
     }
 
     fn from_sources(sources: BTreeMap<PathBuf, String>) -> Self {
+        let _overlay = crate::macros::source::overlay(sources.clone());
         let mut files = BTreeMap::new();
         let mut pending: Vec<_> = sources.into_iter().map(|(p, s)| (p, s, true)).collect();
         let io = canonical(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std/io.rfl"));
@@ -195,15 +196,24 @@ impl Workspace {
                 ));
             let lexed = lexer::tokenize(&source);
             let lex_ok = lexed.is_ok();
-            let tokens = lexed.unwrap_or_else(|_| {
+            let mut tokens = lexed.unwrap_or_else(|_| {
                 vec![Token {
                     kind: TokenKind::Eof,
                     span: Span::empty(),
                 }]
             });
-            let (ast, errors) = parser::parse_for_ide(&source, &tokens);
-            let complete = lex_ok && errors.is_empty();
-            for import in &ast.imports {
+            let (mut ast, errors) = parser::parse_for_ide(&source, &tokens);
+            let mut complete = lex_ok && errors.is_empty();
+            if complete && (!ast.macro_imports.is_empty() || !ast.item_macros.is_empty()) {
+                let mut expanded = source.clone();
+                complete =
+                    crate::macros::prepare(&path, &mut expanded, &mut ast, crate::Target::Ripple)
+                        .and_then(|_| {
+                            crate::macros::editor::refactoring(&mut ast, &source, &mut tokens)
+                        })
+                        .is_ok();
+            }
+            for import in ast.imports.iter().chain(&ast.macro_imports) {
                 if let Some(target) = import_path(&path, &import.path) {
                     if !files.contains_key(&target) && !pending.iter().any(|(p, _, _)| p == &target)
                     {
@@ -244,7 +254,116 @@ impl Workspace {
             duplicates: 0,
         };
         this.index();
+        this.index_macros();
         this
+    }
+
+    fn macro_origin(
+        &self,
+        path: &Path,
+        name: &str,
+        seen: &mut HashSet<PathBuf>,
+    ) -> Option<Binding> {
+        if !seen.insert(path.to_owned()) {
+            return None;
+        }
+        let ast = &self.files.get(path)?.ast;
+        if ast.proc_macros.iter().any(|n| n == name) {
+            return self
+                .globals
+                .get(path)?
+                .get(name)
+                .cloned()
+                .filter(|b| self.exports.contains(&b.key));
+        }
+        if ast.macro_exports.iter().any(|n| n == name) {
+            for import in &ast.macro_imports {
+                for item in &import.names {
+                    if item.alias == name {
+                        return self.macro_origin(
+                            &import_path(path, &import.path)?,
+                            &item.name,
+                            seen,
+                        );
+                    }
+                }
+            }
+        }
+        None
+    }
+    fn index_macros(&mut self) {
+        let modules: Vec<_> = self
+            .files
+            .iter()
+            .map(|(p, f)| (p.clone(), f.ast.clone()))
+            .collect();
+        for (path, ast) in modules {
+            let mut aliases = HashMap::new();
+            for import in &ast.macro_imports {
+                let Some(target) = import_path(&path, &import.path) else {
+                    continue;
+                };
+                for item in &import.names {
+                    let origin = self.macro_origin(&target, &item.name, &mut HashSet::new());
+                    let aliased = item.span != item.alias_span;
+                    let external = !self.files.get(&target).is_some_and(|f| f.editable);
+                    let binding = if aliased || external {
+                        self.occurrence(
+                            &path,
+                            item.span,
+                            origin.as_ref().map(|b| b.key.clone()),
+                            Spelling::Name,
+                        );
+                        let key = self.declare(&path, &item.alias, item.alias_span, true);
+                        if !aliased {
+                            if let Some(last) = self.occurrences.last_mut() {
+                                last.spelling = Spelling::ImportAlias(item.name.clone());
+                            }
+                        }
+                        Some(Binding { key, ty: None })
+                    } else {
+                        if let Some(binding) = &origin {
+                            self.occurrence(
+                                &path,
+                                item.span,
+                                Some(binding.key.clone()),
+                                Spelling::Name,
+                            );
+                        }
+                        origin
+                    };
+                    if let Some(binding) = binding {
+                        aliases.insert(item.alias.clone(), binding);
+                    }
+                }
+            }
+            if let Some(data) = &ast.macro_expansion {
+                for (name, span) in &data.calls {
+                    self.occurrence(
+                        &path,
+                        *span,
+                        aliases.get(name).map(|b| b.key.clone()),
+                        Spelling::Name,
+                    );
+                }
+            }
+            let contextual: Vec<_> = self.files[&path]
+                .tokens
+                .windows(2)
+                .filter_map(|ts| {
+                    if ts[0].kind == TokenKind::Import
+                        && matches!(&ts[1].kind,TokenKind::Ident(n) if n=="macro")
+                    {
+                        Some(ts[1].span)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for span in contextual {
+                self.occurrence(&path, span, None, Spelling::Name);
+            }
+        }
     }
 
     pub(crate) fn source(&self, path: &Path) -> Option<&str> {
@@ -259,7 +378,10 @@ impl Workspace {
     }
 
     fn occurrence(&mut self, path: &Path, span: Span, key: Option<Key>, spelling: Spelling) {
-        if self.files[path].editable && span.end > span.start {
+        if self.files[path].editable
+            && span.end > span.start
+            && span.end <= self.files[path].source.len()
+        {
             self.occurrences.push(Occurrence {
                 path: path.to_path_buf(),
                 span,
@@ -275,7 +397,11 @@ impl Workspace {
             key.clone(),
             Declaration {
                 name: name.to_string(),
-                allowed: allowed && self.files[path].editable && name != "self" && name != "_",
+                allowed: allowed
+                    && self.files[path].editable
+                    && name != "self"
+                    && name != "_"
+                    && self.files[path].source.get(span.start..span.end) == Some(name),
             },
         );
         self.occurrence(path, span, Some(key.clone()), Spelling::Name);
@@ -1144,7 +1270,7 @@ impl Workspace {
                 self.ty(path, ty, env);
                 type_of(ty, env)
             }
-            ExprKind::Lambda { params, body } => {
+            ExprKind::Lambda { params, body, .. } => {
                 let mut local = env.clone();
                 self.params(path, params, &mut local);
                 self.expr(path, body, &local);

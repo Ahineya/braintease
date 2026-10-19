@@ -379,3 +379,39 @@ fn deep_recursive_await_uses_the_frame_driver_instead_of_the_hardware_stack() {
         assert_eq!(run.stdout, "");
     }
 }
+
+#[test]
+fn cancelling_deep_compiler_owned_children_preserves_inner_first_cleanup() {
+    let template = r#"
+        import {Future,Pending,yield_now} from "std/future";
+        import {Result} from "std/result";
+        import {Context,task_set} from "std/task";
+        async fn descend(n:u16,report:fn(u16)->unit){
+            let token=owned(n,fn(n:&mut u16)=>report(*n));
+            if(n==0){yield_now().await;}else{descend(n-1,report).await;}
+        }
+        fn main()->i16{
+            let mut expected:u16=0;
+            let report=fn(n:u16)=>{if(n!=expected){println("wrong order");}expected+=1;};
+            let q=task_set(1,0).unwrap();let w=q.allocate().unwrap();let mut cx=Context{waker:w,now:0};
+            let mut f=descend($DEPTH,report);
+            match f.poll(&mut cx){Pending=>{},_=>{return 1;}}
+            f.cancel();f.cancel();drop(move(f));report($COUNT);println("cancelled");0
+        }
+    "#;
+    for (depth, native) in [(6000, true), (256, false)] {
+        let p = Program::new(
+            &template
+                .replace("$DEPTH", &depth.to_string())
+                .replace("$COUNT", &(depth + 1).to_string()),
+        );
+        let result = if native {
+            rfl::run_native_file(p.path(), false)
+        } else {
+            rfl::run_file(p.path())
+        }
+        .unwrap();
+        assert_eq!(result.status, 0, "native={native}: {}", result.stdout);
+        assert_eq!(result.stdout, "cancelled\n");
+    }
+}

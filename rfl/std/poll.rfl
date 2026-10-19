@@ -1,0 +1,503 @@
+import { Socket, Address, address, socket_from_handle, SocketError, socket_error, SocketCancelled, SocketTimedOut, SocketOsError, ResolveError, InvalidSocketArgument, SocketTransferLimit } from "std/socket";
+import { Reactor } from "std/executor";
+import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
+import { Context, Waker } from "std/task";
+import { Shared, share, with_shared } from "std/shared";
+extern "C" {
+    fn rfl_poll_create() -> *mut u16;
+    fn rfl_poll_release(p: *mut u16);
+    fn rfl_poll_driver(p: *mut u16) -> *mut u16;
+    fn rfl_poll_driver_drop(p: *mut u16);
+    fn rfl_poll_watch(p: *mut u16, s: *mut u16, events: u16) -> *mut u16;
+    fn rfl_poll_slot(p: *mut u16) -> u16;
+    fn rfl_poll_status(p: *mut u16, now: u32) -> i16;
+    fn rfl_poll_error(p: *mut u16) -> i16;
+    fn rfl_poll_timeout(p: *mut u16, ms: u32) -> i16;
+    fn rfl_poll_cancel(p: *mut u16);
+    fn rfl_poll_drop(p: *mut u16);
+    fn rfl_poll_clock(out: *mut u32) -> i16;
+    fn rfl_poll_turn(p: *mut u16, hint: u32, time: *mut u32, events: *mut u16) -> i16;
+    fn rfl_socket_from_fd(fd: i16) -> *mut u16;
+    fn rfl_socket_release(p: *mut u16);
+    fn rfl_poll_resolve(p: *mut u16, name: *const u8) -> *mut u16;
+    fn rfl_poll_resolve_result(p: *mut u16, out: *mut u8) -> i16;
+    fn rfl_poll_connect(p: *mut u16, ip: *const u8, port: u16) -> *mut u16;
+    fn rfl_poll_connect_result(p: *mut u16) -> *mut u16;
+    fn rfl_poll_transfer(p: *mut u16, s: *mut u16, kind: u16, data: *const u8, count: usize) -> *mut u16;
+    fn rfl_poll_size(p: *mut u16) -> usize;
+    fn rfl_poll_copy(p: *mut u16, out: *mut u8, count: usize) -> i16;
+}
+
+/// Wait for data, EOF, or another readable endpoint condition.
+export const READABLE: u16 = 1;
+/// Wait until an endpoint can make write/connect progress.
+export const WRITABLE: u16 = 2;
+/// Shared registration capability. Copies refer to the same C engine and waker table.
+/// Futures can retain this handle and register operations while the executor runs.
+export struct Poller {
+    /// Shared registry and wake table retained by this registration capability.
+    state: Shared<PollState>
+}
+
+/// Private language-side ownership; C receives no managed RFL layouts or callbacks.
+export struct PollState {
+    /// Owns one reference to the C polling engine.
+    handle: Owned<*mut u16>,
+    /// Stable registration allocations indexed by their C engine slot.
+    wakes: Vec<Option<*mut WaitState>>
+}
+
+/// Stable language-side state for one C polling registration.
+export struct WaitState {
+    /// C registration, released by its Readiness owner.
+    handle: *mut u16,
+    /// Most recent task waker, consumed when readiness is delivered.
+    token: Option<Waker>
+}
+
+/// Owned one-shot registration. C handles progress, deadlines and cancellation.
+export struct Readiness {
+    /// Owned stable allocation for registration state and its waker.
+    state: Owned<WaitState>,
+    /// Keeps the engine and slot table alive until this wait is dropped.
+    registry: Shared<PollState>,
+    /// Records terminal completion/cancellation and prevents polling twice.
+    finished: bool
+}
+
+/// A pending asynchronous IPv4 name lookup.
+export struct ResolveFuture {
+    /// Underlying owned operation and cancellation state.
+    event: Readiness
+}
+
+/// A pending connection that yields an owned socket.
+export struct ConnectFuture {
+    /// Underlying owned operation and cancellation state.
+    event: Readiness
+}
+
+/// A pending bounded single read.
+export struct ReadFuture {
+    /// Underlying owned operation and cancellation state.
+    event: Readiness
+}
+
+/// A pending complete write with an absolute deadline.
+export struct WriteFuture {
+    /// Underlying owned operation and cancellation state.
+    event: Readiness
+}
+
+/// Sole driver of a shared C engine. Registration handles remain independently usable.
+export struct GuestReactor {
+    /// Registration capability sharing the engine driven by this reactor.
+    poller: Poller,
+    /// Exclusive C driver lease; dropping it allows another reactor to resume.
+    driver: Owned<*mut u16>,
+    /// Latest sampled monotonic time in milliseconds.
+    time: u32,
+    /// Last driver failure, if any.
+    failure: Option<SocketError>,
+    /// Prevents further driver turns after a stop or failure.
+    stopped: bool
+}
+
+fn pointer(owner: &Owned<*mut u16>) -> *mut u16 {
+    let value = owner.borrow();
+    *value
+}
+
+/// Create a shared registry with thirty-two readiness/operation slots.
+export fn poller() -> Result<Poller, SocketError> {
+    let mut wakes: Vec<Option<*mut WaitState>> = [];
+    for (i in 0..32) {
+        wakes.push(None);
+    }
+    let p = rfl_poll_create();
+    if (p.is_null()) {
+        return Err(socket_error());
+    }
+    let handle = owned(p, fn(p: &mut *mut u16) => {
+        rfl_poll_release(*p);
+    });
+    Ok(Poller { state: share(PollState { handle: move(handle), wakes: move(wakes) }) })
+}
+
+/// Sample the host-provided wrapping u32 monotonic millisecond clock.
+export fn monotonic_millis() -> Result<u32, SocketError> {
+    let mut now: u32 = 0;
+    if (unsafe {
+        rfl_poll_clock(&mut now)
+    } < 0) {
+        Err(socket_error())
+    } else {
+        Ok(now)
+    }
+}
+
+fn register(table: &mut PollState, p: *mut u16, keep: Shared<PollState>, timeout: Option<u32>) -> Result<Readiness, SocketError> {
+    if (p.is_null()) {
+        return Err(socket_error());
+    }
+    let slot = rfl_poll_slot(p) as usize;
+    let mut state = owned(WaitState { handle: p, token: None }, fn(s: &mut WaitState) => {
+        rfl_poll_drop(s.handle);
+    });
+    match timeout {
+        Some(ms) => {
+            if (rfl_poll_timeout(p, ms) < 0) {
+                return Err(socket_error());
+            }
+        },
+        None => {}
+    }
+    // C unregisters a slot before this stable allocation is freed. A wake batch
+    // is collected under the shared table guard; callbacks run after releasing it.
+    let ptr = unsafe {
+        let value = state.borrow_mut();
+        let ptr: *mut WaitState = &mut *value;
+        ptr
+    };
+    table.wakes[slot] = Some(ptr);
+    Ok(Readiness { state: move(state), registry: keep, finished: false })
+}
+
+impl Poller {
+    /// Copy the shared registration capability without acquiring a driver.
+    export fn clone(&self) -> Poller {
+        Poller { state: self.state }
+    }
+    /// Registers without borrowing the reactor. The endpoint is retained until completion/cancellation.
+    export fn socket(&self, socket: &Socket, events: u16) -> Result<Readiness, SocketError> {
+        let s = socket.handle();
+        let keep = self.state;
+        with_shared(keep, once fn(table: &mut PollState) => {
+            let p = rfl_poll_watch(pointer(&table.handle), s, events);
+            register(table, p, keep, None)
+        })
+    }
+    /// Owns a duplicate, so closing/reusing the caller's fd does not redirect this wait.
+    export fn descriptor(&self, fd: i16, events: u16) -> Result<Readiness, SocketError> {
+        let s = rfl_socket_from_fd(fd);
+        if (s.is_null()) {
+            return Err(socket_error());
+        }
+        let keep = self.state;
+        with_shared(keep, once fn(table: &mut PollState) => {
+            let p = rfl_poll_watch(pointer(&table.handle), s, events);
+            rfl_socket_release(s);
+            register(table, p, keep, None)
+        })
+    }
+    /// C-backed asynchronous IPv4 DNS, including hosts, retry/failover, CNAME and TCP fallback.
+    /// Network work is lazy, starts on first poll, and has one absolute deadline.
+    export fn resolve_async(&self, name: String, timeout: u32) -> Result<ResolveFuture, SocketError> {
+        if (name.is_empty() || name.len() > 253 || timeout > 2147483647) {
+            return Err(InvalidSocketArgument);
+        }
+        let mut bytes: Vec<u8> = [];
+        for (i in 0..name.len()) {
+            let ch = name[i] as u32;
+            if (ch == 0 || ch > 127) {
+                return Err(InvalidSocketArgument);
+            }
+            bytes.push(ch as u8);
+        }
+        bytes.push(0);
+        let keep = self.state;
+        let event = with_shared(keep, once fn(table: &mut PollState) => {
+            let p = unsafe {
+                rfl_poll_resolve(pointer(&table.handle), &bytes[0])
+            };
+            register(table, p, keep, Some(timeout))
+        })?;
+        Ok(ResolveFuture { event: move(event) })
+    }
+    /// Connects in C and returns an owned endpoint only after SO_ERROR/peer validation.
+    export fn connect(&self, ip: Address, port: u16, timeout: u32) -> Result<ConnectFuture, SocketError> {
+        if (port == 0 || timeout > 2147483647) {
+            return Err(InvalidSocketArgument);
+        }
+        let bytes: [u8; 4] = [ip.a, ip.b, ip.c, ip.d];
+        let keep = self.state;
+        let event = with_shared(keep, once fn(table: &mut PollState) => {
+            let p = unsafe {
+                rfl_poll_connect(pointer(&table.handle), &bytes[0], port)
+            };
+            register(table, p, keep, Some(timeout))
+        })?;
+        Ok(ConnectFuture { event: move(event) })
+    }
+    /// Receives once, up to 32767 octets. Empty success means EOF (or a zero limit).
+    export fn read(&self, socket: &Socket, limit: usize, timeout: u32) -> Result<ReadFuture, SocketError> {
+        if (limit > 32767) {
+            return Err(SocketTransferLimit);
+        }
+        if (timeout > 2147483647) {
+            return Err(InvalidSocketArgument);
+        }
+        let s = socket.handle();
+        let keep = self.state;
+        let event = with_shared(keep, once fn(table: &mut PollState) => {
+            let dummy: [u8; 1] = [0];
+            let p = unsafe {
+                rfl_poll_transfer(pointer(&table.handle), s, 3, &dummy[0], limit)
+            };
+            register(table, p, keep, Some(timeout))
+        })?;
+        Ok(ReadFuture { event: move(event) })
+    }
+    /// Copies at most 65536 octets into C-owned storage once. C drives partial writes.
+    /// Cancellation is not a rollback: bytes already sent remain sent.
+    export fn write_all(&self, socket: &Socket, bytes: Vec<u8>, timeout: u32) -> Result<WriteFuture, SocketError> {
+        if (bytes.len() > 65536) {
+            return Err(SocketTransferLimit);
+        }
+        if (timeout > 2147483647) {
+            return Err(InvalidSocketArgument);
+        }
+        let s = socket.handle();
+        let keep = self.state;
+        let count = bytes.len();
+        let mut bytes = bytes;
+        if (bytes.is_empty()) {
+            bytes.push(0);
+        }
+        let event = with_shared(keep, once fn(table: &mut PollState) => {
+            let p = unsafe {
+                rfl_poll_transfer(pointer(&table.handle), s, 4, &bytes[0], count)
+            };
+            register(table, p, keep, Some(timeout))
+        })?;
+        Ok(WriteFuture { event: move(event) })
+    }
+    /// Acquires the sole driver; a second simultaneous driver returns EBUSY.
+    /// Dropping it permits another driver to resume this registry's live operations.
+    export fn reactor(&self) -> Result<GuestReactor, SocketError> {
+        let h = with_shared(self.state, once fn(table: &mut PollState) => rfl_poll_driver(pointer(&table.handle)));
+        if (h.is_null()) {
+            return Err(socket_error());
+        }
+        let driver = owned(h, fn(p: &mut *mut u16) => {
+            rfl_poll_driver_drop(*p);
+        });
+        Ok(GuestReactor { poller: self.clone(), driver: move(driver), time: monotonic_millis()?, failure: None, stopped: false })
+    }
+}
+
+impl Readiness {
+    fn handle(&self) -> *mut u16 {
+        let state = self.state.borrow();
+        state.handle
+    }
+    /// Deadline starts on first poll. Configure before polling; expiry unregisters the operation.
+    export fn with_timeout(self, milliseconds: u32) -> Result<Readiness, SocketError> {
+        if (milliseconds > 2147483647) {
+            return Err(InvalidSocketArgument);
+        }
+        if (rfl_poll_timeout(self.handle(), milliseconds) < 0) {
+            return Err(socket_error());
+        }
+        Ok(move(self))
+    }
+}
+
+impl Future for Readiness {
+    type Output = Result<unit, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<unit, SocketError>> {
+        if (self.finished) {
+            invalid_poll();
+            return Pending;
+        }
+        let p = self.handle();
+        let status = rfl_poll_status(p, cx.now);
+        if (status == 0) {
+            let state = self.state.borrow_mut();
+            state.token = Some(cx.waker);
+            Pending
+        } else {
+            let error = rfl_poll_error(p);
+            self.finished = true;
+            rfl_poll_cancel(p);
+            {
+                let state = self.state.borrow_mut();
+                state.token = None;
+            }
+            Ready(if (status == 1) {
+                Ok({})
+            } else if (status == -2) {
+                Err(SocketTimedOut)
+            } else if (status == -3) {
+                Err(SocketOsError(error))
+            } else if (status == -4) {
+                Err(ResolveError(error))
+            } else {
+                Err(SocketCancelled)
+            })
+        }
+    }
+    fn cancel(&mut self) {
+        if (!self.finished) {
+            self.finished = true;
+            rfl_poll_cancel(self.handle());
+            let state = self.state.borrow_mut();
+            state.token = None;
+        }
+    }
+}
+
+impl Future for ResolveFuture {
+    type Output = Result<Address, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<Address, SocketError>> {
+        match self.event.poll(cx) {
+            Pending => Pending,
+            Ready(Err(e)) => Ready(Err(e)),
+            Ready(Ok(_)) => {
+                let mut ip: [u8; 4] = [0, 0, 0, 0];
+                if (unsafe {
+                    rfl_poll_resolve_result(self.event.handle(), &mut ip[0])
+                } < 0) {
+                    Ready(Err(socket_error()))
+                } else {
+                    Ready(Ok(address(ip[0], ip[1], ip[2], ip[3])))
+                }
+            }
+        }
+    }
+    fn cancel(&mut self) {
+        self.event.cancel();
+    }
+}
+
+impl Future for ConnectFuture {
+    type Output = Result<Socket, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<Socket, SocketError>> {
+        match self.event.poll(cx) {
+            Pending => Pending,
+            Ready(Err(e)) => Ready(Err(e)),
+            Ready(Ok(_)) => Ready(socket_from_handle(rfl_poll_connect_result(self.event.handle())))
+        }
+    }
+    fn cancel(&mut self) {
+        self.event.cancel();
+    }
+}
+
+impl Future for ReadFuture {
+    type Output = Result<Vec<u8>, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<Vec<u8>, SocketError>> {
+        match self.event.poll(cx) {
+            Pending => Pending,
+            Ready(Err(e)) => Ready(Err(e)),
+            Ready(Ok(_)) => {
+                let size = rfl_poll_size(self.event.handle());
+                let mut out: Vec<u8> = [];
+                for (i in 0..size) {
+                    out.push(0);
+                }
+                if (size > 0 && unsafe {
+                    rfl_poll_copy(self.event.handle(), &mut out[0], size)
+                } < 0) {
+                    Ready(Err(socket_error()))
+                } else {
+                    Ready(Ok(move(out)))
+                }
+            }
+        }
+    }
+    fn cancel(&mut self) {
+        self.event.cancel();
+    }
+}
+
+impl Future for WriteFuture {
+    type Output = Result<usize, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, SocketError>> {
+        match self.event.poll(cx) {
+            Pending => Pending,
+            Ready(Err(e)) => Ready(Err(e)),
+            Ready(Ok(_)) => Ready(Ok(rfl_poll_size(self.event.handle())))
+        }
+    }
+    fn cancel(&mut self) {
+        self.event.cancel();
+    }
+}
+
+impl GuestReactor {
+    /// Return the last polling driver failure.
+    export fn error(&self) -> Option<SocketError> {
+        self.failure
+    }
+    /// Stop further reactor turns; registered operation owners retain cleanup.
+    export fn stop(&mut self) {
+        self.stopped = true;
+    }
+    /// Register socket readiness through the shared registration capability.
+    export fn socket(&self, socket: &Socket, events: u16) -> Result<Readiness, SocketError> {
+        self.poller.socket(socket, events)
+    }
+    /// Register readiness on an owned duplicate of a descriptor.
+    export fn descriptor(&self, fd: i16, events: u16) -> Result<Readiness, SocketError> {
+        self.poller.descriptor(fd, events)
+    }
+}
+
+impl Reactor for GuestReactor {
+    fn now(&self) -> u32 {
+        self.time
+    }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        if (self.stopped) {
+            return false;
+        }
+        let hint: u32 = match wait {
+            Some(ms) => ms,
+            None => 4294967295
+        };
+        let previous = self.time;
+        let result: Result<(u32, Vec<Waker>), SocketError> = with_shared(self.poller.state, once fn(table: &mut PollState) => {
+            let mut events: [u16; 33] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+            let mut sample = previous;
+            if (unsafe {
+                rfl_poll_turn(pointer(&table.handle), hint, &mut sample, &mut events[0])
+            } < 0) {
+                return Err(socket_error());
+            }
+            let mut wakes: Vec<Waker> = [];
+            for (i in 0..events[0] as usize) {
+                match table.wakes[events[i + 1] as usize] {
+                    Some(ptr) => {
+                        unsafe {
+                            let state = __borrow_raw(ptr);
+                            match state.token {
+                                Some(w) => {
+                                    wakes.push(w);
+                                },
+                                None => {}
+                            };
+                            state.token = None;
+                        }
+                    },
+                    None => {}
+                }
+            }
+            Ok((sample, move(wakes)))
+        });
+        match result {
+            Ok((time, wakes)) => {
+                self.time = time;
+                for (i in 0..wakes.len()) {
+                    wakes[i].wake();
+                }
+                true
+            },
+            Err(e) => {
+                self.failure = Some(e);
+                self.stopped = true;
+                false
+            }
+        }
+    }
+}

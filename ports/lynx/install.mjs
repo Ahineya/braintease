@@ -5,6 +5,7 @@ import {fatFile} from '../fuzix/tools/fat.mjs';
 import {installRoot} from '../fuzix/tools/install.mjs';
 import {atomicWrite} from '../fuzix/tools/disk.mjs';
 import {lynxFiles} from './files.mjs';
+import {tlsFiles} from '../tls/files.mjs';
 
 const [target, filename, executable] = process.argv.slice(2);
 if (!['native', 'ripple'].includes(target) || !filename || !executable)
@@ -13,7 +14,9 @@ const original = openImage(filename);
 const root = target === 'native' ? {data: original, replace: data => data} : fatFile(original, 'ROOTFS.IMG');
 const files = [
   {name:'/bin/lynx', mode:0o100755, data:fs.readFileSync(executable)},
-  ...lynxFiles(),
+  ...lynxFiles(), ...tlsFiles(),
+  {name:'/dev/crypto',mode:0o20666,device:0x105,data:Buffer.alloc(0)},
+  {name:'/dev/urandom',mode:0o20444,device:0x104,data:Buffer.alloc(0)},
 ];
 const updated = root.replace(installRoot(root.data, files));
 if (original.equals(updated)) {

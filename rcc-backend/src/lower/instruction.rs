@@ -99,6 +99,20 @@ pub fn lower_instruction(
                 crate::instr::pointers::to_linear(mgr, naming, operand, *result, bank_size)
             } else if matches!(op, rcc_ir::ir::IrUnaryOp::IntToPtr) {
                 crate::instr::pointers::from_integer(mgr, naming, operand, *result)
+            } else if (result_type.is_wide() || result_type.is_i64())
+                && matches!(op, rcc_ir::ir::IrUnaryOp::Neg | rcc_ir::ir::IrUnaryOp::Not)
+            {
+                // Update every word and retain wide metadata for pointer math.
+                let (binary, left) = if *op == rcc_ir::ir::IrUnaryOp::Neg {
+                    (rcc_ir::ir::IrBinaryOp::Sub, Value::Constant(0))
+                } else {
+                    (rcc_ir::ir::IrBinaryOp::Xor, Value::Constant(-1))
+                };
+                if result_type.is_i64() {
+                    crate::instr::i64::lower_i64_binary(mgr, naming, binary, &left, operand, *result)
+                } else {
+                    crate::instr::wide::lower_i32_binary(mgr, naming, binary, &left, operand, *result)
+                }
             } else if result_type.is_i64()
                 && matches!(op, rcc_ir::ir::IrUnaryOp::SExt | rcc_ir::ir::IrUnaryOp::ZExt)
             {

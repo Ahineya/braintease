@@ -50,6 +50,8 @@ fn pattern(ty: &ParsedTy, params: &[TypeParam], side: &str) -> Pattern {
             Pattern::Node(
                 if matches!(ty, ParsedTy::CFn { .. }) {
                     "cfn"
+                } else if matches!(ty, ParsedTy::Func { once: true, .. }) {
+                    "oncefn"
                 } else {
                     "fn"
                 }
@@ -69,6 +71,28 @@ fn pattern(ty: &ParsedTy, params: &[TypeParam], side: &str) -> Pattern {
     }
 }
 pub(super) fn overlaps(a: &Impl, b: &Impl) -> bool {
+    fn impl_pattern(item: &Impl, side: &str) -> Pattern {
+        if let ParsedTy::Named { name, args, .. } = &item.ty {
+            if !args.is_empty() && args.iter().all(kinds::is_slot) {
+                return Pattern::Node(name.clone(), Vec::new());
+            }
+            if args.iter().any(kinds::is_slot) {
+                // An open slot cannot unify with a fixed value parameter.
+                let mask: String = args
+                    .iter()
+                    .map(|arg| if kinds::is_slot(arg) { '_' } else { 'v' })
+                    .collect();
+                return Pattern::Node(
+                    format!("partial:{name}:{mask}"),
+                    args.iter()
+                        .filter(|arg| !kinds::is_slot(arg))
+                        .map(|arg| pattern(arg, &item.type_params, side))
+                        .collect(),
+                );
+            }
+        }
+        pattern(&item.ty, &item.type_params, side)
+    }
     fn resolve(p: Pattern, subst: &HashMap<String, Pattern>) -> Pattern {
         match p {
             Pattern::Var(ref v) if subst.contains_key(v) => resolve(subst[v].clone(), subst),
@@ -103,8 +127,8 @@ pub(super) fn overlaps(a: &Impl, b: &Impl) -> bool {
         }
     }
     unify(
-        pattern(&a.ty, &a.type_params, "a:"),
-        pattern(&b.ty, &b.type_params, "b:"),
+        impl_pattern(a, "a:"),
+        impl_pattern(b, "b:"),
         &mut HashMap::new(),
     )
 }

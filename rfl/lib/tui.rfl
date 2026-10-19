@@ -1,0 +1,75 @@
+import { prefix } from "lib/unicode";
+import { Screen, Window } from "std/curses";
+
+/// Cell rectangle in coordinates local to a drawing surface.
+export struct Rect {
+    row: i16,
+    column: i16,
+    rows: i16,
+    columns: i16
+}
+
+/// Small drawing contract for reusable widgets. Calls are statically dispatched;
+/// widgets borrow the surface and never acquire a terminal or present a frame.
+export trait Canvas {
+    fn text(&self, row: i16, column: i16, value: String, style: u32);
+    fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32);
+    fn glyph(&self, row: i16, column: i16, value: u16, style: u32);
+    fn glyphs(&self, row: i16, column: i16, width: i16, value: u16, style: u32);
+    fn frame(&self, area: Rect, style: u32);
+}
+
+impl Canvas for Screen {
+    fn text(&self, row: i16, column: i16, value: String, style: u32) {
+        self.text(row, column, value, style);
+    }
+    fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
+        self.fill(row, column, width, ch, style);
+    }
+    fn glyph(&self, row: i16, column: i16, value: u16, style: u32) {
+        self.glyph(row, column, value, style);
+    }
+    fn glyphs(&self, row: i16, column: i16, width: i16, value: u16, style: u32) {
+        self.glyphs(row, column, width, value, style);
+    }
+    fn frame(&self, area: Rect, style: u32) {
+        self.border(area.row, area.column, area.rows, area.columns, style);
+    }
+}
+
+impl Canvas for Window {
+    fn text(&self, row: i16, column: i16, value: String, style: u32) {
+        self.text(row, column, value, style);
+    }
+    fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
+        self.fill(row, column, width, ch, style);
+    }
+    fn glyph(&self, row: i16, column: i16, value: u16, style: u32) {
+        self.glyph(row, column, value, style);
+    }
+    fn glyphs(&self, row: i16, column: i16, width: i16, value: u16, style: u32) {
+        self.glyphs(row, column, width, value, style);
+    }
+    fn frame(&self, area: Rect, style: u32) {
+        self.frame(area.row, area.column, area.rows, area.columns, style);
+    }
+}
+
+/// Clips UTF-8 at a complete grapheme boundary, measured in terminal cells.
+export fn fitted(value: String, width: i16) -> String {
+    if (width <= 0) { "" } else { value[0..prefix(value, width as usize)] }
+}
+
+/// Decimal count for widget labels; does not change application formatting policy.
+export fn number(value: usize) -> String {
+    let mut value = value;
+    let mut text = "";
+    while (true) {
+        text = from_char((48 + value % 10) as char) + text;
+        value /= 10;
+        if (value == 0) {
+            return text;
+        }
+    }
+    text
+}

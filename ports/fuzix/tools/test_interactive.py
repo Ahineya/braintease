@@ -50,7 +50,7 @@ class Terminal:
     def shell(self, data):
         self.send(data.encode() + b'\r' if isinstance(data, str) else data)
         return self.until(b'fuzix# ')
-    def edit(self, name, keys, command='vi'):
+    def edit(self, name, keys, command='levee'):
         print(('JIT' if self.jit else 'Interpreter') + ': ' + command + ' ' + name, flush=True)
         self.send((command + ' ' + name).encode() + b'\r')
         self.until(b'\x1b[?1049h')
@@ -124,7 +124,7 @@ def exercise(image, jit):
         t.send(b'guest line\r\x04'); t.until(b'fuzix# ')
         assert t.content('/raw-restored') == b'guest line\n'
         print(('JIT' if jit else 'Interpreter') + ': shell input passed', flush=True)
-        # Levee is the default vi; its substantial features must survive saving.
+        # Exercise Levee explicitly; the default vi now launches Rift.
         t.edit('/levee-note', b'ione\rtwo\rthree\r\x1b:wq\r')
         assert t.content('/levee-note') == b'one\ntwo\nthree\n'
         t.shell('chmod 640 /levee-note')

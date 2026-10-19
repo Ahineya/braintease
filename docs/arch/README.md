@@ -11,6 +11,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | [abi.md](abi.md) | C data model, calling convention, stack frames |
 | [memory.md](memory.md) | Bank map, fat pointers, GEP, heap |
 | [mmio.md](mmio.md) | MMIO header summary; full device spec in `rvm/mmio.md` |
+| [crypto.md](crypto.md) | Optional ECC and public RSA accelerator, guest TLS and kernel interface |
 | [stacks-and-interrupts.md](stacks-and-interrupts.md) | Growing C stacks, CPU trap state, timer, IRET |
 | [mmu.md](mmu.md) | Optional translation, user mode, faults, page tables and COW |
 | [c16-filesystem.md](c16-filesystem.md) | FUZIX/Fuse-X V3 disk format, sparse tools and upgrades |

@@ -5,7 +5,7 @@ static NetContext net;
 static NetTcp tcp;
 static NetConfig config = {0, {192,168,64,42}, {255,255,255,0}, {192,168,64,1}, {192,168,64,1}, 7};
 static NetTcpConfig target = {{192,168,64,1}, 50000, 7777, 0xfffffff0UL, 60000UL};
-static unsigned char incoming[800], outgoing[800], data[600];
+static unsigned char incoming[1514], outgoing[1514], data[1460];
 static unsigned short in_length, out_length, transmissions, connected = 1, blocked;
 static unsigned long now, peer_next;
 unsigned short vm_net_info(unsigned short id, VmNetInfo *info) {

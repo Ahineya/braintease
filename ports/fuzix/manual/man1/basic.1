@@ -1,0 +1,27 @@
+.TH BASIC 1
+.SH NAME
+basic \- run a system BASIC source program
+.SH SYNOPSIS
+.B basic
+[--check] [--graphics=auto|off|on] file.bas
+.SH DESCRIPTION
+Runs the terminal BASIC dialect shared by FUZIX and Fuse-X.
+Names ignore case. Strings have dollar-suffixed names; numbers use binary64.
+The interpreter supports structured conditions, loops, scoped labels, SUB/CALL,
+terminal input/output and sequential text files.
+.PP
+--check validates statements without executing program I/O.
+Graphics support is not implemented in this build; GRAPHICSAVAILABLE() is zero.
+--graphics=on exits with an explanatory error.
+.PP
+Open a .bas file in Rift and press F5 to save and run it.
+.SH FILES
+/usr/share/basic/hello.bas
+.br
+/usr/share/basic/granny.bas
+.PP
+Granny Bingo uses name.sav text saves in the current directory.
+.SH EXIT STATUS
+0 for successful completion, 1 for program or I/O errors, 2 for command-line errors.
+.SH SEE ALSO
+rift(1)

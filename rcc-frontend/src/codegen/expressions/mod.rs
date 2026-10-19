@@ -1,5 +1,6 @@
 //! Expression code generation modules
 
+pub(crate) mod bit_fields;
 mod literals;
 mod identifiers;
 mod binary_ops;
@@ -273,7 +274,7 @@ impl<'a> TypedExpressionGenerator<'a> {
                 member: _,
                 offset, 
                 is_pointer, 
-                expr_type 
+                expr_type, bit_field,
             } => {
                 // Following POINTER_ARITHMETIC_ROADMAP.md Task 2.3:
                 // Struct field access MUST be converted to GEP
@@ -312,6 +313,11 @@ impl<'a> TypedExpressionGenerator<'a> {
                     field_type_ir.clone()
                 )?;
                 
+                if let Some((width, shift)) = bit_field {
+                    let unit = Value::Temp(self.builder.build_load_volatile(field_ptr, field_type_ir, expr_type.is_volatile())?);
+                    let value = bit_fields::extract(self, unit, expr_type, *width, *shift)?;
+                    return conversions::convert_integer(self, value, expr_type, expr.get_type());
+                }
                 // Check if the field is an array type, struct type, or pointer type
                 // Arrays and structs should decay to pointers when accessed (not loaded)
                 // Pointers should be returned as FatPtr for further operations

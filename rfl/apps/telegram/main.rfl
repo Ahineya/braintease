@@ -1,0 +1,397 @@
+import { start, Screen, color_pair, BOLD, REVERSE, RESIZE, CLOSED, PAGE_UP, PAGE_DOWN, function_key } from "std/curses";
+import { arguments } from "std/posix";
+import { client, Client, QR_LOGIN, PASSWORD, READY, SENDING, FAILED } from "lib/telegram";
+import { encode, QrCode } from "lib/qr";
+import { loader, Config, Role } from "lib/tui_theme";
+import { install } from "lib/tui_curses";
+import { LineEdit, line_edit } from "lib/tui_input";
+import { fitted, number } from "lib/tui";
+import { Selection, selection } from "lib/tui_list";
+import {} from "std/result";
+
+fn theme(screen: &Screen) -> Vec<u32> {
+    let body = Role { foreground: 7, background: 0, bold: false, reverse: false, underline: false };
+    let title = Role { foreground: 15, background: 4, bold: true, reverse: false, underline: false };
+    let muted = Role { foreground: 6, background: 0, bold: false, reverse: false, underline: false };
+    let input = Role { foreground: 15, background: 4, bold: false, reverse: false, underline: false };
+    let config = Config { name: "Telegram", roles: [body, title, muted, input], lines: true };
+    let loaded = loader(config, ["body", "title", "muted", "input"]).unwrap();
+    loaded.file("/usr/share/telegram/themes", "/etc/telegram-theme.ini", true);
+    install(screen, loaded.config(), 2, [0, BOLD, 0, REVERSE]).unwrap()
+}
+
+fn draw(screen: &Screen, service: &Client, qr: &Option<QrCode>, styles: Vec<u32>, input: &LineEdit, query: &LineEdit, selected: &Selection, focus: u16, scroll: usize) {
+    let rows = screen.rows();
+    let columns = screen.columns();
+    screen.background(styles[0]);
+    screen.fill(0, 0, columns, ' ', styles[1]);
+    screen.text(0, 2, "Telegram  /  Fuse-X", styles[1]);
+    if (service.state() != READY && service.state() != SENDING) {
+        screen.text(2, 2, service.status(), styles[2]);
+    }
+    screen.cursor(0, 0, false);
+    if (rows < 30 || columns < 80) {
+        screen.text(4, 2, "Please enlarge this terminal to at least 80x30.", styles[0]);
+    } else if (service.state() == QR_LOGIN) {
+        match qr {
+            Some(value) => {
+                let top = 3 + (rows - 6 - value.rows()) / 2;
+                let left = (columns - value.columns()) / 2;
+                for (row in 0..value.rows()) {
+                    screen.cells(top + row, left, value.row(row, color_pair(1)));
+                }
+                screen.text(rows - 3, 2, "Scan in Telegram on your phone, then approve this login.", styles[0]);
+            },
+            None => screen.text(5, 2, "Waiting for a fresh login QR...", styles[0]),
+        }
+    } else if (service.state() == PASSWORD) {
+        screen.text(8, (columns - 48) / 2, "Telegram two-step verification", styles[1]);
+        screen.text(10, (columns - 48) / 2, fitted("Hint: " + service.password_hint(), 48), styles[2]);
+        let mut masked = "";
+        let count = service.password_length();
+        for (i in 0..if (count > 46) {
+            46 as usize
+        } else {
+            count
+        }) {
+            masked = masked + "*";
+        }
+        screen.fill(12, (columns - 48) / 2, 48, ' ', styles[3]);
+        screen.text(12, (columns - 48) / 2, masked, styles[3]);
+        screen.text(14, (columns - 48) / 2, "Enter: continue    Ctrl-U: clear", styles[2]);
+        screen.cursor(12, (columns - 48) / 2 + if (count > 46) {
+            46
+        } else {
+            count as i16
+        }, true);
+    } else if (service.state() == READY || service.state() == SENDING) {
+        let left: i16 = 28;
+        let right: i16 = 31;
+        let width = if (columns - right - 2 > 180) {
+            180 as i16
+        } else {
+            columns - right - 2
+        };
+        let height = (rows - 8) as usize;
+        screen.text(2, 1, "/", styles[2]);
+        query.draw(screen, 2, 3, left - 4, if (focus == 2) {
+            styles[3]
+        } else {
+            styles[0]
+        });
+        screen.text(1, 1, "Chats  " + number(service.chat_count()), styles[1]);
+        screen.text(2, right, fitted(service.active_title(), width), styles[1]);
+        for (row in 3..rows - 2) {
+            screen.text(row, left + 1, "|", styles[2]);
+        }
+        let count = service.chat_count();
+        for (row in 0..height) {
+            let item = selected.top + row;
+            if (item < count) {
+                let flags = service.chat_flags(item);
+                let marker = if ((flags & 1) != 0) {
+                    "* "
+                } else if ((flags & 2) != 0) {
+                    "A "
+                } else {
+                    "  "
+                };
+                let unread = service.chat_unread(item);
+                let badge = if (unread > 0) {
+                    " (" + number(unread) + ")"
+                } else {
+                    ""
+                };
+                let style = if (item == selected.selected) {
+                    styles[3]
+                } else {
+                    styles[0]
+                };
+                screen.fill(4 + row as i16, 1, left - 1, ' ', style);
+                screen.text(4 + row as i16, 1, fitted(marker + service.chat_title(item) + badge, left - 1), style);
+            }
+        }
+        let lines = service.history_lines(width as usize);
+        let maximum = if (lines > height) {
+            lines - height
+        } else {
+            0 as usize
+        };
+        let offset = if (scroll > maximum) {
+            maximum
+        } else {
+            scroll
+        };
+        let end = lines - offset;
+        let first = if (end > height) {
+            end - height
+        } else {
+            0 as usize
+        };
+        for (row in 0..height) {
+            if (first + row < end) {
+                screen.text(4 + row as i16, right, service.history_line(first + row, width as usize), styles[0]);
+            }
+        }
+        if (lines == 0) {
+            screen.text(5, right, "No text history yet.", styles[2]);
+        }
+        if (service.can_send()) {
+            input.draw(screen, rows - 3, right, width, if (focus == 1) {
+                styles[3]
+            } else {
+                styles[0]
+            });
+            if (focus == 1) {
+                screen.cursor(rows - 3, right + input.column(width as usize) as i16, true);
+            }
+        } else {
+            screen.text(rows - 3, right, "Read-only chat", styles[2]);
+        }
+        if (focus == 2) {
+            screen.cursor(2, 3 + query.column((left - 4) as usize) as i16, true);
+        }
+        screen.text(rows - 2, 1, fitted(service.status(), columns - 2), styles[2]);
+    } else if (service.state() == FAILED) {
+        screen.text(5, 2, "r: reconnect using this session", styles[0]);
+    } else {
+        screen.text(5, 2, "All Telegram protocol and session state runs inside the guest.", styles[0]);
+    }
+    screen.fill(rows - 1, 0, columns, ' ', styles[1]);
+    screen.text(rows - 1, 1, if (service.state() == READY || service.state() == SENDING) {
+        "F10 quit | Tab focus | / search | Enter open/send | PgUp/Dn history | F5 latest"
+    } else {
+        "F10 / Esc: exit"
+    }, styles[1]);
+    screen.present();
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    let config = if (args.len() > 1) {
+        args[1]
+    } else {
+        "/etc/telegram.conf"
+    };
+    let session = if (args.len() > 2) {
+        args[2]
+    } else {
+        "/telegram.session"
+    };
+    let service = match client(config, session) {
+        Ok(value) => move(value),
+        Err(error) => {
+            println(error);
+            return 1;
+        },
+    };
+    let screen = match start() {
+        Ok(value) => move(value),
+        Err(_) => {
+            println("Cannot start Telegram terminal");
+            return 1;
+        },
+    };
+    let styles = theme(&screen);
+    if (!screen.define_pair(1, 0, 15)) {
+        screen.suspend();
+        println("QR login requires black and white terminal colors");
+        return 1;
+    }
+    screen.timeout(25);
+    let mut qr: Option<QrCode> = None;
+    let mut uri = "";
+    let mut input = line_edit("");
+    let mut query = line_edit("");
+    let mut selected = selection();
+    let mut focus: u16 = 0;
+    let mut scroll: usize = 0;
+    let mut last_lines: usize = 0;
+    let mut waiting_older = false;
+    let mut browsing = false;
+    let mut sending_peer: usize = 0;
+    let mut revision: u32 = 0;
+    let mut redraw = true;
+    while (true) {
+        let selected_key = service.chat_key(selected.selected);
+        service.step();
+        if (service.state() == READY && !browsing) {
+            browsing = service.browse();
+            redraw = true;
+        }
+        if (service.state() == QR_LOGIN || service.state() == PASSWORD) {
+            browsing = false;
+        }
+        if (service.revision() != revision) {
+            revision = service.revision();
+            if (sending_peer != 0 && service.state() == READY) {
+                let status = service.status();
+                if (status.len() >= 16 && status[0..16] == "Message accepted" && service.active_key() == sending_peer) {
+                    input = line_edit("");
+                }
+                sending_peer = 0;
+            }
+            let next = service.qr_uri();
+            if (next != uri) {
+                uri = next;
+                qr = None;
+                if (!uri.is_empty()) {
+                    let mut bytes: Vec<u8> = [];
+                    for (i in 0..uri.len()) {
+                        bytes.push(uri[i] as u8);
+                    }
+                    qr = Some(encode(bytes).unwrap());
+                }
+            }
+            if (browsing) {
+                let count = service.chat_count();
+                if (selected_key != 0) {
+                    for (i in 0..count) {
+                        if (service.chat_key(i) == selected_key) {
+                            selected.selected = i;
+                            break;
+                        }
+                    }
+                }
+                let width = if (screen.columns() > 213) {
+                    180 as usize
+                } else if (screen.columns() > 43) {
+                    (screen.columns() - 33) as usize
+                } else {
+                    10 as usize
+                };
+                let lines = service.history_lines(width);
+                if (lines > last_lines && (scroll > 0 || waiting_older)) {
+                    scroll += lines - last_lines;
+                    waiting_older = false;
+                }
+                last_lines = lines;
+                selected.reveal(count, if (screen.rows() > 8) {
+                    (screen.rows() - 8) as usize
+                } else {
+                    1 as usize
+                });
+            }
+            redraw = true;
+        }
+        if (redraw) {
+            draw(&screen, &service, &qr, styles, &input, &query, &selected, focus, scroll);
+            redraw = false;
+        }
+        let event = screen.event();
+        let key = event.key();
+        if (key == CLOSED || key == function_key(10)) {
+            return 0;
+        }
+        if (screen.rows() < 30 || screen.columns() < 80) {
+            if (key == 27) {
+                return 0;
+            }
+            if (key == RESIZE) {
+                redraw = true;
+            }
+            continue;
+        }
+        if (key == RESIZE) {
+            redraw = true;
+        } else if (service.state() == PASSWORD) {
+            if (key == 27) {
+                return 0;
+            }
+            if (event.kind == 0 && event.value >= 128) { service.password_scalar(event.value); }
+            else { service.password_key(key); }
+        } else if (service.state() == FAILED && key == 114) {
+            service.reconnect();
+        } else if (service.state() == READY || service.state() == SENDING) {
+            if (key == 27) {
+                if (focus == 2) {
+                    query = line_edit("");
+                    service.filter("");
+                    selected = selection();
+                    focus = 0;
+                } else if (focus == 1) {
+                    focus = 0;
+                } else {
+                    return 0;
+                }
+                redraw = true;
+            } else if (key == function_key(5)) {
+                service.latest();
+                scroll = 0;
+                last_lines = 0;
+                waiting_older = false;
+                redraw = true;
+            } else if (key == 9) {
+                focus = if (focus == 1) {
+                    0
+                } else {
+                    1
+                };
+                redraw = true;
+            } else if (focus == 2) {
+                if (key == 10 || key == 13) {
+                    focus = 0;
+                    redraw = true;
+                } else if (query.event(event)) {
+                    service.filter(query.text);
+                    selected = selection();
+                    redraw = true;
+                }
+            } else if (key == 47 && focus == 0) {
+                focus = 2;
+                redraw = true;
+            } else if (focus == 0) {
+                if (key == 10 || key == 13) {
+                    let previous = service.active_key();
+                    if (service.open_chat(selected.selected)) {
+                        if (previous != service.active_key()) {
+                            input = line_edit("");
+                        }
+                        scroll = 0;
+                        last_lines = 0;
+                        focus = 1;
+                        redraw = true;
+                    }
+                } else if (selected.key(key, service.chat_count(), (screen.rows() - 8) as usize)) {
+                    redraw = true;
+                }
+            } else if (key == PAGE_UP) {
+                let page = (screen.rows() - 9) as usize;
+                let maximum = if (last_lines > page + 1) {
+                    last_lines - page - 1
+                } else {
+                    0 as usize
+                };
+                if (scroll >= maximum) {
+                    waiting_older = service.more_history();
+                } else {
+                    scroll += if (maximum - scroll < page) {
+                        maximum - scroll
+                    } else {
+                        page
+                    };
+                }
+                redraw = true;
+            } else if (key == PAGE_DOWN) {
+                let page = (screen.rows() - 9) as usize;
+                scroll = if (scroll > page) {
+                    scroll - page
+                } else {
+                    0 as usize
+                };
+                redraw = true;
+            } else if (key == 10 || key == 13) {
+                if (service.send_active(input.text)) {
+                    sending_peer = service.active_key();
+                    scroll = 0;
+                    redraw = true;
+                }
+            } else if (service.state() == READY && service.can_send() && input.event(event)) {
+                redraw = true;
+            }
+        } else if (key == 27) {
+            return 0;
+        }
+    }
+    0
+}

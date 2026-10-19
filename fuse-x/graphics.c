@@ -12,6 +12,7 @@ static struct lease { ptptr owner; unsigned pid; unsigned long handle; } leases[
 static unsigned waiting;
 unsigned fuse_new_terminals;
 static int fail(unsigned e) { udata.u_error=e;return -1; }
+#include "raster-abi.h"
 static long host(unsigned op,unsigned long *a) {
     long result=rcc_hosted_gx(op,a);
     if(result<0)udata.u_error=-result;
@@ -57,14 +58,20 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     struct gx_handle handle;struct lease *lease;
     unsigned long a[12]={0};
     if(m)return fail(ENXIO);
+    if(req==GX_RASTER_FILL||req==GX_RASTER_COPY){
+        struct gx_raster r;if(uget(user,&r,sizeof(r))||raster_request(&r,req==GX_RASTER_COPY))return -1;
+        a[0]=(unsigned long)r.dst;a[1]=(unsigned long)r.src;a[2]=r.width;a[3]=r.height;
+        a[4]=r.dst_stride;a[5]=r.src_stride;a[6]=r.colour;
+        return host(req==GX_RASTER_FILL?15:16,a)<0?-1:0;
+    }
     if(req==GX_INFO) {
-        struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT|GX_CAP_MULTIWINDOW|GX_CAP_TITLE|GX_CAP_RESIZE,1024,768,WINDOWS,GX_RGB565,786432UL};
+        struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT|GX_CAP_MULTIWINDOW|GX_CAP_TITLE|GX_CAP_RESIZE|GX_CAP_DESKTOP_POINTER|GX_CAP_RASTER|GX_CAP_SCALED_UPLOAD|GX_CAP_INDEXED_UPLOAD|GX_CAP_CLIPBOARD,GX_HOSTED_MAX_WIDTH,GX_HOSTED_MAX_HEIGHT,WINDOWS,GX_RGB565,(unsigned long)GX_HOSTED_MAX_WIDTH*GX_HOSTED_MAX_HEIGHT};
         return uput(&info,user,sizeof(info));
     }
     if(req==GX_CREATE||req==GX_CREATE_HIDDEN) {
         struct gx_window w;unsigned i;
         if(uget(user,&w,sizeof(w))||!valaddr_w(user,sizeof(w),sizeof(w)))return -1;
-        if(w.version!=GX_VERSION||w.format!=GX_RGB565||!w.width||!w.height||w.width>1024||w.height>768)return fail(EINVAL);
+        if(w.version!=GX_VERSION||w.format!=GX_RGB565||!w.width||!w.height||w.width>GX_HOSTED_MAX_WIDTH||w.height>GX_HOSTED_MAX_HEIGHT)return fail(EINVAL);
         for(i=0;i<WINDOWS&&leases[i].handle;i++);if(i==WINDOWS)return fail(ENOMEM);
         w.title[63]=0;a[0]=w.width;a[1]=w.height;a[2]=(unsigned long)w.title;a[3]=req==GX_CREATE_HIDDEN?GX_WINDOW_HIDDEN:0;
         if(host(1,a)<0)return -1;
@@ -75,6 +82,23 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(handle.version!=GX_VERSION)return fail(EINVAL);
     lease=mine(handle.handle);if(!lease)return -1;
     a[0]=handle.handle;
+    if(req==GX_CLIPBOARD_READ||req==GX_CLIPBOARD_WRITE) {
+        struct gx_clipboard c;
+        if(uget(user,&c,sizeof(c))||!valaddr_w(user,sizeof(c),sizeof(c)))return -1;
+        if(c.length>GX_CLIPBOARD_MAX||c.capacity>GX_CLIPBOARD_MAX)return fail(EINVAL);
+        if(req==GX_CLIPBOARD_READ) {
+            if(!c.capacity||!valaddr_w(c.text,c.capacity,c.capacity))return fail(EFAULT);
+        } else if(c.length&&!valaddr_r(c.text,c.length,c.length))return -1;
+        a[1]=(unsigned long)c.text;a[2]=req==GX_CLIPBOARD_READ?c.capacity:c.length;
+        if(host(req==GX_CLIPBOARD_READ?19:20,a)<0)return -1;
+        c.length=a[2];return uput(&c,user,sizeof(c));
+    }
+    if(req==GX_DESKTOP_POINTER) {
+        struct gx_pointer p;
+        if(!valaddr_w(user,sizeof(p),sizeof(p))||host(14,a)<0)return -1;
+        p.version=GX_VERSION;p.window=handle.handle;p.x=a[1];p.y=a[2];
+        return uput(&p,user,sizeof(p));
+    }
     if(req==GX_CONFIGURE) {
         struct gx_configure c;if(uget(user,&c,sizeof(c)))return -1;
         if(c.flags&~(GX_WINDOW_FIXED|GX_WINDOW_HIDDEN))return fail(EINVAL);
@@ -83,15 +107,22 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(req==GX_DESTROY) { if(host(2,a)<0)return -1;memset(lease,0,sizeof(*lease));return 0; }
     if(req==GX_PRESENT)return host(4,a)<0?-1:0;
     if(req==GX_ACTIVATE)return host(13,a)<0?-1:0;
-    if(req==GX_UPLOAD) {
+    if(req==GX_UPLOAD||req==GX_UPLOAD_SCALED||req==GX_UPLOAD_INDEXED) {
         struct gx_upload u;unsigned long count;
-        if(uget(user,&u,sizeof(u)))return -1;
+        if(req==GX_UPLOAD_INDEXED) {
+            struct gx_indexed_upload indexed;
+            if(uget(user,&indexed,sizeof(indexed)))return -1;
+            u=indexed.image;
+            if(!valaddr_r(indexed.palette,256,256))return -1;
+            a[7]=(unsigned long)indexed.palette;
+        } else if(uget(user,&u,sizeof(u)))return -1;
         if(u.stride<u.width)return fail(EINVAL);
+        if(req!=GX_UPLOAD&&(u.x||u.y||!u.width||!u.height||u.width>GX_HOSTED_MAX_WIDTH||u.height>GX_HOSTED_MAX_HEIGHT))return fail(EINVAL);
         if(!u.width||!u.height)return 0;
         count=(unsigned long)(u.height-1)*u.stride+u.width;
         if(!valaddr_r(u.pixels,count,count))return -1;
         a[1]=u.x;a[2]=u.y;a[3]=u.width;a[4]=u.height;a[5]=u.stride;a[6]=(unsigned long)u.pixels;
-        return host(3,a)<0?-1:0;
+        return host(req==GX_UPLOAD_INDEXED?18:req==GX_UPLOAD_SCALED?17:3,a)<0?-1:0;
     }
     if(req==GX_FILL) {
         struct gx_fill f;if(uget(user,&f,sizeof(f)))return -1;

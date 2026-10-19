@@ -1,8 +1,14 @@
 //! Lazy host attachment. Device snapshots contain no process or socket handles.
 use super::{NetworkBackend, NetworkDevice};
-use std::{ffi::OsStr, path::PathBuf, sync::OnceLock};
+use std::{
+    ffi::OsStr,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 enum Configuration {
     #[default]
     Off,
@@ -14,7 +20,7 @@ enum Configuration {
 #[derive(Default)]
 pub(super) struct HostNetwork {
     configuration: Configuration,
-    connection: OnceLock<Result<Connection, String>>,
+    connection: OnceLock<Result<Mutex<Attachment>, String>>,
 }
 impl std::fmt::Debug for HostNetwork {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -29,6 +35,113 @@ struct Connection {
     _backend: NetworkBackend,
     #[cfg(target_os = "macos")]
     _helper: Option<super::vmnet::ManagedHelper>,
+}
+// Initial authorization errors remain cached. Only an attachment that worked
+// before is eligible for noninteractive recovery. Cleanup and reconnection run
+// outside the emulation thread; a slow helper must not freeze the guest UI.
+struct Attachment {
+    connection: Option<Connection>,
+    recovery: Option<JoinHandle<Result<Connection, String>>>,
+    retry_at: Option<Instant>,
+    delay: Duration,
+}
+impl Attachment {
+    fn new(connection: Connection) -> Self {
+        Self {
+            connection: Some(connection),
+            recovery: None,
+            retry_at: None,
+            delay: Duration::from_secs(1),
+        }
+    }
+    fn ensure(
+        &mut self,
+        configuration: &Configuration,
+        device: &NetworkDevice,
+    ) -> Result<(), String> {
+        if self
+            .recovery
+            .as_ref()
+            .is_some_and(|worker| worker.is_finished())
+        {
+            match self.recovery.take().unwrap().join() {
+                Ok(Ok(connection)) => {
+                    self.connection = Some(connection);
+                    self.retry_at = None;
+                    self.delay = Duration::from_secs(1);
+                    eprintln!("network: Ethernet attachment restored");
+                }
+                result => {
+                    let error = match result {
+                        Ok(Err(error)) => error,
+                        Err(_) => "network recovery worker panicked".into(),
+                        Ok(Ok(_)) => unreachable!(),
+                    };
+                    device.port().backend_failed();
+                    self.failed(&error);
+                }
+            }
+        }
+        if self.recovery.is_some() {
+            return Err("network attachment is recovering".into());
+        }
+        if self.connection.is_some() && device.state.lock().unwrap().link {
+            return Ok(());
+        }
+        let now = Instant::now();
+        let Some(retry_at) = self.retry_at else {
+            // Return link-down to the guest before reconnecting, including
+            // helpers which reuse the same MAC. This invalidates old TCP/ARP.
+            self.retry_at = Some(now + self.delay);
+            return Err("network attachment lost; recovery scheduled".into());
+        };
+        if now < retry_at {
+            return Err("network attachment is waiting to retry".into());
+        }
+        let previous = self.connection.take();
+        let configuration = configuration.clone();
+        // This private alias shares only the bounded NIC queues, never guest
+        // memory or the HostNetwork manager itself.
+        let alias = NetworkDevice {
+            state: Arc::clone(&device.state),
+            host: HostNetwork::default(),
+        };
+        match thread::Builder::new()
+            .name("ripple-net-recovery".into())
+            .spawn(move || {
+                drop(previous); // joins the old worker, then stops its owned helper
+                {
+                    let mut state = alias.state.lock().unwrap();
+                    state.generation = state.generation.wrapping_add(1);
+                    state.counters.rx_dropped = state
+                        .counters
+                        .rx_dropped
+                        .saturating_add(state.rx.len() as u32);
+                    state.rx.clear();
+                }
+                HostNetwork::open(&configuration, &alias, true)
+            }) {
+            Ok(worker) => self.recovery = Some(worker),
+            Err(error) => self.failed(&format!("start network recovery worker: {error}")),
+        }
+        Err("network attachment is recovering".into())
+    }
+    fn failed(&mut self, error: &str) {
+        eprintln!(
+            "network recovery failed: {error}; retry in {}s",
+            self.delay.as_secs()
+        );
+        self.retry_at = Some(Instant::now() + self.delay);
+        self.delay = (self.delay * 2).min(Duration::from_secs(30));
+    }
+}
+impl Drop for Attachment {
+    fn drop(&mut self) {
+        if let Some(worker) = self.recovery.take() {
+            // Dropping a runtime must also reap a helper started during recovery.
+            let _ = worker.join();
+        }
+    }
 }
 impl HostNetwork {
     pub(super) fn new(setting: Option<&OsStr>) -> Self {
@@ -54,25 +167,31 @@ impl HostNetwork {
     pub(super) fn is_external(&self) -> bool {
         matches!(self.configuration, Configuration::Socket(_))
     }
-    pub(super) fn ensure(&self, device: &NetworkDevice) -> Result<(), &str> {
+    pub(super) fn ensure(&self, device: &NetworkDevice) -> Result<(), String> {
         if self.configuration == Configuration::Off {
             return Ok(());
         }
         self.connection
             .get_or_init(|| {
-                let result = self.open(device);
+                let result = Self::open(&self.configuration, device, false);
                 if let Err(error) = &result {
                     eprintln!("network initialization failed: {error}");
                     device.port().backend_failed();
                 }
-                result
+                result.map(|connection| Mutex::new(Attachment::new(connection)))
             })
             .as_ref()
-            .map(|_| ())
-            .map_err(String::as_str)
+            .map_err(Clone::clone)?
+            .lock()
+            .unwrap()
+            .ensure(&self.configuration, device)
     }
-    fn open(&self, device: &NetworkDevice) -> Result<Connection, String> {
-        if let Configuration::Socket(path) = &self.configuration {
+    fn open(
+        configuration: &Configuration,
+        device: &NetworkDevice,
+        recovering: bool,
+    ) -> Result<Connection, String> {
+        if let Configuration::Socket(path) = configuration {
             return NetworkBackend::connect(device, path).map(|backend| Connection {
                 _backend: backend,
                 #[cfg(target_os = "macos")]
@@ -81,12 +200,12 @@ impl HostNetwork {
         }
         #[cfg(target_os = "macos")]
         {
-            let mode = if self.configuration == Configuration::Shared {
+            let mode = if *configuration == Configuration::Shared {
                 "shared"
             } else {
                 "host"
             };
-            let helper = super::vmnet::ManagedHelper::start(mode)?;
+            let helper = super::vmnet::ManagedHelper::start(mode, !recovering)?;
             let backend = NetworkBackend::connect(device, &helper.socket())?;
             eprintln!("network: {mode} Ethernet ready (host/gateway 192.168.64.1)");
             Ok(Connection {
@@ -95,9 +214,17 @@ impl HostNetwork {
             })
         }
         #[cfg(not(target_os = "macos"))]
-        Err("automatic Ethernet attachment currently requires macOS; use an external socket backend or disable networking".into())
+        {
+            let _ = recovering;
+            Err("automatic Ethernet attachment currently requires macOS; use an external socket backend or disable networking".into())
+        }
     }
 }
+
+#[cfg(test)]
+#[cfg(unix)]
+#[path = "host_recovery_tests.rs"]
+mod recovery_tests;
 
 #[cfg(test)]
 mod tests {

@@ -3,11 +3,12 @@
 //! The C frontend lowers into this module. The backend lowers it to assembly.
 //! `BankTag` lives here because fat pointers carry it through both sides.
 
+mod bank;
+pub mod float;
 pub mod ir;
+pub mod link;
 pub mod native_image;
 pub mod target;
-pub mod float;
-mod bank;
 mod text;
 
 pub use bank::BankTag;

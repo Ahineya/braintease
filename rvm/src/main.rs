@@ -136,9 +136,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     vm.devices.audio.set_output(
-        cli.audio == rvm::audio::AudioMode::Auto
+        cli.audio == rvm::audio::AudioMode::On || (cli.audio == rvm::audio::AudioMode::Auto
             && !cli.headless
-            && cli.clock == runner::ClockPolicy::Paced,
+            && cli.clock == runner::ClockPolicy::Paced),
         cli.audio_wav.as_deref(),
     )?;
     vm.host_input_enabled = !options.deterministic && !cli.control_stdin;

@@ -11,10 +11,13 @@ int ripple_curses_cells(WINDOW *w, int row, int column, const chtype *cells, int
     n = w->_maxx - column + 1; if (n > count) n = count;
     for (i = 0; i < n; ++i) {
         chtype cell = cells[i] & (A_ATTRIBUTES | A_CHARTEXT);
-        unsigned ch = cell & A_CHARTEXT;
-        if (!(cell & A_ALTCHARSET) && (ch < 32 || ch > 126)) cell = (cell & A_ATTRIBUTES) | '?';
+        uint32_t ch = cell & A_CHARTEXT;
+        if (ch < 32 || (ch >= 127 && ch < 160)) cell = (cell & A_ATTRIBUTES) | '?';
+        else if (ch != RU_CONTINUATION && ((ch >= 0xd800 && ch <= 0xdfff) || ch >= RU_CLUSTER_BASE + RU_CLUSTER_LIMIT))
+            cell = (cell & A_ATTRIBUTES) | RU_REPLACEMENT;
         w->_line[row][column + i] = cell;
     }
+    w->_last_valid = 0;
     if (n) {
         if (w->_minchng[row] < 0 || w->_minchng[row] > column) w->_minchng[row] = column;
         if (w->_maxchng[row] < column + n - 1) w->_maxchng[row] = column + n - 1;

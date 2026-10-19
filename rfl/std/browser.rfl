@@ -1,0 +1,206 @@
+// Low-level Wasm browser patches. The typed Html/Msg renderer is a later layer.
+import { Result } from "std/result";
+extern "C" {
+    fn ripple_browser_mount();
+    fn ripple_dom_begin();
+    fn ripple_dom_abort();
+    fn ripple_dom_string(text: *const u16, cells: u32) -> u16;
+    fn ripple_dom_command(op: u16, a: u16, b: u16, c: u16, d: u16);
+    fn ripple_dom_commit();
+}
+
+/// Click event kind.
+export const CLICK: u16 = 1;
+/// Input event kind, including current text and composition state.
+export const INPUT: u16 = 2;
+/// Change event kind, including current value and checked state.
+export const CHANGE: u16 = 3;
+/// Key-down event kind.
+export const KEYDOWN: u16 = 4;
+/// Key-up event kind.
+export const KEYUP: u16 = 5;
+/// Composition-start event kind.
+export const COMPOSITION_START: u16 = 6;
+/// Composition-end event kind.
+export const COMPOSITION_END: u16 = 7;
+/// Double-click event kind.
+export const DOUBLE_CLICK: u16 = 8;
+/// Blur event kind, including the control's current value.
+export const BLUR: u16 = 9;
+/// Focus event kind.
+export const FOCUS: u16 = 10;
+/// Synchronous browser preventDefault listener policy.
+export const PREVENT_DEFAULT: u16 = 1;
+/// Synchronous browser stopPropagation listener policy.
+export const STOP_PROPAGATION: u16 = 2;
+
+/// Exclusive open patch batch. Dropping it aborts uncommitted work.
+export struct Patch {
+    /// Owns the singleton Wasm staging buffer until commit or drop.
+    guard: Owned<i16>
+}
+
+/// Opts main into the browser ABI. Define both exported C lifecycle hooks:
+/// ripple_browser_on_events(*const u16, u32) and ripple_browser_on_dispose().
+export fn mount() {
+    ripple_browser_mount();
+}
+
+/// Opens one batch. Nested batches and exhausted buffers fault explicitly.
+export fn patch() -> Patch {
+    ripple_dom_begin();
+    Patch { guard: owned(0, fn(value: &mut i16) => {
+        ripple_dom_abort();
+    }) }
+}
+
+impl Patch {
+    /// Pools UTF-8 octets once. Reuse the returned ID only within this batch.
+    export fn string(&mut self, text: String) -> u16 {
+        let mut cells: Vec<u16> = [];
+        for (i in 0..text.len()) {
+            cells.push(text[i] as u16);
+        }
+        cells.push(0);
+        unsafe {
+            ripple_dom_string(&cells[0], text.len() as u32)
+        }
+    }
+    /// Creates a supported HTML element. Node IDs increase across all batches.
+    export fn element(&mut self, node: u16, tag: u16) {
+        ripple_dom_command(1, node, tag, 0, 0);
+    }
+    /// Creates a supported SVG element.
+    export fn svg(&mut self, node: u16, tag: u16) {
+        ripple_dom_command(1, node, tag, 1, 0);
+    }
+    /// Creates a text node from a pooled string.
+    export fn text(&mut self, node: u16, text: u16) {
+        ripple_dom_command(2, node, text, 0, 0);
+    }
+    /// Updates an existing text node without replacing its identity.
+    export fn set_text(&mut self, node: u16, text: u16) {
+        ripple_dom_command(3, node, text, 0, 0);
+    }
+    /// Sets a supported attribute. Text never becomes executable HTML.
+    export fn attribute(&mut self, node: u16, name: u16, value: u16) {
+        ripple_dom_command(4, node, name, value, 0);
+    }
+    /// Removes a supported attribute.
+    export fn remove_attribute(&mut self, node: u16, name: u16) {
+        ripple_dom_command(10, node, name, 0, 0);
+    }
+    /// Sets an input/textarea/select value; unchanged values preserve selection.
+    export fn value(&mut self, node: u16, text: u16) {
+        ripple_dom_command(5, node, 1, text, 0);
+    }
+    /// Sets an input's checked state.
+    export fn checked(&mut self, node: u16, value: bool) {
+        ripple_dom_command(5, node, 2, if (value) {
+            1
+        } else {
+            0
+        }, 0);
+    }
+    /// Sets a supported element's disabled state.
+    export fn disabled(&mut self, node: u16, value: bool) {
+        ripple_dom_command(5, node, 3, if (value) {
+            1
+        } else {
+            0
+        }, 0);
+    }
+    /// Inserts/moves a child before an anchor; zero anchor appends, zero parent is the mount root.
+    export fn insert(&mut self, parent: u16, child: u16, before: u16) {
+        ripple_dom_command(6, parent, child, before, 0);
+    }
+    /// Removes a complete subtree and retires its node/listener identities.
+    export fn remove(&mut self, node: u16) {
+        ripple_dom_command(7, node, 0, 0, 0);
+    }
+    /// Installs/replaces one event binding. Listener IDs increase across batches.
+    export fn listen(&mut self, node: u16, kind: u16, listener: u16, policy: u16) {
+        ripple_dom_command(8, node, kind, listener, policy);
+    }
+    /// Removes one event binding. Already queued events for it become stale.
+    export fn unlisten(&mut self, node: u16, kind: u16) {
+        ripple_dom_command(9, node, kind, 0, 0);
+    }
+    /// Consumes the batch in one host crossing. Empty batches do not cross.
+    export fn commit(self) {
+        ripple_dom_commit();
+    }
+}
+
+/// Owned event payload; no borrowed inbox storage escapes decode_events.
+export struct BrowserEvent {
+    /// Listener identity supplied by the guest renderer.
+    listener: u16,
+    /// Stable guest node identity.
+    node: u16,
+    /// One of the event constants above.
+    kind: u16,
+    /// Shift=1, Ctrl=2, Alt=4, Meta=8, composing=16.
+    modifiers: u16,
+    /// Keyboard event.key as UTF-8 octets.
+    key: String,
+    /// Current input value as UTF-8 octets.
+    value: String,
+    /// Current input checked state.
+    checked: bool
+}
+
+/// Invalid version, lengths, reserved bits or event record.
+export type BrowserError = InvalidBrowserEvents;
+
+fn text_range(data: *const u16, begin: usize, end: usize) -> String {
+    if (end - begin > 32) {
+        let middle = begin + (end - begin) / 2;
+        return text_range(data, begin, middle) + text_range(data, middle, end);
+    }
+    let mut text = "";
+    for (i in begin..end) {
+        let byte = unsafe {
+            data[i]
+        };
+        text = text + from_byte(byte as u8);
+    }
+    text
+}
+
+/// Copies a borrowed host event batch into owned RFL events. Call only from the
+/// exported hook with its live inbox pointer/count; arbitrary pointers are unsafe.
+export fn decode_events(data: *const u16, cells: u32) -> Result<Vec<BrowserEvent>, BrowserError> {
+    if (cells < 4 || cells > 4096) {
+        return Err(InvalidBrowserEvents);
+    }
+    unsafe {
+        if (data[0] != 21061 || data[1] != 1 || data[2] as u32 != cells || data[3] > 64) {
+            return Err(InvalidBrowserEvents);
+        }
+        let mut events: Vec<BrowserEvent> = [];
+        let mut p: usize = 4;
+        for (i in 0..data[3] as usize) {
+            if (p + 8 > cells as usize) {
+                return Err(InvalidBrowserEvents);
+            }
+            let size = data[p] as usize;
+            let keys = data[p + 5] as usize;
+            let values = data[p + 6] as usize;
+            if (size != 8 + keys + values || p + size > cells as usize || data[p + 1] == 0 || data[p + 2] == 0 || data[p + 3] < 1 || data[p + 3] > 10 || data[p + 4] > 31 || data[p + 7] > 1) {
+                return Err(InvalidBrowserEvents);
+            }
+            for (j in p + 8..p + size) {
+                if (data[j] > 255) {
+                    return Err(InvalidBrowserEvents);
+                }
+            }
+            events.push(BrowserEvent { listener: data[p + 1], node: data[p + 2], kind: data[p + 3], modifiers: data[p + 4], key: text_range(data, p + 8, p + 8 + keys), value: text_range(data, p + 8 + keys, p + size), checked: data[p + 7] != 0 });
+            p += size;
+        }
+        if (p != cells as usize) {
+            return Err(InvalidBrowserEvents);
+        }
+        Ok(move(events))
+    }
+}

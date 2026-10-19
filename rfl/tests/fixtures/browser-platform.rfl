@@ -1,0 +1,46 @@
+import { Html } from "std/html";
+import { Ui } from "std/ui";
+import { Cmd, perform_with, program_with_init } from "std/ui_command";
+
+import { load, store, remove } from "std/browser_storage";
+import { navigate, watch_routes, RouteError } from "std/router";
+import { Future } from "std/future";
+import macro { html } from "std/html_macro";
+type Msg = Hash(String) | Finished | Ignore;
+async fn service(ui: Ui<Msg>) -> Msg {
+    remove(ui.app().effects(), "rfl.test").await.unwrap();
+    store(ui.app().effects(), "rfl.test", "hé 🌍").await.unwrap();
+    let value = load(ui.app().effects(), "rfl.test").await.unwrap().unwrap();
+    println(value);
+    navigate(ui.app().effects(), "#/done", false).await.unwrap();
+    Finished
+}
+
+async fn locations(ui: Ui<Msg>) -> Msg {
+    let work = watch_routes(ui.app().effects(), fn(path: String) => Some("#" + path), fn(result: Result<String, RouteError>) => {
+        let hash = result.unwrap();
+        ui.send(Hash(hash)).unwrap();
+    });
+    move(work).await.unwrap();
+    Ignore
+}
+
+fn init(ui: Ui<Msg>) -> Vec<Cmd<Msg>> {
+    [perform_with(once fn(ui: Ui<Msg>) => locations(ui)), perform_with(once fn(ui: Ui<Msg>) => service(ui))]
+}
+
+fn update(model: String, msg: Msg) -> (String, Vec<Cmd<Msg>>) {
+    let model = match msg {
+        Hash(hash) => hash,
+        _ => model
+    };
+    (model, [])
+}
+
+fn view(model: &String) -> Html<Msg> {
+    html!{<p>{model}</p>}
+}
+
+fn main() {
+    program_with_init("waiting", init, update, view, 4).unwrap();
+}

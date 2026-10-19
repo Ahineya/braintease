@@ -1,5 +1,7 @@
-import { Screen, Window, TerminalError, InvalidWindow, BOLD, BACKSPACE, CLOSED, RESIZE, UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN } from "std/curses";
+import { prompt as input_prompt, Palette } from "lib/tui_dialog";
+import { Screen, Window, TerminalError, InvalidWindow, BOLD, BACKSPACE, CLOSED, RESIZE, NO_KEY, UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN, LEFT, RIGHT } from "std/curses";
 import { open_read, IoError, read_bytes as read, write_text, STDIN, STDOUT, run_command, run_program, change_directory, metadata, read_dir, REGULAR, UnsupportedFileType, Errno } from "std/posix";
+import { buffer } from "lib/text";
 import { ends_with } from "std/string";
 import { Theme } from "./theme";
 import { fitted, number } from "./format";
@@ -47,49 +49,7 @@ fn present(screen: &Screen, panel: &Popup) {
 }
 
 export fn prompt(screen: &Screen, theme: &Theme, title: String, initial: String) -> Option<String> {
-    let mut value = initial;
-    while (true) {
-        let panel = match popup(screen, theme, title, 7) {
-            Ok(panel) => move(panel),
-            Err(_) => {
-                return None;
-            }
-        };
-        let width = panel.window.columns() - 4;
-        while (true) {
-            let label = title + ": " + value;
-            let visible = if (label.len() > width as usize) {
-                label[label.len() - width as usize..label.len()]
-            } else {
-                label
-            };
-            panel.window.fill(2, 2, width, ' ', theme.input);
-            panel.window.text(2, 2, visible, theme.input);
-            panel.window.text(4, 2, fitted("Enter: accept   Esc: cancel   Ctrl-U: clear", width), theme.dialog);
-            panel.window.cursor(2, 2 + visible.len() as i16, true);
-            present(screen, &panel);
-            let key = panel.window.key();
-            if (key == RESIZE) {
-                break;
-            }
-            if (key == 27 || key == 3 || key == CLOSED) {
-                panel.window.cursor(0, 0, false);
-                return None;
-            }
-            if (key == 10 || key == 13) {
-                panel.window.cursor(0, 0, false);
-                return Some(value);
-            }
-            if ((key == BACKSPACE || key == 127 || key == 8) && value.len() > 0) {
-                value = value[0..value.len() - 1];
-            } else if (key == 21) {
-                value = "";
-            } else if (key >= 32 && key < 127 && value.len() < 255) {
-                value = value + from_char(key as char);
-            }
-        }
-    }
-    None
+    input_prompt(screen, Palette { body: theme.dialog, title: theme.dialog | BOLD, input: theme.input, selected: theme.selected, shadow: theme.shadow }, title, initial)
 }
 
 export fn confirm(screen: &Screen, theme: &Theme, question: String) -> bool {
@@ -205,21 +165,20 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
     }
     let file = open_read(path)?;
     let bytes = file.read(16384)?;
-    let mut lines: Vec<String> = [];
-    let mut line = "";
-    for (i in 0..bytes.len()) {
-        let byte = bytes[i];
-        if (byte == 10) {
-            lines.push(line);
-            line = "";
-        } else if (byte == 9) {
-            line = line + "    ";
-        } else if (byte != 13) {
-            line = line + from_byte(byte);
+    let text = match buffer() {
+        Ok(text) => move(text),
+        Err(_) => {
+            return Err(Errno(12));
         }
+    };
+    if (text.append(bytes).is_err()) {
+        return Err(UnsupportedFileType);
     }
-    lines.push(line);
+    let styles = [theme.dialog, theme.dialog, theme.dialog, theme.dialog, theme.dialog, theme.dialog, theme.dialog];
     let mut top: usize = 0;
+    let mut left: usize = 0;
+    let mut wrap = true;
+    let mut anchor: usize = 0;
     while (true) {
         let panel = match popup(screen, theme, "View: " + path, screen.rows() - 4) {
             Ok(panel) => move(panel),
@@ -227,25 +186,95 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
                 return Ok({});
             }
         };
+        let width = (panel.window.columns() - 4) as u16;
         let height = (panel.window.rows() - 4) as usize;
+        let mut changed = true;
         while (true) {
-            for (row in 0..height) {
-                panel.window.fill(row as i16 + 1, 1, panel.window.columns() - 2, ' ', theme.dialog);
-                if (top + row < lines.len()) {
-                    panel.window.text(row as i16 + 1, 2, fitted(lines[top + row], panel.window.columns() - 4), theme.dialog);
+            let count = if (wrap) {
+                text.wrap_at(text.len(), width, 4) + 1
+            } else {
+                text.lines()
+            };
+            let last = if (count > height) {
+                count - height
+            } else {
+                0 as usize
+            };
+            if (changed) {
+                top = if (wrap) {
+                    text.wrap_at(anchor, width, 4)
+                } else {
+                    text.row(anchor)
+                };
+                if (top > last) {
+                    top = last;
                 }
             }
-            panel.window.text(panel.window.rows() - 2, 2, fitted("Arrows/PgUp/PgDn | q/Esc close | First 16 KiB", panel.window.columns() - 4), theme.dialog | BOLD);
+            for (row in 0..height) {
+                panel.window.fill(row as i16 + 1, 1, panel.window.columns() - 2, ' ', theme.dialog);
+                if (top + row < count) {
+                    let info = text.wrapped(if (wrap) {
+                        top + row
+                    } else {
+                        0 as usize
+                    }, width, 4);
+                    let logical = if (wrap) {
+                        info.row
+                    } else {
+                        top + row
+                    };
+                    let column = if (wrap) {
+                        info.left
+                    } else {
+                        left
+                    };
+                    let size = if (wrap && info.columns < width) {
+                        info.columns
+                    } else {
+                        width
+                    };
+                    match text.cells(logical, column, size, 4, styles, theme.dialog, 0, 0) {
+                        Ok(cells) => {
+                            panel.window.cells(row as i16 + 1, 2, cells);
+                        },
+                        Err(_) => {
+                            return Err(Errno(12));
+                        }
+                    }
+                }
+            }
+            let label = if (wrap) {
+                "Wrap:on [w]"
+            } else {
+                "Wrap:off [w] Left/Right"
+            };
+            panel.window.fill(panel.window.rows() - 2, 1, panel.window.columns() - 2, ' ', theme.dialog);
+            panel.window.text(panel.window.rows() - 2, 2, fitted(label + " | PgUp/PgDn | q/Esc close | First 16 KiB", panel.window.columns() - 4), theme.dialog | BOLD);
             panel.window.cursor(0, 0, false);
             present(screen, &panel);
-            let key = panel.window.key();
+            changed = false;
+            let mut key = panel.window.key();
+            while (key == NO_KEY) {
+                key = panel.window.key();
+            }
             if (key == 113 || key == 27 || key == 3 || key == CLOSED) {
                 return Ok({});
             }
+            anchor = if (wrap) {
+                text.wrapped(top, width, 4).start
+            } else {
+                text.column(top, left, 4)
+            };
             if (key == RESIZE) {
                 break;
             }
-            if (key == UP || key == PAGE_UP) {
+            if (key == 119 || key == 87) {
+                if (wrap) {
+                    left = text.wrapped(top, width, 4).left;
+                }
+                wrap = !wrap;
+                changed = true;
+            } else if (key == UP || key == PAGE_UP) {
                 let distance = if (key == UP) {
                     1 as usize
                 } else {
@@ -254,18 +283,13 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
                 top = if (top > distance) {
                     top - distance
                 } else {
-                    0
+                    0 as usize
                 };
             } else if (key == DOWN || key == PAGE_DOWN) {
                 let distance = if (key == DOWN) {
                     1 as usize
                 } else {
                     height
-                };
-                let last = if (lines.len() > height) {
-                    lines.len() - height
-                } else {
-                    0
                 };
                 top = if (top + distance < last) {
                     top + distance
@@ -274,11 +298,29 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
                 };
             } else if (key == HOME) {
                 top = 0;
+                left = 0;
             } else if (key == END) {
-                top = if (lines.len() > height) {
-                    lines.len() - height
+                top = last;
+            } else if (!wrap && key == LEFT) {
+                left = if (left > 4) {
+                    left - 4
                 } else {
-                    0
+                    0 as usize
+                };
+            } else if (!wrap && key == RIGHT) {
+                let mut maximum: usize = 0;
+                for (row in 0..height) {
+                    if (top + row < text.lines()) {
+                        let columns = text.visual(text.endline(top + row), 4);
+                        if (columns > width as usize && columns - width as usize > maximum) {
+                            maximum = columns - width as usize;
+                        }
+                    }
+                }
+                left = if (left + 4 < maximum) {
+                    left + 4
+                } else {
+                    maximum
                 };
             }
         }
@@ -286,34 +328,15 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
     Ok({})
 }
 
-// The shell uses canonical input/echo. Browser state survives suspend/resume;
-// shell output stays visible until an empty line returns to the panels.
+// Let the guest shell own editing, completion, history and job control.
+// Browser state survives suspend/resume; exit or Ctrl-D returns to the panels.
 export fn console(screen: &Screen, path: String) -> Result<unit, IoError> {
     change_directory(path)?;
     screen.clear();
     screen.refresh();
     screen.suspend();
-    write_text(STDOUT, "RFL Commander shell (empty line returns to panels)\n")?;
-    while (true) {
-        write_text(STDOUT, "rfl$ ")?;
-        let bytes = read(STDIN, 1024)?;
-        if (bytes.is_empty()) {
-            break;
-        }
-        let mut command = "";
-        for (i in 0..bytes.len()) {
-            if (bytes[i] != 10 && bytes[i] != 13) {
-                command = command + from_byte(bytes[i]);
-            }
-        }
-        if (command == "") {
-            break;
-        }
-        let status = run_command(command)?;
-        if (status != 0) {
-            write_text(STDOUT, "Command wait status: " + number(status as u32) + "\n")?;
-        }
-    }
+    write_text(STDOUT, "RFL Commander shell (exit or Ctrl-D returns to panels)\n")?;
+    run_program("/bin/sh", ["-i"])?;
     Ok({})
 }
 

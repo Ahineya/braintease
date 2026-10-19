@@ -52,18 +52,30 @@ pub(super) fn hosted(module: &Module) -> bool {
         })
 }
 
+fn continuation_slots(
+    live: &BTreeSet<u32>,
+    parameters: &BTreeMap<u32, usize>,
+) -> BTreeMap<u32, u64> {
+    live.iter()
+        .filter(|id| !parameters.contains_key(id))
+        .enumerate()
+        .map(|(index, id)| (*id, index as u64))
+        .collect()
+}
+
 impl Cg<'_, '_> {
     fn reload_continuation(
         &mut self,
         live: &BTreeSet<u32>,
         parameters: &BTreeMap<u32, usize>,
     ) -> Result<(), String> {
+        let slots = continuation_slots(live, parameters);
         for id in live {
             let value = if let Some(index) = parameters.get(id) {
                 let index = self.k(*index as i64);
                 self.runtime("rcc_native_process_arg", &[index])?
             } else {
-                let slot = self.k(i64::from(*id));
+                let slot = self.k(slots[id] as i64);
                 self.runtime("rcc_native_process_slot", &[slot])?
             };
             let bits = width(
@@ -89,9 +101,8 @@ impl Cg<'_, '_> {
         let proceed = self.b.create_block();
         self.b.ins().brif(due, suspend, &[], proceed, &[]);
         self.b.switch_to_block(suspend);
-        let mut spills = live.clone();
-        spills.retain(|id| !parameters.contains_key(id));
-        self.save_continuation(pc, &spills)?;
+        let slots = continuation_slots(live, parameters);
+        self.save_continuation(pc, &slots, None)?;
         let op = self.k(15);
         let zero = self.k(0);
         self.runtime("rcc_native_process_request", &[op, zero, zero, zero])?;
@@ -103,17 +114,25 @@ impl Cg<'_, '_> {
         Ok((resume, proceed))
     }
 
-    fn save_continuation(&mut self, pc: u64, live: &BTreeSet<u32>) -> Result<(), String> {
+    fn save_continuation(
+        &mut self,
+        pc: u64,
+        slots: &BTreeMap<u32, u64>,
+        skip: Option<u32>,
+    ) -> Result<(), String> {
         let pc = self.k(pc as i64);
         // Clear slots from the previous suspension before storing this one.
         self.runtime("rcc_native_process_set_pc", &[pc])?;
-        for id in live {
+        for (id, index) in slots {
+            if Some(*id) == skip {
+                continue;
+            }
             let var = *self
                 .vars
                 .get(id)
                 .ok_or_else(|| format!("undefined continuation temporary %{id}"))?;
             let value = self.b.use_var(var);
-            let slot = self.k(i64::from(*id));
+            let slot = self.k(*index as i64);
             self.runtime("rcc_native_process_save", &[slot, value])?;
         }
         Ok(())
@@ -155,16 +174,12 @@ impl Cg<'_, '_> {
             values.truncate(*fixed);
             values.push(base);
         }
-        let mut spills = live.clone();
-        if let Some(id) = result {
-            spills.remove(id);
-        }
-        spills.retain(|id| !parameters.contains_key(id));
-        self.save_continuation(pc, &spills)?;
-        // Zero means discard the result; SSA slot zero is encoded as one.
+        let slots = continuation_slots(live, parameters);
+        self.save_continuation(pc, &slots, *result)?;
+        // Zero discards the result; compact slot zero is encoded as one.
         let slot = self.k(result
-            .filter(|id| live.contains(id))
-            .map_or(0, |id| i64::from(id) + 1));
+            .and_then(|id| slots.get(&id))
+            .map_or(0, |index| *index as i64 + 1));
         let op = match function {
             Value::Global(n) | Value::Function(n)
                 if self
@@ -213,7 +228,9 @@ fn suspends(compiler: &Compiler, instruction: &I) -> bool {
     };
     match function {
         Value::Global(n) | Value::Function(n) => {
-            operation(n).is_some() || compiler.ir.get_function(n).is_some_and(|f| !f.is_external)
+            !compiler.direct_functions.contains_key(n)
+                && (operation(n).is_some()
+                    || compiler.ir.get_function(n).is_some_and(|f| !f.is_external))
         }
         _ => true,
     }
@@ -332,6 +349,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             phis,
             frame: zero,
             mark: zero,
+            owns_stack: false,
             allocas,
             edges: Vec::new(),
             va_input: None,
@@ -432,4 +450,19 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             )
         })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn sparse_ssa_ids_use_dense_slots_without_spilling_parameters() {
+        let live = BTreeSet::from([3, 1000, 1000000, u32::MAX]);
+        let parameters = BTreeMap::from([(1000, 0)]);
+        assert_eq!(
+            continuation_slots(&live, &parameters),
+            BTreeMap::from([(3, 0), (1000000, 1), (u32::MAX, 2)])
+        );
+        assert!(continuation_slots(&BTreeSet::from([1000]), &parameters).is_empty());
+    }
 }

@@ -1,0 +1,67 @@
+export struct Todo {
+    id: u32,
+    title: String,
+    completed: bool
+}
+
+export type Filter = All | Active | Completed;
+export type Msg = Ignore | NewTitle(String) | Add | Toggle(u32, bool) | ToggleAll(bool) | Delete(u32) | ClearCompleted | BeginEdit(u32) | EditTitle(u32, String) | CommitEdit(u32) | BlurEdit(u32, String) | CancelEdit(u32) | HashChanged(String) | RouteFailed(String) | Loaded(Result<Vec<Todo>, String>) | Saved(u32, Result<unit, String>) | RetryLoad | RetrySave | StartEmpty;
+export struct Model {
+    todos: Vec<Todo>,
+    draft: String,
+    editing: Option<u32>,
+    edit_title: String,
+    filter: Filter,
+    route_ready: bool,
+    loaded: bool,
+    loading: bool,
+    next_id: u32,
+    revision: u32,
+    saved: u32,
+    saving: bool,
+    load_error: String,
+    save_error: String,
+    notice: String
+}
+
+export fn initial() -> Model {
+    Model { todos: [], draft: "", editing: None, edit_title: "", filter: All, route_ready: false, loaded: false, loading: true, next_id: 1, revision: 0, saved: 0, saving: false, load_error: "", save_error: "", notice: "" }
+}
+
+export fn remaining(todos: Vec<Todo>) -> usize {
+    let mut n: usize = 0;
+    for (todo in todos) {
+        if (!todo.completed) {
+            n += 1;
+        }
+    }
+    n
+}
+
+export fn visible(filter: Filter, done: bool) -> bool {
+    match filter {
+        All => true,
+        Active => !done,
+        Completed => done
+    }
+}
+
+export fn route(path: String) -> Option<Filter> {
+    if (path == "/") {
+        Some(All)
+    } else if (path == "/active") {
+        Some(Active)
+    } else if (path == "/completed") {
+        Some(Completed)
+    } else {
+        None
+    }
+}
+
+export fn path(filter: Filter) -> String {
+    match filter {
+        All => "/",
+        Active => "/active",
+        Completed => "/completed"
+    }
+}

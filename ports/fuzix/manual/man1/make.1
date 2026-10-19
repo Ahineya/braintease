@@ -11,10 +11,18 @@ $(NAME); command-line definitions take precedence. Environment definitions
 are available, with -e giving them precedence over file definitions.
 .PP
 Automatic macros include $@ (target), $? (newer prerequisites), $<
-(prerequisites) and $* (target prefix). Include files, suffix rules, double
+(first prerequisite), $^ (all prerequisites without duplicates) and $* (target prefix).
+Include files, suffix rules, double
 colon rules, .DEFAULT, .IGNORE and .SILENT are supported. This is historical
 MWC make, with its own syntax and limits; GNU pattern rules, functions,
-the .PHONY marker and parallel -j builds are not implemented.
+and parallel -j builds are not implemented.
+.PP
+.PHONY marks targets that always need updating, even if a file has that name.
+.DELETE_ON_ERROR removes a changed output after its recipe fails.
+-include skips missing optional include files. NAME ?= value assigns only if
+NAME is undefined; NAME += value appends. Command-line definitions remain
+protected against these assignments. Files seeded with an epoch-zero timestamp
+are recognized as existing prerequisites.
 .PP
 -r skips default rules/macros; -f selects a file; -n prints recipes without
 running them; -s suppresses recipe echo; -i ignores recipe failures; -t
@@ -24,8 +32,9 @@ and macros; -d enables debugging.
 .PP
 Default rules and macros are in /usr/lib/makeactions and
 /usr/lib/makemacros. LIBPATH selects colon-separated library directories.
-SRCPATH supplies a source directory. The installed tools do not include
-a C compiler inside the guest; make can run any available commands.
+SRCPATH supplies a source directory. The installed cc toolchain produces Ripple
+executables. Compiler sources and their Make/Tcl build coordinator are in
+/usr/src/rcc.
 .SH STATUS
 Zero means success or up-to-date. One reports errors. With -q, two means
 an update is needed. Dependency cycles are reported as errors.

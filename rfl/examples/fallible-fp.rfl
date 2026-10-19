@@ -1,0 +1,19 @@
+import { Functor, Monad, map, pure, flat_map, map_result, flat_map_result } from "std/fp";
+
+fn checked_double(value: i16) -> Result<i16, String> {
+    if (value < 0) {
+        Err("negative input")
+    } else {
+        Ok(value * 2)
+    }
+}
+
+fn main() {
+    let value: Result<i16, String> = pure<Result<_, String>, _>(21);
+    println(flat_map<Result<_, String>, _, _>(value, checked_double));
+    println(map<Result<_, String>, _, _>(value, fn(x: i16) => "mapped"));
+
+    // These helpers choose the success slot and infer A, B and E for us.
+    println(map_result(value, fn(x: i16) => x + 21));
+    println(flat_map_result(checked_double(-1), checked_double));
+}

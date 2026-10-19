@@ -178,7 +178,7 @@ enum Commands {
         /// Report compilation stage wall times to stderr
         #[arg(long)]
         timings: bool,
-        /// Native v1 uses host machine code with the shared Ripple data ABI
+        /// Code target; native and Wasm retain the shared C16 data ABI
         #[arg(long, default_value="ripple", value_parser=rcc_ir::target::Target::parse)]
         target: rcc_ir::target::Target,
     },
@@ -339,10 +339,17 @@ fn finish_module(module: &Module, config: &CompileConfig) -> Result<(), Box<dyn 
         path.clone()
     } else {
         let mut path = config.input_path.clone();
-        path.set_extension(if config.target == rcc_ir::target::Target::Native { "native" } else { "asm" });
+        path.set_extension(match config.target { rcc_ir::target::Target::Native => "native", rcc_ir::target::Target::Wasm => "wasm", _ => "asm" });
         path
     };
-    if config.target == rcc_ir::target::Target::Native {
+    if config.target == rcc_ir::target::Target::Wasm {
+        if config.segmented_stack || config.bank_size!=64000 {return Err("Wasm uses the C16 ABI with 64000-cell banks and its own logical stack".into());}
+        let _timer=StageTimer::new(config.timings,"wasm_codegen_link");
+        let artifact=rcc_wasm::compile(std::slice::from_ref(module),&rcc_wasm::Options::default())?;
+        fs::write(&output,artifact.bytes)?;
+        println!("WebAssembly written to: {}",output.display());
+        Ok(())
+    } else if config.target == rcc_ir::target::Target::Native {
         if config.segmented_stack { return Err("--segmented-stack is a Ripple calling convention; native uses its own logical stack".into()); }
         if config.bank_size != 64000 { return Err("native v1 data ABI requires --bank-size 64000".into()); }
         let _timer = StageTimer::new(config.timings, "native_codegen_link");

@@ -33,17 +33,26 @@ def adapt(unit, source):
               'if(fuse_host_inode(ino))return fuse_host_truncate(ino,0);')
         enter('int f_trunc_blocks(register inoptr ino, blkno_t nblock)',
               'if(fuse_host_inode(ino)){udata.u_error=EOPNOTSUPP;return -1;}')
-        replace('    magic(inoindex);\n    return(inoindex);',
-                '    magic(inoindex);\n    if(fuse_host_inode(inoindex) && fuse_host_refresh(inoindex)<0)return NULLINODE;\n    return(inoindex);')
         replace('            if (fp != lastname + 30)\n                *fp++ = c;',
                 '            if (fp != lastname + 30)\n                *fp++ = c;\n'
                 '            else if(fuse_host_inode(wd)){n_open_fault=1;n_fault_type=ENAMETOOLONG;}')
         replace('        *fp = 0;', '        *fp = 0;\n        if(n_open_fault){udata.u_error=n_fault_type;goto nodir;}')
+    elif unit == 'syscall_fs':
+        replace('\treturn stcpy(ino, buf);',
+                '    if(fuse_host_inode(ino) && fuse_host_refresh(ino)<0)return -1;\n'
+                '\treturn stcpy(ino, buf);')
+        replace('\to = &of_tab[udata.u_files[file]];',
+                '    if(flag==2 && fuse_host_inode(ino) && fuse_host_refresh(ino)<0)return -1;\n'
+                '\to = &of_tab[udata.u_files[file]];')
     elif unit == 'inode':
         enter('void readi(register inoptr ino, uint_fast8_t flag)',
               'if(fuse_host_inode(ino)){fuse_host_read(ino);return;}')
         enter('void writei(register inoptr ino, uint_fast8_t flag)',
               'if(fuse_host_inode(ino)){fuse_host_write(ino,flag);return;}')
+        replace('if (getmode(ino) == MODE_R(F_REG) && m)',
+                'if (getmode(ino) == MODE_R(F_REG) && m && !fuse_host_inode(ino))')
+        replace('setftime(ino, is_read ? A_TIME : (A_TIME | M_TIME | C_TIME));',
+                'if(!fuse_host_inode(ino))setftime(ino, is_read ? A_TIME : (A_TIME | M_TIME | C_TIME));')
         replace('if (m->m_dev != NO_DEVICE &&\n\t\t\tm->m_fs.s_fmod != FMOD_CLEAN)',
                 'if (m->m_dev != NO_DEVICE && m->m_dev != FUSE_HOST_DEV &&\n\t\t\tm->m_fs.s_fmod != FMOD_CLEAN)')
     elif unit == 'devio':

@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
 #include <kdata.h>
 #include <printf.h>
@@ -16,6 +17,11 @@
  */
 
 struct tty ttydata[NUM_DEV_TTY + 1];	/* ttydata[0] is not used */
+
+#ifdef RIPPLE_MMU
+/* Physical-console batching; PTYs retain their blocking queue path. */
+extern int ripple_tty_write_run(uint_fast8_t minor);
+#endif
 
 #ifdef CONFIG_LEVEL_2
 static uint16_t tty_select;		/* Fast path if no selects, could do with being per tty ? */
@@ -86,6 +92,20 @@ int tty_read(uint_fast8_t minor, uint_fast8_t rawflag, uint_fast8_t flag)
 #endif
 		        if ((t->flag & TTYF_DEAD) && (!q->q_count))
 				goto dead;
+#ifdef CONFIG_RIPPLE_IO
+            if (!(t->termios.c_lflag&ICANON) && q->q_count) {
+                irqflags_t irq=di();
+                usize_t remaining=udata.u_count-udata.u_done;
+                unsigned limit=remaining>(usize_t)q->q_count?q->q_count:(unsigned)remaining;
+                int n=ripple_queue_read(q,udata.u_base,limit,udata.u_sysio);
+                irqrestore(irq);
+                if (n<0) goto out;
+                udata.u_base+=n; udata.u_done+=n;
+                tty_data_consumed(minor); wakeup(&q->q_count);
+                if (udata.u_done==udata.u_count) goto out;
+                continue;
+            }
+#endif
 			if ((udata.u_done || input_ready(minor) || (t->flag & TTYF_DEAD)) && remq(q, &c)) {
 				/* EOF terminates the line without entering the user buffer. */
 				if ((t->termios.c_lflag & ICANON) &&
@@ -172,6 +192,15 @@ int tty_write(uint_fast8_t minor, uint_fast8_t rawflag, uint_fast8_t flag)
 		   c) look at hint/batching for ugetc into a local work buffer
 		*/
 		if (!(t->flag & TTYF_DISCARD)) {
+#ifdef RIPPLE_MMU
+            int run = ripple_tty_write_run(minor);
+            if (run < 0) break;
+            if (run) {
+                udata.u_base += run;
+                udata.u_done += run;
+                continue;
+            }
+#endif
 			if (udata.u_sysio)
 				c = *udata.u_base;
 			else

@@ -282,3 +282,59 @@ unsafe extern "C" fn rcc_native_arguments(ctx: *mut Runtime) -> u64 {
     rt.memory.fill(end..end + 2, 0);
     (args.len() as u64) << 32 | table
 }
+
+// Kernel disk buffers contain C16 words, whereas ordinary fread/fwrite expose
+// one host octet per guest cell. Keep that codec at the host I/O boundary.
+file_service!(rcc_native_ext_rcc_hosted_read_cells(rt, stream, buffer, count) {
+    if !rt.processes.hosted || count > 4096 { return u64::MAX; }
+    let range = rt.file_span(buffer, count);
+    if range.start < address_space::KERNEL_START { return u64::MAX; }
+    let Some(file) = rt.files.get_mut(&stream) else { return rt.file_error(9); };
+    let mut bytes = vec![0; range.len() * 2];
+    if let Err(error) = file.file.read_exact(&mut bytes) {
+        file.error = true;
+        return rt.io_error(error);
+    }
+    let cells: Vec<_> = bytes.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+    rt.memory.write_from(range.start, &cells);
+    count
+});
+file_service!(rcc_native_ext_rcc_hosted_write_cells(rt, stream, buffer, count) {
+    if !rt.processes.hosted || count > 4096 { return u64::MAX; }
+    let range = rt.file_span(buffer, count);
+    if range.start < address_space::KERNEL_START { return u64::MAX; }
+    let mut cells = vec![0; range.len()];
+    rt.memory.read_into(range.start, &mut cells);
+    let bytes: Vec<_> = cells.into_iter().flat_map(u16::to_le_bytes).collect();
+    if rt.write_bytes(stream, &bytes) == bytes.len() { count } else { u64::MAX }
+});
+
+#[cfg(test)]
+mod cell_io_tests {
+    use super::*;
+    #[test]
+    fn disk_codec_roundtrip_and_short_read_are_atomic() {
+        let path = std::env::temp_dir().join(format!("fuse-cell-io-{}", std::process::id()));
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        rt.processes.hosted = true;
+        let stream = rt.memory.kernel_allocate(1);
+        let buffer = rt.memory.kernel_allocate(1024);
+        let at = linear(buffer);
+        let values: Vec<_> = (0..1024).map(|i| (i * 997) as u16).collect();
+        let file = OpenOptions::new().read(true).write(true).create_new(true).open(&path).unwrap();
+        rt.files.insert(stream, Stream { file: BufReader::new(file), eof: false, error: false });
+        rt.memory.write_from(at, &values);
+        unsafe {
+            assert_eq!(rcc_native_ext_rcc_hosted_write_cells(&mut rt, stream, buffer, 1024),1024);
+            assert_eq!(rcc_native_ext_fseek(&mut rt,stream,0,0),0);
+            rt.memory.fill(at..at+1024,0);
+            assert_eq!(rcc_native_ext_rcc_hosted_read_cells(&mut rt,stream,buffer,1024),1024);
+            assert!(rt.memory.cells(at..at+1024).eq(values.iter().copied()));
+            assert_eq!(rcc_native_ext_rcc_hosted_read_cells(&mut rt,stream,buffer,1),u64::MAX);
+            assert!(rt.memory.cells(at..at+1024).eq(values.iter().copied()));
+        }
+        assert_eq!(std::fs::read(&path).unwrap(),values.iter().flat_map(|v|v.to_le_bytes()).collect::<Vec<_>>());
+        std::fs::remove_file(path).unwrap();
+    }
+}

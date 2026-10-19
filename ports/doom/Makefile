@@ -17,6 +17,13 @@ TARGET ?= ripple
 START_MAP ?= 0
 START_DEMO ?= 0
 LOW_DETAIL ?= 0
+MOUSE_INPUT ?= 0
+ifneq ($(words $(MOUSE_INPUT)),1)
+$(error MOUSE_INPUT must be 0 or 1)
+endif
+ifeq ($(filter $(MOUSE_INPUT),0 1),)
+$(error MOUSE_INPUT must be 0 or 1)
+endif
 RESOLUTION_SCALE ?= 1
 ifneq ($(words $(RESOLUTION_SCALE)),1)
 $(error RESOLUTION_SCALE must be 1, 2 or 4)
@@ -117,7 +124,7 @@ endif
 source_stem = $(if $(filter tests/%,$(1)),test_)$(basename $(notdir $(1)))
 OBJECTS := $(foreach source,$(RIPPLE_SOURCES),$(ROUT)/$(call source_stem,$(source)).pobj)
 INCLUDES := -Isrc -I$(GENERATED) -Iengine
-DEFINES := -DDOOM_PCM=$(PCM_AUDIO) -DDOOM_MUSIC=$(MUSIC_AUDIO) -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 -DDOOM_RESOLUTION_SCALE=$(RESOLUTION_SCALE) \
+DEFINES := -DDOOM_MOUSE=$(MOUSE_INPUT) -DDOOM_PCM=$(PCM_AUDIO) -DDOOM_MUSIC=$(MUSIC_AUDIO) -DDOOM_GENERATED_TABLES=1 -DDOOMGENERIC_RESX=320 -DDOOMGENERIC_RESY=200 -DDOOM_PORT=1 -DDOOM_RESOLUTION_SCALE=$(RESOLUTION_SCALE) \
  $(if $(filter engine info_storage,$(PROGRAM)),-DDOOM_GENERATED_INFO=1) \
  $(if $(filter renderer_tables,$(PROGRAM)),$(if $(filter 1,$(RENDERER_BF_SMOKE)),-DDOOM_RENDERER_BF_SMOKE=1))
 SCENE_DEFINES := $(if $(filter 1,$(START_MAP)),-DDOOM_START_MAP=1) $(if $(filter 1,$(START_DEMO)),-DDOOM_START_DEMO=1) $(if $(filter 1,$(LOW_DETAIL)),-DDOOM_LOW_DETAIL=1)
@@ -237,7 +244,7 @@ $(NATIVE_BINARY): $(NATIVE_SOURCES) $(HEADERS) $(NOUT)/.flags $(FIXTURE_STAMP) $
 	@printf '%s\n' "$@"
 
 run:
-	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter rcc-native,$(TARGET)),--target native) $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(START_DEMO)),--scene demo1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(if $(filter 2,$(RESOLUTION_SCALE)),--half-resolution) $(if $(filter 4,$(RESOLUTION_SCALE)),--quarter-resolution) $(RUN_ARGS)
+	+@DOOM_BUILD="$(BUILD)" DOOM_WAD="$(WAD)" DOOM_WAD_MODE="$(WAD_MODE)" DOOM_ASSET_VALIDATION="$(ASSET_VALIDATION)" ./run.sh $(if $(filter rcc-native,$(TARGET)),--target native) $(if $(filter 1,$(MOUSE_INPUT)),--mouse) $(if $(filter 1,$(START_MAP)),--scene e1m1) $(if $(filter 1,$(START_DEMO)),--scene demo1) $(if $(filter 1,$(LOW_DETAIL)),--low-detail) $(if $(filter 2,$(RESOLUTION_SCALE)),--half-resolution) $(if $(filter 4,$(RESOLUTION_SCALE)),--quarter-resolution) $(RUN_ARGS)
 test:
 	+@DOOM_BUILD="$(abspath $(BUILD))" DOOM_WAD_MODE="$(WAD_MODE)" node tools/test.mjs smoke --wad "$(WAD)"
 test-fixtures:
@@ -262,7 +269,7 @@ test-assets:
 clean:
 	rm -rf "$(BUILD)/ripple" "$(BUILD)/native" "$(BUILD)/rcc-native" "$(BUILD)/assets" "$(GENERATED)"
 help:
-	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|rcc-native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1|START_DEMO=1] [LOW_DETAIL=1] [RESOLUTION_SCALE=1|2|4]' \
+	@printf '%s\n' 'make -j4 [TARGET=ripple|bf|native|rcc-native|both] [WAD_MODE=packed|expanded|cooked] [START_MAP=1|START_DEMO=1] [LOW_DETAIL=1] [RESOLUTION_SCALE=1|2|4] [MOUSE_INPUT=1]' \
 	 'rcc-native compiles RCC IR through Cranelift; native is the Clang/GCC reference.' \
 	 'ASSET_VALIDATION=preflight (default) uses assets checked when packed; guest also enables detailed guest checks.' \
 	 'make PROGRAM=numeric TARGET=both' 'make test | test-fixtures | test-kernels | test-gameplay | test-presentation | test-resolution | test-assets' \

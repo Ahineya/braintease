@@ -1,6 +1,9 @@
-/// Concrete RFL types after checking. Integer literals have already been given a width.
+/// RFL value types and checking-only constructor arguments.
+/// Integer literals have already been given a width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ty {
+    /// Checker-only type constructor identity. Never a runtime value or layout.
+    Constructor(u32),
     I8,
     U8,
     I16,
@@ -33,6 +36,8 @@ pub enum Ty {
     Owned(u32),
     /// Move-only opaque owner; retains the original typed destruction glue.
     ErasedOwner,
+    /// Copyable opaque owner; last reference runs the original typed cleanup.
+    SharedOwner,
     /// Index into the checker's reference table. The value is a pointer to a
     /// local: address cell, bank cell. It cannot outlive that local.
     Ref(u32),
@@ -71,6 +76,7 @@ impl Ty {
     pub fn parse_name(name: &str) -> Option<Self> {
         Some(match name {
             "ErasedOwner" => Self::ErasedOwner,
+            "SharedOwner" => Self::SharedOwner,
             "i8" => Self::I8,
             "u8" => Self::U8,
             "i16" => Self::I16,
@@ -133,7 +139,12 @@ impl Ty {
         self.owns_buffer()
             || matches!(
                 self,
-                Self::Adt(_) | Self::Func(_) | Self::String | Self::Owned(_) | Self::ErasedOwner
+                Self::Adt(_)
+                    | Self::Func(_)
+                    | Self::String
+                    | Self::Owned(_)
+                    | Self::ErasedOwner
+                    | Self::SharedOwner
             )
     }
 
@@ -148,6 +159,7 @@ impl Ty {
     /// Cells occupied in an activation record.
     pub fn cells(self) -> i64 {
         match self {
+            Self::Constructor(_) => unreachable!("type constructor has no runtime layout"),
             Self::Unit => 0,
             Self::Adt(_) => 3,
             Self::Func(_) => 4,
@@ -156,6 +168,7 @@ impl Ty {
             Self::Vec(_)
             | Self::Owned(_)
             | Self::ErasedOwner
+            | Self::SharedOwner
             | Self::Ref(_)
             | Self::Ptr(_)
             | Self::CFn(_)
@@ -179,7 +192,8 @@ impl Ty {
             Self::I32 => (i32::MIN as i64..=i32::MAX as i64).contains(&value),
             Self::I64 => true,
             Self::U64 => value >= 0,
-            Self::Bool
+            Self::Constructor(_)
+            | Self::Bool
             | Self::Char
             | Self::Unit
             | Self::String
@@ -190,6 +204,7 @@ impl Ty {
             | Self::Vec(_)
             | Self::Owned(_)
             | Self::ErasedOwner
+            | Self::SharedOwner
             | Self::Ref(_)
             | Self::Ptr(_)
             | Self::CFn(_)
@@ -207,7 +222,8 @@ impl Ty {
             Self::I16 | Self::U16 | Self::Bool => value & 0xffff,
             Self::I32 | Self::U32 | Self::Usize | Self::Char => value & 0xffff_ffff,
             Self::I64 | Self::U64 => value,
-            Self::Unit
+            Self::Constructor(_)
+            | Self::Unit
             | Self::String
             | Self::F32
             | Self::F64
@@ -216,6 +232,7 @@ impl Ty {
             | Self::Vec(_)
             | Self::Owned(_)
             | Self::ErasedOwner
+            | Self::SharedOwner
             | Self::Ref(_)
             | Self::Ptr(_)
             | Self::CFn(_)
@@ -230,6 +247,7 @@ impl Ty {
 impl std::fmt::Display for Ty {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
+            Self::Constructor(_) => "type constructor",
             Self::I8 => "i8",
             Self::U8 => "u8",
             Self::I16 => "i16",
@@ -250,6 +268,7 @@ impl std::fmt::Display for Ty {
             Self::Vec(_) => "vec",
             Self::Owned(_) => "Owned",
             Self::ErasedOwner => "ErasedOwner",
+            Self::SharedOwner => "SharedOwner",
             Self::Ref(_) => "ref",
             Self::Array { .. } => "array",
             Self::Slice(_) => "slice",

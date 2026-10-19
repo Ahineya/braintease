@@ -9,7 +9,7 @@ import sys
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('image', type=Path)
-p.add_argument('--repair', action='store_true', help='rebuild free lists and mark clean after structural validation; backs up the disk first')
+p.add_argument('--repair', action='store_true', help='reclaim abandoned zero-link pipes, rebuild free lists and mark clean after structural validation; backs up the disk first')
 a = p.parse_args()
 if not a.image.is_file():
     sys.exit(f'Image not found: {a.image}')

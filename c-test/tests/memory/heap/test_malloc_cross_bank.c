@@ -6,8 +6,8 @@ int main() {
     char *span;
     int i;
 
-    /* Two five-cell allocation headers place span at bank offset 63999. */
-    pad = (char *)malloc(63989U);
+    /* Two eleven-cell allocation headers place span at bank offset 63999. */
+    pad = (char *)malloc(63977U);
     if (pad == 0) {
         putchar('N');
         putchar('\n');

@@ -24,7 +24,8 @@ and [complete C example](#complete-c-example-using-the-helpers).
 | 7       | `HDR_DISP_STATUS`     | R   | Display status (bit 0: ready, bit 1: flush done)      |
 | 8       | `HDR_DISP_CTL`        | R/W | Display control (bit 0: enable, bit 1: clear)         |
 | 9       | `HDR_DISP_FLUSH`      | W   | Trigger display flush (write non-zero)                |
-| 10–15 | Reserved | R/W | Reads zero; writes ignored. Input uses DEVICE_* commands. |
+| 10 | `HDR_MATH_STACK` | R/W | RVM: read ABI 1; write packet offset in current SB |
+| 11–15 | Reserved | R/W | Reads zero; writes ignored. |
 | 16      | `HDR_DISP_RESOLUTION` | R/W | Display resolution for RGB565 (hi8=width, lo8=height) |
 | 17      | `HDR_STORE_BLOCK`     | W   | Select current storage block (0-65535)                |
 | 18      | `HDR_STORE_ADDR`      | W   | Select word address within block (0-32767)            |
@@ -152,8 +153,8 @@ migration requirements are in [stacks-and-interrupts.md](../docs/arch/stacks-and
 
 ### Keyboard and pointer input
 
-Input uses the DEVICE_* mailbox in every display mode. Registers 10–15 are
-reserved. The C directional helpers read DEVICE_INPUT_STATE using USB HID usages.
+Input uses the DEVICE_* mailbox in every display mode. Registers 11–15 are
+reserved; register 10 is the atomic math stack service. The C directional helpers read DEVICE_INPUT_STATE using USB HID usages.
 TEXT40 terminal key presses become short pulses; windowed RGB565 input provides
 press/release, pointer motion, buttons, wheel, focus and capture events.
 
@@ -291,6 +292,10 @@ Multiword integers use the low cell first.
 | HOST_REALTIME | 9 | 10 | same layout as HOST_MONOTONIC |
 | HOST_IDLE | 10 | 4 | version, length, requested milliseconds (0–10), reserved zero |
 | HOST_TERMINAL | 11 | 4 | version, length, rows, columns (payload zero on submission) |
+| HOST_RANDOM | 12 | 6 | version, length, output bank, output offset, count (1–256), reserved zero |
+| CRYPTO | 13 | 6 | version, length, request bank, request offset, request cells (2056), reserved zero |
+| TTY_WRITE | 14 | 8 | version, length, source bank/offset, octet count, reserved zero, completed out, reserved zero |
+| MATH | 15 | 16 | version, length, operation, reserved zero, A (4 cells), B (4 cells), result (4 cells) |
 
 #### Worked example: a capabilities request in memory
 
@@ -633,7 +638,9 @@ held-key state from that recovery snapshot.
 
 ### MMIO Read Handling
 
-The VM routes memory reads in this order:
+With the MMU enabled, ordinary user accesses translate and check permissions
+before physical MMIO routing. The atomic math register is the explicit exception.
+Unprotected/supervisor memory reads route in this order:
 1. Bank 0, addresses 0–31: MMIO header registers.
 2. In legacy RGB565 mode 3, bank-0 front/back framebuffer addresses: display
    buffer reads, including addresses below the old TEXT40 boundary at 1032.
@@ -768,7 +775,7 @@ LOAD  A0, T0, T1   ; Random value in A0
 ### Keyboard input
 
 Submit INPUT_STATE as described above. The up arrow (HID usage 82) is bit 2 of
-snapshot cell 17; input registers 10–15 are reserved.
+snapshot cell 17; registers 11–15 are reserved and register 10 submits math packets.
 
 ### Storage Operations
 ```asm
@@ -886,6 +893,7 @@ pub const HDR_DISP_MODE: usize     = 6;
 pub const HDR_DISP_STATUS: usize   = 7;
 pub const HDR_DISP_CTL: usize      = 8;
 pub const HDR_DISP_FLUSH: usize    = 9;
+pub const HDR_MATH_STACK: usize    = 10;
 pub const HDR_DISP_RESOLUTION: usize = 16;
 pub const HDR_STORE_BLOCK: usize   = 17;
 pub const HDR_STORE_ADDR: usize    = 18;
@@ -965,3 +973,27 @@ COMMIT_ALL takes precedence if both commit command bits are written.
 This flushes the VM storage cache. Guest filesystem buffers still need a guest
 `sync` or clean shutdown. Neither operation makes a filesystem transaction
 atomic or guarantees a clean filesystem after interruption between writes.
+
+## Cryptographic host entropy
+
+`VM_CAP_HOST_RANDOM` (0x8000) advertises `HOST_RANDOM` (12). The descriptor
+is `[1, 6, bank, offset, count, 0]`; output lengths count cells, with one
+0–255 octet per cell. Complete RAM ranges may cross banks but cannot overlap
+MMIO or the descriptor. Entropy is staged before copying: invalid requests
+and OS failures leave guest memory unchanged. Failure returns `IO` without
+a predictable fallback. It advances no simulation time and raises no IRQ.
+The seeded `RNG` and `RNG_SEED` registers remain deterministic and must not
+seed cryptographic operations. See [host entropy](../docs/arch/entropy.md)
+for the C API, guest `/dev/urandom` and validation.
+
+See the [crypto coprocessor contract](../docs/arch/crypto.md) for command 13 and `/dev/crypto`.
+
+## Scalar math and atomic stack packets
+
+Command 15 implements IEEE binary32/binary64 arithmetic, conversions and
+binary64 libm. RVM also provides atomic, MMU-aware stack submission through
+bank-0 address 10. Read-only CSR 28 feature bit 2 advertises user access to this
+single register. Other MMIO remains protected. See the
+[math contract, packet layout and runtime integration](../docs/arch/mmio.md#floating-point-acceleration)
+and `runtime/include/vm_math.h`. The ordinary device mailbox stays physical;
+its generic serialization requirements are unchanged.

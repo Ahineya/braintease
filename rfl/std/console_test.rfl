@@ -1,0 +1,59 @@
+import { Console, ConsoleError } from "std/console";
+import { Shared, share, with_shared } from "std/shared";
+
+struct RecordingState {
+    input: Vec<String>,
+    next: usize,
+    output: Vec<String>
+}
+
+/// A deterministic console. Copies share the same input cursor and output log;
+/// use recording_console again for an independent service.
+export struct RecordingConsole {
+    /// Shared recording state. Prefer the constructor and snapshot methods.
+    state: Shared<RecordingState>
+}
+
+/// Supplies complete lines without terminators, then EOF. Reads and writes
+/// modify state only when their returned futures are first polled.
+export fn recording_console(lines: Vec<String>) -> RecordingConsole {
+    RecordingConsole { state: share(RecordingState { input: lines, next: 0, output: [] }) }
+}
+
+async fn read_recording(state: Shared<RecordingState>) -> Result<Option<String>, ConsoleError> {
+    Ok(with_shared(state, once fn(s: &mut RecordingState) => {
+        if (s.next == s.input.len()) {
+            None
+        } else {
+            let line = s.input[s.next];
+            s.next += 1;
+            Some(line)
+        }
+    }))
+}
+
+async fn write_recording(state: Shared<RecordingState>, text: String) -> Result<unit, ConsoleError> {
+    with_shared(state, once fn(s: &mut RecordingState) => s.output.push(text));
+    Ok({})
+}
+
+impl Console for RecordingConsole {
+    fn read_line(&mut self) -> Async<Result<Option<String>, ConsoleError>> {
+        read_recording(self.state)
+    }
+    fn write_text(&mut self, text: String) -> Async<Result<unit, ConsoleError>> {
+        write_recording(self.state, text)
+    }
+}
+
+impl RecordingConsole {
+    /// Returns a COW snapshot of writes in execution order, retaining embedded
+    /// newlines. Subsequent writes do not modify earlier snapshots.
+    export fn output(&self) -> Vec<String> {
+        with_shared(self.state, once fn(s: &mut RecordingState) => s.output)
+    }
+    /// Number of complete input lines consumed by this service.
+    export fn consumed(&self) -> usize {
+        with_shared(self.state, once fn(s: &mut RecordingState) => s.next)
+    }
+}

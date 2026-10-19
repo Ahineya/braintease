@@ -28,30 +28,39 @@ impl Analysis {
         let lexer::TokenKind::Ident(name) = &owner.kind else {
             return None;
         };
-        let mut members =
-            std::collections::BTreeMap::<String, std::collections::BTreeMap<String, String>>::new();
+        let mut members = std::collections::BTreeMap::<
+            String,
+            std::collections::BTreeMap<String, (String, bool)>,
+        >::new();
         for member in self
             .info
             .type_members
             .iter()
             .filter(|m| m.qualifier == *name && m.scope.contains(replace.start))
         {
-            members
-                .entry(member.name.clone())
-                .or_default()
-                .insert(member.contract.clone(), member.detail.clone());
+            members.entry(member.name.clone()).or_default().insert(
+                member.contract.clone(),
+                (member.detail.clone(), member.operation),
+            );
         }
         if !members.is_empty() {
             return Some(
                 members
                     .into_iter()
                     .filter(|(_, candidates)| candidates.len() == 1)
-                    .map(|(name, candidates)| Completion {
-                        label: name,
-                        kind: CompletionKind::AssociatedType,
-                        detail: candidates.into_values().next().unwrap(),
-                        replace,
-                        import_edit: None,
+                    .map(|(name, candidates)| {
+                        let (detail, operation) = candidates.into_values().next().unwrap();
+                        Completion {
+                            label: name,
+                            kind: if operation {
+                                CompletionKind::Method
+                            } else {
+                                CompletionKind::AssociatedType
+                            },
+                            detail,
+                            replace,
+                            import_edit: None,
+                        }
                     })
                     .collect(),
             );
@@ -72,7 +81,11 @@ impl Analysis {
                     Completion {
                         label: method.name.clone(),
                         kind: CompletionKind::Method,
-                        detail: format!("fn({receiver}{comma}{rest}"),
+                        detail: if method.receiver.is_some() {
+                            format!("fn({receiver}{comma}{rest}")
+                        } else {
+                            sig
+                        },
                         replace,
                         import_edit: None,
                     }
@@ -389,5 +402,63 @@ mod tests {
             let item = items.iter().find(|m| m.label == name).unwrap();
             assert!(item.import_edit.is_none());
         }
+    }
+    #[test]
+    fn constructor_bound_operations_complete_and_navigate_without_a_receiver() {
+        let source="trait Functor<_>{fn map<A,B>(x:Self<A>,f:fn(A)->B)->Self<B>;} fn mapped<F<_>:Functor,A,B>(x:F<A>,f:fn(A)->B)->F<B>{F::map(move(x),f)}";
+        let doc = Analysis::open(None, source);
+        assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+        let at = source.find("F::map").unwrap() + 3;
+        assert_eq!(
+            doc.definition(at).unwrap().1.start,
+            source.find("map<").unwrap()
+        );
+        let hover = doc.hover(at).unwrap();
+        assert!(hover.contains("F<A>") && hover.contains("F<B>"), "{hover}");
+        let partial = source.replace("F::map(", "F::ma(");
+        let doc = Analysis::open(None, &partial);
+        let items = doc.completions(partial.find("F::ma").unwrap() + 5);
+        let item = items
+            .iter()
+            .find(|item| item.label == "map")
+            .expect("constructor map completion");
+        assert!(
+            item.detail.contains("Self<A>") && !item.detail.starts_with("fn(Self,"),
+            "{}",
+            item.detail
+        );
+        let partial = source.replace("F::map(", "Functor::ma(");
+        let doc = Analysis::open(None, &partial);
+        let items = doc.completions(partial.find("Functor::ma").unwrap() + 11);
+        let item = items.iter().find(|item| item.label == "map").unwrap();
+        assert!(!item.detail.starts_with("fn(Self,"), "{}", item.detail);
+    }
+
+    #[test]
+    fn generic_receiver_methods_complete_and_calls_show_concrete_outputs() {
+        let source="trait Identity{fn id<T>(&self,x:T)->T;} impl Identity for bool{fn id<T>(&self,x:T)->T{move(x)}} fn main(){let instance=true;println(instance.id(42));}";
+        let doc = Analysis::open(None, source);
+        assert!(doc.diagnostics.is_empty(), "{:?}", doc.diagnostics);
+        assert_eq!(
+            doc.definition(source.find("instance.id").unwrap() + 9)
+                .unwrap()
+                .1
+                .start,
+            source.find("id<T>").unwrap()
+        );
+        assert!(doc
+            .signature(source.find("id(42").unwrap() + 3)
+            .unwrap()
+            .0
+            .contains("i16"));
+        let partial = source.replace("instance.id(42)", "instance.i(42)");
+        let doc = Analysis::open(None, &partial);
+        let items = doc.completions(partial.find("instance.i").unwrap() + 10);
+        assert!(
+            items
+                .iter()
+                .any(|item| item.label == "id" && item.detail.contains("T")),
+            "missing generic id completion"
+        );
     }
 }

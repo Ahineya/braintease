@@ -1,7 +1,9 @@
 use super::VM;
 use crate::constants::*;
 use crate::display_rgb565::RGB565Display;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::display_text40::Text40Snapshot;
+#[cfg(not(target_arch = "wasm32"))]
 use std::io;
 
 impl VM {
@@ -80,6 +82,10 @@ impl VM {
     }
 
     /// Render TEXT40 display to terminal
+    #[cfg(target_arch = "wasm32")]
+    pub(super) fn flush_text40_display(&mut self) {}
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn flush_text40_display(&mut self) {
         if self.display_mode != DISP_TEXT40 || !self.display_enabled {
             return; // Display not in TEXT40 mode or not enabled

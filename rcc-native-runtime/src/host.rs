@@ -103,9 +103,9 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
         .devices
         .audio
         .set_output(
-            !runtime.host.headless
+            std::env::var("RCC_NATIVE_AUDIO").as_deref() == Ok("on") || (!runtime.host.headless
                 && std::env::var("RCC_NATIVE_AUDIO").as_deref() != Ok("off")
-                && runtime.host.pacing != Some(false),
+                && runtime.host.pacing != Some(false)),
             std::env::var_os("RCC_NATIVE_AUDIO_WAV")
                 .as_deref()
                 .map(std::path::Path::new),
@@ -116,20 +116,26 @@ pub unsafe extern "C" fn rcc_native_start(entry: usize) -> i32 {
     let finished_graphics = graphics.clone();
     let (events, receiver) = mpsc::channel();
     runtime.host.events = Some(events);
-    let worker = std::thread::spawn(move || {
-        let status = unsafe { entry(&mut runtime) };
-        runtime.flush();
-        runtime.devices.audio.finish().unwrap_or_else(|e| fatal(&e));
-        if std::env::var_os("RCC_NATIVE_FRAME").is_some() {
-            fatal("requested native frame was never presented");
-        }
-        runtime.display.shutdown();
-        finished_graphics.lock().unwrap().finished = true;
-        // A finished program wakes the main thread without creating an event
-        // loop. On panic, dropping the runtime disconnects the same channel.
-        let _ = runtime.host.events.as_ref().unwrap().send(Event::Finished);
-        status
-    });
+    // Large generated application continuations (including Rift) can exceed
+    // Rust's default 2 MiB host stack. This reservation is
+    // separate from guest memory and guest continuation-frame allocations.
+    let worker = std::thread::Builder::new()
+        .stack_size(16 * 1024 * 1024)
+        .spawn(move || {
+            let status = unsafe { entry(&mut runtime) };
+            runtime.flush();
+            runtime.devices.audio.finish().unwrap_or_else(|e| fatal(&e));
+            if std::env::var_os("RCC_NATIVE_FRAME").is_some() {
+                fatal("requested native frame was never presented");
+            }
+            runtime.display.shutdown();
+            finished_graphics.lock().unwrap().finished = true;
+            // A finished program wakes the main thread without creating an event
+            // loop. On panic, dropping the runtime disconnects the same channel.
+            let _ = runtime.host.events.as_ref().unwrap().send(Event::Finished);
+            status
+        })
+        .unwrap_or_else(|error| fatal(&format!("guest execution worker: {error}")));
     match receiver.recv() {
         Ok(Event::HostedDisplayRequested) => {
             if let Err(error) = hosted_graphics::run(graphics) {

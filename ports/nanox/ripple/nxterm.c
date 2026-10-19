@@ -13,39 +13,81 @@
 #include <time.h>
 #include <syscalls.h>
 #include "nano-X.h"
+#include "nx_clipboard.h"
+#include "../../../ports/graphics/terminal-input.h"
+#include "../../../ports/graphics/terminal-selection.h"
 #include "pty-limits.h"
 #include "../../../ports/graphics/terminal.h"
 #include "../../../ports/graphics/terminal.c"
+#include "../../../libraries/unicode/font.c"
+#define GRAPHICS_COLS VT_MAX_COLS
+#define GRAPHICS_ROWS VT_MAX_ROWS
 static struct vt terminal;
 static GR_WINDOW_ID window;
 static GR_GC_ID gc;
 static int master=-1,child,connected;
 static volatile int stopping;
-static char pending[512];static unsigned pending_count;
+static struct vt_input pending;
+static struct vt_selection selection;
 static const GR_COLOR palette[16]={
     GR_RGB(0,0,0),GR_RGB(168,0,0),GR_RGB(0,168,0),GR_RGB(168,168,0),
     GR_RGB(0,0,168),GR_RGB(168,0,168),GR_RGB(0,168,168),GR_RGB(168,168,168),
     GR_RGB(84,84,84),GR_RGB(255,84,84),GR_RGB(84,255,84),GR_RGB(255,255,84),
     GR_RGB(84,84,255),GR_RGB(255,84,255),GR_RGB(84,255,255),GR_RGB(255,255,255)};
 static void caught(int s){stopping=s;signal(s,caught);}
-static void queue(const char *s){unsigned n=strlen(s);if(n<=sizeof(pending)-pending_count){memcpy(pending+pending_count,s,n);pending_count+=n;}}
+static void queue(const char *s){if(vt_input_put(&pending,s,strlen(s)))fputs("nxterm: input queue full\n",stderr);}
 static void reply(struct vt *t,const char *s){queue(s);}
-static void invalidate(void){unsigned i;for(i=0;i<terminal.rows;i++)terminal.dirty[i]=1;}
-static void draw(void){
-    unsigned y,x,end,colour,dirty=0;char text[VT_MAX_COLS];struct vt_cell *cells=vt_cells(&terminal);
-    for(y=0;y<terminal.rows;y++)dirty|=terminal.dirty[y];
-    if(!dirty)return;
-    for(y=0;y<terminal.rows;y++)if(terminal.dirty[y]){
+/* Last rendered cells let a keystroke repaint a short span, not 64 glyphs. */
+static struct vt_cell painted[GRAPHICS_COLS*GRAPHICS_ROWS];
+static unsigned char known[GRAPHICS_ROWS];
+static unsigned cursor_x,cursor_y,cursor_shown;
+static void invalidate(void){unsigned i;for(i=0;i<terminal.rows;i++){terminal.dirty[i]=1;known[i]=0;}}
+#define CHANGED(x,y) (!known[y]||cells[(y)*terminal.cols+(x)].ch!=painted[(y)*terminal.cols+(x)].ch||cells[(y)*terminal.cols+(x)].colour!=painted[(y)*terminal.cols+(x)].colour||(cursor_shown&&moved&&(x)==cursor_x&&(y)==cursor_y))
+static int draw_cells(int show_cursor){
+    unsigned y,x,end,colour,changed=0,moved=cursor_shown!=((unsigned)show_cursor&&terminal.visible)||cursor_x!=terminal.x||cursor_y!=terminal.y;
+    char text[GRAPHICS_COLS];struct vt_cell *cells=vt_cells(&terminal);
+    for(y=0;y<terminal.rows;y++)if(terminal.dirty[y]||(moved&&cursor_shown&&y==cursor_y)){
         x=0;while(x<terminal.cols){
-            colour=cells[y*terminal.cols+x].colour;end=x;
-            while(end<terminal.cols&&cells[y*terminal.cols+end].colour==colour){text[end-x]=cells[y*terminal.cols+end].ch&255;end++;}
+            if(!CHANGED(x,y)){x++;continue;}
+            colour=vt_selection_colour(&selection,y*terminal.cols+x,cells[y*terminal.cols+x].colour);
             GrSetGCForeground(gc,palette[colour&15]);GrSetGCBackground(gc,palette[(colour>>4)&15]);
-            GrText(window,gc,x*8,y*16,text,end-x,GR_TFASCII|GR_TFTOP);x=end;
+            if(cells[y*terminal.cols+x].ch>=128) {
+                GR_BITMAP rows[16];unsigned r;uint32_t ch=cells[y*terminal.cols+x].ch;
+                for(r=0;r<16;r++)rows[r]=ch==RU_CONTINUATION?(x?ru_font_row(cells[y*terminal.cols+x-1].ch,r)<<8:0):ru_font_row(ch,r);
+                GrBitmap(window,gc,x*8,y*16,8,16,rows);
+                painted[y*terminal.cols+x]=cells[y*terminal.cols+x];end=x+1;
+            } else {
+                end=x;
+                while(end<terminal.cols&&vt_selection_colour(&selection,y*terminal.cols+end,cells[y*terminal.cols+end].colour)==colour&&CHANGED(end,y)&&cells[y*terminal.cols+end].ch<128){
+                    text[end-x]=(unsigned)cells[y*terminal.cols+end].ch;
+                    painted[y*terminal.cols+end]=cells[y*terminal.cols+end];end++;
+                }
+                GrText(window,gc,x*8,y*16,text,end-x,GR_TFASCII|GR_TFTOP);
+            }
+            x=end;changed=1;
         }
-        terminal.dirty[y]=0;
+        terminal.dirty[y]=0;known[y]=1;
     }
-    if(terminal.visible){GrSetGCForeground(gc,palette[cells[terminal.y*terminal.cols+terminal.x].colour&15]);GrLine(window,gc,terminal.x*8,terminal.y*16+15,terminal.x*8+7,terminal.y*16+15);}
-    GrFlush();
+    cursor_shown=show_cursor&&terminal.visible;cursor_x=terminal.x;cursor_y=terminal.y;
+    if(cursor_shown&&(changed||moved)){
+        GrSetGCForeground(gc,palette[cells[terminal.y*terminal.cols+terminal.x].colour&15]);
+        GrLine(window,gc,terminal.x*8,terminal.y*16+15,terminal.x*8+7,terminal.y*16+15);
+    }
+    return changed||moved;
+}
+#undef CHANGED
+static void draw(void){if(draw_cells(1))GrFlush();}
+static void scroll_pixels(struct vt *t,int amount){
+    unsigned n=amount<0?-amount:amount,rows=t->bottom-t->top+1,from,to,y;
+    /* Apply pending characters and erase the cursor before copying old pixels. */
+    draw_cells(0);
+    if(n<rows){
+        from=t->top+(amount>0?n:0);to=t->top+(amount<0?n:0);
+        GrCopyArea(window,gc,0,to*16,t->cols*8,(rows-n)*16,window,0,from*16,MWROP_COPY);
+        memmove(painted+to*t->cols,painted+from*t->cols,(unsigned long)(rows-n)*t->cols*sizeof(*painted));
+    }
+    from=amount>0?t->bottom+1-n:t->top;
+    for(y=from;y<from+n;y++){known[y]=0;t->dirty[y]=1;}
 }
 static void key(GR_EVENT_KEYSTROKE *e){
     unsigned k=e->ch;char s[2]={0,0};
@@ -66,21 +108,40 @@ static void key(GR_EVENT_KEYSTROKE *e){
         case MWKEY_F11:queue("\033[23~");return;case MWKEY_F12:queue("\033[24~");return;
         case MWKEY_BACKSPACE:k=127;break;
     }
+    if(k==NXR_KEY_PASTE||(e->modifiers&(MWKMOD_CTRL|MWKMOD_SHIFT))==(MWKMOD_CTRL|MWKMOD_SHIFT)&&(k=='v'||k=='V')) {
+        size_t length;char *text=nx_clipboard_get(window,&length);
+        if(text){if(vt_input_paste(&pending,text,length,terminal.bracketed_paste))fputs("nxterm: paste too large or out of memory\n",stderr);free(text);}
+        return;
+    }
+    if(k==NXR_KEY_SELECT_ALL){selection.active=1;selection.anchor=0;selection.end=terminal.cols*terminal.rows-1;invalidate();return;}
+    if(k==NXR_KEY_COPY||k==NXR_KEY_CUT||((e->modifiers&(MWKMOD_CTRL|MWKMOD_SHIFT))==(MWKMOD_CTRL|MWKMOD_SHIFT)&&(k=='c'||k=='C'))) {
+        size_t length;char *text=vt_selection_text(&terminal,&selection,&length);
+        if(text){if(nx_clipboard_set(window,text,length))fputs("nxterm: cannot copy selection\n",stderr);free(text);}return;
+    }
     if(k>255)return;
     if(e->modifiers&MWKMOD_CTRL){if((k>='a'&&k<='z')||(k>='@'&&k<='_'))k&=31;else if(k==' ')k=0;}
     if(e->modifiers&MWKMOD_ALT)queue("\033");
-    if(k){s[0]=k;queue(s);}else if(pending_count<sizeof(pending))pending[pending_count++]=0;
+    if(k){s[0]=k;queue(s);}else {char zero=0;if(vt_input_put(&pending,&zero,1))fputs("nxterm: input queue full\n",stderr);}
 }
 static void event(GR_EVENT *e){
     struct winsize size;unsigned cols,rows;
     if(e->type==GR_EVENT_TYPE_EXPOSURE)invalidate();
     else if(e->type==GR_EVENT_TYPE_KEY_DOWN)key(&e->keystroke);
+    else if((e->type==GR_EVENT_TYPE_BUTTON_DOWN||e->type==GR_EVENT_TYPE_BUTTON_UP)&&(e->button.changebuttons&GR_BUTTON_L)) {
+        unsigned at=vt_selection_at(&terminal,e->button.x/8,e->button.y/16);
+        if(e->type==GR_EVENT_TYPE_BUTTON_DOWN){selection.anchor=at;selection.active=selection.dragging=1;}
+        selection.end=at;if(e->type==GR_EVENT_TYPE_BUTTON_UP)selection.dragging=0;invalidate();
+    } else if(e->type==GR_EVENT_TYPE_MOUSE_POSITION&&selection.dragging) {
+        selection.end=vt_selection_at(&terminal,e->mouse.x/8,e->mouse.y/16);invalidate();
+    }
     else if(e->type==GR_EVENT_TYPE_CLOSE_REQ)stopping=SIGHUP;
     else if(e->type==GR_EVENT_TYPE_UPDATE&&e->update.utype==GR_UPDATE_SIZE){
+        selection.active=selection.dragging=0;
         cols=e->update.width/8;rows=e->update.height/16;
-        if(cols>VT_MAX_COLS)cols=VT_MAX_COLS;if(rows>VT_MAX_ROWS)rows=VT_MAX_ROWS;
+        if(cols>GRAPHICS_COLS)cols=GRAPHICS_COLS;if(rows>GRAPHICS_ROWS)rows=GRAPHICS_ROWS;
         if(!cols)cols=1;if(!rows)rows=1;
-        vt_resize(&terminal,cols,rows);memset(&size,0,sizeof(size));
+        if(vt_resize(&terminal,cols,rows)){GrResizeWindow(window,terminal.cols*8,terminal.rows*16);return;}
+        cursor_shown=0;memset(&size,0,sizeof(size));
         size.ws_col=cols;size.ws_row=rows;size.ws_xpixel=cols*8;size.ws_ypixel=rows*16;
         ioctl(master,TIOCSWINSZ,&size);
         if(getenv("NANOX_TRACE"))fprintf(stderr,"NXTERM_SIZE %d %u %u\n",getpid(),rows,cols);
@@ -89,6 +150,7 @@ static void event(GR_EVENT *e){
     }
 }
 static void cleanup(void){
+    vt_destroy(&terminal);free(pending.text);
     unsigned i;int status;
     if(master>=0){close(master);master=-1;}
     if(child>0){
@@ -105,14 +167,14 @@ int main(int argc,char **argv){
     GR_WM_PROPERTIES props;GR_EVENT e;struct winsize size;struct termios settings;fd_set reads,writes;struct timeval wait;int maxfd;
     if(argc>1&&!strcmp(argv[1],"--help")){puts("usage: nxterm [COMMAND [ARG...]]\nA Nano-X terminal (default: sh).");return 0;}
     if(GrOpen()<0){fputs("nxterm: cannot connect to Nano-X\n",stderr);return 1;}connected=1;atexit(cleanup);
-    vt_init_size(&terminal,cols,rows);terminal.reply=reply;
+    if(vt_init_size(&terminal,cols,rows))return 1;terminal.reply=reply;terminal.scroll=scroll_pixels;
     window=GrNewWindow(GR_ROOT_WINDOW_ID,24+(getpid()%4)*16,32+(getpid()%4)*16,cols*8,rows*16,0,GR_RGB(0,0,0),0);
     if(!window)return 1;
     memset(&props,0,sizeof(props));props.flags=GR_WM_FLAGS_TITLE|GR_WM_FLAGS_PROPS;
     props.title="Terminal";props.props=GR_WM_PROPS_APPWINDOW;
-    GrSetWMProperties(window,&props);gc=GrNewGC();GrSetGCUseBackground(gc,GR_TRUE);
-    GrSelectEvents(window,GR_EVENT_MASK_EXPOSURE|GR_EVENT_MASK_KEY_DOWN|GR_EVENT_MASK_CLOSE_REQ|GR_EVENT_MASK_UPDATE);
-    for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]='0'+i;master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("nxterm");return 1;}}
+    GrSetWMProperties(window,&props);gc=GrNewGC();GrSetGCUseBackground(gc,GR_TRUE);GrSetGCGraphicsExposure(gc,GR_FALSE);
+    GrSelectEvents(window,GR_EVENT_MASK_EXPOSURE|GR_EVENT_MASK_KEY_DOWN|GR_EVENT_MASK_CLOSE_REQ|GR_EVENT_MASK_UPDATE|GR_EVENT_MASK_BUTTON_DOWN|GR_EVENT_MASK_BUTTON_UP|GR_EVENT_MASK_MOUSE_POSITION);
+    for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]=RIPPLE_PTY_DIGIT(i);master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("nxterm");return 1;}}
     if(master<0){fputs("nxterm: no free terminals\n",stderr);return 1;}
     /* Backspace sends DEL. Raw-mode applications such as Levee read VERASE
      * instead of accepting both DEL and Ctrl-H like the shell editor does. */
@@ -132,12 +194,12 @@ int main(int argc,char **argv){
     if(getenv("NANOX_TRACE"))fprintf(stderr,"NXTERM_READY %d %u\n",getpid(),window);
     while(!stopping){
         for(i=0;i<8;i++){
-            n=read(master,buf,sizeof(buf));if(n>0){terminal.dirty[terminal.y]=1;vt_feed(&terminal,buf,n);}else{if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;break;}
+            n=read(master,buf,sizeof(buf));if(n>0){if(selection.active){selection.active=selection.dragging=0;invalidate();}terminal.dirty[terminal.y]=1;vt_feed(&terminal,buf,n);}else{if(!n)stopping=SIGHUP;else if(errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;break;}
         }
-        if(pending_count){n=write(master,pending,pending_count);if(n>0){pending_count-=n;memmove(pending,pending+n,pending_count);}else if(n<0&&errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;}
+        if(pending.length){n=write(master,pending.text+pending.head,pending.length>512?512:pending.length);if(n>0){vt_input_consume(&pending,n);}else if(n<0&&errno!=EAGAIN&&errno!=EINTR)stopping=SIGTERM;}
         draw();
         if(waitpid(child,&status,WNOHANG)==child){child=0;break;}
-        FD_ZERO(&reads);FD_ZERO(&writes);maxfd=master;FD_SET(master,&reads);if(pending_count)FD_SET(master,&writes);
+        FD_ZERO(&reads);FD_ZERO(&writes);maxfd=master;FD_SET(master,&reads);if(pending.length)FD_SET(master,&writes);
         GrPrepareSelect(&maxfd,&reads);wait.tv_sec=1;wait.tv_usec=0;
         n=select(maxfd+1,&reads,&writes,NULL,&wait);
         if(n>0)GrServiceSelect(&reads,event);else if(n<0&&errno!=EINTR){stopping=SIGTERM;break;}

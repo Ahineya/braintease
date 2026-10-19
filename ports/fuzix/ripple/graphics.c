@@ -25,6 +25,19 @@ static unsigned long address(unsigned long at) {
     return ((unsigned long)(MMU_GRAPHICS_BANK + at / BANK_CELLS) << 16) | (unsigned)(at % BANK_CELLS);
 }
 static int fail(unsigned e) { udata.u_error=e; return -1; }
+#include "raster-abi.h"
+static int raster(unsigned req,char *user){
+    struct gx_raster r;unsigned y;unsigned long n;uint16_t *d;const uint16_t *source;
+    if(uget(user,&r,sizeof(r))||raster_request(&r,req==GX_RASTER_COPY))return -1;
+    d=ripple_userptr(r.dst);source=ripple_userptr(r.src);
+    if(r.dst_stride==r.width&&(req==GX_RASTER_FILL||r.src_stride==r.width)){
+        n=(unsigned long)r.width*r.height;return req==GX_RASTER_FILL?ripple_fill(d,r.colour,n):ripple_copy(d,source,n);
+    }
+    for(y=0;y<r.height;y++){
+        if(req==GX_RASTER_FILL?ripple_fill(d,r.colour,r.width):ripple_copy(d,source,r.width))return -1;
+        d+=r.dst_stride;if(req==GX_RASTER_COPY)source+=r.src_stride;
+    }return 0;
+}
 static int mine(uint32_t handle) {
     if (!owner || owner!=udata.u_ptab || owner_pid!=owner->p_pid) return fail(EPERM);
     if (!handle || handle!=generation) return fail(EINVAL);
@@ -84,10 +97,13 @@ void ripple_gfx_exit(ptptr p) {
     irqrestore(irq);
 }
 void ripple_gfx_poll(void) {
-    VmInputBatch batch; unsigned i; irqflags_t irq;
+    VmInputBatch batch; unsigned i, capacity; irqflags_t irq;
     if(!owner)return;
     irq=di();
-    if(vm_input_read(incoming,8,&batch)==VM_DEVICE_OK) {
+    /* Leave unread transitions in the device queue while a slow renderer is
+     * catching up. Draining into a full GX ring discarded ordinary typing. */
+    capacity=EVENTS-queued;if(capacity>8)capacity=8;
+    if(capacity&&vm_input_read(incoming,capacity,&batch)==VM_DEVICE_OK) {
         if(batch.overflow)lost=1;
         for(i=0;i<batch.count;i++) {
             if(incoming[i].type==VM_INPUT_CLOSE){closing=1;continue;}
@@ -108,8 +124,9 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     unsigned long from,to;
     irqflags_t irq;
     if(m)return fail(ENXIO);
+    if(req==GX_RASTER_FILL||req==GX_RASTER_COPY)return raster(req,user);
     if(req==GX_INFO) {
-        struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT,640,480,1,GX_RGB565,307200UL};
+        struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT|GX_CAP_RASTER,640,480,1,GX_RGB565,307200UL};
         return uput(&info,user,sizeof(info));
     }
     if(req==GX_CREATE) {

@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import {ptyDevices} from '../ports/fuzix/tools/pty.mjs';
 // Reuse the canonical C16 image builder; never update a running Ripple disk.
 import fs from 'node:fs';
 import path from 'node:path';
 import {rootImage, atomicWrite} from '../ports/fuzix/tools/disk.mjs';
 import {fatFile} from '../ports/fuzix/tools/fat.mjs';
+import {backupImage, pruneImageBackups} from '../ports/fuzix/tools/image-backup.mjs';
 import {openImage, writeImage} from '../ports/fuzix/tools/image.mjs';
 import {ROOT_BLOCKS} from '../ports/fuzix/tools/layout.mjs';
 import {installRoot, growRoot} from '../ports/fuzix/tools/install.mjs';
@@ -11,6 +13,12 @@ import {manualFiles} from '../ports/fuzix/tools/manuals.mjs';
 import {sokobanFiles} from '../ports/fuzix/tools/sokoban.mjs';
 import {commanderFiles, riftFiles} from '../rfl/os/files.mjs';
 import {lynxFiles} from '../ports/lynx/files.mjs';
+import {tlsFiles} from '../ports/tls/files.mjs';
+import {fuseDEFiles} from '../ports/fusede/files.mjs';
+import {compilerFiles} from '../rcc-portable/files.mjs';
+import {unicodeFiles} from '../libraries/unicode/files.mjs';
+import {basicFiles} from '../ports/basic/files.mjs';
+import {netsurfFiles} from '../ports/netsurf/files.mjs';
 
 // C16 V3 shares the 1 GiB default and 32-bit block references with Ripple.
 
@@ -29,41 +37,62 @@ try {
     appDirectory=args[option+1];args.splice(option,2);
   }
   const [command, source, destination, extra, ...rest] = args;
+  const compiler = appDirectory ? compilerFiles(path.join(appDirectory, '../compiler')) : [];
   if (appDirectory) {
     if(!['create','install'].includes(command)) throw Error('--apps is only supported with create/install');
     const report=path.join(appDirectory,'../application-report.json');
     const names=fs.existsSync(report)
       ? ['native-hello',...JSON.parse(fs.readFileSync(report,'utf8')).filter(a=>a.status==='built').map(a=>a.name)]
       : ['native-hello','cat','ls','cp','sh'];
-    for(const name of ['rfl-demo','rfl-fm','rift']) {
+    for(const name of ['rfl-demo','rfl-fm','rift','qr-demo','telegram','music','wavplay','chat']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
-    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxcheck','nxhostcheck','startx','nxdraw']) {
+    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxmsg','nxselect','nxcalc','nxtetris','nxview','nxcheck','nxhostcheck','startx','nxdraw','fdeshowcase','fdectl']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
-    for(const name of [...new Set(names)].sort()) {
+    const aliases = {vi:'rift',mc:'rfl-fm',mv:'cp',ln:'cp',tcl:'picol',
+                     tclsh:'picol',sokoban:'sok',nslookup:'host'};
+    const selected = new Set(names);
+    for(const name of [...selected].sort()) {
       if(!/^[a-zA-Z0-9-]+$/.test(name)) throw Error('invalid application name in build report');
       if(!fs.existsSync(path.join(appDirectory,`${name}.fxe`))) throw Error(`missing built application: ${name}`);
       if(name==='sh') {
         if(useBootstrap) continue;
         applications.splice(applications.findIndex(a=>a.name==='/bin/sh'),1);
       }
+      if(aliases[name]) {
+        if(!selected.has(aliases[name])) throw Error(`missing executable alias target: ${aliases[name]}`);
+        applications.push({name:`/bin/${name}`,symlink:aliases[name]});
+        continue;
+      }
       applications.push({name:`/bin/${name}`,mode:0o100755,data:fs.readFileSync(`${appDirectory}/${name}.fxe`)});
       if(name==='lynx') applications.push(...lynxFiles());
-      if(name==='rfl-fm') applications.push({name:'/bin/mc',link:'/bin/rfl-fm'});
+      if(name==='netsurf') applications.push(...netsurfFiles());
+      if(name==='basic') applications.push(...basicFiles());
+      if((name==='htget'||name==='lynx'||name==='chat'||name==='netsurf')&&!applications.some(f=>f.name==='/etc/ssl/cert.pem')) applications.push(...tlsFiles());
+      if(name==='fdeshowcase') {
+        // Integration fixtures stage executable symlinks separately from data.
+        const local=path.resolve(appDirectory,'../fusede');
+        const assets=fs.existsSync(path.join(local,'theme.fdi')) ? local :
+          path.resolve(path.dirname(fs.realpathSync(path.join(appDirectory,'fdeshowcase.fxe'))),'../fusede');
+        applications.push(...fuseDEFiles(assets));
+      }
+      if(name==='rfl-fm') applications.push({name:'/bin/mc',symlink:'rfl-fm'});
     }
   }
   if(['create','install'].includes(command)) {
-    applications.push(...commanderFiles(), ...riftFiles());
+    applications.push(...compiler);
+    applications.push(...commanderFiles(), ...riftFiles(), ...unicodeFiles());
     applications.push({name:'/mnt/host',directory:true,mode:0o40755});
     if(appDirectory && fs.existsSync(path.join(appDirectory,'nano-X.fxe')))
       applications.push({name:'/etc/nxlaunch.cnf',mode:0o100644,preserve:true,
-        data:Buffer.from('Terminal - /bin/nxterm\nMac-term - /bin/gterm\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nDraw - /bin/nxdraw\n')});
+        data:Buffer.from('Terminal - /bin/nxterm\nMac-term - /bin/gterm\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nDraw - /bin/nxdraw\nCalculator - /bin/nxcalc\nTetris - /bin/nxtetris\nImages - /bin/nxview\n')});
     applications.push({name:'/dev/tty',mode:0o20666,device:0x200,data:Buffer.alloc(0)});
     applications.push({name:'/dev/gfx',mode:0o20666,device:0x400,data:Buffer.alloc(0)});
-    for(let i=0;i<4;i++) applications.push(
-      {name:`/dev/ptyp${i}`,mode:0o20600,device:0x300+i,data:Buffer.alloc(0)},
-      {name:`/dev/ttyp${i}`,mode:0o20600,device:0x202+i,data:Buffer.alloc(0)});
+    applications.push(...ptyDevices());
+    applications.push({name:'/dev/urandom',mode:0o20444,device:0x104,data:Buffer.alloc(0)});
+    applications.push({name:'/dev/crypto',mode:0o20666,device:0x105,data:Buffer.alloc(0)});
+    applications.push({name:'/dev/pcm',mode:0o20666,device:0x500,data:Buffer.alloc(0)});
     for(const [name,device] of [['null',0x100],['zero',0x102],['proc',0x103]])
       applications.push({name:`/dev/${name}`,mode:0o20666,device,data:Buffer.alloc(0)});
     for(const [name,data] of [
@@ -88,19 +117,18 @@ try {
   if(command==='put') applications.splice(0,applications.length,{name:destination,mode:0o100755,data:fs.readFileSync(extra)});
   if (command === 'install' || command==='put') {
     const original = openImage(source), updated = installRoot(
-      growRoot(original, ROOT_BLOCKS), applications);
+      growRoot(original, ROOT_BLOCKS, compiler.length ? 2048 : 1024), applications);
     if (!original.equals(updated)) {
-      let backup = `${source}.bak`, serial = 0;
-      while (fs.existsSync(backup)) backup = `${source}.bak.${++serial}`;
-      writeImage(backup, original, true);
+      const backup = backupImage(source, original);
       atomicWrite(source, updated);
-      console.log(`Installed native programs; previous image: ${backup}`);
+      pruneImageBackups(source);
+      console.log(backup ? `Installed native programs; previous image: ${backup}` : 'Installed native programs (backups disabled)');
     }
     process.exit(0);
   }
   const output = command === 'create' ? source : destination;
   const image = command === 'create'
-    ? rootImage(applications, ROOT_BLOCKS, 1024)
+    ? rootImage(applications, ROOT_BLOCKS, compiler.length ? 2048 : 1024)
     : growRoot(fatFile(openImage(source), 'ROOTFS.IMG').data, ROOT_BLOCKS);
   writeImage(output, image, true);
   console.log(`Created ${output}`);

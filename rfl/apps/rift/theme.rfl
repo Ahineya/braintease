@@ -6,6 +6,7 @@ import { Screen, BOLD, REVERSE, UNDERLINE } from "std/curses";
 import { env } from "./config";
 export struct Theme {
     name: String,
+    lines: bool,
     styles: Vec<u32>,
     notice: String
 }
@@ -41,7 +42,7 @@ export fn load(screen: &Screen, name: String) -> Theme {
     }
     let config = theme.config();
     let fallback: Vec<u32> = [0, 0, BOLD, 0, 0, 0, BOLD, REVERSE, REVERSE, REVERSE | BOLD, 0, REVERSE, BOLD, 0, REVERSE, 0];
-    Theme { name: config.name, styles: install(screen, config, 1, fallback).unwrap(), notice: notice }
+    Theme { name: config.name, lines: config.lines, styles: install(screen, config, 1, fallback).unwrap(), notice: notice }
 }
 
 export fn palette(theme: &Theme) -> Palette {

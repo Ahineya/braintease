@@ -1,155 +1,41 @@
-import { DirEntry, Metadata, IoError, read_dir, DIRECTORY } from "std/posix";
-
-export struct Panel {
-    path: String,
-    entries: Vec<DirEntry>,
-    selected: usize,
-    top: usize
-}
+import { IoError } from "std/posix";
+import { FilePanel, file_panel } from "lib/tui_files";
+import { joined as path_joined } from "lib/path";
 
 export struct Browser {
-    left: Panel,
-    right: Panel,
+    left: FilePanel,
+    right: FilePanel,
     right_active: bool,
     single: bool,
     status: String
 }
 
-export fn normalize(path: String) -> String {
-    let mut parts: Vec<String> = [];
-    let mut start: usize = 0;
-    for (i in 0..path.len() + 1) {
-        if (i == path.len() || path[i] == '/') {
-            let part = path[start..i];
-            if (part == "..") {
-                parts.pop();
-            } else if (part != "" && part != ".") {
-                parts.push(part);
-            }
-            start = i + 1;
-        }
-    }
-    let mut result = "";
-    for (i in 0..parts.len()) {
-        result = result + "/" + parts[i];
-    }
-    if (result == "") {
-        "/"
-    } else {
-        result
-    }
-}
-
 export fn joined(directory: String, name: String) -> String {
-    if (name.len() > 0 && name[0] == '/') {
-        normalize(name)
-    } else {
-        normalize(directory + "/" + name)
-    }
+    path_joined(directory, name)
 }
 
-fn before(a: DirEntry, b: DirEntry) -> bool {
-    if (a.name == "..") {
-        return b.name != "..";
-    }
-    if (b.name == "..") {
-        return false;
-    }
-    if (a.info.kind == DIRECTORY && b.info.kind != DIRECTORY) {
-        return true;
-    }
-    if (b.info.kind == DIRECTORY && a.info.kind != DIRECTORY) {
-        return false;
-    }
-    let length = if (a.name.len() < b.name.len()) {
-        a.name.len()
-    } else {
-        b.name.len()
-    };
-    for (i in 0..length) {
-        if (a.name[i] != b.name[i]) {
-            return a.name[i] < b.name[i];
-        }
-    }
-    a.name.len() < b.name.len()
+export fn load_panel(path: String) -> Result<FilePanel, IoError> {
+    file_panel(path, true)
 }
 
-fn sorted(entries: Vec<DirEntry>) -> Vec<DirEntry> {
-    let mut result = entries;
-    let mut gap = result.len() / 2;
-    while (gap > 0) {
-        for (i in gap..result.len()) {
-            let value = result[i];
-            let mut j = i;
-            while (j >= gap && before(value, result[j - gap])) {
-                result[j] = result[j - gap];
-                j -= gap;
-            }
-            result[j] = value;
-        }
-        gap /= 2;
-    }
-    result
+export fn reload(panel: &mut FilePanel) -> Result<unit, IoError> {
+    let hidden = panel.show_hidden;
+    panel.refresh(hidden)
 }
 
-export fn load_panel(path: String) -> Result<Panel, IoError> {
-    let path = normalize(path);
-    let mut entries = read_dir(path)?;
-    entries.push(DirEntry { name: "..", info: Metadata { kind: DIRECTORY, size: 0, device: 0, inode: 0, mode: 0 } });
-    Ok(Panel { path: path, entries: sorted(entries), selected: 0, top: 0 })
+export fn select_name(panel: &mut FilePanel, name: String) {
+    panel.select_name(name);
 }
 
-export fn reload(panel: &mut Panel) -> Result<unit, IoError> {
-    let name = panel.entries[panel.selected].name;
-    let next = load_panel(panel.path)?;
-    panel.entries = next.entries;
-    if (panel.selected >= panel.entries.len()) {
-        panel.selected = panel.entries.len() - 1;
-    }
-    select_name(panel, name);
-    Ok({})
+export fn select_by(panel: &mut FilePanel, amount: i16, visible: usize) {
+    panel.step(amount, visible);
 }
 
-export fn select_name(panel: &mut Panel, name: String) {
-    for (i in 0..panel.entries.len()) {
-        if (panel.entries[i].name == name) {
-            panel.selected = i;
-        }
-    }
+export fn keep_visible(panel: &mut FilePanel, visible: usize) {
+    panel.reveal(visible);
 }
 
-export fn select_by(panel: &mut Panel, amount: i16, visible: usize) {
-    if (amount < 0) {
-        let distance = (-amount) as usize;
-        panel.selected = if (panel.selected > distance) {
-            panel.selected - distance
-        } else {
-            0
-        };
-    } else {
-        let wanted = panel.selected + amount as usize;
-        panel.selected = if (wanted < panel.entries.len()) {
-            wanted
-        } else {
-            panel.entries.len() - 1
-        };
-    }
-    keep_visible(panel, visible);
-}
-
-export fn keep_visible(panel: &mut Panel, visible: usize) {
-    if (visible == 0) {
-        return;
-    }
-    if (panel.selected < panel.top) {
-        panel.top = panel.selected;
-    }
-    if (panel.selected >= panel.top + visible) {
-        panel.top = panel.selected - visible + 1;
-    }
-}
-
-export fn active(state: &Browser) -> Panel {
+export fn active(state: &Browser) -> FilePanel {
     if (state.right_active) {
         state.right
     } else {
@@ -166,8 +52,7 @@ export fn destination(state: &Browser) -> String {
 }
 
 export fn selected_path(state: &Browser) -> String {
-    let panel = active(state);
-    joined(panel.path, panel.entries[panel.selected].name)
+    active(state).selected_path()
 }
 
 export fn enter(state: &mut Browser, path: String) -> Result<unit, IoError> {

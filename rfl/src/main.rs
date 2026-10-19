@@ -1,7 +1,16 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+/// VM engines share Ripple IR; native and Wasm have distinct code targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum RunTarget {
+    Ripple,
+    Rbf,
+    Native,
+    Wasm,
+}
 
 #[derive(Parser)]
 #[command(name = "rfl", about = "Ripple Functional Language compiler")]
@@ -42,19 +51,19 @@ enum Command {
     /// Compile, link, and run a source file
     Run {
         input: PathBuf,
-        /// Execute the guest with rvm's Cranelift JIT
+        /// Use the selected VM's JIT (rvm or rbf)
         #[arg(long)]
         jit: bool,
-        /// Code generation target (native v1 retains the Ripple data ABI)
-        #[arg(long, default_value="ripple", value_parser=rfl::Target::parse)]
-        target: rfl::Target,
+        /// Execution target; rbf runs Brainfuck with lightweight progress telemetry
+        #[arg(long, default_value = "ripple", value_enum)]
+        target: RunTarget,
     },
     /// Start the language server on standard input and output
     Lsp,
-    /// Compile a source file to IR, Ripple assembly, or a native executable
+    /// Compile a source file to IR, Ripple assembly, a native executable, or Wasm
     Compile {
         input: PathBuf,
-        /// Output path. Defaults to `.asm` for Ripple or `.native` for native.
+        /// Output path. Defaults to `.asm`, `.native`, or `.wasm` for the target.
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Print textual IR instead of generating target code
@@ -85,9 +94,8 @@ fn run() -> Result<i32, rfl::CompileError> {
             build_dir,
             compiler,
         } => {
-            let output = output.unwrap_or_else(|| {
-                input.with_extension(if os == "fuzix" { "rxe" } else { "fxe" })
-            });
+            let output = output
+                .unwrap_or_else(|| input.with_extension(if os == "fuzix" { "rxe" } else { "fxe" }));
             let mut command = std::process::Command::new("python3");
             command
                 .arg(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/build_os.py"))
@@ -96,9 +104,10 @@ fn run() -> Result<i32, rfl::CompileError> {
                 .arg("-o")
                 .arg(output)
                 .arg("--rfl")
-                .arg(std::env::current_exe().map_err(|err| {
-                    rfl::CompileError::plain(err.to_string())
-                })?);
+                .arg(
+                    std::env::current_exe()
+                        .map_err(|err| rfl::CompileError::plain(err.to_string()))?,
+                );
             if let Some(build) = build_dir {
                 command.arg("--build-dir").arg(build);
             }
@@ -116,11 +125,22 @@ fn run() -> Result<i32, rfl::CompileError> {
             Ok(0)
         }
         Command::Run { input, jit, target } => {
-            if target == rfl::Target::Native {
+            if target == RunTarget::Wasm {
                 if jit {
-                    return Err(rfl::CompileError::plain("--jit selects the Ripple VM JIT; native programs are ahead-of-time compiled"));
+                    return Err(rfl::CompileError::plain(
+                        "--jit selects a VM JIT; Wasm runs in the host WebAssembly engine",
+                    ));
+                }
+                rfl::run_wasm_file(&input, true).map(|result| result.status)
+            } else if target == RunTarget::Native {
+                if jit {
+                    return Err(rfl::CompileError::plain(
+                        "--jit selects a VM JIT; native programs are ahead-of-time compiled",
+                    ));
                 }
                 rfl::run_native_file(&input, true).map(|result| result.status)
+            } else if target == RunTarget::Rbf {
+                rfl::run_file_in_brainfuck(&input, jit)
             } else {
                 rfl::run_file_in_terminal(&input, jit)
             }
@@ -149,6 +169,12 @@ fn run() -> Result<i32, rfl::CompileError> {
             if target == rfl::Target::Native {
                 let output = output.unwrap_or_else(|| input.with_extension("native"));
                 rfl::compile_file_to_native(&input, &output)?;
+                eprintln!("    Finished {}", output.display());
+                return Ok(0);
+            }
+            if target == rfl::Target::Wasm {
+                let output = output.unwrap_or_else(|| input.with_extension("wasm"));
+                rfl::compile_file_to_wasm(&input, &output)?;
                 eprintln!("    Finished {}", output.display());
                 return Ok(0);
             }
@@ -225,5 +251,44 @@ mod tests {
             assert_eq!(input, PathBuf::from("examples/beep.rfl"));
             assert!(jit);
         }
+    }
+
+    #[test]
+    fn brainfuck_target_accepts_flags_on_either_side_of_the_filename() {
+        for args in [
+            vec![
+                "rfl",
+                "run",
+                "--target",
+                "rbf",
+                "examples/comprehensions.rfl",
+            ],
+            vec![
+                "rfl",
+                "run",
+                "examples/comprehensions.rfl",
+                "--target",
+                "rbf",
+            ],
+            vec![
+                "rfl",
+                "run",
+                "--jit",
+                "examples/comprehensions.rfl",
+                "--target",
+                "rbf",
+            ],
+        ] {
+            let cli = Cli::try_parse_from(&args).unwrap();
+            let Command::Run { input, target, jit } = cli.command else {
+                panic!("expected the run command");
+            };
+            assert_eq!(target, RunTarget::Rbf);
+            assert_eq!(input, PathBuf::from("examples/comprehensions.rfl"));
+            assert_eq!(jit, args.contains(&"--jit"));
+        }
+        // rbf selects an execution engine, not a different source/IR data model.
+        assert!(Cli::try_parse_from(["rfl", "check", "main.rfl", "--target", "rbf"]).is_err());
+        assert!(Cli::try_parse_from(["rfl", "compile", "main.rfl", "--target", "rbf"]).is_err());
     }
 }

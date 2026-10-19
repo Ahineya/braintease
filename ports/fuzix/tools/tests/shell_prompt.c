@@ -55,6 +55,11 @@ int main(void) {
     assert(shell_prompt_columns("a\t> ")==10);
     assert(shell_prompt_columns("long\r> ")==2);
     assert(shell_prompt_columns("abc\b")==2);
+    assert(shell_prompt_columns("Жé中🙂> ")==8);
+    s=shell_prompt_expand("first\\n\\[\\e[32m\\]Жé中🙂\\[\\e[0m\\]> ",0);
+    assert(shell_prompt_columns(s)==8);
+    strcpy(path,"/home/tester/Ж中");
+    s=shell_prompt_expand("\\w> ","/home/tester");assert(shell_prompt_columns(s)==7);
     memset(large,'x',sizeof(large));large[sizeof(large)-1]=0;
     s=shell_prompt_expand(large,0);assert(strlen(s)==1023);assert(shell_prompt_columns(s)==1023);
     assert(!strcmp(shell_prompt_expand(0,0),""));

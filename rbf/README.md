@@ -193,6 +193,23 @@ for the tape alone, plus expanded source and interpreter data. Use
 `make -C ports/doom -j4 bf` or `TARGET=bf` for a direct export build after building
 the tools. See [the port guide](../ports/doom/README.md#brainfuck-host) for details.
 
+## Minimal FUZIX boot
+
+```sh
+scripts/run-fuzix-bf.sh
+scripts/run-fuzix-bf.sh --build-only
+scripts/run-fuzix-bf.sh --run-only --no-jit
+```
+
+This separate boot-only profile runs the maintained FUZIX kernel bootstrap,
+creates PID 1, mounts a tiny read-only C16 V3 root, verifies a file through the
+kernel filesystem and halts. JIT and compact telemetry are enabled by default.
+It uses four 16,384-cell RAM banks; MMU, IRQ polling, networking, graphics,
+audio and executable userspace are omitted. It does not provide a shell.
+The normal MMU/RVM FUZIX build and persistent disks are separate.
+See the [boot profile guide](../ports/fuzix/rbf/README.md) for its exact scope,
+tests, measurements and next milestones.
+
 ## Ordinary Brainfuck interpreters
 
 The portable CPU remains standard Brainfuck with 16-bit wrapping cells. Build

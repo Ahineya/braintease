@@ -27,6 +27,7 @@ int net_poll(NetContext *net, unsigned long now_ms) {
     if (result.outcome == VM_NET_EMPTY) return NET_AGAIN;
     if (result.outcome == VM_NET_LINK_DOWN) { net_link_lost(net); return NET_LINK_DOWN; }
     if (result.outcome != VM_NET_OK) return NET_IO_ERROR;
+    ++net->received_frames;
     if (result.length < 14) { ++net->rejected; return NET_REJECTED; }
     if (memcmp(net->rx, net->mac, 6)) {
         unsigned short i;

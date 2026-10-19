@@ -29,54 +29,69 @@ static void waited(int pid) {
     int status;
     C(waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0);
 }
+static unsigned long poll_low(struct ripple_deadline_queue *q,const struct ripple_deadline_time *t) {
+    struct ripple_deadline_ready ready;
+    ripple_deadline_poll(q,t,&ready);C(ready.bits[1]==0);return ready.bits[0];
+}
 static void queue(void) {
     struct ripple_deadline_queue q;
     struct ripple_deadline_time t = {10, 0, 999999000UL}, at;
     unsigned i;
     memset(&q, 0, sizeof(q));
-    C(ripple_deadline_poll(&q, &t) == 0);
+    C(poll_low(&q, &t) == 0);
     C(ripple_deadline_arm(&q, 0, &t, 0, 1) == 0);
     at = q.slots[0].at;
     C(at.seconds_low == 11 && at.seconds_high == 0 && at.nanoseconds == 0);
-    C(ripple_deadline_poll(&q, &t) == 0 && q.slots[0].state == RIPPLE_DEADLINE_ARMED);
-    C(ripple_deadline_poll(&q, &at) == 1 && !q.head && q.slots[0].state == RIPPLE_DEADLINE_EXPIRED);
-    C(ripple_deadline_poll(&q, &at) == 0);
+    C(poll_low(&q, &t) == 0 && q.slots[0].state == RIPPLE_DEADLINE_ARMED);
+    C(poll_low(&q, &at) == 1 && !q.head && q.slots[0].state == RIPPLE_DEADLINE_EXPIRED);
+    C(poll_low(&q, &at) == 0);
     t.seconds_low = 0xffffffffUL; t.seconds_high = 7;
     C(ripple_deadline_arm(&q, 31, &t, 0, 1) == 0);
     at = q.slots[31].at;
     C(at.seconds_low == 0 && at.seconds_high == 8 && at.nanoseconds == 0);
-    C(ripple_deadline_poll(&q, &t) == 0);
-    C(ripple_deadline_poll(&q, &at) == 0x80000000UL);
+    C(poll_low(&q, &t) == 0);
+    C(poll_low(&q, &at) == 0x80000000UL);
     t.seconds_low = 100; t.seconds_high = 1; t.nanoseconds = 0;
     C(ripple_deadline_arm(&q, 2, &t, 0x7fffffffUL, 999999) == 0);
     at = q.slots[2].at;
     C(at.seconds_low == 0x80000063UL && at.seconds_high == 1 && at.nanoseconds == 999999000UL);
-    C(ripple_deadline_poll(&q, &t) == 0);
+    C(poll_low(&q, &t) == 0);
     ripple_deadline_cancel(&q, 2); C(!q.head && q.slots[2].state == RIPPLE_DEADLINE_NONE);
     for (i=0; i<32; ++i) C(ripple_deadline_arm(&q, i, &t, 0, (32-i)*1000UL) == 0);
     at=t;at.nanoseconds=1000000UL;
-    C(ripple_deadline_poll(&q,&at)==0x80000000UL);
+    C(poll_low(&q,&at)==0x80000000UL);
     ripple_deadline_cancel(&q,30); /* current head */
     ripple_deadline_cancel(&q,16); /* middle */
     ripple_deadline_cancel(&q,0);  /* tail */
     ripple_deadline_cancel(&q,16); /* idempotent */
     at.nanoseconds=32000000UL;
-    C(ripple_deadline_poll(&q,&at)==0x3ffefffeUL && !q.head);
+    C(poll_low(&q,&at)==0x3ffefffeUL && !q.head);
     C(ripple_deadline_arm(&q,16,&t,0,1000)==0);
     C(ripple_deadline_arm(&q,16,&t,0,2000)==0); /* replace, not duplicate */
-    at.nanoseconds=1000000UL;C(ripple_deadline_poll(&q,&at)==0);
-    at.nanoseconds=2000000UL;C(ripple_deadline_poll(&q,&at)==0x10000UL && !q.head);
+    at.nanoseconds=1000000UL;C(poll_low(&q,&at)==0);
+    at.nanoseconds=2000000UL;C(poll_low(&q,&at)==0x10000UL && !q.head);
     C(ripple_deadline_arm(&q,1,&t,0,1000)==0 && ripple_deadline_arm(&q,4,&t,0,1000)==0);
-    at.nanoseconds=1000000UL;C(ripple_deadline_poll(&q,&at)==18 && !q.head);
+    at.nanoseconds=1000000UL;C(poll_low(&q,&at)==18 && !q.head);
     C(ripple_deadline_arm(&q,3,&t,0,1000)==0 && ripple_deadline_arm(&q,31,&t,1,0)==0);
-    C(ripple_deadline_poll(&q,NULL)==0x80000008UL && !q.head);
+    C(poll_low(&q,NULL)==0x80000008UL && !q.head);
     C(q.slots[3].state==RIPPLE_DEADLINE_ERROR && q.slots[31].state==RIPPLE_DEADLINE_ERROR);
     ripple_deadline_cancel(&q,3);C(q.slots[3].state==RIPPLE_DEADLINE_NONE);
-    C(ripple_deadline_arm(&q,32,&t,0,0)==-1);
+    C(ripple_deadline_arm(&q,RIPPLE_DEADLINE_SLOTS,&t,0,0)==-1);
+    {
+        struct ripple_deadline_ready ready;
+        for(i=0;i<RIPPLE_DEADLINE_SLOTS;i++)C(ripple_deadline_arm(&q,i,&t,0,1000)==0);
+        at=t;at.nanoseconds=1000000UL;ripple_deadline_poll(&q,&at,&ready);
+        C(ready.bits[0]==0xffffffffUL && ready.bits[1]==0xffffffffUL && !q.head);
+        C(q.slots[32].state==RIPPLE_DEADLINE_EXPIRED && q.slots[63].state==RIPPLE_DEADLINE_EXPIRED);
+        C(ripple_deadline_arm(&q,32,&t,1,0)==0 && ripple_deadline_arm(&q,63,&t,1,0)==0);
+        ripple_deadline_poll(&q,NULL,&ready);
+        C(ready.bits[0]==0 && ready.bits[1]==0x80000001UL);
+        C(q.slots[32].state==RIPPLE_DEADLINE_ERROR && q.slots[63].state==RIPPLE_DEADLINE_ERROR);
+    }
     C(ripple_deadline_arm(&q,0,&t,0,1000000UL)==-1 && !q.head);
     t.seconds_low=t.seconds_high=0xffffffffUL;t.nanoseconds=999999000UL;
     C(ripple_deadline_arm(&q,0,&t,0,1)==-1 && !q.head);
-    puts("finecheck: synthetic clock boundaries, ordering, cancellation, errors and 32 slots passed");
+    puts("finecheck: synthetic clock boundaries, ordering, cancellation, errors and 64 slots passed");
 }
 static void clocks(void) {
     struct timespec t;
@@ -87,7 +102,8 @@ static void clocks(void) {
     C(call(27,(long)&c.sample,RIPPLE_TIME_MONOTONIC,0,0)==0);
     C(c.before==0x1234 && c.after==0x4321 && c.sample.nanoseconds<1000000000UL);
     C(c.sample.resolution_ns>0 && c.sample.resolution_ns<=1000000UL);
-    C(call(27,0x180000UL,RIPPLE_TIME_MONOTONIC,0,0)==-1 && errno==EFAULT);
+    /* Bank 24 is now valid heap space; bank 240 is outside both user maps. */
+    C(call(27,0xf00000UL,RIPPLE_TIME_MONOTONIC,0,0)==-1 && errno==EFAULT);
     C(clock_getres(CLOCK_MONOTONIC,&t)==0 && t.tv_sec==0 && t.tv_nsec>0 && t.tv_nsec<=1000000L);
     C(clock_getres(CLOCK_REALTIME,&t)==0 && t.tv_sec==1 && t.tv_nsec==0);
     C(clock_getres(CLOCK_MONOTONIC,NULL)==0);

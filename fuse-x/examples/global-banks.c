@@ -33,9 +33,15 @@ int main(int argc, char **argv) {
     require(putenv("GLOBAL_BANK_TEST=survived")==0,"environment setup");
     for (i=0;i<35003UL;i++) wide[i] = 0x12340000UL + i;
     for (i=0;i<35003UL;i++) require(wide[i]==0x12340000UL+i,"wide cross-bank access");
-    heap=malloc(140003UL);
+    /* A full-HD canvas alone crosses 32 banks. Keep it disjoint from the
+     * application's extended globals and exercise COW in this larger region. */
+    heap=malloc(2500003UL);
     require(heap!=NULL,"large heap allocation");
-    memset(heap,0x5a,140003UL);
+    memset(heap,0x5a,2500003UL);
+    heap[2500002UL]=0xbeef;
+    pid=fork();require(pid>=0,"large-heap fork");
+    if(!pid){heap[2500002UL]=0x1234;_exit(heap[0]==0x5a?0:1);}
+    require(waitpid(pid,&status,0)==pid&&status==0&&heap[2500002UL]==0xbeef,"large-heap COW");
     require(*tail==21 && *edge==19,"heap does not overwrite globals");
     free(heap);
     fd=open("/tmp/global-span",O_RDWR|O_CREAT|O_TRUNC,0600);

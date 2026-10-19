@@ -10,9 +10,9 @@
 /* In a pretty way.						*/
 /****************************************************************/
 
-int wbox(WINDOW *win, int ymin, int xmin, int ymax, int xmax, unsigned int v, unsigned int h)
+int wbox(WINDOW *win, int ymin, int xmin, int ymax, int xmax, chtype v, chtype h)
 {
-  unsigned int vc, hc, ulc, urc, llc, lrc;	/* corner chars */
+  chtype vc, hc, ulc, urc, llc, lrc;	/* corner chars */
   int i;
 
   if (ymax == 0) ymax = win->_maxy;

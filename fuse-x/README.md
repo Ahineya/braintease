@@ -12,7 +12,20 @@ From the repository root, with Rust, a host C linker, Python 3 and Node.js:
 ```sh
 scripts/run-fuse-x.sh
 scripts/run-fuse-x.sh --run-only
+scripts/run-fuse-x.sh --rebuild --build-only
 ```
+
+Normal launches reuse unchanged host tools, kernel, applications and guest
+compiler packages. Content checks also notice missing or changed build outputs.
+The first launch after upgrading the build system may rebuild once to record
+its inputs. `--rebuild` forces rebuilding while preserving the disk;
+`--run-only` skips building and installation. The disk is checked and updated
+only when its managed files change.
+
+The [guest C toolchain](../rcc-portable/README.md) is installed as `/bin/cc`
+with headers and libraries under `/usr/lib/rcc`. It currently produces Ripple
+RXE programs for FUZIX/RVM; native Fuse-X executable generation still uses the
+host compiler.
 
 The default shell is the existing FUZIX Bourne shell. Try `help`, `ls /bin`,
 `echo hello | cat`, `echo saved > /tmp/note`, `cat /tmp/note`, `jobs`, and `levee`.
@@ -46,7 +59,9 @@ V3 uses 32-bit block references; ordinary file octets still occupy 16-bit cells.
 See the [format and migration guide](../docs/arch/c16-filesystem.md).
 `--build-only` prepares everything without running. `--fresh` backs up and
 replaces the default image.
-`FUSE_X_BUILD` changes the build directory; build output goes to `build.log` there.
+`FUSE_X_BUILD` changes the build directory; full build output goes to `build.log` there.
+The terminal shows elapsed time, build stages and current compilation activity,
+with an update every ten seconds during quiet work or build-lock waits.
 Interactive sessions have no default timeout; `--timeout N` sets one in seconds.
 
 ```sh
@@ -67,7 +82,7 @@ ten-second timeout. These test persistence after orderly exits, not crash recove
 Normal builds also install `rfl-demo` and `rfl-fm`, the modular RFL Commander,
 with `mc` as its short alias. Try `mc / /tmp` for two panels, file
 viewing/copy/move/mkdir/delete, Ctrl-P for one panel, and Ctrl-O for a guest
-command prompt. Ctrl-A/F1 opens About, F4 edits with VISUAL/EDITOR (default vi),
+interactive shell (return with `exit` or Ctrl-D). Ctrl-A/F1 opens About, F4 edits with VISUAL/EDITOR (default vi),
 `r` renames, and Enter runs executable files. F10 restores the shell screen.
 Regular files move between `/mnt/host` and guest storage by copy-then-remove.
 F9 selects a color theme; Classic Blue is the subdued default. Example themes
@@ -114,8 +129,9 @@ kills remaining tasks, reaps them and flushes the filesystems and host image.
 Host SIGTERM follows this path. Host crashes, SIGKILL and execution timeouts are
 not orderly shutdown. The broker's `console.log` records guest output while no
 client is attached; it rotates at 8 MiB and retains one previous log.
-Attachments replay at most the latest 64 KiB. A client that stops reading is
-disconnected once its output backlog reaches 1 MiB, leaving the kernel running.
+Attachments replay at most the latest 64 KiB. A slow attached client applies
+backpressure at a 1 MiB output backlog while input and session controls remain
+available; output floods no longer force detachment.
 Attached clients also forward terminal dimensions on connection and resize;
 the kernel exposes the current physical-console size through `TIOCGWINSZ`.
 Commander rebuilds/repositions its layout and dialogs when dimensions change.
@@ -128,6 +144,13 @@ Direct native runs normally remain alive after console EOF, with existing
 sessions continuing; the launcher keeps its console input open across detach.
 
 ## Existing images
+
+Guest development tools include `cc`, the expanded MWC `make` and the Picol Tcl
+build subset. Compiler sources and their guest-only build coordinator are
+installed under `/usr/src/rcc`; see [guest source builds](../rcc-portable/README.md#guest-source-builds).
+Use the shared folder for build outputs that should survive a disk replacement.
+The portable backend currently produces Ripple RXE executables, which run in
+FUZIX/RVM; native FXE emission remains a separate self-hosting stage.
 
 The executable needs a raw C16 V3 `ROOTFS.IMG`, rather than the outer Ripple FAT
 disk. The signature and physical image size are checked before boot.
@@ -235,7 +258,7 @@ keeps the session offline. `--net /path/to/socket` selects the existing raw
 Ethernet backend. `RCC_NATIVE_NET` (then `RIPPLE_NET`) supplies the default.
 Avoid running another guest with the same address on the same network.
 
-Telnet starts independent Bourne shells on the four guest PTYs. It is an
+Telnet starts independent Bourne shells on the sixteen guest PTYs. It is an
 unauthenticated, unencrypted development service; start it explicitly on a
 trusted network. Closing one remote session leaves the main shell and other
 sessions running. The init supervisor owns the overall session independently
@@ -257,30 +280,44 @@ platform adapters, applications and separate build output live here. RCC retains
 the 16-bit cell and logical bank/offset pointer ABI while generating host machine
 code. Disk layout remains compatible with the Ripple C16 filesystem.
 
-The hosted configuration has 16 FUZIX process slots, including init, the shell
-and unreaped children. Private RAM uses 1 KiB copy-on-write pages. Banks 1–4
-hold small globals and continuation stacks, 8–23 provide a bounded user heap
-window, and 31 holds arguments. Larger applications reserve banks 32–47 for
-globals. Shared kernel globals and allocations use banks 240–255.
+The hosted configuration has 64 FUZIX process slots, including init, the shell
+and unreaped children, with 192 system-wide open-file entries and 128 cached
+inodes. Private RAM uses 1 KiB copy-on-write pages. Banks 1–4
+hold small globals and continuation stacks, 31 holds arguments, and larger
+applications reserve banks 32–47 for globals. Current SDK allocators select
+banks 48–239 for up to 24,000 KiB of private heap; old packages retain the
+bounded 8–30 heap window. Shared kernel globals and allocations use banks
+240–255. The arena switch preserves arguments, globals and legacy allocations.
+The shared shell tracks up to 64 jobs and pipeline members.
+`make -C fuse-x test-process-capacity` checks all process slots, high-slot
+timeouts, process snapshots, cleanup and 40 simultaneous background jobs using
+a disposable disk.
 Current RAM figures are provisional accounting, not enforced physical budgets;
 the Ripple port's variable executable allocation is not yet integrated here.
 
 Newly compiled native applications have scheduling checkpoints at loop edges;
 function-call continuations also provide checkpoints. About every 5 ms, subject
-to reaching a checkpoint, the kernel polls input/networking, advances timers,
-delivers signals and schedules ready processes. Pure computation loops can be
+to reaching a checkpoint, the kernel polls input/networking, advances timers
+and delivers signals. Runnable/event queues use the shared scheduler, with a
+native 5 ms slice and bounded wakeup-driven rescheduling. Pure computation loops can be
 interrupted and cannot indefinitely exclude other runnable tasks. Kernel work
 and signal handlers executing inside a kernel callback are not interrupted;
-blocking host services still need their own nonblocking adapters. Rebuild older
+blocking host services still need their own nonblocking adapters. Executable
+loading explicitly yields between released file chunks, prepares native code on
+two host workers, and installs at most 128 functions between scheduler polls.
+Rebuild older
 application packages to obtain checkpoints. This is compiler-assisted fairness,
 not asynchronous host-thread or machine-instruction preemption. Host clocks advance
 kernel timers at these checkpoints and platform services. Interrupt masking records
 logical state on the single guest execution thread. Console input is collected
-by a host worker and polled without blocking that thread. Four guest PTY pairs
+by a host worker and polled without blocking that thread. Sixteen guest PTY pairs
 provide independent terminal sessions. Custom handlers run on completed syscall
 returns; privilege isolation remains future work.
 User-copy validation checks allowed regions, but trusted compiled code can still
 address kernel memory directly.
+
+See [native performance](PERFORMANCE.md) for COW page-table sharing, compact
+continuations, bounded direct-call helpers, compatibility and benchmark commands.
 
 See the [architecture](../docs/fuse-x/architecture.md),
 [roadmap](../docs/fuse-x/roadmap.md), and
@@ -290,10 +327,10 @@ See the [architecture](../docs/fuse-x/architecture.md),
 
 The shared guest `select()` interface supports regular files, pipes, terminals,
 PTYs and internet/local guest sockets. Unix-domain stream sockets and
-`socketpair()` work without Ethernet. Both targets have sixteen internet socket
-endpoints, sixteen active TCP connections, four TCP listeners and a separate
+`socketpair()` work without Ethernet. Both targets have 64 internet socket
+endpoints, 64 active TCP connections, 16 TCP listeners, 16 bound UDP ports and a separate
 pool of thirty-two local endpoints. See [local IPC](../docs/networking/local-ipc.md).
-The native process limit remains 16 descriptors; sets
+Both targets provide 32 descriptors per process; sets
 have the same two-word C16 layout as RVM. Waiting suspends the native
 continuation while other sessions and host idle processing proceed. TCP
 asynchronous connect exposes `getsockopt(SOL_SOCKET, SO_ERROR)`. Both graphics
@@ -334,11 +371,14 @@ The hosted `/dev/gfx` implements GX RGB565 creation, upload, fill, overlapping
 copy, presentation, titles, input/state, Unix readiness and destruction. Up to
 16 surfaces have independent input queues and opaque, non-reused handles.
 FUZIX checks process ownership; inherited descriptors cannot destroy a parent's
-windows. Successful exec and process exit release owned windows. Four PTYs
+windows. Successful exec and process exit release owned windows. Sixteen PTYs
 currently limit the total of native terminals, Nano-X terminals and Telnet
-shells. Standalone GX programs scale their fixed framebuffer on host resize;
-Nano-X windows resize their guest canvases and notify clients (up to 1024×768,
-subject to guest memory). Fixed-size clients retain that restriction.
+shells. Nano-X windows resize their guest canvases and notify clients (up to
+1920×1080, subject to guest memory). Both `nxterm` and `gterm` resize their
+terminal grid and PTY, so shells and editors receive the new dimensions.
+Resize with the normal Mac window edges/corners or the green window control.
+Fixed-size clients retain that restriction. Other GX programs must handle
+`GX_RESIZE` and acknowledge accepted dimensions through `GX_CONFIGURE`.
 
 Run `nxclock &`, `nxeyes &` or `nxterm &` in GUI mode: each Nano-X top-level
 opens its own Mac window with native chrome. Child widgets stay in their

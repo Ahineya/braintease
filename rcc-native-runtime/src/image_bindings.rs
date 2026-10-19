@@ -73,6 +73,7 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         fn rcc_native_ext_mmio_read(ctx: *mut c_void, a0: u64) -> u64;
         fn rcc_native_ext_mmio_write(ctx: *mut c_void, a0: u64, a1: u64) -> u64;
         fn rcc_native_ext_rfl_halt(ctx: *mut c_void) -> u64;
+        fn rcc_native_ext___rcc_host_math(ctx: *mut c_void, op: u64, a: u64, b: u64) -> u64;
         fn rcc_native_ext___rfl_host_sin(ctx: *mut c_void, a0: u64) -> u64;
         fn rcc_native_ext___rfl_host_cos(ctx: *mut c_void, a0: u64) -> u64;
         fn rcc_native_ext___rcc_f64_floor(ctx: *mut c_void, a0: u64) -> u64;
@@ -148,6 +149,7 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         ("rcc_native_ext_mmio_read", 1) => rcc_native_ext_mmio_read as *const () as usize,
         ("rcc_native_ext_mmio_write", 2) => rcc_native_ext_mmio_write as *const () as usize,
         ("rcc_native_ext_rfl_halt", 0) => rcc_native_ext_rfl_halt as *const () as usize,
+        ("rcc_native_ext___rcc_host_math", 3) => rcc_native_ext___rcc_host_math as *const () as usize,
         ("rcc_native_ext___rfl_host_sin", 1) => rcc_native_ext___rfl_host_sin as *const () as usize,
         ("rcc_native_ext___rfl_host_cos", 1) => rcc_native_ext___rfl_host_cos as *const () as usize,
         ("rcc_native_ext___rcc_f64_floor", 1) => {

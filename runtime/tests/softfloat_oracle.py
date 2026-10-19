@@ -99,7 +99,7 @@ def main():
         '''
         (path / 'oracle.c').write_text(code)
         subprocess.run([os.environ.get('CC', 'cc'), '-std=c99', '-O2', '-fno-fast-math', '-ffp-contract=off',
-                        '-shared', '-fPIC', path / 'oracle.c', '-lm', '-o', path / 'oracle.so'], check=True)
+                        '-shared', '-fPIC', '-I', str(ROOT / 'runtime'), path / 'oracle.c', '-lm', '-o', path / 'oracle.so'], check=True)
         lib = ctypes.CDLL(str(path / 'oracle.so'))
         for bits in args.bits or [32, 64]:
             uint = ctypes.c_uint32 if bits == 32 else ctypes.c_uint64

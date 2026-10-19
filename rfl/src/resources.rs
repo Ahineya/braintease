@@ -2,24 +2,58 @@
 //! Ordinary values keep copy semantics; owners and aggregates containing them
 //! require an explicit transfer. References never become resource owners.
 use crate::{ast::BinOp, error::CompileError, ty::Ty, typed::*};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 pub(crate) struct ResourceTypes {
+    once_functions: HashSet<u32>,
+    /// Destruction tracking only; never used to authorize copies or transfers.
+    shared_cleanup: bool,
     structs: Vec<bool>,
     tuples: Vec<bool>,
     adts: Vec<bool>,
     vectors: Vec<bool>,
     arrays: Vec<bool>,
+    slices: Vec<bool>,
 }
 impl ResourceTypes {
     pub fn new(module: &TModule) -> Self {
+        Self::build(module, false)
+    }
+
+    /// Shared handles and closures retaining them have observable last-drop
+    /// cleanup, even though they remain copyable. Keep this proof independent
+    /// of move checking and call argument transfer decisions.
+    pub fn for_scope_cleanup(module: &TModule) -> Self {
+        let shared = module
+            .functions
+            .iter()
+            .any(|f| f.ret == Ty::SharedOwner || f.bindings.contains(&Ty::SharedOwner))
+            || module
+                .adts
+                .iter()
+                .flat_map(|a| &a.ctors)
+                .flat_map(|c| &c.fields)
+                .chain(module.structs.iter().flatten())
+                .chain(module.tuples.iter().flatten())
+                .chain(&module.collections.vectors)
+                .chain(&module.collections.slices)
+                .chain(&module.collections.arrays)
+                .chain(&module.collections.owners)
+                .any(|t| *t == Ty::SharedOwner);
+        Self::build(module, shared)
+    }
+
+    fn build(module: &TModule, shared_cleanup: bool) -> Self {
         let mut result = Self {
+            once_functions: module.once_functions.iter().copied().collect(),
+            shared_cleanup,
             structs: vec![false; module.structs.len()],
             tuples: vec![false; module.tuples.len()],
             adts: vec![false; module.adts.len()],
             vectors: vec![false; module.collections.vectors.len()],
             arrays: vec![false; module.collections.arrays.len()],
+            slices: vec![false; module.collections.slices.len()],
         };
         // Monotone propagation handles recursive ADTs without a recursion limit.
         loop {
@@ -60,6 +94,12 @@ impl ResourceTypes {
                     changed = true;
                 }
             }
+            for (id, elem) in module.collections.slices.iter().enumerate() {
+                if !result.slices[id] && result.contains(*elem) {
+                    result.slices[id] = true;
+                    changed = true;
+                }
+            }
             if !changed {
                 return result;
             }
@@ -68,10 +108,14 @@ impl ResourceTypes {
     pub fn contains(&self, ty: Ty) -> bool {
         match ty {
             Ty::Owned(_) | Ty::ErasedOwner => true,
+            Ty::SharedOwner => self.shared_cleanup,
+            // A reusable callable may retain shared owners in its environment.
+            Ty::Func(id) => self.shared_cleanup || self.once_functions.contains(&id),
             Ty::Struct { id, .. } => self.structs[id as usize],
             Ty::Tuple { id, .. } => self.tuples[id as usize],
             Ty::Adt(id) => self.adts[id as usize],
             Ty::Vec(id) => self.vectors[id as usize],
+            Ty::Slice(id) => self.slices[id as usize],
             Ty::Array { id, .. } => self.arrays[id as usize],
             _ => false,
         }
@@ -89,7 +133,7 @@ struct Check<'a> {
     types: &'a ResourceTypes,
     loops: Vec<Loop>,
     known: std::collections::HashSet<u32>,
-    closures: &'a HashMap<String, Vec<u32>>,
+    closures: &'a HashMap<String, Vec<Capture>>,
 }
 #[derive(Clone, Copy)]
 enum Use {
@@ -98,23 +142,36 @@ enum Use {
 }
 
 pub(crate) fn check(source: &str, module: &TModule) -> Result<(), CompileError> {
+    check_with_named_functions(source, module, std::iter::empty())
+}
+
+/// Declaration checking contains only the bodies instantiated so far. Named
+/// functions have no lexical captures, including those not checked until the
+/// concrete pass. Lifted lambdas must always supply their actual capture lists.
+pub(crate) fn check_with_named_functions<'a>(
+    source: &str,
+    module: &TModule,
+    named: impl IntoIterator<Item = &'a str>,
+) -> Result<(), CompileError> {
     let types = ResourceTypes::new(module);
     if module.collections.slices.iter().any(|t| types.contains(*t)) {
         return Err(CompileError::at(source,0,"owning slices cannot share move-only resource elements; borrow an element or keep its vector owner"));
     }
-    let closures = module
+    let mut closures: HashMap<_, _> = module
         .functions
         .iter()
-        .map(|f| {
-            (
-                f.name.clone(),
-                f.captures.iter().map(|c| c.parent).collect(),
-            )
-        })
+        .map(|f| (f.name.clone(), f.captures.clone()))
         .collect();
+    for name in named {
+        closures.entry(name.to_owned()).or_default();
+    }
     for function in &module.functions {
-        if function.captures.iter().any(|c| types.contains(c.ty)) {
-            return Err(CompileError::at(source,0,"a copyable closure cannot capture a move-only resource; pass a temporary reference instead"));
+        if let Some(cap) = function
+            .captures
+            .iter()
+            .find(|c| !c.transfer && types.contains(c.ty))
+        {
+            return Err(CompileError::at(source,cap.span,"a copyable closure cannot capture a move-only resource; pass a temporary reference instead"));
         }
         Check {
             source,
@@ -587,8 +644,18 @@ impl Check<'_> {
                 return self.expr(ptr, Use::Value, state)
             }
             Closure { func } => {
-                for id in &self.closures[func] {
-                    self.live(*id, 0, state)?;
+                let captures = self.closures.get(func).ok_or_else(|| {
+                    CompileError::at(
+                        self.source,
+                        0,
+                        format!("missing capture metadata for function `{func}`"),
+                    )
+                })?;
+                for cap in captures {
+                    self.live(cap.parent, cap.span, state)?;
+                    if cap.transfer {
+                        state.insert(cap.parent, cap.span);
+                    }
                 }
             }
             Int(_)

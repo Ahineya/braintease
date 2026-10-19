@@ -26,6 +26,7 @@ export function riftFiles() {
     file('/usr/share/rift/config.example.ini', 'themes/config.ini'),
     file('/usr/share/rift/theme.example.ini', 'themes/theme.ini'),
     file('/usr/share/rift/hello.bf', 'hello.bf'),
+    file('/usr/share/rift/hello.mjs', 'hello.mjs'),
     file('/etc/rift.ini', 'themes/config.ini', true),
     file('/etc/rift/theme.ini', 'themes/theme.ini', true)
   ];

@@ -91,18 +91,20 @@ arg_t _mknod(void)
 	inoptr parent;
 
 	udata.u_error = 0;
+    /* Link target storage can only be initialized through symlink(). */
+    if ((mode & F_MASK) == F_LNK) { udata.u_error = EINVAL; return -1; }
 
 	if (!super() && ((mode & F_MASK) != F_PIPE)) {
 		udata.u_error = EPERM;
 		goto nogood3;
 	}
-	if ((ino = n_open(name, &parent)) != NULL) {
+	if ((ino = n_open_flags(name, &parent, N_NOFOLLOW | N_NODEREF)) != NULL) {
 		udata.u_error = EEXIST;
 		goto nogood;
 	}
 
 	if (!parent) {
-		udata.u_error = ENOENT;
+		if (!udata.u_error) udata.u_error = ENOENT;
 		return (-1);
 	}
 

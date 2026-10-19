@@ -9,7 +9,9 @@ The MMU translates existing `(bank, offset)` addresses rather than changing C
 pointers or the instruction format. There are separate instruction and data
 maps, backed by physical RAM tables. Device descriptors and bulk transfers
 continue to contain **physical** addresses. A kernel must translate or copy user
-buffers before submitting them to a device.
+buffers before submitting them to a device. The narrowly scoped
+[atomic math stack service](mmio.md#atomic-rvm-stack-submission) is the exception:
+it translates a packet in current SB and validates every cell inside one STORE.
 
 ## Modes and instructions
 
@@ -56,7 +58,7 @@ interrupt CSRs 0–11 retain their numbering. All writes below are privileged.
 | 25 | SAVED_MODE | Interrupted mode: 0 supervisor, 1 user; writable only with a live CPU trap frame, user return requires MMU enabled |
 | 26 | MODE | Read-only current mode, 0 supervisor or 1 user |
 | 27 | MMU_FLUSH | Write bit 0 to flush address translations, bit 1 to also discard compiled instruction translations; reads zero; writing zero does nothing; unknown bits rejected |
-| 28 | MMU_FEATURES | Read-only 3: bit 0 bank maps, bit 1 512-cell pages |
+| 28 | MMU_FEATURES | Read-only bitmap: bit 0 bank maps, bit 1 512-cell pages, bit 2 atomic user math stack packets (current value 7) |
 
 CONTROL, root and window writes flush address translations. Table stores alone
 need not become visible until a flush. Changing instruction mappings requires a

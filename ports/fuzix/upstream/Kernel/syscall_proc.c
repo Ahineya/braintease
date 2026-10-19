@@ -1,4 +1,5 @@
 #include <kernel.h>
+#include <process-state.h>
 #include <timer.h>
 #include <kdata.h>
 #include <printf.h>
@@ -352,7 +353,7 @@ arg_t _waitpid(void)
 						if (statloc)
 							uputi(p->p_exitval, statloc);
 						retval = p->p_pid;
-						p->p_status = P_EMPTY;
+						proc_setstate(p,P_EMPTY);
 
 						/* Add in child's cumulative time info */
 						udata.u_ptab->p_cutime += p->p_utime + p->p_cutime;
@@ -429,7 +430,7 @@ arg_t _fork(void)
 	 * FIXME: push this down into dofork
 	 */
 #ifndef CONFIG_PARENT_FIRST
-	udata.u_ptab->p_status = P_READY;
+	proc_setstate(udata.u_ptab,P_READY);
 #endif
 
 	/*
@@ -450,14 +451,14 @@ arg_t _fork(void)
 #endif
 	// if we fail this returns -1
 	if (r == -1) {
-		udata.u_ptab->p_status = P_RUNNING;
+		proc_setstate(udata.u_ptab,P_RUNNING);
 		pagemap_free(new_process);
-		new_process->p_status = P_EMPTY;
+		proc_setstate(new_process,P_EMPTY);
 		udata.u_error = ENOMEM;
 		/* FIXME: we don't know for sure whether the error occurred
 		   before or after makeproc: see bug 686 */
 		nproc--;
-		nready--;
+		proc_ready_remove();
 	}
 	irqrestore(irq);
 	return r;

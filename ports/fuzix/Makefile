@@ -10,7 +10,7 @@ R := $(ROOT)/runtime
 ROS := $(ROOT)/c-test/examples/rOS
 RCC := $(ROOT)/target/release/rcc
 RFL ?= $(ROOT)/target/release/rfl
-RFL_SOURCES := $(shell find $(ROOT)/rfl/std $(ROOT)/rfl/lib $(ROOT)/libraries/ini $(ROOT)/libraries/tui-theme -type f) $(ROOT)/rfl/os/posix.c $(ROOT)/rfl/tools/build_os.py
+RFL_SOURCES := $(shell find $(ROOT)/rfl/std $(ROOT)/rfl/lib $(ROOT)/libraries/ini $(ROOT)/libraries/tui-theme $(ROOT)/libraries/unicode -type f) $(ROOT)/rfl/os/posix.c $(ROOT)/rfl/tools/build_os.py
 RASM := $(ROOT)/src/ripple-asm/target/release/rasm
 RLINK := $(ROOT)/src/ripple-asm/target/release/rlink
 # Retained only to diagnose older build commands; there is one supported profile.
@@ -22,21 +22,23 @@ BULK_IO ?= 1
 CODE_BANKS ?= 1024
 TEST_ENGINE ?= jit
 FLAGS := -DRIPPLE_MMU=1 -DRIPPLE_BULK_IO=$(BULK_IO) -DRIPPLE_CODE_BANKS=$(CODE_BANKS) --bank-size 64000 -I$(PORT)/ripple -I$(K)/include -I$(K)/dev -I$(R)/include -I$(ROOT)/ports/graphics/include -DBANK_SIZE=64000
-RUNTIME_HEADERS := $(addprefix $(R)/include/,$(addsuffix .h,stdint stddef stdarg string ctype stdlib mmio mmio_constants vm_devices vm_bulk irq stdio limits stdbool))
-RUNTIME_HEADERS += $(addprefix $(R)/include/,$(addsuffix .h,net net_tcp vm_network))
+RUNTIME_HEADERS := $(addprefix $(R)/include/,$(addsuffix .h,stdint stddef stdarg string ctype stdlib mmio mmio_constants vm_devices vm_crypto vm_bulk irq stdio limits stdbool ripple_unicode))
+RUNTIME_HEADERS += $(R)/include/vm_math.h $(R)/include/__float_accel.h
+RUNTIME_HEADERS += $(addprefix $(R)/include/,$(addsuffix .h,net net_tcp vm_network ripple_net_limits))
 U := $(PORT)/upstream/Library
 USERFLAGS := -DRIPPLE_MMU=1 --bank-size 64000 -I$(PORT)/ripple/include -I$(U)/include -I$(R)/include -I$(PORT)/ripple -I$(ROOT)/ports/graphics/include -DNO_64BIT
 USERHEADERS := $(BUILD)/.mmu $(shell find ripple/include $(U)/include -name '*.h') $(RUNTIME_HEADERS) $(K)/include/userstructs.h
-LIBC_LOCAL := syscalls stdio format scan wait clock dirent misc heap pipe sockets resolver search identity
+LIBC_LOCAL := syscalls stdio format scan wait clock timezone dirent misc heap pipe sockets resolver search identity
 AWK_MATH_SRC := __sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf
 LIBC_UPSTREAM := $(filter-out regerror malloc calloc realloc readline readline_fn clock_gettime clock_getres $(AWK_MATH_SRC),$(basename $(notdir $(wildcard upstream/Library/libs/*.c))))
+UNICODE_OBJS := $(BUILD)/libc/unicode.pobj
 LIBC_OBJS := $(addprefix $(BUILD)/libc/,$(addsuffix .pobj,$(LIBC_LOCAL))) $(addprefix $(BUILD)/ulib/,$(addsuffix .pobj,$(LIBC_UPSTREAM)))
 .PHONY: rfl-sdk rfl-sdk-info
 rfl-sdk: $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
 rfl-sdk-info:
-	@python3 -c 'import json; print(json.dumps({"entry":"$(BUILD)/user/entry.pobj","libraries":"$(BUILD)/user/userlib.pobj $(if $(filter 1,$(RFL_CURSES)),$(CURSES_OBJS)) $(LIBC_OBJS)".split()}))'
+	@python3 -c 'import json; print(json.dumps({"entry":"$(BUILD)/user/entry.pobj","libraries":"$(BUILD)/user/userlib.pobj $(if $(filter 1,$(RFL_CURSES)),$(CURSES_OBJS),$(if $(filter 1,$(RFL_UNICODE)),$(UNICODE_OBJS))) $(LIBC_OBJS)".split()}))'
 APPS := basename dirname cat cp ls wc head tail grep fgrep sort uniq echo mkdir rmdir touch tee cmp chmod cut colrm expand pwd rm sync true false seq sleep kill tr od sum yes which env printenv chown chgrp du df sed ed xargs id whoami uname date mkfifo mknod comm rev test ps vile levee find dd diff diffh tar cowsay picol more less mktemp groups logname nohup fmt column cksum stty join split tsort tty nice time clear pr col man wump hamurabi expr awk make m4 dc
-APPS += free uptime sok top ptysh
+APPS += free uptime sok top ptysh mux
 APPS += ifconfig ping telnet telnetd
 APPS += htget dig echoping ntpdate host
 APPS += bf
@@ -45,6 +47,9 @@ APPS += nxdraw
 APPS += nano-X nanowm nxlaunch nxterm startx
 APPS += nxeyes nxclock
 APPS += lynx
+APPS += diff3
+APPS += basic
+APPS += chat
 
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512 select
 BULK_CONFIG := $(BUILD)/.bulk-io
@@ -62,7 +67,10 @@ $(BULK_CONFIG): FORCE
 	@mkdir -p $(@D)
 	@if test "$$(cat $@ 2>/dev/null)" != "$(BULK_IO)"; then printf '%s\n' '$(BULK_IO)' > $@; fi
 HEADERS := $(ROOT)/ports/graphics/include/gx.h $(MMU_CONFIG) $(BULK_CONFIG) $(CODE_CONFIG) $(filter-out ripple/user.h,$(wildcard ripple/*.h)) $(wildcard $(K)/include/*.h) $(RUNTIME_HEADERS) $(ROS)/disk.h $(ROS)/fat16.h
+HEADERS += $(wildcard ripple/*.inc)
 USERHEADERS += ripple/select-abi.h ripple/clock-abi.h ripple/socket-abi.h ripple/mmu-profile.h ripple/resources.h ripple/pty-limits.h $(ROOT)/ports/graphics/include/gx.h
+USERHEADERS += ripple/process-limits.h ripple/process-report.h
+USERHEADERS += ripple/exec-args.h
 OBJS := $(addprefix $(BUILD)/kernel/,$(addsuffix .pobj,$(CORE)))
 .PHONY: all kernel-objects clean
 .PRECIOUS: $(BUILD)/kernel/%.asm
@@ -81,10 +89,11 @@ clean:
 	rm -rf "$(BUILD)/kernel" "$(BUILD)/port" "$(BUILD)/rt" "$(BUILD)/ros" "$(BUILD)/user" "$(BUILD)/apps" "$(BUILD)/libc" "$(BUILD)/ulib" "$(BUILD)/sh" "$(BUILD)/levee" "$(BUILD)/awk" "$(BUILD)/math" "$(BUILD)/net" "$(BUILD)/curses" "$(BUILD)/nanox"
 	rm -f "$(BUILD)/FUZIX.SYS" "$(BUILD)/bios.bin" "$(BUILD)/bios.bf" "$(BUILD)"/*.rxe "$(BUILD)/apps.json"
 
-PORT_CORE := platform devices console jobcontrol pty usermem exec version sockets localsockets graphics mmu selectwait deadline clock
+PORT_CORE := scheduler pipes kernel-io platform devices console jobcontrol pty usermem exec version sockets localsockets graphics pcm mmu selectwait deadline clock
 PORT_OBJS := $(addprefix $(BUILD)/port/,$(addsuffix .pobj,$(PORT_CORE)))
-SHARED := string ctype stdlib mmio irq putchar puts vm_devices vm_bulk vm_network
+SHARED := string ctype stdlib mmio irq putchar puts vm_devices vm_bulk vm_network vm_audio
 RT_OBJS := $(addprefix $(BUILD)/rt/,$(addsuffix .pobj,$(SHARED)))
+$(BUILD)/rt/string.asm $(BUILD)/user/userlib.asm: $(R)/include/__banked_memory.h
 NET_SRC := core config wire ipv4 link arp history icmp icmp_error udp tcp tcp_wire tcp_ack tcp_payload tcp_stream tcp_poll tcp_receive tcp_decode tcp_error tcp_listen tcp_passive tcp_wait
 NET_OBJS := $(addprefix $(BUILD)/net/,$(addsuffix .pobj,$(NET_SRC)))
 $(BUILD)/net/%.asm: $(R)/net/%.c $(wildcard $(R)/net/*.h) $(RUNTIME_HEADERS) $(RCC) Makefile
@@ -147,12 +156,33 @@ userspace: $(BUILD)/init.rxe $(BUILD)/hello.rxe $(BUILD)/forkcheck.rxe $(BUILD)/
 $(BUILD)/rfl-demo.rxe: $(ROOT)/rfl/examples/posix.rfl $(RFL_SOURCES) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
 	$(RFL) build $< --os fuzix --build-dir $(BUILD) --compiler $(RCC) -o $@
 userspace: $(BUILD)/rfl-demo.rxe
-$(BUILD)/rfl-fm.rxe: $(wildcard $(ROOT)/rfl/apps/commander/*.rfl) $(RFL_SOURCES) $(wildcard $(ROOT)/rfl/os/*.c) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS)
+$(BUILD)/rfl-fm.rxe: $(wildcard $(ROOT)/rfl/apps/commander/*.rfl) $(RFL_SOURCES) $(wildcard $(ROOT)/libraries/text/* $(ROOT)/rfl/os/*.c) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS)
 	$(RFL) build $(ROOT)/rfl/apps/commander/main.rfl --os fuzix --build-dir $(BUILD) --compiler $(RCC) -o $@
 userspace: $(BUILD)/rfl-fm.rxe
 $(BUILD)/rift.rxe: $(wildcard $(ROOT)/rfl/apps/rift/*.rfl) $(RFL_SOURCES) $(wildcard $(ROOT)/libraries/text/* $(ROOT)/rfl/os/*.c) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
 	$(RFL) build $(ROOT)/rfl/apps/rift/main.rfl --os fuzix --build-dir $(BUILD) --compiler $(RCC) -o $@
 userspace: $(BUILD)/rift.rxe
+.PHONY: telegram
+telegram: $(BUILD)/telegram.rxe
+$(BUILD)/telegram.rxe: $(wildcard $(ROOT)/rfl/apps/telegram/*.rfl) $(shell find $(ROOT)/ports/telegram -type f -name '*.[ch]' ! -path '*/tests/*') $(shell find $(ROOT)/libraries/qr -type f) $(RFL_SOURCES) $(wildcard $(ROOT)/rfl/os/*.c) $(wildcard $(PORT)/ripple/curses/*.[ch]) $(ROOT)/runtime/include/vm_crypto.h $(USERHEADERS) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS)
+	$(RFL) build $(ROOT)/rfl/apps/telegram/main.rfl --os fuzix --build-dir $(BUILD) --compiler $(RCC) -o $@
+userspace: $(BUILD)/telegram.rxe
+.PHONY: music
+music: $(BUILD)/music.rxe $(BUILD)/wavplay.rxe
+$(BUILD)/music.rxe: $(wildcard $(ROOT)/rfl/apps/music/*.rfl $(ROOT)/ports/music/*.[ch]) $(RFL_SOURCES) $(wildcard $(ROOT)/rfl/os/*.c $(PORT)/ripple/curses/*.[ch]) $(USERHEADERS) $(RFL) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
+	$(RFL) build $(ROOT)/rfl/apps/music/main.rfl --os fuzix --build-dir $(BUILD) --compiler $(RCC) -o $@
+$(BUILD)/music/%.asm: $(ROOT)/ports/music/%.c $(wildcard $(ROOT)/ports/music/*.h) $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/music/%.pobj: $(BUILD)/music/%.asm $(RASM)
+	$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/wavplay.rxe: $(BUILD)/user/entry.pobj $(addprefix $(BUILD)/music/,$(addsuffix .pobj,wavplay music wav)) $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+	$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/pcmcheck.rxe: $(ROOT)/ports/music/tests/pcmcheck.c $(USERHEADERS) $(RCC) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+	$(RCC) compile $< -o $(BUILD)/pcmcheck.asm $(USERFLAGS)
+	$(RASM) assemble $(BUILD)/pcmcheck.asm -o $(BUILD)/pcmcheck.pobj --bank-size 64000 --max-immediate 65535
+	$(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/pcmcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) -f rxe --bank-size 64000 -o $@
+userspace: $(BUILD)/music.rxe $(BUILD)/wavplay.rxe
 .PHONY: test-rift
 test-rift: kernel bios $(BUILD)/rift.rxe
 	python3 $(ROOT)/rfl/tools/test_rift.py --os fuzix --fuzix-build $(BUILD) --rfl $(RFL)
@@ -198,7 +228,9 @@ test: images
 	python3 tools/test_editor.py --build $(BUILD) --engine $(TEST_ENGINE)
 	python3 tools/test_interactive.py --build $(BUILD) --engine $(TEST_ENGINE)
 	python3 tools/test_shell.py --build $(BUILD) --engine $(TEST_ENGINE)
+	python3 tools/test_exec_permissions.py --os fuzix --build $(BUILD)
 	python3 tools/test_filetools.py --build $(BUILD) --engine $(TEST_ENGINE)
+	python3 tools/test_diff.py --os fuzix --build $(BUILD)
 	python3 tools/test_texttools.py --build $(BUILD) --engine $(TEST_ENGINE)
 	python3 tools/test_pagers.py --build $(BUILD) --engine $(TEST_ENGINE)
 	python3 tools/test_fun.py --build $(BUILD) --engine $(TEST_ENGINE)
@@ -221,7 +253,7 @@ $(BUILD)/apps/%.asm: upstream/Applications/util/%.c $(USERHEADERS) $(RCC) Makefi
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -DUIDGID=0 $(if $(filter cut,$*),-Dwarn=cut_warn) $(if $(filter grep,$*),-Dregerror=grep_regerror) $(if $(filter vile,$*),-DRIPPLE) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(addprefix $(BUILD)/,$(addsuffix .rxe,$(filter-out levee awk lynx nxdraw nano-X nanowm nxlaunch nxterm startx nxeyes nxclock,$(APPS)))): $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/apps/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+$(addprefix $(BUILD)/,$(addsuffix .rxe,$(filter-out chat basic levee awk lynx htget nxdraw nano-X nanowm nxlaunch nxterm startx nxeyes nxclock,$(APPS)))): $(BUILD)/%.rxe: $(BUILD)/user/entry.pobj $(BUILD)/apps/%.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
 	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 userspace: $(addprefix $(BUILD)/,$(addsuffix .rxe,$(APPS)))
 
@@ -235,7 +267,7 @@ $(BUILD)/mv.rxe $(BUILD)/ln.rxe: $(BUILD)/cp.rxe
 	@cp $< $@
 $(BUILD)/apps.json: Makefile
 	@mkdir -p $(@D)
-	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck rfl-demo rfl-fm mc rift $(APPS) mv ln sh vi tcl tclsh sokoban nslookup".split()))' >$@
+	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck rfl-demo rfl-fm mc rift telegram music wavplay $(APPS) mv ln sh vi tcl tclsh sokoban nslookup".split()))' >$@
 userspace: $(BUILD)/mv.rxe $(BUILD)/ln.rxe $(BUILD)/sh.rxe $(BUILD)/vi.rxe $(BUILD)/tcl.rxe $(BUILD)/tclsh.rxe $(BUILD)/apps.json
 userspace: $(BUILD)/sokoban.rxe
 userspace: $(BUILD)/nslookup.rxe
@@ -260,13 +292,13 @@ $(BUILD)/sh.rxe: $(BUILD)/user/entry.pobj $(SHELL_OBJS) $(BUILD)/sh/input.pobj $
 	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/sh/%.asm
 
-$(BUILD)/vi.rxe: $(BUILD)/levee.rxe
+$(BUILD)/vi.rxe: $(BUILD)/rift.rxe Makefile
 	@cp $< $@
 
 $(BUILD)/apps/find.asm: upstream/Applications/MWC/cmd/find.c upstream/Applications/MWC/cmd/findnode.h $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/apps/diff.asm $(BUILD)/apps/diffh.asm: $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
+$(BUILD)/apps/diff.asm $(BUILD)/apps/diffh.asm $(BUILD)/apps/diff3.asm: $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 
@@ -301,7 +333,7 @@ $(BUILD)/apps/wump.asm: upstream/Applications/V7/games/wump.c $(USERHEADERS) $(R
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/apps/picol.asm: upstream/Applications/TCL/picol.c ripple/picol-extra.inc $(USERHEADERS) $(RCC) Makefile
+$(BUILD)/apps/picol.asm: upstream/Applications/TCL/picol.c ripple/picol-extra.inc ripple/picol-build.inc $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/tcl.rxe $(BUILD)/tclsh.rxe: $(BUILD)/picol.rxe
@@ -317,7 +349,7 @@ $(BUILD)/apps/dc.asm: upstream/Applications/V7/cmd/dc.c $(USERHEADERS) $(RCC) Ma
 
 AWK_SRC := awkgram.tab b main parse proctab tran lib run lex
 AWKFLAGS := $(filter-out -DNO_64BIT,$(USERFLAGS)) -I$(PORT)/awk
-FLOAT_LIB_OBJS := $(addprefix $(BUILD)/awk/,$(addsuffix .pobj,format softfloat math-bits)) $(addprefix $(BUILD)/math/,$(addsuffix .pobj,$(AWK_MATH_SRC)))
+FLOAT_LIB_OBJS := $(addprefix $(BUILD)/awk/,$(addsuffix .pobj,format softfloat math-bits math-host)) $(addprefix $(BUILD)/math/,$(addsuffix .pobj,scalbn strtod ecvt frexp ldexp modf))
 AWK_OBJS := $(addprefix $(BUILD)/awk/,$(addsuffix .pobj,$(AWK_SRC) support)) $(FLOAT_LIB_OBJS)
 .PHONY: float-sdk float-sdk-info
 float-sdk: $(FLOAT_LIB_OBJS)
@@ -334,6 +366,9 @@ $(BUILD)/math/%.asm: upstream/Library/libs/%.c upstream/Library/libs/libm.h $(US
 $(BUILD)/awk/support.asm: ripple/awk-support.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/awk/math-host.asm: ripple/libc/math-host.c $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/awk/math-bits.asm: ripple/libc/math-bits.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(AWKFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
@@ -347,6 +382,17 @@ $(BUILD)/awk.rxe: $(BUILD)/user/entry.pobj $(AWK_OBJS) $(BUILD)/user/userlib.pob
 	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
 .PRECIOUS: $(BUILD)/awk/%.asm $(BUILD)/math/%.asm
 
+BASIC_OBJS := $(addprefix $(BUILD)/basic/,$(addsuffix .pobj,main parse value run))
+$(BUILD)/basic/%.asm: $(ROOT)/ports/basic/%.c $(ROOT)/ports/basic/basic.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@printf "  RCC %s\n" "$<"
+	@$(RCC) compile $< -o $@ $(filter-out -DNO_64BIT,$(USERFLAGS)) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/basic/%.pobj: $(BUILD)/basic/%.asm $(RASM)
+	@$(RASM) assemble $< -o $@ --bank-size 64000 --max-immediate 65535 >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/basic.rxe: $(BUILD)/user/entry.pobj $(BASIC_OBJS) $(FLOAT_LIB_OBJS) $(BUILD)/user/userlib.pobj $(filter-out $(BUILD)/libc/format.pobj,$(LIBC_OBJS)) $(RLINK)
+	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+.PRECIOUS: $(BUILD)/basic/%.asm
+
 $(BUILD)/sh/jobs.asm: ripple/shell-jobs.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -I$(SHELL_DIR) -DBUILD_FSH >$@.log 2>&1 || { cat $@.log; exit 1; }
@@ -359,22 +405,31 @@ $(addprefix $(BUILD)/apps/,$(addsuffix .asm,ifconfig ping telnet telnetd)): $(BU
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 
-$(addprefix $(BUILD)/apps/,$(addsuffix .asm,htget dig echoping ntpdate)): $(BUILD)/apps/%.asm: upstream/Applications/netd/%.c $(USERHEADERS) $(RCC) Makefile
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,dig echoping ntpdate)): $(BUILD)/apps/%.asm: upstream/Applications/netd/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(addprefix $(BUILD)/apps/,$(addsuffix .asm,host bf gterm)): $(BUILD)/apps/%.asm: ripple/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/apps/mux.asm: ripple/mux.c $(wildcard ripple/mux/*.inc ripple/mux/*.h) $(ROOT)/ports/graphics/terminal.c $(ROOT)/ports/graphics/terminal.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/apps/gterm.asm: $(ROOT)/ports/graphics/terminal.c $(ROOT)/ports/graphics/terminal.h $(ROOT)/ports/graphics/fonts/rom8x16.inc
 
 # Opt-in integration probe; not installed on normal disks.
+$(BUILD)/user/consolecheck.asm: tools/consolecheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/consolecheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/consolecheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+
 $(BUILD)/gfxcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/gfxcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
 
 # Shared C16 curses; only consumers link it. Keep terminal input and allocation
 # adaptations separate from the imported screen-update algorithms.
 CURSES_DIR := $(U)/libs/curses
-CURSES_UPSTREAM := $(filter-out initscr endwin newwin windel wgetch wgetstr doupdt refresh winscrol,$(basename $(notdir $(wildcard $(CURSES_DIR)/*.c))))
-CURSES_OBJS := $(addprefix $(BUILD)/curses/,$(addsuffix .pobj,$(CURSES_UPSTREAM))) $(addprefix $(BUILD)/curses/local/,$(addsuffix .pobj,input window screen color render cells))
+CURSES_UPSTREAM := $(filter-out initscr endwin newwin windel wgetch wgetstr doupdt refresh winscrol waddch waddstr,$(basename $(notdir $(wildcard $(CURSES_DIR)/*.c))))
+CURSES_OBJS := $(UNICODE_OBJS) $(addprefix $(BUILD)/curses/,$(addsuffix .pobj,$(CURSES_UPSTREAM))) $(addprefix $(BUILD)/curses/local/,$(addsuffix .pobj,input window screen color render cells characters))
 $(BUILD)/rfl-fm.rxe $(BUILD)/rift.rxe: $(CURSES_OBJS)
 ifeq ($(RFL_CURSES),1)
 rfl-sdk: $(CURSES_OBJS)
@@ -385,7 +440,7 @@ $(BUILD)/curses/%.asm: $(CURSES_DIR)/%.c $(CURSES_DIR)/curspriv.h $(USERHEADERS)
 $(BUILD)/curses/local/%.asm: ripple/curses/%.c $(CURSES_DIR)/curspriv.h $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) -I$(CURSES_DIR) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(BUILD)/user/cursescheck.asm: tools/cursescheck.c $(USERHEADERS) $(RCC)
+$(BUILD)/user/cursescheck.asm: tools/cursescheck.c $(ROOT)/rfl/os/curses.c $(USERHEADERS) $(RCC)
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/cursescheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/cursescheck.pobj $(BUILD)/user/userlib.pobj $(CURSES_OBJS) $(LIBC_OBJS) $(RLINK)
@@ -394,6 +449,10 @@ $(BUILD)/cursescheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/cursescheck.pob
 include $(ROOT)/ports/nanox/engine.mk
 
 .PHONY: test-curses
+.PHONY: test-diff
+test-diff: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo cat cp ed cmp ls diff diffh diff3))
+	python3 tools/test_diff.py --os fuzix --build $(BUILD)
+
 test-curses: images $(BUILD)/cursescheck.rxe
 	python3 tools/test_curses.py --build $(BUILD)
 
@@ -402,6 +461,15 @@ $(BUILD)/user/finecheck.asm: tools/finecheck.c ripple/deadline.c ripple/deadline
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/finecheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/finecheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+
+$(BUILD)/user/proccheck.asm: tools/proccheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/proccheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/proccheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+
+.PHONY: test-process-capacity
+test-process-capacity: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo ps top free uptime sleep proccheck finecheck))
+	python3 tools/test_process_capacity.py --build $(BUILD)
 
 .PHONY: test-deadlines
 test-deadlines: images $(BUILD)/finecheck.rxe
@@ -436,6 +504,82 @@ $(BUILD)/cursescheck.rxe: $(CONFIG_OBJS)
 
 # Full browser port; normal userspace and apps.json include it on both hosts.
 LYNX := $(ROOT)/ports/lynx
+TLS_SOURCES := $(wildcard $(ROOT)/ports/tls/*.[ch] $(ROOT)/ports/tls/*.py $(ROOT)/ports/tls/*.json) $(shell find $(ROOT)/ports/tls/upstream $(ROOT)/ports/tls/config -type f \( -name '*.c' -o -name '*.h' \))
 LYNX_SOURCES := $(wildcard $(LYNX)/*.py $(LYNX)/*.c $(LYNX)/config/* $(LYNX)/vendor/*)
-$(BUILD)/lynx.rxe: $(LYNX_SOURCES) $(USERHEADERS) $(RCC) $(ROOT)/target/release/rcpp $(RASM) $(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS) $(FLOAT_LIB_OBJS)
+$(BUILD)/lynx.rxe: $(TLS_SOURCES) $(LYNX_SOURCES) $(USERHEADERS) $(RCC) $(ROOT)/target/release/rcpp $(RASM) $(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS) $(FLOAT_LIB_OBJS)
 	python3 $(LYNX)/build.py --target ripple --compiler $(RCC) --build-dir $(BUILD) -o $@
+
+$(BUILD)/user/gfxcheck.asm: $(ROOT)/ports/graphics/raster-check.inc
+
+# Host entropy is opt-in acceptance coverage, not another installed utility.
+.PHONY: test-entropy
+test-entropy: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo entropycheck))
+	python3 $(ROOT)/ports/fuzix/tools/test_entropy.py --build $(BUILD)
+
+# TLS remains a guest userspace library; htget is its first consumer.
+$(BUILD)/htget.rxe: upstream/Applications/netd/htget.c $(TLS_SOURCES) $(USERHEADERS) $(RCC) $(RASM) $(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS)
+	python3 $(ROOT)/ports/tls/app.py --target ripple --compiler $(RCC) --build-dir $(BUILD) --skip-sdk -o $@
+
+# Initial guest C development tools and C16 SDK.
+.PHONY: compiler
+userspace: compiler
+compiler: rfl-sdk float-sdk
+	python3 $(ROOT)/rcc-portable/package.py --os fuzix --build $(BUILD)
+
+# Optional syscall/alias acceptance probe; never installed on normal disks.
+$(BUILD)/user/symlinkcheck.asm: tools/symlinkcheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/symlinkcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/symlinkcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+
+.PHONY: test-symlinks
+test-symlinks: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo cat cp ln mv ls rm levee vi symlinkcheck))
+	python3 tools/test_symlinks.py --os fuzix --build $(BUILD)
+
+# Allocator scaling and bank/COW edge cases; private disposable images only.
+.PHONY: test-heap
+test-heap: kernel bios rfl-sdk $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo))
+	python3 tools/bench_foundations.py --os fuzix --build $(BUILD) --source tools/heapedgecheck.c --repetitions 1 --output $(BUILD)/heap-check
+
+# Directory rename and Commander acceptance; kept off normal root disks.
+$(BUILD)/user/dirmovecheck.asm: tools/dirmovecheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/dirmovecheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/dirmovecheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+
+.PHONY: test-directory-moves
+test-directory-moves:
+	python3 tools/test_directory_moves.py --os fuzix --build $(BUILD)
+
+$(BUILD)/user/muxcheck.asm: tools/muxcheck.c ripple/pty-limits.h $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/muxcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/muxcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+	@$(RLINK) $(filter %.pobj,$^) -f rxe --bank-size 64000 -o $@ >$@.log 2>&1 || { cat $@.log; exit 1; }
+.PHONY: test-mux
+test-mux: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,mux muxcheck init ptysh sh cat echo sleep stty ps seq levee rift rfl-fm lynx))
+	python3 tools/test_mux.py --system fuzix --build $(BUILD)
+
+$(BUILD)/libc/unicode.asm: $(ROOT)/libraries/unicode/unicode.c $(ROOT)/libraries/unicode/tables.inc $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+
+$(BUILD)/apps/gterm.asm $(BUILD)/nanox/app/nxterm.asm: $(ROOT)/libraries/unicode/font.c $(ROOT)/libraries/unicode/font.inc
+
+ifeq ($(RFL_UNICODE),1)
+rfl-sdk: $(UNICODE_OBJS)
+endif
+$(BUILD)/sh.rxe $(BUILD)/gterm.rxe $(BUILD)/mux.rxe $(BUILD)/nxterm.rxe $(BUILD)/nano-X.rxe: $(UNICODE_OBJS)
+
+# Fuse Chat shares the guest TLS and Unicode/curses stack on both systems.
+CHAT_SOURCES := $(wildcard $(ROOT)/ports/chat/*.[ch] $(ROOT)/ports/chat/*.py)
+.PHONY: chat
+chat: $(BUILD)/chat.rxe
+$(BUILD)/chat.rxe: $(CHAT_SOURCES) $(TLS_SOURCES) $(USERHEADERS) $(RCC) $(RASM) $(RLINK) $(BUILD)/user/entry.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(CURSES_OBJS)
+	python3 $(ROOT)/ports/chat/build.py --target ripple --compiler $(RCC) --build-dir $(BUILD) --skip-sdk -o $@
+
+# Disposable-kernel IO validation; no installed root image is modified.
+.PHONY: test-kernel-io
+test-kernel-io: kernel bios rfl-sdk $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo))
+	python3 tools/test_kernel_io_unit.py
+	python3 tools/test_kernel_io.py --os fuzix --build $(BUILD) --output $(BUILD)/kernel-io-check

@@ -1,0 +1,10 @@
+struct Item {
+    completed: bool
+}
+
+fn main() {
+    let rows = [Item { completed: false }];
+    let value = true;
+    println(rows[0].completed != value);
+    println(rows[0].completed == false);
+}

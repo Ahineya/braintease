@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* Keep fixture device mocks distinct from the linked runtime's real ABI. */
+#define vm_input_read fixture_input_read
+#define vm_input_state fixture_input_state
+#define vm_key_is_down fixture_key_is_down
 #include "controls_defaults.inc"
 #include "input_commands.inc"
 #include "platform_keyboard.inc"
@@ -287,9 +291,43 @@ static void paired_physical_modifiers(void)
     expect_posts(4);
 }
 
+static void disabled_mouse(void)
+{
+    if (usemouse != DOOM_MOUSE) {
+        puts("INPUT FAIL mouse build default"); exit(1);
+    }
+    reset();
+    usemouse = 0;
+    Doom_PostMouse(7U, 100L, -100L);
+    expect("disabled mouse ignores motion and buttons", 0, 0, 0, 0);
+    expect_posts(0);
+    memset(pending_input, 0, sizeof(pending_input));
+    pending_input[0].type = VM_INPUT_MOTION;
+    pending_input[0].flags = VM_INPUT_RELATIVE;
+    pending_input[0].dx = 100L;
+    pending_input[1].type = VM_INPUT_BUTTON;
+    pending_input[1].buttons = 1;
+    pending_input[2].type = VM_INPUT_KEY;
+    pending_input[2].code = 26; /* W still moves forward. */
+    pending_input[2].flags = VM_INPUT_DOWN;
+    pending_count = 3;
+    pending_position = input_overflow = 0;
+    I_StartTic();
+    expect("disabled device mouse retains keyboard", 25, 0, 0, 0);
+    memset(&recovery_state, 0, sizeof(recovery_state));
+    recovery_state.buttons = 7;
+    recovery_state.held[26 >> 4] = 1U << (26 & 15);
+    pending_count = pending_position = 0;
+    input_overflow = 1;
+    I_StartTic();
+    expect("disabled mouse ignores recovered buttons", 25, 0, 0, 0);
+    expect_posts(1);
+}
+
 static void mouse_controls(void)
 {
     reset();
+    usemouse = 1;
     Doom_PostMouse(1U, 10L, -3L);
     expect("mouse fire, forward and turn", 3, 0, -80, BT_ATTACK);
     Doom_PostMouse(0U, 0L, 0L);
@@ -354,9 +392,10 @@ int main(void)
     strafe_aliases();
     modifiers_and_turning();
     paired_physical_modifiers();
+    disabled_mouse();
     mouse_controls();
     device_mouse_batches();
-    if (commands != 69) {
+    if (commands != 72) {
         printf("INPUT FAIL command count %d\n", commands);
         return 1;
     }

@@ -6,7 +6,10 @@
 pub const DEFAULT_BANK_SIZE: u16 = 65535;
 pub const OP_HALT: u8 = 0x00;
 pub const OP_NOP: u8 = 0x42;
-pub const DEFAULT_MEMORY_SIZE: usize = 65536 * 65536; // 64K words in 64K banks
+#[cfg(not(target_arch = "wasm32"))]
+pub const DEFAULT_MEMORY_SIZE: usize = 65536 * 65536;
+#[cfg(target_arch = "wasm32")]
+pub const DEFAULT_MEMORY_SIZE: usize = 16_384_000; // 64K words in 64K banks
 /// Instruction storage ceiling, allocated lazily (512 MiB of decoded code).
 pub const DEFAULT_CODE_MEMORY: usize = 1024 * 65536;
 
@@ -22,7 +25,10 @@ pub const HDR_DISP_STATUS: usize = 7; // Read: bit0=ready, bit1=flush_done
 pub const HDR_DISP_CTL: usize = 8; // R/W: bit0=ENABLE, bit1=CLEAR
 pub const HDR_DISP_FLUSH: usize = 9; // Write: trigger display flush
 
-// Words 10..15 are reserved (read zero, writes ignored).
+// Atomic, process-local math packet at (current SB, written offset).
+pub const HDR_MATH_STACK: usize = 10;
+pub const MMU_FEATURE_STACK_MATH: u16 = 4;
+// Words 11..15 are reserved (read zero, writes ignored).
 
 // Display resolution for RGB565 mode (bank 0, word 16)
 pub const HDR_DISP_RESOLUTION: usize = 16; // R/W: hi8=width, lo8=height (for RGB565 mode)
@@ -66,7 +72,7 @@ pub const STORE_COMMIT: u16 = 1 << 2; // bit2: Trigger commit of current block
 pub const STORE_COMMIT_ALL: u16 = 1 << 3; // bit3: Trigger commit of all dirty blocks
 pub const STORE_ERROR: u16 = 1 << 4; // bit4: Sticky host I/O error; write one to clear
 
-// Words 27..31 are reserved for future use
+// Versioned device mailbox at words 27..31: see devices.rs.
 
 // TEXT40 display constants
 pub const TEXT40_BASE_WORD: usize = 32; // Start of VRAM

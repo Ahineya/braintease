@@ -113,6 +113,7 @@ extern int open(const char *path, int flags, ...);
 extern int close(int fd);
 extern int creat(const char *path, mode_t mode);
 extern int mknod(const char *path, mode_t mode, dev_t dev);
+extern int symlink(const char *target, const char *path);
 extern int link(const char *path, const char *path2);
 extern int unlink(const char *path);
 extern ssize_t read(int fd, void *buf, size_t len);

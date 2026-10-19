@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "shell-prompt.h"
 #include <string.h>
+#include <ripple_unicode.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -35,22 +36,20 @@ static void number(unsigned n, char suffix) {
     put("\033["); put(s + i);
 }
 static unsigned width(const char *s, unsigned n) {
-    unsigned result = 0, esc = 0, i;
-    for (i = 0; i < n; i++) {
-        unsigned c = s[i];
-        if (esc) { if (c >= '@' && c <= '~' && c != '[') esc = 0; }
-        else if (c == 27) esc = 1;
-        else result += c < 32 || c >= 127 ? 2 : 1;
+    unsigned result=0,w;size_t at=0;
+    while(at<n){
+        if(s[at]>=32&&s[at]<127&&(at+1==n||(s[at+1]>=32&&s[at+1]<127))){result++;at++;}
+        else if((unsigned char)s[at]<32||s[at]==127){result+=2;at++;}
+        else{at=ru_next_grapheme((const unsigned char *)s,n,at,&w);result+=w;}
     }
     return result;
 }
 static void text(const char *s, unsigned n) {
-    unsigned i; char c[2];
-    for (i = 0; i < n; i++) {
-        if (s[i] < 32 || s[i] >= 127) {
-            c[0] = '^'; c[1] = s[i] == 127 ? '?' : (s[i] & 31) + '@';
-            write(out, c, 2);
-        } else write(out, s + i, 1);
+    unsigned i=0,start;char c[2];
+    while(i<n){
+        start=i;while(i<n&&s[i]>=32&&s[i]!=127)i++;
+        if(i>start)write(out,s+start,i-start);
+        if(i<n){c[0]='^';c[1]=s[i]==127?'?':(s[i]&31)+'@';write(out,c,2);i++;}
     }
 }
 static unsigned position(unsigned n) { return prompt_columns + width(buf, n); }
@@ -190,11 +189,12 @@ static void complete(int again) {
         for (j = 0; j < common && matches[i][j] == matches[0][j]; j++);
         common = j;
     }
+    while(common && ((unsigned char)matches[0][common]&0xc0)==0x80)common--;
     /* A full match table cannot establish a unique/common completion. */
     if (overflow) common = strlen(base);
     for (i = strlen(base); i < common; i++) {
         c = matches[0][i];
-        if (c < 32 || c >= 127) { bell(); return; }
+        if (c < 32 || c == 127) { bell(); return; }
         if (quote == '\'' && c == '\'') {
             if (addlen + 4 >= LINE) return;
             memcpy(addition + addlen, "'\\''", 4); addlen += 4;
@@ -228,6 +228,7 @@ int rl_edit(int fd, int ofd, const char *promptstr, char *inputbuf, size_t lengt
     unsigned hpos = count;
     int escape = 0, parameter = 0, previous = 0, result, cancelled = 0;
     char c;
+    struct ru_decoder decoder={0,0,0};int retry=0;
     if (length > LINE) length = LINE;
     if (length < 2 || tcgetattr(fd, &saved)) return -1;
     raw = saved;
@@ -242,8 +243,19 @@ int rl_edit(int fd, int ofd, const char *promptstr, char *inputbuf, size_t lengt
     if (!ioctl(fd, TIOCGWINSZ, &ws) && ws.ws_col >= 20 && ws.ws_col <= 240) columns = ws.ws_col;
     put(ps); screenrow = position(0) / columns;
     while (1) {
-        result = read(fd, &c, 1);
+        if(retry){retry=0;result=1;}else result = read(fd, &c, 1);
         if (result <= 0) { result = result < 0 && errno == EINTR ? -2 : -1; break; }
+        if(decoder.need||(unsigned char)c>=128){
+            uint32_t cp;unsigned char bytes[4];unsigned n;int decoded=ru_decode(&decoder,(unsigned char)c,&cp);
+            if(!decoded)continue;
+            if(decoded<0)retry=1;
+            if(ru_width(cp)<0)continue;
+            n=ru_encode(cp,bytes);
+            if(end+n>capacity){bell();continue;}
+            memmove(buf+cursor+n,buf+cursor,end-cursor+1);memcpy(buf+cursor,bytes,n);cursor+=n;end+=n;
+            if(cursor<end)cursor=ru_next_grapheme((const unsigned char *)buf,end,ru_previous_grapheme((const unsigned char *)buf,end,cursor),NULL);
+            redraw();continue;
+        }
         if (escape) {
             if (escape == 1 && (c == '[' || c == 'O')) { escape = 2; parameter = 0; continue; }
             if (escape == 2 && c >= '0' && c <= '9') { parameter = parameter * 10 + c - '0'; continue; }
@@ -275,11 +287,11 @@ int rl_edit(int fd, int ofd, const char *promptstr, char *inputbuf, size_t lengt
         }
         if (c == 1) cursor = 0;
         else if (c == 5) cursor = end;
-        else if (c == 2) { if (cursor) cursor--; }
-        else if (c == 6) { if (cursor < end) cursor++; }
-        else if (c == 4) { if (cursor < end) { memmove(buf + cursor, buf + cursor + 1, end - cursor); end--; } }
+        else if (c == 2) { if (cursor) cursor=ru_previous_grapheme((const unsigned char *)buf,end,cursor); }
+        else if (c == 6) { if (cursor < end) cursor=ru_next_grapheme((const unsigned char *)buf,end,cursor,NULL); }
+        else if (c == 4) { if (cursor < end) { unsigned next=ru_next_grapheme((const unsigned char *)buf,end,cursor,NULL);memmove(buf+cursor,buf+next,end-next+1);end-=next-cursor; } }
         else if (c == 8 || c == 127) {
-            if (cursor) { cursor--; memmove(buf + cursor, buf + cursor + 1, end - cursor); end--; }
+            if (cursor) { unsigned old=cursor;cursor=ru_previous_grapheme((const unsigned char *)buf,end,cursor);memmove(buf+cursor,buf+old,end-old+1);end-=old-cursor; }
         } else if (c == 21) { end = cursor = 0; buf[0] = 0; }
         else if (c == 11) { end = cursor; buf[end] = 0; }
         else if (c == 23) {

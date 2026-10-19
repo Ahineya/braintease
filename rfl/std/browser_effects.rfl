@@ -1,0 +1,366 @@
+// Browser host effects. The caller owns the poll loop and calls wake_completed
+// at the beginning of each exported ripple_browser_on_effects hook.
+import { Future, Poll, Pending, Ready, invalid_poll } from "std/future";
+import { OwnedFuture, own_future } from "std/future_owned";
+import { Context, Waker } from "std/task";
+import { Shared, share, with_shared } from "std/shared";
+import { take } from "std/mem";
+import { Result } from "std/result";
+extern "C" {
+    fn ripple_browser_effects();
+    fn ripple_effect_timer(milliseconds: u32) -> u32;
+    fn ripple_effect_get(url: *const u16, length: u32, limit: u32) -> u32;
+    fn ripple_effect_platform(kind: u16, arg: u32, text: *const u16, length: u32) -> u32;
+    fn ripple_effect_consume(id: u32);
+    fn ripple_effect_state(id: u32) -> u16;
+    fn ripple_effect_status(id: u32) -> u16;
+    fn ripple_effect_length(id: u32) -> u16;
+    fn ripple_effect_copy(id: u32, destination: *mut u16, capacity: u32);
+    fn ripple_effect_release(id: u32);
+}
+
+/// Browser effect failure. HTTP error statuses remain successful responses.
+export type BrowserEffectError = InvalidDuration | InvalidRequest | EffectCapacity | FetchFailed | BodyLimit | EffectCancelled | HostUnavailable | StorageQuota;
+/// A finite host-operation result. Fetch/platform bytes use guest-owned storage.
+export struct BrowserResponse {
+    /// HTTP status, storage presence (0/1), or zero for timers/navigation.
+    status: u16,
+    /// Bounded response bytes copied into guest-owned storage.
+    body: Vec<u8>
+}
+
+/// Internal generation-safe wake registration. IDs never repeat within a mount.
+export struct EffectWaiter {
+    /// Generation-safe host operation identity.
+    id: u32,
+    /// Task wake capability registered for this operation.
+    waker: Waker
+}
+
+/// Shared wake registrations for this mount's effects; no pointers to poll contexts.
+export struct BrowserEffects {
+    /// Shared pending operation-to-task wake registrations.
+    waiting: Shared<Vec<EffectWaiter>>
+}
+
+/// Internal lazy host operation description.
+export type BrowserRequest = TimerRequest(u32) | GetRequest(String, usize) | PlatformRequest(u16, u32, String);
+/// Internal single-use operation. Prefer sleep/get; their owners cancel on drop.
+export struct BrowserOperation {
+    /// Wake registry belonging to the mounted application.
+    effects: BrowserEffects,
+    /// Lazy request consumed on the first poll.
+    request: Option<BrowserRequest>,
+    /// Active host operation identity, or zero before start/after release.
+    id: u32,
+    /// Whether completion or cancellation has consumed this operation.
+    done: bool
+}
+
+/// A move-only timer future. Its nested owner cancels unfinished host work.
+export struct BrowserTimer {
+    /// Owned operation whose drop cancels unfinished timer work.
+    work: OwnedFuture<BrowserOperation>
+}
+
+/// Enables the effects ABI once after browser.mount(). Define the exported C
+/// ripple_browser_on_effects() hook, and retain this wake registry with your tasks.
+export fn browser_effects() -> BrowserEffects {
+    ripple_browser_effects();
+    let waiting: Vec<EffectWaiter> = [];
+    BrowserEffects { waiting: share(move(waiting)) }
+}
+
+impl BrowserEffects {
+    /// Wakes registered tasks whose completions arrived in this batch. Call
+    /// before giving the executor a bounded turn; this method never polls tasks.
+    export fn wake_completed(&self) {
+        with_shared(self.waiting, once fn(waiting: &mut Vec<EffectWaiter>) => {
+            let mut i: usize = 0;
+            while (i < waiting.len()) {
+                if (ripple_effect_state(waiting[i].id) != 0) {
+                    waiting[i].waker.wake();
+                    remove_waiter(waiting, i);
+                } else {
+                    i += 1;
+                }
+            }
+        });
+    }
+}
+
+fn remove_waiter(waiting: &mut Vec<EffectWaiter>, index: usize) {
+    let last = waiting.pop().unwrap();
+    if (index < waiting.len()) {
+        waiting[index] = last;
+    }
+}
+
+fn watch(effects: BrowserEffects, id: u32, waker: Waker) {
+    with_shared(effects.waiting, once fn(waiting: &mut Vec<EffectWaiter>) => {
+        for (i in 0..waiting.len()) {
+            if (waiting[i].id == id) {
+                let waiter = &mut waiting[i];
+                waiter.waker = waker;
+                return;
+            }
+        }
+        waiting.push(EffectWaiter { id: id, waker: waker });
+    });
+}
+
+fn release(effects: BrowserEffects, id: u32) {
+    let release_id = id;
+    if (id == 0) {
+        return;
+    }
+    with_shared(effects.waiting, once fn(waiting: &mut Vec<EffectWaiter>) => {
+        let mut i: usize = 0;
+        while (i < waiting.len()) {
+            if (waiting[i].id == id) {
+                remove_waiter(waiting, i);
+            } else {
+                i += 1;
+            }
+        }
+    });
+    ripple_effect_release(release_id);
+}
+
+/// Creates a lazy timer, starting on its first poll. Dropping/cancelling it
+/// revokes its wake and clears the host timer at the end of the guest turn.
+export fn sleep(effects: BrowserEffects, milliseconds: u32) -> Result<BrowserTimer, BrowserEffectError> {
+    if (milliseconds > 2147483647) {
+        return Err(InvalidDuration);
+    }
+    Ok(BrowserTimer { work: own_future(BrowserOperation { effects: effects, request: Some(TimerRequest(milliseconds)), id: 0, done: false }) })
+}
+
+/// Creates a lazy browser GET. URL: 1..2048 UTF-8 octets, no NUL; body limit:
+/// 1..16384 octets. Uses normal browser CORS/redirect/credential policies.
+/// The body is bounded while streaming, before materializing the response.
+export fn get(effects: BrowserEffects, url: String, body_limit: usize) -> Result<OwnedFuture<BrowserOperation>, BrowserEffectError> {
+    if (url.len() == 0 || url.len() > 2048 || body_limit == 0 || body_limit > 16384) {
+        return Err(InvalidRequest);
+    }
+    for (i in 0..url.len()) {
+        if ((url[i] as u16) == 0) {
+            return Err(InvalidRequest);
+        }
+    }
+    Ok(own_future(BrowserOperation { effects: effects, request: Some(GetRequest(url, body_limit)), id: 0, done: false }))
+}
+
+impl Future for BrowserOperation {
+    type Output = Result<BrowserResponse, BrowserEffectError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<BrowserResponse, BrowserEffectError>> {
+        if (self.done) {
+            invalid_poll();
+            return Pending;
+        }
+        if (self.id == 0) {
+            match take(&mut self.request) {
+                Some(TimerRequest(ms)) => {
+                    self.id = ripple_effect_timer(ms);
+                },
+                Some(GetRequest(url, limit)) => {
+                    let mut cells: Vec<u16> = [];
+                    for (i in 0..url.len()) {
+                        cells.push(url[i] as u16);
+                    }
+                    self.id = unsafe {
+                        ripple_effect_get(&cells[0], url.len() as u32, limit as u32)
+                    };
+                },
+                Some(PlatformRequest(kind, arg, text)) => {
+                    self.id = start_platform(kind, arg, text);
+                },
+                None => {
+                    invalid_poll();
+                    return Pending;
+                },
+            }
+            if (self.id == 0) {
+                self.done = true;
+                return Ready(Err(EffectCapacity));
+            }
+        }
+        let state = ripple_effect_state(self.id);
+        if (state == 0) {
+            watch(self.effects, self.id, cx.waker);
+            return Pending;
+        }
+        self.done = true;
+        let mut body: Vec<u8> = [];
+        let status = ripple_effect_status(self.id);
+        if (state == 1) {
+            let length = ripple_effect_length(self.id) as usize;
+            if (length != 0) {
+                let mut cells: Vec<u16> = [];
+                for (i in 0..length) {
+                    cells.push(0);
+                }
+                unsafe {
+                    ripple_effect_copy(self.id, &mut cells[0], length as u32);
+                }
+                for (i in 0..length) {
+                    body.push(cells[i] as u8);
+                }
+            }
+        }
+        release(self.effects, self.id);
+        self.id = 0;
+        if (state == 1) {
+            Ready(Ok(BrowserResponse { status: status, body: move(body) }))
+        } else if (state == 2) {
+            Ready(Err(FetchFailed))
+        } else if (state == 3) {
+            Ready(Err(BodyLimit))
+        } else {
+            Ready(Err(effect_error(state)))
+        }
+    }
+    fn cancel(&mut self) {
+        if (self.done) {
+            return;
+        }
+        self.done = true;
+        drop(take(&mut self.request));
+        release(self.effects, self.id);
+        self.id = 0;
+    }
+}
+
+impl Future for BrowserTimer {
+    type Output = Result<unit, BrowserEffectError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<unit, BrowserEffectError>> {
+        match self.work.poll(cx) {
+            Pending => Pending,
+            Ready(Ok(_)) => Ready(Ok({})),
+            Ready(Err(error)) => Ready(Err(error)),
+        }
+    }
+    fn cancel(&mut self) {
+        self.work.cancel();
+    }
+}
+
+fn effect_error(state: u16) -> BrowserEffectError {
+    if (state == 2) {
+        FetchFailed
+    } else if (state == 3) {
+        BodyLimit
+    } else if (state == 4) {
+        HostUnavailable
+    } else if (state == 6) {
+        StorageQuota
+    } else {
+        EffectCancelled
+    }
+}
+
+fn start_platform(kind: u16, arg: u32, text: String) -> u32 {
+    let mut cells: Vec<u16> = [];
+    for (i in 0..text.len()) {
+        cells.push(text[i] as u16);
+    }
+    cells.push(0);
+    unsafe {
+        ripple_effect_platform(kind, arg, &cells[0], text.len() as u32)
+    }
+}
+
+/// Internal bounded platform operation used by the router and storage libraries.
+export fn platform_request(effects: BrowserEffects, kind: u16, arg: u32, text: String) -> OwnedFuture<BrowserOperation> {
+    own_future(BrowserOperation { effects: effects, request: Some(PlatformRequest(kind, arg, text)), id: 0, done: false })
+}
+
+fn byte_text(bytes: &Vec<u8>, begin: usize, end: usize) -> String {
+    if (end - begin > 32) {
+        let mid = begin + (end - begin) / 2;
+        return byte_text(bytes, begin, mid) + byte_text(bytes, mid, end);
+    }
+    let mut out = "";
+    for (i in begin..end) {
+        out = out + from_byte(bytes[i]);
+    }
+    out
+}
+
+/// Copies response octets into a String without host calls. Platform text is UTF-8;
+/// binary fetch bodies require application-level text validation.
+export fn response_text(response: &BrowserResponse) -> String {
+    byte_text(&response.body, 0, response.body.len())
+}
+
+fn location_text(id: u32) -> String {
+    let length = ripple_effect_length(id) as usize;
+    let mut cells: Vec<u16> = [];
+    for (i in 0..=length) {
+        cells.push(0);
+    }
+    unsafe {
+        ripple_effect_copy(id, &mut cells[0], length as u32);
+    }
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..length) {
+        bytes.push(cells[i] as u8);
+    }
+    byte_text(&bytes, 0, length)
+}
+
+/// Internal never-ending location future. Its owner revokes the host listener on drop.
+export struct LocationSubscription {
+    /// Mounted completion registry.
+    effects: BrowserEffects,
+    /// Active host subscription, or zero before the first poll.
+    id: u32,
+    /// Called with owned initial and changed hash snapshots.
+    notify: fn(String) -> unit,
+    /// Whether cancellation or failure has finished the subscription.
+    done: bool
+}
+
+/// Subscribes lazily to the initial hash and subsequent changes. Pending changes
+/// coalesce to the latest snapshot. Drop/cancel removes its browser listener.
+export fn watch_location(effects: BrowserEffects, notify: fn(String) -> unit) -> OwnedFuture<LocationSubscription> {
+    own_future(LocationSubscription { effects: effects, id: 0, notify: notify, done: false })
+}
+
+impl Future for LocationSubscription {
+    type Output = Result<unit, BrowserEffectError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<unit, BrowserEffectError>> {
+        if (self.done) {
+            invalid_poll();
+            return Pending;
+        }
+        if (self.id == 0) {
+            self.id = start_platform(4, 0, "");
+            if (self.id == 0) {
+                self.done = true;
+                return Ready(Err(EffectCapacity));
+            }
+        }
+        let state = ripple_effect_state(self.id);
+        if (state != 0) {
+            if (state != 1) {
+                let error = effect_error(state);
+                self.cancel();
+                return Ready(Err(error));
+            }
+            let hash = location_text(self.id);
+            ripple_effect_consume(self.id);
+            let notify = self.notify;
+            notify(hash);
+        }
+        watch(self.effects, self.id, cx.waker);
+        Pending
+    }
+    fn cancel(&mut self) {
+        if (!self.done) {
+            self.done = true;
+            release(self.effects, self.id);
+            self.id = 0;
+        }
+    }
+}

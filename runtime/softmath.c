@@ -1,5 +1,6 @@
-/* Integer-only binary64 helpers shared by RFL's math module.
- * No new guest instructions or host floating-point shortcuts. */
+#include "include/__float_accel.h"
+/* Binary64 helpers shared by RFL's math module. Host acceleration is optional;
+ * integer-only fallbacks remain available without it. */
 #define SIGN 0x8000000000000000ULL
 #define FRAC 0x000FFFFFFFFFFFFFULL
 #define INF  0x7FF0000000000000ULL
@@ -8,6 +9,7 @@
 extern unsigned long long __rcc_f64_from_u64(unsigned long long);
 
 unsigned long long __rcc_f64_floor(unsigned long long a) {
+    RCC_ACCEL_LOCAL_RETURN(VM_MATH_FLOOR, a, 0);
     int exp;
     unsigned long long mask;
     exp = (int)((a >> 52) & 2047ULL);
@@ -24,6 +26,7 @@ unsigned long long __rcc_f64_floor(unsigned long long a) {
 }
 
 unsigned long long __rcc_f64_sqrt(unsigned long long a) {
+    RCC_ACCEL_RETURN(VM_MATH_SQRT, a, 0);
     unsigned long long sig;
     unsigned long long hi;
     unsigned long long lo;
@@ -144,4 +147,14 @@ unsigned long long __rcc_f64_reduce_pi2(unsigned long long a, long *quadrant) {
     fraction = fraction - ((unsigned long long)(point - first + 63) << 52);
     if (round_up) { sign = sign ^ SIGN; }
     return sign | fraction;
+}
+
+/* Public bit ABI for standalone callers. Invalid/unsupported operations return
+ * a quiet NaN; the status-bearing vm_math interface is available for probing. */
+unsigned long long __rcc_host_math(unsigned op, unsigned long long a, unsigned long long b) {
+#if CHAR_BIT == 16 && !defined(RCC_SOFTWARE_FLOAT)
+    unsigned long long result;
+    if (__rcc_float_accel(op, a, b, &result) == VM_DEVICE_OK) return result;
+#endif
+    return QNAN;
 }

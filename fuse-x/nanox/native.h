@@ -7,6 +7,7 @@ PSD GdCreatePixmap(PSD,int,int,MWIMGDATFMT,void *,int);
 int nxh_new(GR_WINDOW *);
 void nxh_destroy(GR_WINDOW *);
 int nxh_resize(GR_WINDOW *,int,int);
+int nxh_host_resizing(void);
 int nxh_reparent(GR_WINDOW *,GR_WINDOW *);
 void nxh_reparented(GR_WINDOW *);
 void nxh_assign(GR_WINDOW *,PSD);
@@ -16,6 +17,8 @@ int nxh_event(struct gx_event *);
 int nxh_input(struct gx_event *);
 GR_WINDOW *nxh_mouse_window(int,int);
 void nxh_finish(void);
+int nxh_clipboard(GR_WINDOW *,char *,unsigned long *,int);
 void nxh_release_keys(void);
 void nxh_activate(GR_WINDOW *);
+int nxh_query_pointer(GR_WINDOW_ID *,GR_COORD *,GR_COORD *,GR_BUTTON *);
 #endif

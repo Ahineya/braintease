@@ -1,0 +1,36 @@
+import macro {html} from "std/html_macro";
+import {Html, TextChild, text} from "std/html";
+import {mount_ui, Ui} from "std/ui";
+type Msg = Ignore;
+// A caller's same-named method must not intercept macro-generated conversion.
+trait CallerChild { fn html_child(&self) -> String; }
+impl CallerChild for i16 { fn html_child(&self) -> String { "WRONG" } }
+struct Score { points: i16 }
+impl TextChild for Score {
+    fn html_child<M>(&self) -> Html<M> { html!{<strong>{self.points}</strong>} }
+}
+fn id<T>(value: T) -> T { move(value) }
+fn label<T: TextChild>(value: &T) -> Html<Msg> { html!{<em>{value}</em>} }
+fn update(model: i16, msg: Msg, ui: Ui<Msg>) -> i16 { model }
+fn view(count: &i16) -> Html<Msg> {
+    let small: i8 = -128;
+    let octet: u8 = 255;
+    let word: u16 = 65535;
+    let signed: i32 = -70000;
+    let wide: u32 = 4000000000;
+    let minimum: i64 = -9223372036854775807 - 1;
+    let maximum: u64 = 0 as u64 - 1;
+    let size: usize = 64000;
+    let rows: Vec<Html<Msg>> = [html!{<li>A</li>}, html!{<li>B</li>}];
+    let optional_rows: Option<Vec<Html<Msg>>> = Some(rows);
+    let present: Option<Html<Msg>> = Some(html!{<p>present</p>});
+    let absent: Option<Html<Msg>> = None;
+    let title = "<script>& 🌍";
+    let score = Score { points: 12 };
+    let mut calls: i16 = 0;
+    let step = fn() => { calls += 1; "once" };
+    let result: Html<Msg> = html!{<section><p>{count}|{small}|{octet}|{word}|{signed}|{wide}|{minimum}|{maximum}|{size}|{true}|{false}|{'🌍'}|{title}</p><ul>{optional_rows}</ul>{present}{absent}{score}{label(&size)}{step()}{text(" legacy")}{id(123)}{if (true) { text(" conditional") } else { text("bad") }}{{let ignored = 1; text(" block")}}{match true { true => text(" match"), false => text("bad") }}{if (true) { 5 } else { 6 }}</section>};
+    println(calls);
+    result
+}
+fn main() { mount_ui(42, update, view, 2).unwrap(); }

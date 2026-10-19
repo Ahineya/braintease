@@ -73,3 +73,21 @@ fn target_metadata_survives_text_and_json() {
     assert!(rcc_ir::parse_module("module native { target native target ripple }").is_err());
     assert!(rcc_ir::parse_module("module native { target unknown }").is_err());
 }
+
+#[test]
+fn wasm_capabilities_keep_hot_math_inside_the_module() {
+    assert_eq!(Target::parse("wasm").unwrap(), Target::Wasm);
+    assert!(Target::Wasm.has("native_float").unwrap());
+    assert!(!Target::Wasm.has("host_math").unwrap());
+    assert_eq!(Target::Wasm.layout(), Target::Native.layout());
+    let mut module = Module::new("browser".into());
+    module.target = Target::Wasm;
+    assert_eq!(
+        rcc_ir::parse_module(&rcc_ir::emit_module(&module)).unwrap(),
+        module
+    );
+    assert_eq!(
+        serde_json::from_str::<Module>(&serde_json::to_string(&module).unwrap()).unwrap(),
+        module
+    );
+}

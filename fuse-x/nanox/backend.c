@@ -8,6 +8,7 @@
 #include <errno.h>
 #include "screen.h"
 #include "native.h"
+#include "server.h"
 #define VIEWS 16
 struct view {
     GR_WINDOW *window;
@@ -21,12 +22,15 @@ struct view {
 static struct view views[VIEWS];
 static GR_WINDOW *pointer_top;
 static unsigned next_event;
+static int host_resizing;
+int nxh_host_resizing(void){return host_resizing;}
 static struct view *by_window(GR_WINDOW *w) {unsigned i;for(i=0;i<VIEWS;i++)if(views[i].window==w)return views+i;return NULL;}
 static GR_WINDOW *top(GR_WINDOW *w) {unsigned n=0;while(w&&w!=rootwp&&w->parent!=rootwp){if(++n>32)return NULL;w=w->parent;}return w==rootwp?NULL:w;}
 void nxh_assign(GR_WINDOW *w,PSD p) {GR_WINDOW *child;w->psd=p;for(child=w->children;child;child=child->siblings)nxh_assign(child,p);}
 static void offset(GR_WINDOW *w,int dx,int dy) {GR_WINDOW *child;w->x+=dx;w->y+=dy;for(child=w->children;child;child=child->siblings)offset(child,dx,dy);}
 void nxh_damage(PSD canvas,int x,int y,int width,int height) {
     unsigned i;struct view *v;
+    nxr_buffer_damage(canvas,x,y,width,height);
     if(width<=0||height<=0)return;
     for(i=0;i<VIEWS;i++)if(views[i].window&&views[i].canvas==canvas) {
         v=views+i;
@@ -59,15 +63,45 @@ void nxh_destroy(GR_WINDOW *w) {
     h.version=GX_VERSION;h.handle=v->host.window;ioctl(nxr_descriptor(),GX_DESTROY,&h);
     v->canvas->FreeMemGC(v->canvas);memset(v,0,sizeof(*v));
 }
+/* Compact before releasing trailing storage. Shrinking must not require a
+ * second full-size allocation when other desktop windows fill the arena. */
+static void shrink_canvas(PSD p,int width,int height){
+    unsigned y;void *smaller;unsigned long cells=(unsigned long)width*height;
+    for(y=0;y<height;y++)memmove((unsigned short *)p->addr+(unsigned long)y*width,
+        (unsigned short *)p->addr+(unsigned long)y*p->pitch,width*sizeof(unsigned short));
+    smaller=realloc(p->addr,cells*sizeof(unsigned short));if(smaller)p->addr=smaller;
+    p->xres=p->xvirtres=p->pitch=width;p->yres=p->yvirtres=height;p->size=cells;
+}
 int nxh_resize(GR_WINDOW *w,int width,int height) {
-    struct view *v=by_window(w);PSD next;unsigned y,count;
+    struct view *v=by_window(w);PSD next,buffer=NULL,old;unsigned y,count;
     if(!v)return width>0&&height>0;
-    if(width<=0||height<=0||width>1024||height>768)return 0;
+    if(width<=0||height<=0||width>GX_HOSTED_MAX_WIDTH||height>GX_HOSTED_MAX_HEIGHT)return 0;
+    if(width<=v->canvas->xres&&height<=v->canvas->yres){
+        shrink_canvas(v->canvas,width,height);
+        if(w->buffer){shrink_canvas(w->buffer->psd,width,height);w->buffer->width=width;w->buffer->height=height;
+            w->props&=~GR_WM_PROPS_DRAWING_DONE;w->c16_dirty=0;}
+        v->dirty=0;clipwp=NULL;curgcp=NULL;nxr_draw_target(NULL);
+        nxh_damage(v->canvas,0,0,width,height);return 1;
+    }
     next=GdCreatePixmap(&scrdev,width,height,MWIF_RGB565,NULL,0);if(!next)return 0;
+    /* Reserve both replacements before changing any live geometry. Keep the
+     * backing pixmap's identity and owner: a resize is not a new client. */
+    if(w->buffer){
+        buffer=GdCreatePixmap(&scrdev,width,height,MWIF_RGB565,NULL,0);
+        if(!buffer){next->FreeMemGC(next);return 0;}
+    }
     count=width<v->canvas->xres?width:v->canvas->xres;
     for(y=0;y<height&&y<v->canvas->yres;y++)memcpy((unsigned short *)next->addr+(unsigned long)y*next->pitch,
         (unsigned short *)v->canvas->addr+(unsigned long)y*v->canvas->pitch,count);
+    if(buffer){
+        old=w->buffer->psd;
+        for(y=0;y<height&&y<old->yres;y++)memcpy((unsigned short *)buffer->addr+(unsigned long)y*buffer->pitch,
+            (unsigned short *)old->addr+(unsigned long)y*old->pitch,count);
+        w->buffer->psd=buffer;w->buffer->width=width;w->buffer->height=height;
+        old->FreeMemGC(old);w->props&=~GR_WM_PROPS_DRAWING_DONE;w->c16_dirty=0;
+    }
     nxh_assign(w,next);v->canvas->FreeMemGC(v->canvas);v->canvas=next;v->dirty=0;
+    curgcp=NULL;nxr_draw_target(NULL);
     nxh_damage(next,0,0,width,height);clipwp=NULL;return 1;
 }
 /* Called before the canonical reparent while its old tree is still valid. */
@@ -141,7 +175,9 @@ int nxh_input(struct gx_event *e) {
     if(!v->window->realized||!v->window->output)return 0;
     if(e->type==GX_CLOSE){GrCloseWindow(v->window->id);return 0;}
     if(e->type==GX_RESIZE) {
+        host_resizing=1;
         if(!(v->window->props&GR_WM_PROPS_NORESIZE))GrResizeWindow(v->window->id,e->x,e->y);
+        host_resizing=0;
         /* A refused/failed resize explicitly restores the accepted geometry. */
         v->host.width=v->host.height=0;configure(v);return 0;
     }
@@ -161,9 +197,33 @@ int nxh_input(struct gx_event *e) {
         pointer_top=e->flags&4?v->window:NULL;GsCheckMouseWindow();return 0;
     }
     pointer_top=v->window;
-    if(e->type==GX_KEY&&top(focuswp)!=v->window){focusfixed=GR_TRUE;GsSetFocus(v->window);}
+    if((e->type==GX_KEY||e->type==GX_TEXT||e->type==GX_ACTION)&&top(focuswp)!=v->window){focusfixed=GR_TRUE;GsSetFocus(v->window);}
     return 1;
 }
 void nxh_finish(void) {unsigned i;for(i=0;i<VIEWS;i++)if(views[i].window)nxh_destroy(views[i].window);}
 void nxh_activate(GR_WINDOW *w) {struct view *v=by_window(top(w));struct gx_handle h;
     if(!v||!w->realized)return;v->focus=w->id;h.version=GX_VERSION;h.handle=v->host.window;ioctl(nxr_descriptor(),GX_ACTIVATE,&h);}
+int nxh_query_pointer(GR_WINDOW_ID *window,GR_COORD *x,GR_COORD *y,GR_BUTTON *buttons) {
+    unsigned i;struct gx_pointer p;struct view *v;GR_WINDOW *under;
+    /* GrQueryPointer has no window argument. Use this client's first mapped
+     * top-level as its coordinate origin; no global input state is changed. */
+    for(i=0;i<VIEWS;i++)if(views[i].window&&views[i].window->owner==curclient&&views[i].window->realized){
+        v=views+i;p.version=GX_VERSION;p.window=v->host.window;
+        if(ioctl(nxr_descriptor(),GX_DESKTOP_POINTER,&p)<0)return 0;
+        *x=p.x < -32767 ? -32767 : p.x > 32767 ? 32767 : p.x;
+        *y=p.y < -32767 ? -32767 : p.y > 32767 ? 32767 : p.y;
+        under=hit(v->window,*x,*y,0);*window=under?under->id:GR_ROOT_WINDOW_ID;
+        *buttons=pointer_top==v->window?curbuttons:0;return 1;
+    }
+    return 0;
+}
+
+/* Resolve an already owner-checked Nano-X window to the server's GX lease. */
+int nxh_clipboard(GR_WINDOW *w,char *text,unsigned long *length,int writing) {
+    struct view *v=by_window(top(w));struct gx_clipboard c;
+    if(!v)return -1;
+    memset(&c,0,sizeof(c));c.version=GX_VERSION;c.window=v->host.window;c.text=text;
+    c.length=writing?*length:0;c.capacity=GX_CLIPBOARD_MAX;
+    if(ioctl(nxr_descriptor(),writing?GX_CLIPBOARD_WRITE:GX_CLIPBOARD_READ,&c)<0)return -1;
+    *length=c.length;return 0;
+}

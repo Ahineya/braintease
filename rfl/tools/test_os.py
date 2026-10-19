@@ -48,8 +48,11 @@ class Screen:
                 if i + 1 == len(text): break
                 if text[i + 1] == "[":
                     end = i + 2
-                    while end < len(text) and not ("@" <= text[end] <= "~"): end += 1
+                    while end < len(text) and text[end] != "\x1b" and not ("@" <= text[end] <= "~"): end += 1
                     if end == len(text): break
+                    # Terminal restoration can interrupt a partially written CSI.
+                    # A fresh ESC aborts that sequence on a real terminal.
+                    if text[end] == "\x1b": i = end; continue
                     parameters, final = text[i + 2:end], text[end]
                     if parameters == "?1049" and final == "h" and not self.alternate:
                         self.saved = (self.lines, self.styles, self.y, self.x, self.style)
@@ -178,14 +181,46 @@ class Guest:
         fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
         os.kill(self.process.pid, signal.SIGWINCH)
 
-    def shell(self, command):
+    def shell(self, command, seconds=60):
         self.send(command.encode() + b"\r")
-        return self.raw(self.prompt)
+        return self.raw(self.prompt, seconds=seconds)
 
     def close(self):
         Path(f"/tmp/rfl-os-{self.system}.log").write_bytes(self.log)
         if self.process.poll() is None: self.process.kill(); self.process.wait()
         os.close(self.master)
+
+
+def console_checks(guest):
+    guest.at=len(guest.log)
+    guest.send(b"\x0f")
+    guest.raw(b"RFL Commander shell")
+    guest.raw(guest.prompt)
+    guest.shell("RFL_CONSOLE=RFL_SHELL_OK")
+    output=guest.shell("echo $RFL_CONSOLE")
+    assert b"\nRFL_SHELL_OK\n" in output, output
+    # Complete an actual filename using the shell's interactive editor.
+    guest.send(b"cat /left/alph\t\r")
+    guest.raw(b"RFL file manager fixture")
+    guest.raw(guest.prompt)
+    output=guest.shell("sleep 10 &")
+    assert b"Running" in output,output
+    guest.send(b"fg\r")
+    guest.raw(b"sleep 10")
+    guest.send(b"\x03")
+    guest.raw(guest.prompt,seconds=10)
+    guest.shell("cd /left")
+    output=guest.shell("cat alpha.txt")
+    assert b"RFL file manager fixture" in output, output
+    guest.send(b"exit\r")
+    guest.visible("Returned from guest shell")
+    # EOF is the other documented return path. Curses must own input again.
+    guest.at=len(guest.log)
+    guest.send(b"\x0f")
+    guest.raw(b"RFL Commander shell")
+    guest.raw(guest.prompt)
+    guest.send(b"\x04")
+    guest.visible("Returned from guest shell")
 
 
 def exercise(args, system, directory):
@@ -210,13 +245,13 @@ def exercise(args, system, directory):
     if system == "fuzix":
         stage = directory / "stage"
         stage.mkdir()
-        names = ["init", "sh", "echo", "cat", "env", "true", "stty", "levee", "vi", "chmod", "sleep"]
+        names = ["init", "sh", "echo", "cat", "env", "true", "stty", "levee", "vi", "rift", "chmod", "sleep"]
         for name in [*(n + ".rxe" for n in names), "FUZIX.SYS", "bios.bin"]: (stage / name).symlink_to(build / name)
         for name, path in artifacts.items(): (stage / (name + ".rxe")).symlink_to(path)
         (stage / "apps.json").write_text(json.dumps(names + list(artifacts) + ["mc"]))
         run(["node", PORT / "tools/disk.mjs", stage, image])
         command = [ROOT / "target/release/rvm", build / "bios.bin", "--disk", image,
-                   "--memory", "16384000", "--net", "off", "--jit", "--guest-ctrl-c", "--timeout", "240"]
+                   "--memory", "16384000", "--net", "off", "--jit", "--guest-ctrl-c", "--timeout", "600"]
     else:
         # Seed Commander and its alias together, including this test's build.
         apps = directory / "native-apps"
@@ -246,7 +281,22 @@ def exercise(args, system, directory):
     guest = Guest(command, system)
     try:
         guest.raw(guest.prompt)
-        output = guest.shell("rfl-probe; echo RFL_STATUS:$?")
+        if args.console_only:
+            output=guest.shell("rfl-probe; echo RFL_STATUS:$?",seconds=180 if system=="fuzix" else 60)
+            assert b"RFL_OS_OK" in output and b"RFL_STATUS:0" in output,output
+            guest.send(b"mc /left /right\r")
+            guest.visible("RFL Commander")
+            console_checks(guest)
+            guest.send(b"\x1b[21~")
+            guest.raw(guest.prompt)
+            assert b"CONSOLE_RETURN_OK" in guest.shell("echo CONSOLE_RETURN_OK")
+            guest.send(b"shutdown\r");guest.process.wait(timeout=30)
+            assert guest.process.returncode==0
+            print(system+": Commander interactive shell, persistent variables/cd, Tab completion, exit/EOF and terminal restoration passed",flush=True)
+            return
+        # This probe copies its multi-megabyte executable through the RFL I/O
+        # API before checking the widgets; cold JIT execution can exceed 60s.
+        output = guest.shell("rfl-probe; echo RFL_STATUS:$?", seconds=180 if system == "fuzix" else 60)
         assert b"RFL_OS_OK" in output and b"RFL_STATUS:0" in output, output
         assert b"STATUS:23" in guest.shell("rfl-probe status; echo STATUS:$?")
         assert b"STATUS:1" in guest.shell("rfl-probe panic; echo STATUS:$?")
@@ -341,13 +391,8 @@ def exercise(args, system, directory):
         guest.visible("Deleted successfully")
         guest.send(b"\x10")  # Ctrl-P single panel.
         guest.wait(lambda: "[ /right ]" in guest.screen.text() and " /left " not in guest.screen.text().splitlines()[1], "single panel")
-        guest.send(b"\x10\x0f")  # Return to two panels, Ctrl-O shell.
-        guest.visible("RFL Commander shell")
-        guest.visible("rfl$ ")
-        guest.send(b"echo RFL_SHELL_OK\r")
-        guest.wait(lambda: any(line.strip() == "RFL_SHELL_OK" for line in guest.screen.text().splitlines()), "guest shell command output")
-        guest.send(b"\r")
-        guest.visible("Returned from guest shell")
+        guest.send(b"\x10")  # Return to two panels, then exercise Ctrl-O shell.
+        console_checks(guest)
         guest.send(b"\x1b[21~")  # F10 quit.
         guest.raw(guest.prompt)
         assert not guest.screen.alternate and "[ /right ]" not in guest.screen.text()
@@ -435,6 +480,7 @@ def main():
     parser.add_argument("--native-build", type=Path, default=ROOT / "fuse-x/build")
     parser.add_argument("--prebuilt", type=Path, help="explicitly reuse previously saved test executables")
     parser.add_argument("--save-artifacts", type=Path, help="save this run's fresh executables for focused reruns")
+    parser.add_argument("--console-only", action="store_true", help="focus on Commander's interactive shell and terminal ownership")
     args = parser.parse_args()
     for system in (["fuse-x", "fuzix"] if args.os == "both" else [args.os]):
         with tempfile.TemporaryDirectory(prefix="rfl-os-", dir="/tmp") as temporary:

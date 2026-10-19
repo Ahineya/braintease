@@ -1,0 +1,265 @@
+// Property/listener reconciliation. Callback environments update inside Wasm;
+// existing listeners stay installed while their kind/policy remains unchanged.
+import { Prop, Attr, Value, Checked, Disabled, Listener, Focus } from "std/html";
+import { Event } from "std/html_event";
+import { Batch } from "std/browser_batch";
+import { Option } from "std/option";
+/// A listener identity, event kind, policy flags and optional message handler.
+export type Binding<M> = Binding(u16, u16, u16, Option<fn(Event) -> M>);
+/// Monotonic guest identities shared by node and listener reconciliation.
+export struct Ids {
+    /// Next unused node identity; zero is reserved for the root.
+    node: u32,
+    /// Next unused listener identity; exhausted identities fail explicitly.
+    listener: u32
+}
+
+fn listener_id(ids: &mut Ids) -> u16 {
+    let n = ids.listener;
+    ids.listener += 1;
+    Some(n).filter(fn(n: u32) => n <= 65535).expect("UI listener IDs exhausted") as u16
+}
+
+fn attr<M>(props: Vec<Prop<M>>, name: String) -> Option<String> {
+    for (p in props) {
+        match p {
+            Attr(n, v) => {
+                if (n == name) {
+                    return Some(v);
+                }
+            },
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Reports whether properties include a controlled text value.
+export fn controlled<M>(props: Vec<Prop<M>>) -> bool {
+    for (p in props) {
+        match p {
+            Value(_) => {
+                return true;
+            },
+            _ => {}
+        }
+    }
+    false
+}
+
+fn property<M>(props: Vec<Prop<M>>, kind: u16) -> Option<String> {
+    for (p in props) {
+        match p {
+            Value(v) => {
+                if (kind == 1) {
+                    return Some(v);
+                }
+            },
+            Checked(v) => {
+                if (kind == 2) {
+                    return Some(if (v) {
+                        "1"
+                    } else {
+                        "0"
+                    });
+                }
+            },
+            Disabled(v) => {
+                if (kind == 3) {
+                    return Some(if (v) {
+                        "1"
+                    } else {
+                        "0"
+                    });
+                }
+            },
+            _ => {}
+        }
+    }
+    None
+}
+
+fn same(a: Option<String>, b: Option<String>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => true,
+        _ => false
+    }
+}
+
+fn listener<M>(props: Vec<Prop<M>>, kind: u16, tag: String) -> Option<(u16, Option<fn(Event) -> M>)> {
+    for (p in props) {
+        match p {
+            Listener(k, flags, handler) => {
+                if (k == kind) {
+                    return Some((flags, Some(handler)));
+                }
+            },
+            _ => {}
+        }
+    }
+    if (controlled(props) && ((kind == 2 && tag != "option") || ((kind == 6 || kind == 7) && (tag == "input" || tag == "textarea")))) {
+        return Some((0, None));
+    }
+    if (kind == 3) {
+        for (prop in props) {
+            match prop {
+                Checked(_) => {
+                    return Some((0, None));
+                },
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
+fn old_binding<M>(bindings: Vec<Binding<M>>, kind: u16) -> Option<(u16, u16)> {
+    for (binding in bindings) {
+        let Binding(id, k, flags, _) = binding;
+        if (k == kind) {
+            return Some((id, flags));
+        }
+    }
+    None
+}
+
+/// Reconciles attributes, controlled properties and listeners while preserving active composition.
+export fn update_props<M>(node: u16, old: Vec<Prop<M>>, new: Vec<Prop<M>>, bindings: Vec<Binding<M>>, ids: &mut Ids, out: &mut Batch, dirty: bool, composing: bool, defer_value: bool, tag: String) -> Vec<Binding<M>> {
+    for (p in old) {
+        match p {
+            Attr(name, _) => {
+                match attr(new, name) {
+                    None => {
+                        out.emit(10, node, 0, 0, 0, [name]);
+                    },
+                    Some(_) => {}
+                }
+            },
+            _ => {}
+        }
+    }
+    for (p in new) {
+        match p {
+            Attr(name, value) => {
+                if (!same(attr(old, name), Some(value))) {
+                    out.emit(4, node, 0, 0, 0, [name, value]);
+                }
+            },
+            _ => {}
+        }
+    }
+    for (kind in 1..4) {
+        let k = kind as u16;
+        let previous = property(old, k);
+        let next = property(new, k);
+        if ((!defer_value || k != 1) && (!same(previous, next) || (dirty && k != 3))) {
+            match next {
+                Some(value) => {
+                    if (k == 1) {
+                        if (!composing) {
+                            out.emit(5, node, 1, 0, 0, [value]);
+                        }
+                    } else {
+                        out.emit(5, node, k, if (value == "1") {
+                            1
+                        } else {
+                            0
+                        }, 0, []);
+                    }
+                },
+                None => {
+                    match previous {
+                        Some(_) => {
+                            if (k == 1) {
+                                if (!composing) {
+                                    out.emit(5, node, 1, 0, 0, [""]);
+                                }
+                            } else {
+                                out.emit(5, node, k, 0, 0, []);
+                            }
+                        },
+                        None => {}
+                    }
+                },
+            }
+        }
+    }
+    if (focus_requested(new) && !focus_requested(old)) {
+        out.emit(11, node, 0, 0, 0, []);
+    }
+    let mut result: Vec<Binding<M>> = [];
+    for (k in 1..11) {
+        let kind = k as u16;
+        let before = old_binding(bindings, kind);
+        match listener(new, kind, tag) {
+            Some(pair) => {
+                let (flags, handler) = pair;
+                let identity = match before {
+                    Some(pair) => {
+                        let (id, previous) = pair;
+                        if (previous == flags) {
+                            id
+                        } else {
+                            let id = listener_id(ids);
+                            out.emit(8, node, kind, id, flags, []);
+                            id
+                        }
+                    },
+                    None => {
+                        let id = listener_id(ids);
+                        out.emit(8, node, kind, id, flags, []);
+                        id
+                    }
+                };
+                result.push(Binding(identity, kind, flags, handler));
+            },
+            None => {
+                match before {
+                    Some(_) => {
+                        out.emit(9, node, kind, 0, 0, []);
+                    },
+                    None => {}
+                }
+            },
+        }
+    }
+    result
+}
+
+// A select's value is meaningful only after its options have been reconciled.
+/// Synchronizes a select value after reconciling its options, unless composition is active.
+export fn sync_value<M>(node: u16, old: Vec<Prop<M>>, new: Vec<Prop<M>>, out: &mut Batch, force: bool, composing: bool) -> unit {
+    if (composing) {
+        return;
+    }
+    let previous = property(old, 1);
+    let next = property(new, 1);
+    if (force || !same(previous, next)) {
+        match next {
+            Some(value) => {
+                out.emit(5, node, 1, 0, 0, [value]);
+            },
+            None => {
+                match previous {
+                    Some(_) => {
+                        out.emit(5, node, 1, 0, 0, [""]);
+                    },
+                    None => {}
+                }
+            },
+        }
+    }
+}
+
+fn focus_requested<M>(props: Vec<Prop<M>>) -> bool {
+    for (prop in props) {
+        match prop {
+            Focus(value) => {
+                return value;
+            },
+            _ => {}
+        }
+    }
+    false
+}

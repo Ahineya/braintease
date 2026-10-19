@@ -1,5 +1,8 @@
 /* Local port glue; Lynx/libwww still implement HTTP and HTML in the guest. */
 #include <HTUtils.h>
+#include <HTParse.h>
+#include <ripple_tls.h>
+#include <string.h>
 #include <HTAlert.h>
 #include <HTTCP.h>
 #include <LYUtils.h>
@@ -48,6 +51,22 @@ void ripple_browser_screen_init(void)
     if (!no_suspend) signal(SIGTSTP, suspend_browser);
 }
 
+static RippleTLS *tls;
+static int tls_fd=-1;
+static int poll_keyboard(void *context) {(void)context;return HTCheckForInterrupt();}
+void ripple_browser_tls_close(void) {ripple_tls_close(tls);tls=NULL;tls_fd=-1;}
+void ripple_browser_close(int fd) {if(fd==tls_fd)ripple_browser_tls_close();close(fd);}
+int ripple_browser_secure(int fd,const char *url) {
+    char *authority=HTParse(url,"",PARSE_HOST),*host,*port;
+    if(!authority)return -1;
+    host=strrchr(authority,'@');host=host?host+1:authority;
+    port=strchr(host,':');if(port)*port=0;
+    _HTProgress("Establishing verified HTTPS connection...");
+    tls=ripple_tls_open_poll(fd,host,getenv("SSL_CERT_FILE"),60000UL,poll_keyboard,NULL);
+    free(authority);
+    if(!tls){if(errno!=EINTR)HTAlert(*ripple_tls_error()?ripple_tls_error():"Cannot initialize verified HTTPS; check /etc/ssl/cert.pem and /dev/urandom.");return -1;}
+    tls_fd=fd;return 0;
+}
 static unsigned long received;
 static int limit_hit;
 
@@ -66,7 +85,8 @@ int ripple_browser_read(int fd, void *buffer, unsigned capacity)
      * This limit counts wire octets, including headers/chunk framing. */
     if ((unsigned long)capacity > remaining + 1)
         capacity = (unsigned)(remaining + 1);
-    count = HTDoRead(fd, buffer, capacity);
+    count = fd==tls_fd ? ripple_tls_read(tls,buffer,capacity,15000UL) : HTDoRead(fd, buffer, capacity);
+    if(count<0&&fd==tls_fd&&errno==EINTR)return HT_INTERRUPTED;
     if (count > 0) {
         if ((unsigned long)count > remaining) {
             limit_hit = 1;
@@ -83,6 +103,7 @@ int ripple_browser_write(int fd, const void *buffer, unsigned size)
     const char *next = buffer;
     unsigned sent = 0;
     int count;
+    if(fd==tls_fd)return ripple_tls_write(tls,buffer,size,15000UL)<0?-1:(int)size;
     while (sent < size) {
         if (HTCheckForInterrupt()) { errno = EINTR; return -1; }
         count = write(fd, next + sent, size - sent);

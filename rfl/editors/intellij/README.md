@@ -25,7 +25,7 @@ The default installation is `/Applications/IntelliJ IDEA.app`. Elsewhere, pass
 accepted. If the IDE has no compiler, set `JAVA_HOME` to a JDK 21 or later.
 
 In IDEA, open **Settings → Plugins → gear menu → Install Plugin from Disk** and
-select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.6.zip`. Restart
+select `rfl/editors/intellij/build/distributions/rfl-intellij-0.2.7.zip`. Restart
 if IDEA requests it, then open an `.rfl` file.
 
 To update an installed version, use the same **Install Plugin from Disk** action
@@ -41,17 +41,24 @@ You can also enable RFL reformatting through IDEA's **Actions on Save** settings
 
 The style is fixed: four spaces, consistent operator spacing, multiline blocks
 and declarations, and no line-length wrapping. Comments and literal spellings
-are preserved. Syntax errors produce no formatting edits; unresolved names or
+are preserved. Plugin 0.2.7 adds local HTML tag, attribute, entity and embedded RFL
+highlighting inside `html!`, including standard-macro import aliases. The parser
+still treats arbitrary macro bodies as lossless tokens; highlighting does not
+execute macros or require a running server. Syntax errors produce no formatting edits; unresolved names or
 imports do not prevent formatting. See the [formatter guide](../../formatting.md)
 for the CLI, selection behavior and examples.
 
 Rebuild the `rfl` executable and restart its language server after updating.
+The updated formatter lays out standard `html!` trees, properties and embedded
+RFL expressions. Formatting is served independently of the semantic worker, so
+macro expansion/type checking does not block Reformat Code. Diagnostics include
+the document version. Executable discovery and explicit path settings are unchanged.
 If a release binary exists, automatic discovery prefers it over the debug build;
 use `cargo build --release -p rfl` or explicitly select the new debug executable.
 
 Plugin 0.2.6 fixes the 0.2.5 routing bug that could report an unformatted file
 as already formatted without calling the language server. If CLI
-`rfl fmt --check FILE` reports changes but IDEA does nothing, install 0.2.6
+`rfl fmt --check FILE` reports changes but IDEA does nothing, install 0.2.7
 and restart IDEA to load the corrected plugin.
 
 ## Documentation on hover
@@ -235,7 +242,7 @@ project free functions are not suggested. This uses the existing extension-call
 semantics and does not require traits or changes to the stdlib's declarations.
 
 These actions require the updated **RFL executable**. The existing plugin already
-displays LSP quick fixes. Install plugin **0.2.6** for corrected formatting integration,
+displays LSP quick fixes. Install plugin **0.2.7** for HTML highlighting, corrected formatting integration,
 local `trait` keyword highlighting and correct rename token ranges; restart the language server after
 updating its executable. If you installed an older `rfl` on PATH, rebuild it with `cargo build --release -p rfl`, then update
 that PATH installation or point **Languages & Frameworks → RFL → RFL executable**

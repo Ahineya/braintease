@@ -24,13 +24,119 @@ put inside itself!
 #define src (uint8_t *)udata.u_argn
 #define dst (uint8_t *)udata.u_argn1
 
+/* Resolve ancestry from the actual destination parent. Checking only whether
+   pathname traversal visited the source misses relative paths from its child,
+   and incorrectly rejects paths which visit the source then leave via .. . */
+static bool rename_outside(inoptr source, inoptr parent)
+{
+	inoptr walk = i_ref(parent), next;
+	uint16_t depth;
+	for (depth = 0; depth < 512; ++depth) {
+		if (walk == source) {
+			udata.u_error = EINVAL;
+			break;
+		}
+		if (walk->c_num == ROOTINODE) {
+			i_deref(walk);
+			return true;
+		}
+		next = srch_dir(walk, (uint8_t *)"..");
+		if (!next || next == walk) {
+			if (next) i_deref(next);
+			udata.u_error = EIO;
+			break;
+		}
+		i_deref(walk);
+		walk = next;
+	}
+	i_deref(walk);
+	if (!udata.u_error) udata.u_error = EIO;
+	return false;
+}
+
+/* All four inodes are borrowed from _rename. Stage the destination before
+   unlinking the source, and roll back the staged name/.. on ordinary errors.
+   As with the rest of this filesystem, this is not a journal transaction. */
+static arg_t rename_directory(inoptr source, inoptr from, inoptr target,
+			     inoptr to, uint8_t *oldname, uint8_t *newname)
+{
+	uint16_t error;
+	bool reparent = from != to;
+	if (source->c_num == ROOTINODE || (target && target->c_num == ROOTINODE)) {
+		udata.u_error = EBUSY;
+		return -1;
+	}
+	if (target && getmode(target) != MODE_R(F_DIR)) {
+		udata.u_error = ENOTDIR;
+		return -1;
+	}
+	if (!rename_outside(source, to)) return -1;
+	if ((from->c_flags | to->c_flags | source->c_flags) & CRDONLY) {
+		udata.u_error = EROFS;
+		return -1;
+	}
+	if (!(getperm(from) & OTH_WR) || !(getperm(to) & OTH_WR)) {
+		udata.u_error = EACCES;
+		return -1;
+	}
+	if (target && (target->c_node.i_nlink != 2 || !emptydir(target))) {
+		if (!udata.u_error) udata.u_error = ENOTEMPTY;
+		return -1;
+	}
+	if (reparent && !target && to->c_node.i_nlink == 0xffff) {
+		udata.u_error = EMLINK;
+		return -1;
+	}
+	udata.u_error = 0;
+	if (!reparent && !target) {
+		/* A simple rename reuses its directory slot, even on a full disk. */
+		if (!ch_link(from, oldname, newname, source)) return -1;
+	} else {
+		if (!ch_link(to, target ? newname : (uint8_t *)"", newname, source)) return -1;
+		if (reparent && !ch_link_parent(source, to)) goto rollback_name;
+		if (!ch_link(from, oldname, (uint8_t *)"", NULLINODE)) {
+			error = udata.u_error;
+			udata.u_error = 0;
+			if (reparent && !ch_link_parent(source, from))
+				kputs("WARNING: rename: parent rollback failed\n");
+			udata.u_error = error;
+			goto rollback_name;
+		}
+	}
+	if (reparent) {
+		--from->c_node.i_nlink;
+		if (!target) ++to->c_node.i_nlink;
+	} else if (target) {
+		--to->c_node.i_nlink;
+	}
+	if (target) {
+		target->c_node.i_nlink = 0;
+		/* Retained cwd/open references must not expose stale . and .. . */
+		f_trunc(target);
+		setftime(target, C_TIME);
+	}
+	setftime(source, C_TIME);
+	wr_inode(source);
+	wr_inode(from);
+	if (reparent) wr_inode(to);
+	sync();
+	return 0;
+rollback_name:
+	error = udata.u_error;
+	udata.u_error = 0;
+	if (!ch_link(to, newname, target ? newname : (uint8_t *)"", target))
+		kputs("WARNING: rename: name rollback failed\n");
+	udata.u_error = error;
+	return -1;
+}
+
 arg_t _rename(void)
 {
 	staticfast inoptr srci, srcp, dsti, dstp;
 	uint8_t fname[FILENAME_LEN + 1];
 	arg_t ret;
 
-	srci = n_open(src, &srcp);
+	srci = n_open_flags(src, &srcp, N_NOFOLLOW | N_NODEREF);
 	/* Source must exist */
 	if (!srci) {
 		if (srcp)
@@ -39,15 +145,29 @@ arg_t _rename(void)
 	}
 	/* Save the source name */
 	memcpy(fname, lastname, FILENAME_LEN + 1);
+	if (getmode(srci) == MODE_R(F_DIR) &&
+	    (srci->c_num == ROOTINODE || namecomp(fname, (uint8_t *)".") || namecomp(fname, (uint8_t *)".."))) {
+		udata.u_error = srci->c_num == ROOTINODE ? EBUSY : EINVAL;
+		ret = -1;
+		goto nogood3;
+	}
 	/* n_open will wipe u_rename if it walks that inode
 	   so it tells us whether we are trying to create a loop */
 	udata.u_rename = srci;
 	/* Destination maybe does not exist, but parent must */
 
-	dsti = n_open(dst, &dstp);
+	dsti = n_open_flags(dst, &dstp, N_NOFOLLOW | N_NODEREF);
 	/* lastname now holds destination name element */
+	if (getmode(srci) == MODE_R(F_DIR) &&
+	    (namecomp(lastname, (uint8_t *)".") || namecomp(lastname, (uint8_t *)".."))) {
+		udata.u_error = EINVAL;
+		ret = -1;
+		goto nogood;
+	}
 	/* Same file - do nothing */
 	if (dsti == srci) {
+		i_deref(dsti);
+		i_deref(dstp);
 		ret = 0;
 		goto nogood3;
 	}
@@ -63,10 +183,10 @@ arg_t _rename(void)
 		udata.u_error = EXDEV;
 		goto nogood;
 	}
-	/* Can't rename a directory yet.. need to fix this but to do so we
-	   must update .. in the child. Probably a LEVEL 2 functionality ? */
+	/* Directory moves preserve the inode/tree and update .. and link counts. */
 	if (getmode(srci) == MODE_R(F_DIR)) {
-		udata.u_error = EISDIR;
+		udata.u_error = 0;
+		ret = rename_directory(srci, srcp, dsti, dstp, fname, lastname);
 		goto nogood;
 	}
 	/* Can't rename one dir into another */
@@ -107,10 +227,11 @@ arg_t _rename(void)
 	sync();
 	ret = 0;
       nogood2:
-	i_deref(dstp);
+	if (dstp) i_deref(dstp);
       nogood3:
+	udata.u_rename = NULLINODE;
 	i_deref(srci);
-	i_deref(srcp);
+	if (srcp) i_deref(srcp);
 	return ret;
       nogood:
 	if (dsti)
@@ -135,13 +256,13 @@ arg_t _mkdir(void)
 	register inoptr ino;
 	inoptr parent;
 
-	if ((ino = n_open(name, &parent)) != NULL) {
+	if ((ino = n_open_flags(name, &parent, N_NOFOLLOW | N_MKDIR)) != NULL) {
 		udata.u_error = EEXIST;
 		goto nogood;
 	}
 
 	if (!parent) {
-		udata.u_error = ENOENT;
+		if (!udata.u_error) udata.u_error = ENOENT;
 		return (-1);
 	}
 
@@ -207,7 +328,7 @@ arg_t _rmdir(void)
 	inoptr parent;
 
 	/* Q: rmdir . */
-	ino = n_open(path, &parent);
+	ino = n_open_flags(path, &parent, N_NOFOLLOW | N_NODEREF);
 
 	/* It and its parent must exist */
 	if (!(parent && ino)) {

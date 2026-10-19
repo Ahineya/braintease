@@ -65,6 +65,7 @@ impl FnBuild {
                 self.terminate(Term::Suspend {
                     next: poll_start,
                     cleanup: self.cleanup_slots(0),
+                    awaited: slot,
                 });
                 self.cur = ready;
                 self.dead = false;
@@ -359,17 +360,23 @@ impl FnBuild {
                 let next = self.fresh();
                 self.segs[self.cur].term = Some(Term::Apply {
                     slot,
-                    args: arg_slots,
+                    args: arg_slots.clone(),
                     arg_tys: params.clone(),
                     dest,
                     next,
                 });
                 self.cur = next;
                 self.dead = false;
+                // Both consuming and reusable callable snapshots end here.
+                self.insn(Insn::Drop { slot });
+                for slot in arg_slots {
+                    self.insn(Insn::Drop { slot });
+                }
             }
             TExprKind::Closure { func } => self.insn(Insn::Closure {
                 dest,
                 func: func.clone(),
+                captures: Vec::new(),
             }),
             TExprKind::ArrayLit { elems, elem } => {
                 let mut slots = Vec::new();
@@ -729,12 +736,17 @@ impl FnBuild {
                 let next = self.fresh();
                 self.segs[self.cur].term = Some(Term::Call {
                     callee: callee.clone(),
-                    args: arg_slots,
+                    args: arg_slots.clone(),
                     dest,
                     next,
                 });
                 self.cur = next;
                 self.dead = false;
+                // Callee parameters own their shares; argument snapshots are
+                // no longer visible after return, including across resume IDs.
+                for slot in arg_slots {
+                    self.insn(Insn::Drop { slot });
+                }
             }
             TExprKind::If {
                 cond,

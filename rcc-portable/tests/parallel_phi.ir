@@ -1,0 +1,19 @@
+module parallel_phi {
+  function i16 @main() {
+    block 0:
+      br label 1
+    block 1:
+      %0 = phi i16 [1, label 0], [%1, label 2]
+      %1 = phi i16 [2, label 0], [%0, label 2]
+      %2 = phi i16 [0, label 0], [%3, label 2]
+      %4 = slt i16 %2, 3
+      br %4, label 2, label 3
+    block 2:
+      %3 = add i16 %2, 1
+      br label 1
+    block 3:
+      %5 = mul i16 %0, 10
+      %6 = add i16 %5, %1
+      ret %6
+  }
+}

@@ -16,6 +16,12 @@ void rcc_hosted_image_discard(unsigned long entry);
 int rcc_hosted_image_begin(unsigned long cells);
 int rcc_hosted_image_append(const void *data, unsigned long cells);
 unsigned long rcc_hosted_image_finish(void);
+/* Asynchronous alternative: prepare starts host-only work; poll installs at
+ * most 128 functions and returns 0 pending, ~0UL failure, or an entry token.
+ * Kernel must service timers and yield between polls. Cancellation never joins
+ * a worker, and an unfinished image cannot be entered. */
+int rcc_hosted_image_prepare(void);
+unsigned long rcc_hosted_image_poll(void);
 void rcc_hosted_image_cancel(void);
 void rcc_hosted_bind_syscall(long (*entry)(unsigned long));
 /* Called at user-code checkpoints, never while a kernel callback is active.

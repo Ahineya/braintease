@@ -346,6 +346,9 @@ impl ExpressionAnalyzer {
 
             ExpressionKind::SizeofExpr(operand) => {
                 self.analyze(operand)?;
+                if self.type_analyzer.borrow().expression_bit_width(operand).is_some() {
+                    return Err(CompilerError::semantic_error("sizeof cannot be applied to a bit-field".into(), operand.span.start.clone()));
+                }
                 Type::UnsignedLong // sizeof yields size_t (unsigned long)
             }
 
@@ -373,6 +376,10 @@ impl ExpressionAnalyzer {
             }
         };
 
+        let expr_type = if self.type_analyzer.borrow().expression_bit_width(expr).is_some_and(|w| w < 16)
+            && !matches!(expr_type.unqualified(), Type::Bool) {
+            if expr_type.is_volatile() { Type::Int.with_volatile() } else { Type::Int }
+        } else { expr_type };
         expr.expr_type = Some(expr_type);
         Ok(())
     }

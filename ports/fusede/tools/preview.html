@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FuseDE / Slate skin study</title>
+<style>
+:root {color-scheme:dark;font:15px/1.6 system-ui,sans-serif;background:#10181e;color:#e7eeed}
+*{box-sizing:border-box}body{margin:0;padding:44px 32px 64px}main{max-width:1060px;margin:auto}
+header{display:flex;align-items:end;justify-content:space-between;gap:28px;margin-bottom:28px}
+.eyebrow{color:#81b9c8;font-size:11px;font-weight:650;letter-spacing:.18em;text-transform:uppercase}
+h1{font-size:38px;font-weight:550;letter-spacing:-.04em;margin:7px 0}p{max-width:660px;color:#aebcc2;margin:0}
+.tag{font:11px ui-monospace,monospace;border:1px solid #3c4b55;padding:5px 11px;border-radius:20px;white-space:nowrap;color:#b4c6ce}
+.study{background:#19232b;border:1px solid #34414a;border-radius:12px;padding:24px}
+.desktop{position:relative;width:640px;height:480px;margin:auto;font:12px/1.2 Arial,sans-serif;color:@@text@@;overflow:hidden}
+.desktop>img{position:absolute;inset:0;width:640px;height:480px;image-rendering:pixelated}
+.label{position:absolute;pointer-events:none;white-space:pre}.title{font-weight:bold;text-shadow:0 1px #20282e}
+.dim{color:@@muted@@}.active-dot{color:#8cb5c0}.files{position:absolute;left:62px;top:136px;width:334px;font-size:12px}
+.row{display:flex;align-items:center;height:24px;gap:9px}.size{margin-left:auto;color:#a6b9c1}
+.folder{width:13px;height:10px;background:#a7a17e;border-top:2px solid #cfcaac;display:inline-block}
+.file{width:10px;height:13px;background:#a4b5ba;display:inline-block;border-top:2px solid #dce4e3;margin:0 2px}
+.dock{position:absolute;left:180px;top:434px;display:flex;gap:20px}
+.app{height:27px;width:30px;border:1px solid #91a9b1;border-radius:4px;background:#2d424e;color:#d3dfe0;text-align:center;line-height:25px;font:bold 13px/25px monospace}
+.app:nth-child(2){background:#77765e;border-color:#bcb89b}.app:nth-child(3){background:#3d606c}.app:nth-child(4){background:#5c666c}.app:nth-child(5){background:#695f53}.app:nth-child(6){background:#465459}
+.caption{margin-top:20px;font-size:12px;color:#a3b5bf;display:flex;justify-content:space-between;gap:20px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:32px}h2{font-size:16px;font-weight:550;margin:0 0 12px}
+.sample{border:5px solid transparent;border-image:url(button-normal.png) 5 fill stretch;height:30px;color:@@text@@;min-width:96px;background:none;font:12px system-ui;cursor:pointer}
+.sample:hover{border-image-source:url(button-hover.png)}.sample:active{border-image-source:url(button-pressed.png)}
+.sample:disabled{border-image-source:url(button-disabled.png);color:@@muted@@;cursor:default}.sample:focus-visible{outline:2px solid #9bc3d3;outline-offset:2px}
+.buttons{display:flex;gap:10px;flex-wrap:wrap}.resizable{resize:both;overflow:auto;width:100%;min-width:145px;max-width:100%;min-height:110px;height:140px;border-style:solid;border-width:26px 5px 5px;border-image:url(window-active.png) 26 5 5 5 fill stretch;position:relative}
+.resizable p{font-size:12px;padding:14px;color:@@muted@@}.note{font-size:12px;color:#879ba6;margin-top:26px;max-width:900px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}.swatch{border-left:18px solid var(--c);font:11px monospace;padding-left:9px;color:#b9c6ca}
+@media(max-width:760px){body{padding:24px 12px}.study{overflow-x:auto;padding:12px}header{display:block}.tag{display:inline-block;margin-top:12px}.controls{grid-template-columns:1fr}.caption{display:block}h1{font-size:30px}}
+</style>
+<main>
+<header><div><div class="eyebrow">FuseDE · RVM desktop</div><h1>Slate, a quieter kind of desktop.</h1><p>Charcoal frames, satin controls and a muted blue accent. Small bitmap pieces, made to fit a small machine.</p></div><span class="tag">SKIN STUDY / 01</span></header>
+<section class="study" aria-label="Proposed desktop at 640 by 480 logical pixels">
+<div class="desktop">
+<img src="preview.png" alt="Nine-slice window frames, controls and panels painted using the C geometry implementation">
+<span class="label title" style="left:12px;top:6px">FuseDE</span><span class="label" style="left:70px;top:6px">Applications&nbsp;&nbsp;&nbsp; Places&nbsp;&nbsp;&nbsp; Session</span><span class="label dim" style="right:12px;top:6px">RVM&nbsp;&nbsp; · &nbsp;14:32</span>
+<span class="label dim" style="left:452px;top:79px">Terminal</span>
+<span class="label dim" style="left:444px;top:112px;font:12px monospace">fuzix# ls<br>bin  dev  etc  home<br>mnt  tmp  usr<br><br>fuzix# _</span>
+<span class="label title" style="left:45px;top:56px">Files — Home</span><span class="label" style="left:365px;top:55px">– &nbsp;□ &nbsp;×</span>
+<span class="label dim" style="left:60px;top:96px">/home/user</span>
+<div class="files"><div class="row dim"><span>Name</span><span class="size">Size</span></div><div class="row"><i class="folder"></i>Projects<span class="size">folder</span></div><div class="row"><i class="folder"></i>Documents<span class="size">folder</span></div><div class="row"><i class="folder"></i>Pictures<span class="size">folder</span></div><div class="row"><i class="file"></i>hello.rfl<span class="size">1.2 K</span></div><div class="row"><i class="file"></i>notes.txt<span class="size">842 B</span></div></div>
+<span class="label" style="left:72px;top:360px">Back</span><span class="label" style="left:161px;top:360px">New folder</span><span class="label" style="left:352px;top:360px">Open</span>
+<span class="label dim" style="left:48px;top:403px">5 items · Projects selected</span>
+<div class="dock" aria-label="Proposed dock"><span class="app">F</span><span class="app">&gt;_</span><span class="app">R</span><span class="app">12</span><span class="app">T</span><span class="app">⚙</span></div>
+</div>
+<div class="caption"><span>640 × 480 logical pixels · RGB565 + binary masks</span><span>Appearance prototype · guest shell integration is pending</span></div>
+</section>
+<section class="controls">
+<div><h2>Controls with visible states</h2><div class="buttons"><button class="sample">Try hovering</button><button class="sample">Press and hold</button><button class="sample" disabled>Unavailable</button></div><div class="grid"><div class="swatch" style="--c:@@surface@@">Surface</div><div class="swatch" style="--c:@@accent@@">Accent</div><div class="swatch" style="--c:@@selection@@">Selection</div></div><p class="note">Tab to the controls to see a focus outline. A complete guest widget library will supply focus, activation and disabled behaviour.</p></div>
+<div><h2>One frame, many sizes</h2><div class="resizable"><p>Drag the lower-right corner. The corners stay fixed; only the edges and centre stretch.</p></div></div>
+</section>
+<p class="note">This is an authoring preview, not a screenshot of a running desktop. Frame and control pixels are original generated assets; the main preview uses the actual C nine-slice planner and RGB565-quantized artwork. Browser fonts and simple icon placeholders illustrate layout only. Runtime fonts, icons, menus and window actions remain separate milestones.</p>
+</main>
+</html>

@@ -12,7 +12,7 @@ use crate::{EnumVariant, StorageClass, StructField, Type};
 
 /// Declarator suffix (arrays, functions)
 enum DeclSuffix {
-    Array(Option<u64>),
+    Array { size: Option<u64>, volatile_pointer: bool },
     Function { parameters: Vec<Type>, is_variadic: bool },
 }
 
@@ -47,6 +47,58 @@ impl Parser {
             },
             other => other,
         }
+    }
+
+    /// C99 6.7.5.2: static and bracket qualifiers belong only to the outermost
+    /// array derivation of a parameter. The bound is a caller contract, not
+    /// callee array storage. Dynamic bounds remain explicitly unsupported here.
+    fn parse_array_suffix(&mut self, outermost_parameter: bool) -> Result<DeclSuffix, CompilerError> {
+        let mut minimum = false;
+        let mut volatile_pointer = false;
+        let mut qualifiers_before_static = false;
+        while let Some(token) = self.peek() {
+            if !matches!(token.token_type, TokenType::Static | TokenType::Const |
+                         TokenType::Volatile | TokenType::Restrict) { break; }
+            if !outermost_parameter {
+                return Err(ParseError::InvalidType {
+                    message: "static and array qualifiers require an outermost array parameter".into(),
+                    location: self.current_location(),
+                }.into());
+            }
+            match token.token_type {
+                TokenType::Static if minimum => return Err(ParseError::InvalidType {
+                    message: "duplicate static in array parameter".into(),
+                    location: self.current_location(),
+                }.into()),
+                TokenType::Static => minimum = true,
+                _ => {
+                    if minimum && qualifiers_before_static {
+                        return Err(ParseError::InvalidType {
+                            message: "array qualifiers must appear on one side of static".into(),
+                            location: self.current_location(),
+                        }.into());
+                    }
+                    if !minimum { qualifiers_before_static = true; }
+                    if matches!(token.token_type, TokenType::Volatile) { volatile_pointer = true; }
+                    // const/restrict follow the compiler's pointer qualifier policy.
+                },
+            }
+            self.advance();
+        }
+        let size = if self.check(&TokenType::RightBracket) {
+            None
+        } else {
+            let expr = self.parse_assignment_expression()?;
+            Some(self.fold_positive_ice(&expr, "Array size")?)
+        };
+        if minimum && size.is_none_or(|n| n == 0) {
+            return Err(ParseError::InvalidType {
+                message: "static array parameter requires a positive bound".into(),
+                location: self.current_location(),
+            }.into());
+        }
+        self.expect(TokenType::RightBracket, "array declarator")?;
+        Ok(DeclSuffix::Array { size, volatile_pointer })
     }
 
     fn fold_positive_ice(&self, expr: &Expression, what: &str) -> Result<u64, CompilerError> {
@@ -144,6 +196,7 @@ impl Parser {
                     name: field.name.clone(),
                     field_type: self.resolve_parser_type(&field.field_type, depth + 1),
                     offset: field.offset,
+                    bit_width: field.bit_width,
                 }).collect();
                 match ty {
                     Type::Struct { .. } => Type::Struct { name: name.clone(), fields: resolved },
@@ -234,6 +287,8 @@ impl Parser {
     /// Parse type specifier
     pub fn parse_type_specifier(&mut self) -> Result<Type, CompilerError> {
         let location = self.current_location();
+        // Struct fields nested in a parameter's type are ordinary fields.
+        let saved_parameter = std::mem::replace(&mut self.parsing_parameter_declarator, false);
         
         self.skip_ignored_specifiers();
         let volatile = std::mem::take(&mut self.pending_volatile);
@@ -315,6 +370,7 @@ impl Parser {
         }?;
         self.skip_ignored_specifiers();
         let trailing_volatile = std::mem::take(&mut self.pending_volatile);
+        self.parsing_parameter_declarator = saved_parameter;
         Ok(if volatile || trailing_volatile { ty.with_volatile() } else { ty })
     }
     
@@ -324,6 +380,7 @@ impl Parser {
         &mut self,
     ) -> Result<(Vec<Type>, Vec<(Option<String>, Type, SourceSpan)>, bool), CompilerError> {
         self.constant_scopes.push(Default::default());
+        self.object_scopes.push(Default::default());
         self.tag_scopes.push(Default::default());
         let mut parameter_types = Vec::new();
         let mut parameter_info = Vec::new();
@@ -357,12 +414,16 @@ impl Parser {
                 self.skip_ignored_specifiers();
 
                 // Parameters may use abstract declarators (`char *`, `int (*)(void)`).
-                let (name, full_param_type) = self.parse_declarator(param_type)?;
+                let saved_parameter = std::mem::replace(&mut self.parsing_parameter_declarator, true);
+                let declarator = self.parse_declarator(param_type);
+                self.parsing_parameter_declarator = saved_parameter;
+                let (name, full_param_type) = declarator?;
                 if !name.is_empty() {
                     self.declare_constant_name(name.clone(), None);
                 }
                 let param_name = if name.is_empty() { None } else { Some(name) };
-                let full_param_type = Self::adjust_parameter_type(full_param_type);
+                let full_param_type = Self::adjust_parameter_type(self.resolve_known_typedefs(&full_param_type));
+                if let Some(name) = &param_name { self.record_object_type(name, &full_param_type, None); }
 
                 let param_end = self.current_location();
 
@@ -388,6 +449,7 @@ impl Parser {
         }
 
         self.constant_scopes.pop();
+        self.object_scopes.pop();
         self.tag_scopes.pop();
         Ok((parameter_types, parameter_info, is_variadic))
     }
@@ -409,11 +471,13 @@ impl Parser {
                 let field_type = self.parse_type_specifier()?;
                 loop {
                     let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
-                    self.check_field_declarator(&field_name, &full_field_type)?;
+                    let bit_width = self.parse_bit_field_width(&field_name, &full_field_type)?;
+                    if bit_width.is_none() { self.check_field_declarator(&field_name, &full_field_type)?; }
                     fields.push(StructField {
                         name: field_name,
                         field_type: full_field_type,
                         offset: None, // Computed during semantic analysis
+                        bit_width,
                     });
                     if !self.match_token(&TokenType::Comma) {
                         break;
@@ -458,11 +522,13 @@ impl Parser {
                 let field_type = self.parse_type_specifier()?;
                 loop {
                     let (field_name, full_field_type) = self.parse_declarator(field_type.clone())?;
-                    self.check_field_declarator(&field_name, &full_field_type)?;
+                    let bit_width = self.parse_bit_field_width(&field_name, &full_field_type)?;
+                    if bit_width.is_none() { self.check_field_declarator(&field_name, &full_field_type)?; }
                     fields.push(StructField {
                         name: field_name,
                         field_type: full_field_type,
                         offset: None,
+                        bit_width,
                     });
                     if !self.match_token(&TokenType::Comma) {
                         break;
@@ -553,6 +619,24 @@ impl Parser {
         Ok(Type::Enum { name, variants })
     }
 
+    fn parse_bit_field_width(&mut self, name: &str, ty: &Type) -> Result<Option<u8>, CompilerError> {
+        if !self.match_token(&TokenType::Colon) { return Ok(None); }
+        let expr = self.parse_conditional_expression()?;
+        let resolved = self.resolve_parser_type(ty, 0);
+        let width = self.eval_parser_constant(&expr).map_err(|_| ParseError::InvalidType {
+            message: "Bit-field width must be an integer constant expression".into(),
+            location: expr.span.start.clone(),
+        })?;
+        let bits = if resolved.is_integer() { resolved.size_in_words().unwrap_or(0) * 16 } else { 0 };
+        let max = if matches!(resolved.unqualified(), Type::Bool) { 1 } else { bits };
+        if bits == 0 || width < 0 || width as u64 > max || (width == 0 && !name.is_empty()) {
+            return Err(ParseError::InvalidType {
+                message: "Invalid bit-field type or width".into(), location: expr.span.start,
+            }.into());
+        }
+        Ok(Some(width as u8))
+    }
+
     fn check_field_declarator(&self, name: &str, ty: &Type) -> Result<(), CompilerError> {
         if name.is_empty() && !matches!(ty.unqualified(), Type::Struct { .. } | Type::Union { .. }) {
             return Err(ParseError::InvalidType {
@@ -601,7 +685,8 @@ impl Parser {
             // Look ahead to see if this is a parenthesized declarator
             let is_parenthesized = if let Some(next_token) = self.tokens.get(1) {
                 // If we see a star after '(', it's definitely a parenthesized declarator
-                matches!(next_token.token_type, TokenType::Star)
+                matches!(next_token.token_type, TokenType::Star | TokenType::LeftParen)
+                    || matches!(&next_token.token_type, TokenType::Identifier(name) if !self.typedef_names.contains_key(name))
             } else {
                 false
             };
@@ -622,17 +707,9 @@ impl Parser {
                 // Apply suffixes (arrays, functions)
                 loop {
                     if self.match_token(&TokenType::LeftBracket) {
-                        // Array suffix - this array contains elements of the current type
-                        let size = if self.check(&TokenType::RightBracket) {
-                            None
-                        } else {
-                            let size_expr = self.parse_assignment_expression()?;
-                            Some(self.fold_positive_ice(&size_expr, "Array size")?)
-                        };
-                        
-                        self.expect(TokenType::RightBracket, "array declarator")?;
-                        
-                        suffixes.push(DeclSuffix::Array(size));
+                        let outermost = self.parsing_parameter_declarator && suffixes.is_empty()
+                            && matches!(inner_ptr_type.unqualified(), Type::Void);
+                        suffixes.push(self.parse_array_suffix(outermost)?);
                     } else if self.match_token(&TokenType::LeftParen) {
                         // Function suffix
                         let (parameter_types, parameter_info, is_variadic) =
@@ -654,10 +731,13 @@ impl Parser {
                 let mut final_type = base_type;
                 for suffix in suffixes.into_iter().rev() {
                     match suffix {
-                        DeclSuffix::Array(size) => {
-                            final_type = Type::Array {
-                                element_type: Box::new(final_type),
-                                size,
+                        DeclSuffix::Array { size, volatile_pointer } => {
+                            final_type = if volatile_pointer {
+                                // Bracket volatile qualifies the adjusted pointer,
+                                // whereas with_volatile(array) qualifies elements.
+                                Type::Pointer { target: Box::new(final_type), bank: None }.with_volatile()
+                            } else {
+                                Type::Array { element_type: Box::new(final_type), size }
                             };
                         }
                         DeclSuffix::Function { parameters, is_variadic } => {
@@ -698,17 +778,8 @@ impl Parser {
         
         loop {
             if self.match_token(&TokenType::LeftBracket) {
-                // Array declarator
-                let size = if self.check(&TokenType::RightBracket) {
-                    None // Incomplete array type
-                } else {
-                    let size_expr = self.parse_assignment_expression()?;
-                    Some(self.fold_positive_ice(&size_expr, "Array size")?)
-                };
-                
-                self.expect(TokenType::RightBracket, "array declarator")?;
-                
-                suffixes.push(DeclSuffix::Array(size));
+                let outermost = self.parsing_parameter_declarator && suffixes.is_empty();
+                suffixes.push(self.parse_array_suffix(outermost)?);
                 
             } else if self.match_token(&TokenType::LeftParen) {
                 // Function declarator
@@ -735,10 +806,11 @@ impl Parser {
         let mut current_type = base_type;
         for suffix in suffixes.into_iter().rev() {
             match suffix {
-                DeclSuffix::Array(size) => {
-                    current_type = Type::Array {
-                        element_type: Box::new(current_type),
-                        size,
+                DeclSuffix::Array { size, volatile_pointer } => {
+                    current_type = if volatile_pointer {
+                        Type::Pointer { target: Box::new(current_type), bank: None }.with_volatile()
+                    } else {
+                        Type::Array { element_type: Box::new(current_type), size }
                     };
                 }
                 DeclSuffix::Function { parameters, is_variadic } => {
@@ -802,7 +874,10 @@ impl Parser {
     /// This is like parse_type_specifier + abstract declarator (no identifier required)
     pub fn parse_type_name(&mut self) -> Result<Type, CompilerError> {
         let base_type = self.parse_type_specifier()?;
-        self.parse_abstract_declarator(base_type)
+        let saved_parameter = std::mem::replace(&mut self.parsing_parameter_declarator, false);
+        let result = self.parse_abstract_declarator(base_type);
+        self.parsing_parameter_declarator = saved_parameter;
+        result
     }
     
     /// Parse an abstract declarator (pointer/array/function types without identifier)
@@ -828,15 +903,8 @@ impl Parser {
         
         loop {
             if self.match_token(&TokenType::LeftBracket) {
-                let size = if self.check(&TokenType::RightBracket) {
-                    None
-                } else {
-                    let size_expr = self.parse_assignment_expression()?;
-                    Some(self.fold_positive_ice(&size_expr, "Array size")?)
-                };
-                
-                self.expect(TokenType::RightBracket, "array declarator")?;
-                suffixes.push(DeclSuffix::Array(size));
+                let outermost = self.parsing_parameter_declarator && suffixes.is_empty();
+                suffixes.push(self.parse_array_suffix(outermost)?);
             } else {
                 break;
             }
@@ -845,10 +913,11 @@ impl Parser {
         let mut current_type = base_type;
         for suffix in suffixes.into_iter().rev() {
             match suffix {
-                DeclSuffix::Array(size) => {
-                    current_type = Type::Array {
-                        element_type: Box::new(current_type),
-                        size,
+                DeclSuffix::Array { size, volatile_pointer } => {
+                    current_type = if volatile_pointer {
+                        Type::Pointer { target: Box::new(current_type), bank: None }.with_volatile()
+                    } else {
+                        Type::Array { element_type: Box::new(current_type), size }
                     };
                 }
                 DeclSuffix::Function { parameters, is_variadic } => {

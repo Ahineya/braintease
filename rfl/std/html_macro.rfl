@@ -1,0 +1,401 @@
+// Public HTML DSL. Expands to the same typed constructors used without macros.
+import { Token, TokenStream, empty, concat, ident, call_site_ident, literal, punctuation, group, diagnostic, span_of, call_span } from "std/macro";
+// These are definition-site target dependencies, not macro-host services.
+import { TextChild, ViewChild, node, svg, text, attribute, fragment, key, value as controlled_value, checked, disabled, autofocus, on_double_click, on_blur, on_focus, on_click, on_input, on_change, on_keydown, on_keyup, on_composition_start, on_composition_end } from "std/html";
+import { html_tag, svg_tag, attribute_name } from "std/html_schema";
+struct Parser {
+    tokens: Vec<Token>,
+    at: usize,
+    target: String
+}
+
+fn stream(p: &mut Parser, tokens: Vec<Token>) -> TokenStream {
+    TokenStream { tokens: tokens, target: p.target, dependencies: [] }
+}
+
+fn token_is(p: &mut Parser, value: String) -> bool {
+    p.at < p.tokens.len() && p.tokens[p.at].text == value
+}
+
+fn trivia(p: &mut Parser) {
+    while (p.at < p.tokens.len() && p.tokens[p.at].kind == 4) {
+        p.at += 1;
+    }
+}
+
+fn take(p: &mut Parser, value: String) -> Result<unit, String> {
+    if (!token_is(p, value)) {
+        return Err("expected `" + value + "`");
+    }
+    p.at += 1;
+    Ok({})
+}
+
+fn name(p: &mut Parser) -> Result<String, String> {
+    if (p.at >= p.tokens.len()) {
+        return Err("expected a tag or property name");
+    }
+    let token = p.tokens[p.at];
+    if (token.kind != 1) {
+        return Err("expected a tag or property name");
+    }
+    p.at += 1;
+    Ok(token.text)
+}
+
+fn quoted(value: String) -> TokenStream {
+    let mut spelling = "\"";
+    let mut i: usize = 0;
+    while (i < value.len()) {
+        let ch = value[i];
+        if (ch == '\"') {
+            spelling = spelling + "\\\"";
+        } else if (ch == '\\') {
+            spelling = spelling + "\\\\";
+        } else if (ch == '\n') {
+            spelling = spelling + "\\n";
+        } else if (ch == '\r') {
+            spelling = spelling + "\\r";
+        } else if (ch == '\t') {
+            spelling = spelling + "\\t";
+        } else {
+            spelling = spelling + value[i..i + 1];
+        }
+        i += 1;
+    }
+    literal(spelling + "\"")
+}
+
+// Append into one owned buffer. Repeated whole-stream concatenation makes a
+// wide view quadratic in generated tokens (including their hygiene metadata).
+fn append(out: &mut TokenStream, value: TokenStream) -> unit {
+    let mut tokens = out.tokens;
+    out.tokens = [];
+    for (token in value.tokens) {
+        tokens.push(token);
+    }
+    out.tokens = move(tokens);
+}
+
+fn separated(values: Vec<TokenStream>) -> TokenStream {
+    let mut result = empty();
+    let mut first = true;
+    for (value in values) {
+        if (!first) {
+            append(&mut result, punctuation(","));
+        }
+        append(&mut result, value);
+        first = false;
+    }
+    result
+}
+
+fn call(callee: TokenStream, args: Vec<TokenStream>) -> TokenStream {
+    let mut result = callee;
+    append(&mut result, group("(", separated(args)));
+    result
+}
+
+fn expression(p: &mut Parser) -> Result<TokenStream, String> {
+    if (!token_is(p, "{")) {
+        return Err("expected an embedded {RFL expression}");
+    }
+    p.at += 1;
+    let mut depth: usize = 1;
+    let mut tokens: Vec<Token> = [];
+    while (p.at < p.tokens.len()) {
+        let token = p.tokens[p.at];
+        p.at += 1;
+        if (token.kind == 5) {
+            depth += 1;
+        }
+        if (token.kind == 6) {
+            depth -= 1;
+            if (depth == 0) {
+                return Ok(stream(p, tokens));
+            }
+        }
+        tokens.push(token);
+    }
+    Err("unclosed embedded expression")
+}
+
+fn property_value(p: &mut Parser) -> Result<TokenStream, String> {
+    if (token_is(p, "{")) {
+        return expression(p);
+    }
+    if (p.at < p.tokens.len() && p.tokens[p.at].kind == 2) {
+        let token = p.tokens[p.at];
+        p.at += 1;
+        return Ok(stream(p, [token]));
+    }
+    Err("property values must be literals or {expressions}")
+}
+
+// Newline-only runs between children are source layout. Inline spaces remain
+// text, and pre/textarea (including their descendants) preserve every byte.
+fn layout_only(raw: String) -> bool {
+    let mut newline = false;
+    for (i in 0..raw.len()) {
+        let ch = raw[i];
+        if (ch == '\n' || ch == '\r') {
+            newline = true;
+        } else if (ch != ' ' && ch != '\t') {
+            return false;
+        }
+    }
+    newline
+}
+
+fn element(p: &mut Parser, inherited_svg: bool, inherited_space: bool) -> Result<TokenStream, String> {
+    take(p, "<")?;
+    let tag = if (token_is(p, ">")) {
+        ""
+    } else {
+        name(p)?
+    };
+    let namespace = inherited_svg || tag == "svg";
+    let preserve_space = inherited_space || tag == "pre" || tag == "textarea";
+    let component = tag.len() > 0 && tag[0] >= 'A' && tag[0] <= 'Z';
+    if (!component && tag != "" && !(if (namespace) {
+        svg_tag(tag)
+    } else {
+        html_tag(tag)
+    })) {
+        return Err("unsupported HTML tag: " + tag);
+    }
+    let mut props: Vec<TokenStream> = [];
+    let mut arguments: Vec<TokenStream> = [];
+    while (true) {
+        trivia(p);
+        if (token_is(p, ">") || token_is(p, "/")) {
+            break;
+        }
+        let mut property = name(p)?;
+        while (token_is(p, "-")) {
+            p.at += 1;
+            property = property + "-" + name(p)?;
+        }
+        trivia(p);
+        take(p, "=")?;
+        trivia(p);
+        let argument = property_value(p)?;
+        if (component) {
+            arguments.push(argument);
+        } else {
+            let builder = if (property == "key") {
+                "key"
+            } else if (property == "value") {
+                "controlled_value"
+            } else if (property == "checked") {
+                "checked"
+            } else if (property == "disabled") {
+                "disabled"
+            } else if (property == "autofocus") {
+                "autofocus"
+            } else if (property == "on_double_click") {
+                "on_double_click"
+            } else if (property == "on_blur") {
+                "on_blur"
+            } else if (property == "on_focus") {
+                "on_focus"
+            } else if (property == "on_click") {
+                "on_click"
+            } else if (property == "on_input") {
+                "on_input"
+            } else if (property == "on_change") {
+                "on_change"
+            } else if (property == "on_keydown") {
+                "on_keydown"
+            } else if (property == "on_keyup") {
+                "on_keyup"
+            } else if (property == "on_composition_start") {
+                "on_composition_start"
+            } else if (property == "on_composition_end") {
+                "on_composition_end"
+            } else {
+                if (!attribute_name(property)) {
+                    return Err("unsupported HTML property: " + property);
+                }
+                "attribute"
+            };
+            props.push(call(ident(builder), if (builder == "attribute") {
+                [quoted(property), argument]
+            } else {
+                [argument]
+            }));
+        }
+    }
+    let mut children: Vec<TokenStream> = [];
+    if (token_is(p, "/")) {
+        take(p, "/")?;
+        take(p, ">")?;
+    } else {
+        take(p, ">")?;
+        while (true) {
+            if (p.at >= p.tokens.len()) {
+                return Err("missing closing tag for " + tag);
+            }
+            if (token_is(p, "<")) {
+                if (p.at + 1 < p.tokens.len() && p.tokens[p.at + 1].text == "/") {
+                    p.at += 2;
+                    let close = if (token_is(p, ">")) {
+                        ""
+                    } else {
+                        name(p)?
+                    };
+                    if (close != tag) {
+                        return Err("closing tag " + close + " does not match " + tag);
+                    }
+                    trivia(p);
+                    take(p, ">")?;
+                    break;
+                }
+                children.push(element(p, namespace, preserve_space)?);
+            } else if (token_is(p, "{")) {
+                let mut child = group("(", expression(p)?);
+                append(&mut child, punctuation("."));
+                append(&mut child, ident("html_child"));
+                append(&mut child, group("(", empty()));
+                children.push(child);
+            } else {
+                let mut raw = "";
+                while (p.at < p.tokens.len() && !token_is(p, "<") && !token_is(p, "{")) {
+                    let token = p.tokens[p.at];
+                    p.at += 1;
+                    let comment = token.kind == 4 && token.text.len() >= 2 && (token.text[0..2] == "/*" || token.text[0..2] == "//");
+                    if (!comment) {
+                        raw = raw + token.text;
+                    }
+                }
+                if (raw.len() > 0 && (preserve_space || !layout_only(raw))) {
+                    children.push(call(ident("text"), [quoted(entities(raw)?)]));
+                }
+            }
+        }
+    }
+    let array = group("[", separated(children));
+    if (tag == "") {
+        return Ok(call(ident("fragment"), [array]));
+    }
+    if (component) {
+        arguments.push(array);
+        Ok(call(call_site_ident(tag), arguments))
+    } else {
+        Ok(call(ident(if (namespace) {
+            "svg"
+        } else {
+            "node"
+        }), [quoted(tag), group("[", separated(props)), array]))
+    }
+}
+
+fn entities(raw: String) -> Result<String, String> {
+    let mut out = "";
+    let mut at: usize = 0;
+    while (at < raw.len()) {
+        if (raw[at] != '&') {
+            let begin = at;
+            while (at < raw.len() && raw[at] != '&') {
+                at += 1;
+            }
+            out = out + raw[begin..at];
+        } else {
+            let begin = at + 1;
+            at = begin;
+            while (at < raw.len() && raw[at] != ';' && at - begin < 16) {
+                at += 1;
+            }
+            if (at == raw.len() || raw[at] != ';') {
+                return Err("HTML entity needs a terminating semicolon");
+            }
+            let name = raw[begin..at];
+            at += 1;
+            let value = if (name == "amp") {
+                "&"
+            } else if (name == "lt") {
+                "<"
+            } else if (name == "gt") {
+                ">"
+            } else if (name == "quot") {
+                "\""
+            } else if (name == "apos") {
+                "'"
+            } else {
+                if (name.len() < 2 || name[0] != '#') {
+                    return Err("unsupported HTML entity: " + name);
+                }
+                let hex = name.len() > 2 && (name[1] == 'x' || name[1] == 'X');
+                let start: usize = if (hex) {
+                    2
+                } else {
+                    1
+                };
+                if (start == name.len()) {
+                    return Err("empty numeric HTML entity");
+                }
+                let base: u32 = if (hex) {
+                    16
+                } else {
+                    10
+                };
+                let mut code: u32 = 0;
+                for (i in start..name.len()) {
+                    let c = name[i] as u32;
+                    let digit = if (c >= 48 && c <= 57) {
+                        c - 48
+                    } else if (hex && c >= 65 && c <= 70) {
+                        c - 55
+                    } else if (hex && c >= 97 && c <= 102) {
+                        c - 87
+                    } else {
+                        base
+                    };
+                    if (digit >= base || code >(1114111 - digit) / base) {
+                        return Err("invalid numeric HTML entity");
+                    }
+                    code = code * base + digit;
+                }
+                if (code == 0 || (code >= 55296 && code <= 57343)) {
+                    return Err("HTML entity is not a Unicode scalar");
+                }
+                from_char(code as char)
+            };
+            out = out + value;
+        }
+    }
+    Ok(out)
+}
+
+/// Expands typed HTML syntax; embedded children use TextChild or ViewChild conversions.
+#[proc_macro]
+export fn html(input: TokenStream) -> TokenStream {
+    let mut parser = Parser { tokens: input.tokens, at: 0, target: input.target };
+    trivia(&mut parser);
+    let output = element(&mut parser, false, false);
+    trivia(&mut parser);
+    let result: Result<TokenStream, String> = match output {
+        Err(error) => Err(error),
+        Ok(value) => {
+            if (parser.at != parser.tokens.len()) {
+                Err("trailing HTML input")
+            } else {
+                Ok(value)
+            }
+        }
+    };
+    match result {
+        Ok(value) => value,
+        Err(message) => {
+            if (parser.tokens.is_empty()) {
+                return diagnostic(call_span(), message);
+            }
+            let at = if (parser.at < parser.tokens.len()) {
+                parser.at
+            } else {
+                parser.tokens.len() - 1
+            };
+            diagnostic(span_of(parser.tokens[at]), message)
+        }
+    }
+}

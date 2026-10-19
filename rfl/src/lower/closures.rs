@@ -10,20 +10,21 @@ pub(super) fn emit_capture_loads(
     let env_at = proc
         .env_at
         .expect("a capturing function has an environment slot");
-    let addr = load_cell(builder, frame, env_at, IrType::I16)?;
-    let bank = load_cell(builder, frame, env_at + 1, IrType::I16)?;
-    let env = fat_from_parts(builder, addr, bank)?;
+    let env = load_fat(builder, frame, env_at)?;
     for cap in &proc.captures {
         let dest = proc.slots[cap.slot].offset;
         for index in 0..cap.cells {
             let value = load_cell(builder, &env, cap.offset + index, IrType::I16)?;
             store_cell(builder, frame, dest + index, value)?;
+            if cap.transfer {
+                store_object_cell(builder, &env, cap.offset + index, Value::Constant(0))?;
+            }
         }
         if cap.shared {
             let addr = load_cell(builder, frame, dest, IrType::I16)?;
             let bank = load_cell(builder, frame, dest + 1, IrType::I16)?;
             adjust_refcount(builder, addr, bank, true)?;
-        } else if keeps(proc, proc.slots[cap.slot].ty) {
+        } else if !cap.transfer && keeps(proc, proc.slots[cap.slot].ty) {
             retain_managed(builder, proc, frame, cap.slot)?;
         }
     }
@@ -58,12 +59,15 @@ pub(super) fn emit_env(
         for index in 0..cap.cells {
             let value = load_cell(builder, frame, src + index, IrType::I16)?;
             store_object_cell(builder, &obj, cap.offset + index, value)?;
+            if cap.transfer {
+                store_cell(builder, frame, src + index, Value::Constant(0))?;
+            }
         }
         if cap.shared {
             let addr = load_cell(builder, frame, src, IrType::I16)?;
             let bank = load_cell(builder, frame, src + 1, IrType::I16)?;
             adjust_refcount(builder, addr, bank, true)?;
-        } else if keeps(proc, proc.slots[parent].ty) {
+        } else if !cap.transfer && keeps(proc, proc.slots[parent].ty) {
             retain_managed(builder, proc, frame, parent)?;
         }
     }

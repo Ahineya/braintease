@@ -1,4 +1,4 @@
-import { Buffer, buffer, hash } from "lib/text";
+import { Buffer, buffer, hash_prefix } from "lib/text";
 import { Language, detect } from "./languages";
 import { parent, joined } from "lib/path";
 import { File, open_read, create_new, metadata, REGULAR, SYMLINK, Errno, error_message, remove_file, rename, set_permissions, process_id } from "std/posix";
@@ -58,18 +58,22 @@ export fn load(path: String) -> Result<Document, String> {
     };
     let mut document = empty(path)?;
     let mut fingerprint: u32 = 2166136261;
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..4096) {
+        bytes.push(0);
+    }
     while (true) {
-        let bytes = match file.read(4096) {
-            Ok(bytes) => bytes,
+        let count = match file.read_into(&mut bytes) {
+            Ok(count) => count,
             Err(error) => {
                 return Err(error_message(error));
             }
         };
-        if (bytes.is_empty()) {
+        if (count == 0) {
             break;
         }
-        fingerprint = hash(bytes, fingerprint);
-        document.buffer.append(bytes)?;
+        fingerprint = hash_prefix(&bytes, count, fingerprint)?;
+        document.buffer.append_prefix(&bytes, count)?;
     }
     match move(file).close() {
         Ok(_) => {},
@@ -102,21 +106,25 @@ export fn fingerprint(path: String) -> Result<u32, String> {
     };
     let mut value: u32 = 2166136261;
     let mut size: usize = 0;
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..4096) {
+        bytes.push(0);
+    }
     while (true) {
-        let bytes = match file.read(4096) {
-            Ok(bytes) => bytes,
+        let count = match file.read_into(&mut bytes) {
+            Ok(count) => count,
             Err(error) => {
                 return Err(error_message(error));
             }
         };
-        if (bytes.is_empty()) {
+        if (count == 0) {
             break;
         }
-        size += bytes.len();
+        size += count;
         if (size > 524288) {
             return Err("Target exceeds 512 KiB");
         }
-        value = hash(bytes, value);
+        value = hash_prefix(&bytes, count, value)?;
     }
     match move(file).close() {
         Ok(_) => Ok(value),
@@ -144,15 +152,19 @@ export fn changed(document: &Document, path: String) -> Result<bool, String> {
 fn write_buffer(file: &File, buffer: &Buffer) -> Result<u32, String> {
     let mut at: usize = 0;
     let mut value: u32 = 2166136261;
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..4096) {
+        bytes.push(0);
+    }
     while (at < buffer.len()) {
         let n = if (buffer.len() - at > 4096) {
             4096 as usize
         } else {
             buffer.len() - at
         };
-        let bytes = buffer.bytes(at, n)?;
-        value = hash(bytes, value);
-        match file.write_all(bytes) {
+        buffer.copy_into(at, n, &mut bytes)?;
+        value = hash_prefix(&bytes, n, value)?;
+        match file.write_prefix(&bytes, n) {
             Ok(_) => {},
             Err(error) => {
                 return Err(error_message(error));

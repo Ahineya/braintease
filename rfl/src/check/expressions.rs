@@ -10,6 +10,11 @@ impl<'a> Checker<'a> {
     ) -> Result<TExpr, CompileError> {
         let span = expr.span.start;
         match &expr.kind {
+            ExprKind::Macro(invocation) => Err(CompileError::at(
+                self.source,
+                span,
+                format!("unexpanded macro `{}`", invocation.name),
+            )),
             ExprKind::Await(child) => self.check_await(span, child, expected),
             ExprKind::Int(value) => {
                 let ty = match expected {
@@ -251,7 +256,15 @@ impl<'a> Checker<'a> {
                 args,
             } => {
                 let mark = self.borrows.len();
-                let result = self.check_method(span, receiver, method, resolved, args, expected);
+                let result = self.check_method(
+                    span,
+                    receiver,
+                    method_span.start,
+                    method,
+                    resolved,
+                    args,
+                    expected,
+                );
                 if !result.as_ref().is_ok_and(|value| value.ty.is_ref()) {
                     self.borrows.truncate(mark);
                 }
@@ -277,7 +290,9 @@ impl<'a> Checker<'a> {
                 end,
                 inclusive,
             } => self.check_slice(span, base, start, end, *inclusive, expected),
-            ExprKind::Lambda { params, body } => self.check_lambda(span, params, body, expected),
+            ExprKind::Lambda { once, params, body } => {
+                self.check_lambda(span, *once, params, body, expected)
+            }
             ExprKind::Match { scrutinee, arms } => {
                 self.check_match(span, scrutinee, arms, expected)
             }
@@ -293,7 +308,9 @@ impl<'a> Checker<'a> {
                 self.check_struct_lit(span, name, fields, expected)
             }
             ExprKind::Field {
-                base, name, name_span,
+                base,
+                name,
+                name_span,
             } => self.check_field(span, base, name, *name_span, expected),
             ExprKind::Range { .. } => Err(CompileError::at(
                 self.source,

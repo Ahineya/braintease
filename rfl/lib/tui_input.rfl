@@ -1,0 +1,99 @@
+import { columns, prefix, next, previous } from "lib/unicode";
+import { LEFT, RIGHT, HOME, END, BACKSPACE, InputEvent } from "std/curses";
+import { Canvas, fitted } from "lib/tui";
+
+/// Editable UTF-8 line. The cursor is a byte boundary; motion/deletion uses graphemes. Input keys do not accept/cancel a dialog or alter focus.
+export struct LineEdit {
+    text: String,
+    cursor: usize
+}
+
+/// Creates a line with its cursor at the end. Existing paths are never truncated.
+export fn line_edit(text: String) -> LineEdit {
+    LineEdit { text: text, cursor: text.len() }
+}
+
+impl LineEdit {
+    /// Leftmost character needed to keep the cursor in a field of `width` cells.
+    export fn left(&self, width: usize) -> usize {
+        if (width == 0) { return self.cursor; }
+        let before = self.text[0..self.cursor];
+        let used = columns(before);
+        if (used < width) { return 0; }
+        let mut left = prefix(before, used - width + 1);
+        if (left < self.cursor && columns(self.text[left..self.cursor]) >= width) { left = next(self.text, left); }
+        left
+    }
+    /// Cursor position in display cells within the scrolled field.
+    export fn column(&self, width: usize) -> usize {
+        columns(self.text[self.left(width)..self.cursor])
+    }
+    /// Inserts one Unicode scalar; the 255-octet limit never cuts an encoding.
+    export fn insert(&mut self, value: char) -> bool {
+        let code = value as u32;
+        if (code < 32 || (code >= 127 && code < 160) || code > 1114111 || (code >= 55296 && code <= 57343)) { return false; }
+        let text = from_char(value);
+        if (self.text.len() + text.len() <= 255) {
+            self.text = self.text[0..self.cursor] + text + self.text[self.cursor..self.text.len()];
+            self.cursor += text.len();
+            // A ZWJ/mark may have joined the following cluster. Keep a boundary.
+            if (self.cursor < self.text.len()) {
+                let start = previous(self.text, self.cursor);
+                self.cursor = next(self.text, start);
+            }
+        }
+        true
+    }
+    /// Handles a collision-free curses text/key event.
+    export fn event(&mut self, event: InputEvent) -> bool {
+        if (event.kind == 0 && event.value >= 128) { self.insert(event.value as char) }
+        else { self.key(event.key()) }
+    }
+    /// Handles arrows, Home/End, Backspace/Delete, Ctrl-U and printable ASCII.
+    /// New input is bounded to 255 characters; navigation/deletion always work.
+    export fn key(&mut self, key: i16) -> bool {
+        if (self.cursor > self.text.len()) {
+            self.cursor = self.text.len();
+        }
+        if (key == LEFT) {
+            if (self.cursor > 0) {
+                self.cursor = previous(self.text, self.cursor);
+            }
+        } else if (key == RIGHT) {
+            if (self.cursor < self.text.len()) {
+                self.cursor = next(self.text, self.cursor);
+            }
+        } else if (key == HOME || key == 1) {
+            self.cursor = 0;
+        } else if (key == END || key == 5) {
+            self.cursor = self.text.len();
+        } else if (key == 21) {
+            self.text = "";
+            self.cursor = 0;
+        } else if (key == BACKSPACE || key == 8 || key == 127) {
+            if (self.cursor > 0) {
+                let start = previous(self.text, self.cursor);
+                self.text = self.text[0..start] + self.text[self.cursor..self.text.len()];
+                self.cursor = start;
+            }
+        } else if (key == 330) {
+            if (self.cursor < self.text.len()) {
+                self.text = self.text[0..self.cursor] + self.text[next(self.text, self.cursor)..self.text.len()];
+            }
+        } else if (key >= 32 && key < 127) {
+            return self.insert(key as char);
+        } else {
+            return false;
+        }
+        true
+    }
+    /// Paints a horizontally scrolled field without presenting or moving the cursor.
+    export fn draw<T: Canvas>(&self, target: &T, row: i16, column: i16, width: i16, style: u32) {
+        if (width <= 0) {
+            return;
+        }
+        let left = self.left(width as usize);
+        target.fill(row, column, width, ' ', style);
+        target.text(row, column, fitted(self.text[left..self.text.len()], width), style);
+    }
+}

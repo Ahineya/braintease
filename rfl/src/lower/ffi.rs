@@ -34,6 +34,9 @@ pub(super) fn emit_extern(
     ret: Ty,
     fixed: usize,
 ) -> Result<(), CompileError> {
+    if super::browser::intrinsic(name) {
+        return super::browser::exchange(builder, proc, frame, dest, args.first().copied());
+    }
     let mut values = Vec::new();
     for slot in args {
         let ty = proc.slots[*slot].ty;

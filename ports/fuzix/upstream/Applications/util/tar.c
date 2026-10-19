@@ -17,7 +17,6 @@
 
 
     NOTES:
-    * cannot extract symbolic links
     * hardlinks are added as normal files
 
     TODO:
@@ -150,8 +149,8 @@ static uint32_t checksum(void) {
         sum += i >= 148 && i < 156 ? 32 : p[i];
     return sum;
 }
-/* The filesystem has no symbolic links. Reject parent traversal and absolute
- * extraction paths before creating any directory or file. */
+/* Reject parent traversal and absolute extraction member names. Parent
+ * components are checked separately so extraction never follows a symlink. */
 static int safe_path(const char *p) {
     const char *start;
     if (!*p || *p == '/')
@@ -246,7 +245,7 @@ static void store(const char *name, unsigned depth) {
     int fd=-1;
     const char *aname=name;
     if (depth>128) fatal("directory nesting too deep");
-    if (stat(name,&s)<0) { problem(name); return; }
+    if (lstat(name,&s)<0) { problem(name); return; }
     if (s.st_dev==astat.st_dev && s.st_ino==astat.st_ino) return;
     while (*aname=='/') aname++;
     if (!*aname) aname=".";
@@ -257,6 +256,14 @@ static void store(const char *name, unsigned depth) {
         fd=open(name,O_RDONLY);
         if (fd<0) { problem(name); return; }
         h.type='0';
+    } else if (S_ISLNK(s.st_mode)) {
+        int n;
+        if (s.st_size > sizeof(h.lname)) {
+            fprintf(stderr,"tar: link target too long for USTAR: %s\n",name);failed=1;return;
+        }
+        n=readlink(name,h.lname,sizeof(h.lname));
+        if (n<0) { problem(name);return; }
+        h.type='2';
     } else if (S_ISDIR(s.st_mode)) h.type='5';
     else if (S_ISCHR(s.st_mode)) h.type='3';
     else if (S_ISBLK(s.st_mode)) h.type='4';
@@ -322,15 +329,15 @@ static int selected(char **args) {
     }
     return 0;
 }
-static int parents(void) {
+static int parents(const char *name) {
     char path[257];
     unsigned i;
-    strcpy(path,member);
+    strcpy(path,name);
     for (i=1; path[i]; i++)
         if (path[i]=='/') {
             struct stat s;
             path[i]=0;
-            if (mkdir(path,0755)<0 && (errno!=EEXIST || stat(path,&s)<0 || !S_ISDIR(s.st_mode))) {
+            if (mkdir(path,0755)<0 && (errno!=EEXIST || lstat(path,&s)<0 || !S_ISDIR(s.st_mode))) {
                 problem(path); return 0;
             }
             path[i]='/';
@@ -358,8 +365,16 @@ static void unpack(char **args) {
         if (!safe_path(member)) {
             fprintf(stderr,"tar: unsafe name: %s\n",member); failed=1; skipdata(size); continue;
         }
-        if (!parents()) { skipdata(size); continue; }
+        if (!parents(member)) { skipdata(size); continue; }
         if (h.type=='0' || !h.type) {
+            struct stat existing;
+            /* Never truncate the referent of an existing symbolic link. */
+            if (lstat(member,&existing)==0 && S_ISLNK(existing.st_mode)) {
+                if (noreplace || unlink(member)<0) {
+                    if(noreplace)errno=EEXIST;
+                    problem(member);skipdata(size);continue;
+                }
+            }
             int flags=O_CREAT|O_WRONLY|(noreplace?O_EXCL:O_TRUNC);
             fd=open(member,flags,0600);
             if (fd<0) { problem(member); skipdata(size); continue; }
@@ -375,13 +390,22 @@ static void unpack(char **args) {
         }
         if (h.type=='5') {
             struct stat s;
-            if (mkdir(member,0700)<0 && (errno!=EEXIST || stat(member,&s)<0 || !S_ISDIR(s.st_mode)))
+            if (mkdir(member,0700)<0 && (errno!=EEXIST || lstat(member,&s)<0 || !S_ISDIR(s.st_mode)))
                 problem(member);
             else defer_directory();
+        } else if (h.type=='2') {
+            char target[101];
+            memcpy(target,h.lname,100); target[100]=0;
+            if (symlink(target,member)<0) problem(member);
+            /* chmod/chown/utime follow links; leave link metadata alone. */
         } else if (h.type=='1') {
             char target[101];
             memcpy(target,h.lname,100); target[100]=0;
             if (!safe_path(target)) { failed=1; fprintf(stderr,"tar: unsafe link target\n"); }
+            else if (!parents(target)) failed=1;
+            else if (lstat(target,&astat)<0 || !S_ISREG(astat.st_mode)) {
+                fprintf(stderr,"tar: hard link target must be a regular file: %s\n",target);failed=1;
+            }
             else if (link(target,member)<0) problem(member);
             else metadata();
         } else if (h.type=='3' || h.type=='4' || h.type=='6') {

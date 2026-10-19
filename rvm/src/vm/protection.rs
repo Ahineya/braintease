@@ -472,4 +472,93 @@ mod tests {
         assert!(vm.interrupt_return().is_err());
         assert!(!vm.mmu.user);
     }
+
+    fn math_packet(vm: &mut VM, physical: usize) {
+        let mut packet = [0u16; 16];
+        packet[0]=1; packet[1]=16; packet[2]=0x201;
+        packet[7]=0x3ff0; packet[11]=0x3ff0; // 1.0 + 1.0
+        vm.memory[physical..physical+16].copy_from_slice(&packet);
+    }
+    #[test]
+    fn user_math_uses_current_mapping_and_never_opens_other_devices() {
+        let mut vm=machine(false);
+        math_packet(&mut vm,6*1024+40);
+        assert_eq!(vm.read_cell(0,HDR_MATH_STACK as u16).unwrap(),1);
+        vm.write_cell(0,HDR_MATH_STACK as u16,40).unwrap();
+        assert_eq!(vm.memory[6*1024+55],0x4000);
+        assert_eq!(vm.memory[6*1024+43],0);
+        assert_eq!(vm.devices.tick(),0);
+        assert!(vm.read_cell(0,0).is_err());
+        vm.mmu_pending=None;
+        assert!(vm.write_cell(0,27,123).is_err());
+        vm.mmu_pending=None;
+        // Change mappings like a process switch; no mailbox state is retained.
+        vm.memory[2048+8*4]=7;vm.mmu.flush();
+        math_packet(&mut vm,7*1024+40);
+        vm.memory[7*1024+42]=0xffff;
+        vm.memory[7*1024+55]=0xabcd;
+        vm.write_cell(0,HDR_MATH_STACK as u16,40).unwrap();
+        assert_eq!(vm.memory[7*1024+43],crate::devices::STATUS_UNSUPPORTED);
+        assert_eq!(vm.memory[7*1024+55],0xabcd);
+        assert_eq!(vm.memory[6*1024+55],0x4000);
+    }
+    #[test]
+    fn math_cow_fault_is_atomic_and_retries_the_single_instruction() {
+        for jit in [false,true] {
+            let mut vm=machine(jit);
+            let flags=PRESENT|READ|WRITE|USER;
+            vm.memory[2048+8*4..2048+8*4+4].copy_from_slice(&[7,0,flags|PAGED,0]);
+            vm.memory[7*1024..7*1024+8].copy_from_slice(&[
+                6,0,flags,0,9,0,flags & !WRITE | COW,0]);
+            let mut packet=[0u16;16];packet[0]=1;packet[1]=16;packet[2]=0x201;
+            packet[7]=0x3ff0;packet[11]=0x3ff0;packet[15]=0xabcd;
+            for (n,&word) in packet.iter().enumerate() {
+                let off=506+n;
+                vm.memory[if off<512 {6*1024+off} else {9*1024+off-512}]=word;
+            }
+            vm.instructions[1024]=i(0x12,17,0,16);
+            vm.registers[16]=HDR_MATH_STACK as u16;vm.registers[17]=506;
+            let before=vm.memory.clone();
+            vm.step().unwrap();
+            assert_eq!(vm.mmu.cause,CAUSE_WRITE);
+            assert_eq!(vm.mmu.address,(8,512));
+            assert_eq!(vm.read_csr(CSR_EPC).unwrap(),0);
+            assert_eq!(vm.memory[6*1024..7*1024],before[6*1024..7*1024]);
+            assert_eq!(vm.memory[9*1024..10*1024],before[9*1024..10*1024]);
+            vm.memory[7*1024+6]=flags;vm.mmu.flush();
+            vm.interrupt_return().unwrap();vm.step().unwrap();
+            assert!(vm.mmu.user);
+            assert_eq!(vm.memory[9*1024+9],0x4000);
+            assert_eq!(vm.memory[6*1024+509],0);
+        }
+    }
+    #[test]
+    fn hot_user_math_matches_reference_and_publishes_live_stack_bank() {
+        let make=|jit| {
+            let mut vm=machine(jit);
+            vm.memory[2048+9*4..2048+9*4+4].copy_from_slice(&[7,0,PRESENT|READ|WRITE|USER,0]);
+            for bank in [6,7] {
+                math_packet(&mut vm,bank*1024+40);
+                vm.memory[bank*1024+42]=0x205; // uint32 -> binary64
+                vm.memory[bank*1024+47]=0;vm.memory[bank*1024+51]=0;
+            }
+            vm.registers[15]=6000;vm.registers[16]=HDR_MATH_STACK as u16;
+            vm.registers[17]=40;vm.registers[18]=44;
+            vm.instructions[1024..1033].copy_from_slice(&[
+                i(0x0e,Register::Sb as u16,8,0),i(0x12,15,Register::Sb as u16,18),i(0x12,17,0,16),
+                i(0x0e,Register::Sb as u16,9,0),i(0x12,15,Register::Sb as u16,18),i(0x12,17,0,16),
+                i(0x0a,15,15,u16::MAX),i(0x16,15,0,(-7i16) as u16),i(0x25,0,0,0)]);
+            vm
+        };
+        let mut reference=make(false);let mut native=make(true);
+        for vm in [&mut reference,&mut native] {
+            while vm.mmu.user {vm.run_batch(511).unwrap();}
+            assert_eq!(vm.mmu.cause,CAUSE_SYSCALL);
+            assert_eq!(vm.memory[6*1024+55],0x3ff0);
+            assert_eq!(vm.memory[7*1024+55],0x3ff0);
+        }
+        assert_eq!(reference.registers,native.registers);
+        assert_eq!(reference.executed_instructions,native.executed_instructions);
+        assert!(native.jit_stats().unwrap().native_instructions>1000);
+    }
 }

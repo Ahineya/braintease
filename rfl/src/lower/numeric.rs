@@ -317,6 +317,7 @@ pub(super) fn wide_zero(builder: &mut IrBuilder, ty: IrType) -> Result<Value, Co
 
 pub(super) fn arith_ty(ty: Ty) -> IrType {
     match ty {
+        Ty::Constructor(_) => unreachable!("type constructor escaped into lowering"),
         Ty::I8 | Ty::U8 | Ty::I16 | Ty::U16 => IrType::I16,
         Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => IrType::I32,
         Ty::I64 | Ty::U64 | Ty::F64 => IrType::I64,
@@ -328,6 +329,7 @@ pub(super) fn arith_ty(ty: Ty) -> IrType {
         | Ty::Vec(_)
         | Ty::Owned(_)
         | Ty::ErasedOwner
+        | Ty::SharedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -440,6 +442,7 @@ pub(super) fn fold_bitwise(ty: Ty, op: BinOp, left: i64, right: i64) -> i64 {
 
 pub(super) fn ir_ty(ty: Ty) -> IrType {
     match ty {
+        Ty::Constructor(_) => unreachable!("type constructor escaped into lowering"),
         Ty::I8 | Ty::U8 => IrType::I8,
         Ty::I16 | Ty::U16 => IrType::I16,
         Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => IrType::I32,
@@ -452,6 +455,7 @@ pub(super) fn ir_ty(ty: Ty) -> IrType {
         | Ty::Vec(_)
         | Ty::Owned(_)
         | Ty::ErasedOwner
+        | Ty::SharedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -464,6 +468,7 @@ pub(super) fn ir_ty(ty: Ty) -> IrType {
 
 pub(super) fn width(ty: Ty) -> u32 {
     match ty {
+        Ty::Constructor(_) => unreachable!("type constructor escaped into lowering"),
         Ty::I8 | Ty::U8 => 8,
         Ty::I16 | Ty::U16 | Ty::Bool => 16,
         Ty::I32 | Ty::U32 | Ty::Usize | Ty::F32 | Ty::Char => 32,
@@ -475,6 +480,7 @@ pub(super) fn width(ty: Ty) -> u32 {
         | Ty::Vec(_)
         | Ty::Owned(_)
         | Ty::ErasedOwner
+        | Ty::SharedOwner
         | Ty::Ref(_)
         | Ty::Ptr(_)
         | Ty::CFn(_)
@@ -494,6 +500,7 @@ pub(super) fn cell_wise(ty: Ty) -> bool {
             | Ty::Vec(_)
             | Ty::Owned(_)
             | Ty::ErasedOwner
+            | Ty::SharedOwner
             | Ty::Ref(_)
             | Ty::Ptr(_)
             | Ty::CFn(_)

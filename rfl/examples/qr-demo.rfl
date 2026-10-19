@@ -1,0 +1,108 @@
+import { start, Screen, BLACK, color_pair, NO_KEY, RESIZE, CLOSED } from "std/curses";
+import { arguments } from "std/posix";
+import { encode, QrCode, MAX_BYTES } from "lib/qr";
+
+fn draw(screen: &Screen, qr: &QrCode) {
+    screen.background(0);
+    screen.text(0, 1, "Guest QR display test - no Telegram login yet", 0);
+    if (screen.rows() < qr.rows() + 5 || screen.columns() < qr.columns() + 2) {
+        screen.text(2, 1, "Screen too small for the complete QR. Enlarge to 80x30.", 0);
+    } else {
+        screen.text(1, 1, "Scan with your phone camera. QR contains the supplied text.", 0);
+        let top = 3 + (screen.rows() - 5 - qr.rows()) / 2;
+        let left = (screen.columns() - qr.columns()) / 2;
+        for (row in 0..qr.rows()) {
+            screen.cells(top + row, left, qr.row(row, color_pair(1)));
+        }
+    }
+    if (screen.rows() > 1) {
+        screen.text(screen.rows() - 1, 1, "q: exit   r: redraw", 0);
+    }
+    screen.present();
+}
+
+// Text dump for cross-target matrix/geometry verification, before acquiring TTY.
+fn dump(qr: &QrCode) {
+    println("QR_BEGIN");
+    for (row in 0..qr.rows()) {
+        let cells = qr.row(row, 0);
+        let mut line = "";
+        for (x in 0..cells.len()) {
+            let ch = cells[x] & 255;
+            line = line + if (ch == 223) {
+                "U"
+            } else if (ch == 220) {
+                "L"
+            } else if (ch == 219) {
+                "#"
+            } else {
+                "."
+            };
+        }
+        println(line);
+    }
+    println("QR_END");
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    let dumping = args.len() > 1 && args[1] == "--dump";
+    let index: usize = if (dumping) {
+        2
+    } else {
+        1
+    };
+    let text = if (args.len() > index) {
+        args[index]
+    } else {
+        "https://example.org/fuse-x/qr-demo?sample=0123456789abcdef01"
+    };
+    if (text.len() > MAX_BYTES) {
+        println("QR payload exceeds the 84-byte display limit");
+        return 1;
+    }
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..text.len()) {
+        if (text[i] as u32 > 255) {
+            println("QR payload must contain octets");
+            return 1;
+        }
+        bytes.push(text[i] as u8);
+    }
+    let qr = match encode(bytes) {
+        Ok(value) => move(value),
+        Err(_) => {
+            println("Could not encode QR payload");
+            return 1;
+        }
+    };
+    if (dumping) {
+        dump(&qr);
+        return 0;
+    }
+    let screen = match start() {
+        Ok(value) => move(value),
+        Err(_) => {
+            println("Could not start terminal");
+            return 1;
+        }
+    };
+    if (!screen.colors() || !screen.define_pair(1, BLACK, 15)) {
+        screen.suspend();
+        println("QR display needs explicit black and white terminal colors");
+        return 1;
+    }
+    draw(&screen, &qr);
+    while (true) {
+        let key = screen.key();
+        if (key == 113 || key == 27 || key == CLOSED) {
+            return 0;
+        }
+        if (key == RESIZE || key == 114) {
+            draw(&screen, &qr);
+        } else if (key != NO_KEY) {
+            continue;
+        }
+    }
+    0
+}

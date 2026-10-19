@@ -11,8 +11,14 @@
 #define TRUE	(-1)
 #define FALSE	0
 #define LOBYTE	0377
-#define STRIP	0177
-#define QUOTE	0200
+/* C16 has a spare ninth bit; keep UTF-8 octets separate from quoting. */
+#ifdef RIPPLE_MMU
+#define STRIP 0377
+#define QUOTE 0400
+#else
+#define STRIP 0177
+#define QUOTE 0200
+#endif
 
 #define EOF	0
 #define NL	'\n'

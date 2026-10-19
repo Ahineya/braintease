@@ -15,7 +15,7 @@ assets plus the dialog resource header included by nxroach. `UPSTREAM.json` reco
 Large optional font/dependency/data collections remain in the complete archive.
 This is the pristine import and audit baseline. The C16 engine, server, client, NanoWM and launcher
 adaptations are maintained separately in `adapt.py`, `server_adapt.py`,
-`apps_adapt.py`, `roach_adapt.py` and `ripple/`; generated
+`apps_adapt.py`, `roach_adapt.py`, `desktop_adapt.py`, `tetris_adapt.py` and `ripple/`; generated
 sources live in the build directory. See [port status](README.md).
 
 Verify offline:
@@ -38,3 +38,10 @@ rows in `upstream/src/fonts/compiled/rom8x16.c`, changing only the C symbol and
 formatting. Its source comment identifies the generated ROM font; no visual
 edits are made. `tools/verify.py` compares every word with that pinned source.
 The atlas retains the upstream license in adjacent `ports/graphics/fonts/LICENSE`.
+
+NanoTetris retains the upstream game and rendering, with checked source
+adaptations and `ripple/tetris-platform.*` for monotonic deadlines, controls,
+signal wakeup and persistent scores. Adaptations correct out-of-range spawn
+and collision coordinates, line shifting/clearing, and C16 score width. The
+blocking hard-drop and line-clear delays are removed. Generated sources retain
+the original copyright and license notices.

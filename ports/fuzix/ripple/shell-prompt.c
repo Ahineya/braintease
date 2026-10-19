@@ -7,6 +7,7 @@
 #include <utsname.h>
 #include <time.h>
 #include <errno.h>
+#include "../../../runtime/include/ripple_unicode.h"
 
 #define PROMPT_SIZE 1024
 static char rendered[PROMPT_SIZE], invisible[PROMPT_SIZE], cwd[512];
@@ -147,7 +148,13 @@ static unsigned geometry(const char *text, const char **tail) {
         else if(c=='\n' || c=='\r') {column=0;*tail=text+i+1;}
         else if(c=='\t')column+=8-column%8;
         else if(c=='\b') {if(column)column--;}
-        else if(c>=32 && c!=127)column++;
+        else if(c>=32 && c!=127) {
+            unsigned start=i;
+            do {i++;c=(unsigned char)text[i];}
+            while(c>=32 && c!=127 && !(formatted && invisible[i]));
+            column+=ru_columns((const unsigned char *)text+start,i-start);
+            i--;
+        }
     }
     return column;
 }

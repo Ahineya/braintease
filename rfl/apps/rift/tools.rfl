@@ -58,7 +58,7 @@ fn tool(language: Language) -> String {
 
 export fn available() -> Vec<String> {
     let mut out: Vec<String> = [];
-    for (file in ["app.bf", "app.tcl", "app.awk", "app.sh", "Makefile", "app.m4", "app.dc", "app.c", "app.rfl", "app.py", "app.pas", "app.rs", "app.js", "app.lua"]) {
+    for (file in ["app.bas", "app.bf", "app.tcl", "app.awk", "app.sh", "Makefile", "app.m4", "app.dc", "app.c", "app.rfl", "app.py", "app.pas", "app.rs", "app.js", "app.lua"]) {
         let language = detect(file);
         let command = tool(language);
         let path = resolve(command);
@@ -145,7 +145,7 @@ export fn launch(screen: &Screen, document: &Document, settings: &Settings) -> R
             }
         }
         if (!found) {
-            command = command + from_char(pattern[i]);
+            command = command + from_byte(pattern[i] as u8);
             i += 1;
         }
     }

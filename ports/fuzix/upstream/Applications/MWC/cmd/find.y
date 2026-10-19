@@ -455,7 +455,7 @@ void find(char *dir)
     strcpy(fname, dir);
     while (n > 1 && fname[n-1] == '/')
         fname[--n] = 0;
-    if (stat(fname, &sb) < 0) {
+    if (lstat(fname, &sb) < 0) {
         warn("%s", fname);
         failed = 1;
         return;
@@ -505,7 +505,7 @@ void fentry(char *ep, struct stat *sbp)
         }
         position = telldir(dir);
         closedir(dir);
-        if (stat(fname, &sb) < 0) {
+        if (lstat(fname, &sb) < 0) {
             warn("%s", fname);
             failed = 1;
         } else
@@ -723,6 +723,8 @@ int xtype(NODE *np)
 		case 'm':
 			return (ftype==S_IFMPB || ftype==S_IFMPC);
 #endif			
+		case 'l':
+            return (ftype == S_IFLNK);
 		case 'p':
 			return (ftype == S_IFIFO);
 		}

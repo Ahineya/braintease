@@ -27,7 +27,7 @@ static void syn_reply(NetTcp *tcp, const TcpSegment *segment) {
     }
 }
 int tcp_acceptable(NetTcp *tcp, const TcpSegment *segment) {
-    unsigned short window = NET_TCP_BUFFER - tcp->rx_used;
+    unsigned short window = NET_TCP_RX_BUFFER - tcp->rx_used;
     unsigned long space = segment->length + ((segment->flags & (TCP_SYN | TCP_FIN)) ? 1 : 0);
     if (!space) return segment->sequence == tcp->rcv_nxt || (window && segment->sequence - tcp->rcv_nxt < window);
     if (!window) return 0;
@@ -45,7 +45,7 @@ void tcp_receive(NetTcp *tcp, const TcpSegment *segment) {
     }
     if (segment->flags & TCP_RST) {
         if (segment->sequence == tcp->rcv_nxt) tcp_fail(tcp, NET_RESET);
-        else if (segment->sequence - tcp->rcv_nxt < NET_TCP_BUFFER - tcp->rx_used) tcp_challenge(tcp);
+        else if (segment->sequence - tcp->rcv_nxt < NET_TCP_RX_BUFFER - tcp->rx_used) tcp_challenge(tcp);
         return;
     }
     if (segment->flags & TCP_SYN) {

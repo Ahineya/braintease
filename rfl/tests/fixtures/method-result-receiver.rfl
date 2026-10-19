@@ -1,0 +1,9 @@
+// Expected result types should reach a generic receiver of a self-returning method.
+trait Identity { fn identity(&self) -> Self; }
+type Wrapped<T> = Empty;
+impl<T> Identity for Wrapped<T> { fn identity(&self) -> Wrapped<T> { *self } }
+fn make<T>() -> Wrapped<T> { Empty }
+fn main() {
+    let result: Wrapped<i32> = make().identity();
+    println(match result { Empty => 42 });
+}

@@ -1,6 +1,7 @@
-/* Software IEEE-754 binary32 / binary64 for Ripple.
+#include "include/__float_accel.h"
+/* IEEE-754 binary32 / binary64 for Ripple, with optional host acceleration.
  * Bit patterns are passed as unsigned long (f32) and unsigned long long (f64).
- * No hardware float types are used. */
+ * The fallback uses integer arithmetic only. */
 
 #define F32_SIGN 0x80000000UL
 #define F32_EXP  0x7F800000UL
@@ -103,6 +104,7 @@ static unsigned long f32_round_pack(unsigned long sign, int exp, unsigned long s
 }
 
 unsigned long __rcc_f32_add(unsigned long a, unsigned long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_ADD, a, b);
     unsigned long sign_a;
     unsigned long sign_b;
     unsigned long sig_a;
@@ -159,10 +161,12 @@ unsigned long __rcc_f32_add(unsigned long a, unsigned long b) {
 }
 
 unsigned long __rcc_f32_sub(unsigned long a, unsigned long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_SUB, a, b);
     return __rcc_f32_add(a, b ^ F32_SIGN);
 }
 
 unsigned long __rcc_f32_mul(unsigned long a, unsigned long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_MUL, a, b);
     unsigned long sign;
     unsigned long sig_a;
     unsigned long sig_b;
@@ -212,6 +216,7 @@ unsigned long __rcc_f32_mul(unsigned long a, unsigned long b) {
 }
 
 unsigned long __rcc_f32_div(unsigned long a, unsigned long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_DIV, a, b);
     unsigned long sign;
     unsigned long sig_a;
     unsigned long sig_b;
@@ -327,6 +332,7 @@ unsigned long __rcc_f32_from_si(long x) {
 }
 
 unsigned long __rcc_f32_from_u64(unsigned long long x) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_FROM_U64, x, 0);
     int shift;
     int exp;
     unsigned long extra;
@@ -350,6 +356,7 @@ unsigned long __rcc_f32_from_u64(unsigned long long x) {
 }
 
 unsigned long __rcc_f32_from_i64(long long x) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_FROM_I64, x, 0);
     unsigned long long mag;
     mag = (unsigned long long)x;
     if (x < 0) { return F32_SIGN | __rcc_f32_from_u64(0ULL - mag); }
@@ -415,6 +422,7 @@ unsigned long __rcc_f32_to_ui(unsigned long a) {
 }
 
 unsigned long long __rcc_f32_to_u64(unsigned long a) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_TO_U64, a, 0);
     int exp;
     unsigned long long sig;
     if ((a & F32_SIGN) || f32_isnan(a)) { return 0; }
@@ -427,6 +435,7 @@ unsigned long long __rcc_f32_to_u64(unsigned long a) {
 }
 
 long long __rcc_f32_to_i64(unsigned long a) {
+    RCC_ACCEL_RETURN(VM_MATH_F32_TO_I64, a, 0);
     int exp;
     unsigned long long mag;
     if (f32_isnan(a)) { return 0; }
@@ -678,6 +687,7 @@ unsigned long __rcc_f32_from_f64(unsigned long long a) {
 }
 
 unsigned long long __rcc_f64_add(unsigned long long a, unsigned long long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_ADD, a, b);
     unsigned long long sign_a;
     unsigned long long sign_b;
     int exp_a;
@@ -779,10 +789,12 @@ unsigned long long __rcc_f64_add(unsigned long long a, unsigned long long b) {
 }
 
 unsigned long long __rcc_f64_sub(unsigned long long a, unsigned long long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_SUB, a, b);
     return __rcc_f64_add(a, b ^ F64_SIGN);
 }
 
 unsigned long long __rcc_f64_mul(unsigned long long a, unsigned long long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_MUL, a, b);
     unsigned long long sign;
     int exp_a;
     int exp_b;
@@ -863,6 +875,7 @@ unsigned long long __rcc_f64_mul(unsigned long long a, unsigned long long b) {
 }
 
 unsigned long long __rcc_f64_div(unsigned long long a, unsigned long long b) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_DIV, a, b);
     unsigned long long sign;
     int exp_a;
     int exp_b;
@@ -976,6 +989,7 @@ int __rcc_f64_ge(unsigned long long a, unsigned long long b) {
 }
 
 unsigned long long __rcc_f64_from_u64(unsigned long long x) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_FROM_U64, x, 0);
     int shift;
     int exp;
     unsigned long long sig;
@@ -997,6 +1011,7 @@ unsigned long long __rcc_f64_from_u64(unsigned long long x) {
 }
 
 unsigned long long __rcc_f64_from_i64(long long x) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_FROM_I64, x, 0);
     unsigned long long sign;
     unsigned long long mag;
 
@@ -1031,6 +1046,7 @@ unsigned long long __rcc_f64_from_si(long x) {
 }
 
 long long __rcc_f64_to_i64(unsigned long long a) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_TO_I64, a, 0);
     unsigned long long sign;
     int exp;
     unsigned long long mag;
@@ -1101,6 +1117,7 @@ unsigned long __rcc_f64_to_ui(unsigned long long a) {
 }
 
 unsigned long long __rcc_f64_to_u64(unsigned long long a) {
+    RCC_ACCEL_RETURN(VM_MATH_F64_TO_U64, a, 0);
     int exp;
     unsigned long long mag;
     int shift;

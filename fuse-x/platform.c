@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "host.h"
+#include "pcm.h"
 #include "hostfs.h"
 #include <kdata.h>
 #include <printf.h>
@@ -44,14 +45,15 @@ int pagemap_alloc(ptptr p) {
     p->p_size = 750; /* Provisional charge; resident-memory budgets are not integrated. */
     return 0;
 }
-void pagemap_free(ptptr p) { ripple_gfx_exit(p); p->p_page = 0; p->p_size = 0; }
+void pagemap_free(ptptr p) { ripple_gfx_exit(p); ripple_pcm_exit(p); p->p_page = 0; p->p_size = 0; }
 int pagemap_prepare(struct exec *h) { used(h); return 0; }
 int pagemap_realloc(struct exec *h, usize_t size) { used(h); used(size); return ENOSYS; }
 usize_t pagemap_mem_used(void) { return nproc * 750UL; }
 static void select_task(ptptr p) {
     udata = task_data[indexof(p)];
-    p->p_status = P_RUNNING;
-    runticks = need_resched = 0;
+    proc_setstate(p, P_RUNNING);
+    runticks = 0;
+    proc_sched_switch();
 }
 void plt_switchout(void) {
     ptptr next;
@@ -108,7 +110,9 @@ void sync_clock(void) {
             irqrestore(flags);
             return;
         }
+        proc_sched_sample(now.seconds_low, (unsigned)(now.nanoseconds / 1000000UL));
         ripple_select_clock(&now);
+        ripple_pcm_clock(&now);
         sample = now.seconds_low * 100UL + now.nanoseconds / 10000000UL;
         elapsed = sample - host_last;
         host_last = sample;
@@ -126,6 +130,7 @@ void plt_clock_init(void) {
     if (vm_host_realtime(&now) != VM_DEVICE_OK) panic("Fuse-X: realtime clock unavailable");
     tod.low = now.seconds_low;
     tod.high = now.seconds_high;
+    proc_sched_switch();
 }
 uint_fast8_t plt_rtc_secs(void) { return 255; }
 uint_fast8_t plt_param(char *p) { used(p); return 0; }
@@ -192,6 +197,36 @@ static void dispatch_signals(void) {
     }
 }
 
+/* Only called between exec readi calls, with no filesystem buffer pinned.
+ * udata (including the loader's file position) is saved by plt_switchout.
+ * Signal handlers remain deferred until exec commits or returns an error. */
+void fuse_exec_yield(unsigned long *slice, unsigned waiting) {
+    VmHostTime clock;
+    unsigned long now;
+    unsigned error=udata.u_error;
+    arg_t result=udata.u_retval;
+    if(vm_host_monotonic(&clock)!=VM_DEVICE_OK) return;
+    now=clock.seconds_low*1000UL+clock.nanoseconds/1000000UL;
+    if(!waiting && now-*slice<5) return;
+    *slice=now;
+    sync_clock();
+    ripple_gfx_poll();
+    fuse_poll_input();
+    ripple_network_poll();
+    if(rcc_hosted_stopping()) fuse_request_shutdown();
+    if(nready>1) {
+        /* switchout() checks fatal signals before returning: this loader still
+         * owns an inode and staging memory. Defer that check until cleanup. */
+        irqflags_t irq=di();
+        proc_setstate(udata.u_ptab, P_READY);
+        plt_switchout();
+        irqrestore(irq);
+    }
+    else if(waiting) rcc_hosted_idle(1);
+    udata.u_error=error;
+    udata.u_retval=result;
+}
+
 static void fuse_checkpoint(void) {
     unsigned error=udata.u_error;
     arg_t result=udata.u_retval;
@@ -202,7 +237,7 @@ static void fuse_checkpoint(void) {
     ripple_network_poll();
     if(rcc_hosted_stopping()) fuse_request_shutdown();
     chksigs();
-    if(nready>1) switchout();
+    if(nready>1 && need_resched) switchout();
     chksigs();
     udata.u_error=error;
     udata.u_retval=result;
@@ -220,8 +255,7 @@ static arg_t syscall_impl(unsigned number, unsigned long a, unsigned long b, uns
     udata.u_sysio = 0;
     udata.u_callno = number;
     udata.u_argn = a; udata.u_argn1 = b; udata.u_argn2 = c; udata.u_argn3 = d;
-    unix_syscall();
-    sync_clock();
+    unix_syscall(); /* Includes the exit clock sample and slice check. */
     ripple_network_poll();
     result = udata.u_retval;
     _uputw(udata.u_error, (uint16_t *)error);

@@ -11,13 +11,16 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         self.note_sig(builtin_signature(callee).unwrap().to_string());
+        if matches!(callee, "__browser_root_get" | "__browser_root_replace") {
+            return self.check_browser_root(span, callee, args, expected);
+        }
         if callee == "__expect_value" {
             return self.check_expect_value(span, args, expected);
         }
         if matches!(callee, "__async_poll" | "__async_cancel") {
             return self.check_async_builtin(span, callee, args, expected);
         }
-        if matches!(callee, "__erase_owned" | "__borrow_raw") {
+        if matches!(callee, "__erase_owned" | "__share_owned" | "__borrow_raw") {
             return self.check_storage_builtin(span, callee, args, expected);
         }
         if callee == "__replace_value" {
@@ -222,13 +225,53 @@ impl<'a> Checker<'a> {
         expected: Option<Ty>,
     ) -> Result<Option<TExpr>, CompileError> {
         if self.fn_schemas.contains_key(name) {
-            return Err(CompileError::at(
-                self.source,
+            let Some(Ty::Func(id)) = expected else {
+                return Err(CompileError::at(self.source, span,
+                    format!("generic function `{name}` needs a concrete signature to be used as a value")));
+            };
+            let concrete = self.funcs[id as usize].clone();
+            let schema = self.fn_schemas[name].clone();
+            let func = self.ast_fns[schema.index].clone();
+            if func.params.len() != concrete.params.len() {
+                return Err(CompileError::at(
+                    self.source,
+                    span,
+                    format!(
+                        "expected {} parameters, found {}",
+                        concrete.params.len(),
+                        func.params.len()
+                    ),
+                ));
+            }
+            let mut solved = vec![None; schema.type_params.len()];
+            for (param, actual) in func.params.iter().zip(&concrete.params) {
+                self.infer_field(
+                    param.ty.as_ref().unwrap(),
+                    *actual,
+                    &schema.type_params,
+                    &mut solved,
+                    span,
+                )?;
+            }
+            self.infer_field(
+                func.ret.as_ref().unwrap(),
+                concrete.ret,
+                &schema.type_params,
+                &mut solved,
                 span,
-                format!(
-                    "generic function `{name}` needs a concrete signature to be used as a value"
-                ),
-            ));
+            )?;
+            let args: Option<Vec<Ty>> = solved.into_iter().collect();
+            let args = args.ok_or_else(|| {
+                CompileError::at(
+                    self.source,
+                    span,
+                    format!("cannot infer type arguments for function value `{name}`"),
+                )
+            })?;
+            let mangled = self.instantiate(name, &args)?;
+            // Reuse the monomorphic path to check the complete normalized signature
+            // and build a normal callable with an empty environment.
+            return self.fn_value(span, &mangled, expected);
         }
         let Some(sig) = self.sigs.get(name) else {
             return Ok(None);
@@ -278,7 +321,8 @@ impl<'a> Checker<'a> {
             ));
         };
         let params = sig.params.clone();
-        let ty = self.intern_func(params, ret);
+        let once = matches!(expected, Some(Ty::Func(id)) if self.funcs[id as usize].once);
+        let ty = self.intern_func_mode(params, ret, once);
         if let Some(want) = expected {
             if want != ty {
                 return Err(CompileError::at(
@@ -306,6 +350,13 @@ impl<'a> Checker<'a> {
         expr: &Expr,
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        if self.lambda_return == Some(None) {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "a lambda using `?` needs an expected function signature; add a type annotation",
+            ));
+        }
         let operand = self.check_expr(expr, None)?;
         let Ty::Adt(id) = operand.ty else {
             return Err(CompileError::at(

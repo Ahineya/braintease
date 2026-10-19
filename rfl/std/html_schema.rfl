@@ -1,0 +1,70 @@
+// Shared pure schema used by the library and its user-authored HTML macro.
+/// Reports whether a tag is supported in the HTML namespace.
+export fn html_tag(tag: String) -> bool {
+    contains("div span p button input label ul ol li h1 h2 h3 pre code section article header footer main nav strong em br a form textarea select option img canvas table tbody tr td th", tag)
+}
+
+/// Reports whether a tag is supported in the SVG namespace.
+export fn svg_tag(tag: String) -> bool {
+    contains("svg g path circle rect line polyline polygon text defs use", tag)
+}
+
+/// Accepts supported attributes and well-formed data-* or aria-* names.
+export fn attribute_name(name: String) -> bool {
+    if (contains("id class title role alt width height tabindex viewBox d cx cy r x y x1 x2 y1 y2 fill stroke stroke-width points transform type name placeholder for href maxlength", name)) {
+        return true;
+    }
+    let prefix = (name.len() > 5 && name[0..5] == "aria-") || (name.len() > 5 && name[0..5] == "data-");
+    if (!prefix || name[5] < 'a' || name[5] > 'z') {
+        return false;
+    }
+    for (i in 6..name.len()) {
+        let c = name[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Reports whether an input type is supported by the UI schema.
+export fn input_type(value: String) -> bool {
+    contains("text checkbox button number email password search submit", value)
+}
+
+/// Reports whether a tag supports the controlled value property.
+export fn value_tag(tag: String) -> bool {
+    contains("input textarea select option", tag)
+}
+
+/// Reports whether a tag supports the disabled property.
+export fn disabled_tag(tag: String) -> bool {
+    contains("input button textarea select option", tag)
+}
+
+fn contains(words: String, name: String) -> bool {
+    let mut begin: usize = 0;
+    for (i in 0..=words.len()) {
+        if (i == words.len() || words[i] == ' ') {
+            if (words[begin..i] == name) {
+                return true;
+            }
+            begin = i + 1;
+        }
+    }
+    false
+}
+
+/// Accepts a literal ASCII hash path; v1 excludes queries, escapes and external URLs.
+export fn hash_href(value: String) -> bool {
+    if (value.len() < 2 || value.len() > 2048 || value[0..2] != "#/") {
+        return false;
+    }
+    for (i in 2..value.len()) {
+        let c = value[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '/' || c == '_' || c == '~' || c == '.' || c == '-')) {
+            return false;
+        }
+    }
+    true
+}

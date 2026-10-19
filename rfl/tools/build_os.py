@@ -39,11 +39,22 @@ def main():
         ir = work / "program.ir"
         ir.write_bytes(run([args.rfl.resolve(), "compile", source, "--emit-ir", "--target",
                             "ripple" if args.os == "fuzix" else "native"]))
-        if re.search(r"@(mmio_read|mmio_write|rfl_host_clock_read|rfl_host_idle)\(", ir.read_text()):
+        if re.search(r"@(mmio_read|mmio_write|rfl_host_clock_read|rfl_host_idle|rcc_hosted_input)\(", ir.read_text()):
             raise RuntimeError("standalone MMIO/host/network libraries cannot run in an OS process; use std/posix and std/curses guest services")
         bridge = ROOT / "rfl/os/posix.c"
         curses = "@rfl_curses_" in ir.read_text()
+        unicode = "@ru_" in ir.read_text()
         bridges = [bridge] + ([ROOT / "rfl/os/curses.c"] if curses else [])
+        telegram = "@tg_client_" in ir.read_text()
+        if "@music_new" in ir.read_text():
+            bridges.extend(ROOT / "ports/music" / name for name in ("wav.c", "music.c"))
+        if re.search(r"@rfl_(socket|poll)_", ir.read_text()) or telegram:
+            bridges.extend(ROOT / "rfl/os" / name for name in ("socket.c", "poll.c", "dns.c"))
+        if "@rfl_crypto_" in ir.read_text() or telegram:
+            bridges.append(ROOT / "rfl/os/crypto.c")
+        if telegram:
+            bridges.extend(ROOT / "ports/telegram" / (name + ".c") for name in
+                           ("wire", "hash", "inflate", "tg_crypto", "keys", "packet", "storage", "client", "handshake", "account", "receive", "tl", "tl_schema", "model", "dialogs", "updates"))
         if "@rfl_text_paint" in ir.read_text():
             bridges.append(ROOT / "rfl/os/text_curses.c")
         theme = "@tui_theme_" in ir.read_text()
@@ -55,9 +66,9 @@ def main():
                  "--build", build, "-o", artifact, *(["--curses"] if curses else [])])
         else:
             run(["make", "--no-print-directory", "-C", PORT, f"BUILD={build}",
-                 f"RCC={args.rcc.resolve()}", f"RFL_CURSES={int(curses)}", "rfl-sdk"])
+                 f"RCC={args.rcc.resolve()}", f"RFL_CURSES={int(curses)}", f"RFL_UNICODE={int(unicode)}", "rfl-sdk"])
             sdk = json.loads(run(["make", "-s", "--no-print-directory", "-C", PORT,
-                                  f"BUILD={build}", f"RFL_CURSES={int(curses)}", "rfl-sdk-info"]))
+                                  f"BUILD={build}", f"RFL_CURSES={int(curses)}", f"RFL_UNICODE={int(unicode)}", "rfl-sdk-info"]))
             flags = ["--bank-size", "64000", "-DRIPPLE_MMU=1", "-DNO_64BIT"]
             for directory in [PORT / "ripple/include", PORT / "upstream/Library/include",
                               ROOT / "runtime/include", PORT / "ripple"]:

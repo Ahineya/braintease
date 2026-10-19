@@ -12,14 +12,10 @@ def adapt(source):
     replacements = {
         '#define N ((struct network_state *)0x00050000UL)':
             '#include <native_process.h>\nstatic struct network_state *N;',
-        '#define E ((struct endpoint_table *)0x00060000UL)':
-            'static struct endpoint_table *E;',
-        '    ripple_zero(N,sizeof(*N));\n    ripple_zero(E,sizeof(*E));':
+        '    ripple_zero(N,sizeof(*N));':
             '    N = rcc_process_kernel_alloc(sizeof(*N));\n'
             '    if (!N) panic("Fuse-X: cannot allocate shared network state");\n'
-            '    E = rcc_process_kernel_alloc(sizeof(*E));\n'
-            '    if (!E) panic("Fuse-X: cannot allocate shared socket endpoints");\n'
-            '    memset(N,0,sizeof(*N));\n    memset(E,0,sizeof(*E));',
+            '    memset(N,0,sizeof(*N));',
     }
     for old, new in replacements.items():
         if source.count(old) != 1:

@@ -13,6 +13,7 @@ mod instruction;
 mod link;
 mod liveness;
 mod process;
+mod suspension;
 mod units;
 pub use application::compile_application;
 pub use units::link_modules;
@@ -28,6 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 struct Compiler {
     object: ObjectModule,
     functions: BTreeMap<String, FuncId>,
+    direct_functions: BTreeMap<String, FuncId>,
     imports: BTreeMap<String, FuncId>,
     codes: BTreeMap<String, u64>,
     globals: BTreeMap<String, u64>,
@@ -54,7 +56,11 @@ impl Compiler {
                 return Err(format!("native call {name} argument count mismatch"));
             }
             if !function.is_external {
-                return Ok(self.functions[name]);
+                return Ok(self
+                    .direct_functions
+                    .get(name)
+                    .copied()
+                    .unwrap_or(self.functions[name]));
             }
         }
         if self.application && !rcc_ir::native_image::application_service(name) {
@@ -124,6 +130,12 @@ impl Compiler {
     }
 }
 
+fn progress(message: impl std::fmt::Display) {
+    if std::env::var_os("RCC_NATIVE_PROGRESS").is_some() {
+        eprintln!("rcc-native: {message}");
+    }
+}
+
 pub fn compile_object(module: &Module) -> Result<Vec<u8>, String> {
     compile_object_inner(module, &BTreeSet::new(), false).map(|(object, _)| object)
 }
@@ -159,10 +171,17 @@ fn compile_object_inner(
         cranelift_module::default_libcall_names(),
     )
     .map_err(|e| e.to_string())?;
+    let started = std::time::Instant::now();
+    progress("Preparing reachable IR");
     let mut ir = module.clone();
     units::retain_reachable(&mut ir);
     units::hoist_static_allocas(&mut ir);
+    progress("Optimizing IR");
     rcc_backend::optimize::optimize_module(&mut ir);
+    progress(format_args!(
+        "IR optimized ({:.2}s); generating native functions",
+        started.elapsed().as_secs_f64()
+    ));
     units::retain_reachable(&mut ir);
     let resumable = application || process::enabled(&ir);
     if application {
@@ -193,9 +212,15 @@ fn compile_object_inner(
             ));
         }
     }
+    let direct = if resumable {
+        suspension::direct_functions(&ir)
+    } else {
+        BTreeSet::new()
+    };
     let mut compiler = Compiler {
         object: ObjectModule::new(builder),
         functions: BTreeMap::new(),
+        direct_functions: BTreeMap::new(),
         imports: BTreeMap::new(),
         codes: BTreeMap::new(),
         globals: BTreeMap::new(),
@@ -279,6 +304,16 @@ fn compile_object_inner(
         let code = 0x8000_0000 | (compiler.codes.len() as u64 + 1);
         compiler.codes.insert(function.name.clone(), code);
     }
+    for name in direct {
+        let function = compiler.ir.get_function(&name).unwrap();
+        let signature =
+            compiler.signature(function.parameters.len() + usize::from(function.is_vararg));
+        let id = compiler
+            .object
+            .declare_function(&format!("rcc_direct_{name}"), Linkage::Local, &signature)
+            .map_err(|e| format!("native direct declaration {name}: {e}"))?;
+        compiler.direct_functions.insert(name, id);
+    }
     for (name, args) in [
         ("rcc_native_poll", 0),
         ("rcc_native_load", 2),
@@ -293,11 +328,28 @@ fn compile_object_inner(
         compiler.import(name, args)?;
     }
     let functions = compiler.ir.functions.clone();
-    for function in &functions {
+    let mut reported = std::time::Instant::now();
+    for (index, function) in functions.iter().enumerate() {
         if !function.is_external {
+            if reported.elapsed().as_secs() >= 5 {
+                progress(format_args!(
+                    "Generating function {}/{}: {}",
+                    index + 1,
+                    functions.len(),
+                    function.name
+                ));
+                reported = std::time::Instant::now();
+            }
             emit::emit_function(&mut compiler, function)?;
+            if compiler.direct_functions.contains_key(&function.name) {
+                emit::emit_direct_function(&mut compiler, function)?;
+            }
         }
     }
+    progress(format_args!(
+        "Native functions generated ({:.2}s)",
+        started.elapsed().as_secs_f64()
+    ));
     let globals = compiler.ir.globals.clone();
     for global in &globals {
         if let Some(value) = &global.initializer {

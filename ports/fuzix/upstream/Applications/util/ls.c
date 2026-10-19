@@ -54,7 +54,7 @@ static int flags;
 static char prevtype;
 static uint8_t bad; /* Set if any errors occur on the way */
 
-static void lsfile(char *, struct stat *, int);
+static void lsfile(char *, struct stat *, int, char *);
 static void listfiles(char *name);
 static char *modestring(int mode);
 static char *timestring(time_t *t);
@@ -171,7 +171,7 @@ static void printsep(char *name)
 /*
  * Do an LS of a particular file name according to the flags.
  */
-static void lsfile(char *name, struct stat *statbuf, int flags)
+static void lsfile(char *name, struct stat *statbuf, int flags, char *path)
 {
 #if	UIDGID
 	static char username[12];
@@ -230,7 +230,7 @@ static void lsfile(char *name, struct stat *statbuf, int flags)
 	fputs(name, stdout);
 #ifdef	S_ISLNK
 	if ((flags & LSF_LONG) && S_ISLNK(statbuf->st_mode)) {
-		if ((len = readlink(name, buf, PATHLEN - 1)) >= 0) {
+		if ((len = readlink(path, buf, PATHLEN - 1)) >= 0) {
 			buf[len] = '\0';
 			printf(" -> %s", buf);
 		}
@@ -265,7 +265,7 @@ static void listfiles(char *name)
 		/* Apply filters. */
 		if ((flags & (LSF_DIR | LSF_FILE)) != LSF_DIR) {
 			printsep(NULL);
-			lsfile(name, &statbuf, flags);
+			lsfile(name, &statbuf, flags, name);
 		}
 		return;
 	}
@@ -338,7 +338,7 @@ static void listfiles(char *name)
 		if (!(flags & (LSF_DIR | LSF_FILE)) ||
 			((flags & LSF_DIR) && S_ISDIR(statbuf.st_mode)) ||
 			((flags & LSF_FILE) && !S_ISDIR(statbuf.st_mode)))
-			lsfile(cp, &statbuf, flags);
+			lsfile(cp, &statbuf, flags, n);
 		if (!(flags & LSF_RECUR) || !S_ISDIR(statbuf.st_mode) || !strcmp(cp, ".") || !strcmp(cp, ".."))
 freename:
 			{ free(n); list[i] = NULL; }

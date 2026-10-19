@@ -11,6 +11,7 @@ int wclrtoeol(WINDOW *win)
   chtype *maxx, *ptr, *end, blank;
   int y, x, minx;
 
+  win->_last_valid = 0;
   y = win->_cury;
   x = win->_curx;
   blank = ' ' | (win->_attrs & ATR_MSK);

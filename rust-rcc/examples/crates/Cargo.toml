@@ -1,0 +1,27 @@
+[package]
+name = "rustcell-crates"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+default = ["byteorder"]
+byteorder = ["dep:byteorder"]
+heapless = ["dep:heapless"]
+postcard = ["dep:serde", "dep:postcard"]
+postcard-derived = ["postcard"]
+dynamic = []
+
+[dependencies]
+byteorder = { version = "=1.5.0", default-features = false, optional = true }
+heapless = { version = "=0.9.3", default-features = false, optional = true }
+serde = { version = "=1.0.228", default-features = false, features = ["derive", "alloc"], optional = true }
+postcard = { version = "=1.1.3", default-features = false, features = ["alloc"], optional = true }
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+debug = 0
+incremental = false

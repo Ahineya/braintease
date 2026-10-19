@@ -1,0 +1,122 @@
+import {} from "../../../libraries/unicode/unicode.c";
+import { selection } from "lib/tui_list";
+import { line_edit } from "lib/tui_input";
+import { Canvas, Rect } from "lib/tui";
+import { FilePanel, PanelPalette, draw, draw_cached, panel_paint } from "lib/tui_files";
+import { DirEntry, Metadata, DIRECTORY, REGULAR } from "std/posix";
+import { END, HOME, UP, DOWN, PAGE_DOWN, LEFT, BACKSPACE } from "std/curses";
+
+struct Labels {
+    unused: bool
+}
+
+impl Canvas for Labels {
+    fn text(&self, row: i16, column: i16, text: String, style: u32) {
+        println(text);
+    }
+    fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {}
+    fn glyph(&self, row: i16, column: i16, value: u16, style: u32) {}
+    fn glyphs(&self, row: i16, column: i16, width: i16, value: u16, style: u32) {}
+    fn frame(&self, area: Rect, style: u32) {}
+}
+
+fn entry(name: String, kind: u16) -> DirEntry {
+    DirEntry { name: name, info: Metadata { kind: kind, size: 42, device: 0, inode: 0, mode: 0 } }
+}
+
+fn main() -> i16 {
+    let mut cursor = selection();
+    cursor.key(END, 0, 0);
+    cursor.step(-32768, 0, 1);
+    if (cursor.selected != 0 || cursor.top != 0) {
+        return 1;
+    }
+    cursor.select(99, 40, 10);
+    if (cursor.selected != 39 || cursor.top != 30) {
+        return 2;
+    }
+    cursor.key(HOME, 40, 10);
+    cursor.key(PAGE_DOWN, 40, 10);
+    if (cursor.selected != 10 || cursor.top != 1) {
+        return 3;
+    }
+    cursor.reveal(40, 2);
+    if (cursor.selected != 10 || cursor.top != 9) {
+        return 4;
+    }
+    cursor.reveal(3, 2);
+    if (cursor.selected != 2 || cursor.top != 1) {
+        return 5;
+    }
+    cursor.step(-32768, 3, 2);
+    if (cursor.selected != 0 || cursor.top != 0) {
+        return 6;
+    }
+    cursor.step(32767, 3, 2);
+    if (cursor.selected != 2 || cursor.key(65, 3, 2)) {
+        return 7;
+    }
+    let mut input = line_edit("abZ");
+    input.key(LEFT);
+    input.key(330);
+    input.key(99);
+    if (input.text != "abc" || input.cursor != 3 || input.left(2) != 2) {
+        return 8;
+    }
+    input.key(HOME);
+    input.key(BACKSPACE);
+    input.key(88);
+    if (input.text != "Xabc" || input.cursor != 1) {
+        return 9;
+    }
+    input.key(21);
+    for (i in 0..260) {
+        input.key(97);
+    }
+    if (input.text.len() != 255 || input.cursor != 255 || input.key(10)) {
+        return 10;
+    }
+    input.key(BACKSPACE);
+    input.key(98);
+    if (input.text.len() != 255 || input.text[254] != 'b') {
+        return 11;
+    }
+    let mut files = FilePanel { path: "/tmp", entries: [entry("..", DIRECTORY), entry("folder", DIRECTORY), entry("Alpha.txt", REGULAR), entry("z.txt", REGULAR)], cursor: selection(), show_hidden: true, generation: 1 };
+    if (!files.find_prefix("ALP", 2) || files.selected_path() != "/tmp/Alpha.txt" || files.cursor.top != 1) {
+        return 12;
+    }
+    if (files.find_prefix("missing", 2) || files.cursor.selected != 2) {
+        return 13;
+    }
+    files.key(DOWN, 2);
+    if (files.selected_path() != "/tmp/z.txt" || files.cursor.top != 2) {
+        return 14;
+    }
+    let colors = PanelPalette { body: 0, directory: 0, selected: 1, inactive: 2, frame: 0, title: 0, muted: 0 };
+    let labels = Labels { unused: false };
+    draw(&labels, &files, Rect { row: 0, column: 0, rows: 6, columns: 40 }, colors, true, false);
+    let area = Rect { row: 0, column: 0, rows: 6, columns: 40 };
+    let mut painted = panel_paint();
+    draw_cached(&labels, &files, area, colors, true, false, &mut painted);
+    println("CACHE_STABLE");
+    draw_cached(&labels, &files, area, colors, true, false, &mut painted);
+    println("CACHE_MOVE");
+    files.key(UP, 2);
+    draw_cached(&labels, &files, area, colors, true, false, &mut painted);
+    println("CACHE_LISTING");
+    let mut other = files;
+    other.cursor.selected = 0;
+    files.entries[2] = entry("Beta.txt", REGULAR);
+    files.generation += 1;
+    if (other.entries[2].name != "Alpha.txt") {
+        return 15;
+    }
+    other.share_listing(&files);
+    if (other.entries[2].name != "Beta.txt" || other.cursor.selected != 0 || files.cursor.selected != 2) {
+        return 16;
+    }
+    draw_cached(&labels, &files, area, colors, true, false, &mut painted);
+    println("CACHE_DONE");
+    println("TUI_WIDGETS_OK");
+    0
+}

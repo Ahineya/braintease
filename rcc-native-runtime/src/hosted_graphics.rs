@@ -4,9 +4,10 @@ use super::*;
 use rvm::input_events::{InputState, InputTransition};
 use std::sync::{Arc, Mutex};
 
+pub(super) const CLIPBOARD_MAX: usize = 32768;
 const MAX_WINDOWS: usize = 16;
-const MAX_WIDTH: u32 = 1024;
-const MAX_HEIGHT: u32 = 768;
+const MAX_WIDTH: u32 = 1920;
+const MAX_HEIGHT: u32 = 1080;
 type Result<T> = std::result::Result<T, u16>;
 
 pub(super) struct Surface {
@@ -20,10 +21,18 @@ pub(super) struct Surface {
     closed: bool,
     flags: u32,
     resize: Option<(u32, u32)>,
+    resize_in_flight: Option<(u32, u32)>,
     activation: u64,
     configuration: u64,
+    pointer_requested: bool,
+    desktop_pointer: Option<(i32, i32)>,
 }
 impl Surface {
+    // Hosted edit commands share the ordered input queue, but never manufacture
+    // Ctrl+C (SIGINT) or a printable command-key letter in the guest.
+    pub(super) fn action(&mut self, code: u16) {
+        self.transition(InputTransition::Edit { command: code });
+    }
     fn transition(&mut self, event: InputTransition) {
         if matches!(event, InputTransition::Close) {
             if self.closed {
@@ -34,18 +43,22 @@ impl Surface {
         self.input.apply(event, 0);
     }
     fn request_resize(&mut self, width: u32, height: u32) {
+        let dimensions = (width.min(MAX_WIDTH), height.min(MAX_HEIGHT));
         if self.flags & 1 == 0
             && width > 0
             && height > 0
-            && (width, height) != (self.width, self.height)
+            && (dimensions != (self.width, self.height)
+                || self.resize.is_some() || self.resize_in_flight.is_some())
         {
-            self.resize = Some((width.min(MAX_WIDTH), height.min(MAX_HEIGHT)));
+            self.resize = Some(dimensions);
         }
     }
 }
 #[derive(Default)]
 pub(super) struct Shared {
-    windows: BTreeMap<u32, Surface>,
+    pub(super) windows: BTreeMap<u32, Surface>,
+    pub(super) clipboard: String,
+    pub(super) clipboard_publish: Option<String>,
     next: u32,
     pub(super) finished: bool,
     pub(super) new_terminals: u16,
@@ -100,21 +113,115 @@ fn capture(shared: &Shared) -> Result<()> {
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).map_err(|_| 5u16)?;
     let windows:Vec<_>=shared.windows.iter().map(|(&id,w)|serde_json::json!({
-        "id":id,"title":w.title,"width":w.width,"height":w.height,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence
+        "id":id,"title":w.title,"width":w.width,"height":w.height,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence,"configuration":w.configuration
     })).collect();
     let temporary = directory.join("windows.json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&windows).unwrap()).map_err(|_| 5u16)?;
     std::fs::rename(temporary, directory.join("windows.json")).map_err(|_| 5u16)?;
     Ok(())
 }
+// Opt-in acceptance fixture: deliver the same owned host resize/close requests
+// in a headless run. Producers atomically replace this one-command mailbox.
+// No guest protocol or syscall is added, and normal sessions never read it.
+fn test_event(shared: &Arc<Mutex<Shared>>) -> Result<()> {
+    if std::env::var_os("RCC_NATIVE_HEADLESS").is_none() { return Ok(()); }
+    let Some(path)=std::env::var_os("FUSE_X_TEST_EVENT") else { return Ok(()); };
+    let bytes=match std::fs::read(&path) {
+        Ok(bytes)=>bytes,
+        Err(e) if e.kind()==std::io::ErrorKind::NotFound=>return Ok(()),
+        Err(_)=>return Err(5),
+    };
+    let command:serde_json::Value=serde_json::from_slice(&bytes).map_err(|_|22u16)?;
+    let number=|v:&serde_json::Value|v.as_u64().and_then(|n|u32::try_from(n).ok()).ok_or(22u16);
+    let id=number(&command["window"])?;
+    let resize=command.get("resize");let close=command.get("close");
+    let action=command.get("action");let input=command.get("input");
+    if [resize,close,action,input].iter().filter(|v|v.is_some()).count()!=1 { return Err(22); }
+    let mut state=shared.lock().unwrap();
+    if let Some(text)=command.get("clipboard") {
+        let text=text.as_str().filter(|s|s.len()<=CLIPBOARD_MAX&&!s.contains('\0')).ok_or(22u16)?;
+        state.clipboard=text.into();
+    }
+    let window=state.windows.get_mut(&id).ok_or(22u16)?;
+    if let Some(size)=resize {
+        let size=size.as_array().filter(|a|a.len()==2).ok_or(22u16)?;
+        window.request_resize(number(&size[0])?,number(&size[1])?);
+    } else if let Some(action)=action { window.action(number(action)?.try_into().map_err(|_|22u16)?); }
+    else if let Some(input)=input {
+        let transition:InputTransition=serde_json::from_value(input.clone()).map_err(|_|22u16)?;
+        if !transition.valid() { return Err(22); } window.transition(transition);
+    }
+    else if close.and_then(|v|v.as_bool())==Some(true) { window.transition(InputTransition::Close); }
+    else { return Err(22); }
+    std::fs::remove_file(path).map_err(|_|5u16)?;
+    Ok(())
+}
 impl Runtime {
     fn graphics_call(&mut self, op: u64, a: &mut [u32; 12]) -> Result<u32> {
         let shared = self.graphics.shared.clone();
+        if matches!(op,8|10) { test_event(&shared)?; }
         if op == 11 {
             let mut s = shared.lock().unwrap();
             let ready = s.new_terminals != 0;
             s.new_terminals = s.new_terminals.saturating_sub(1);
             return Ok(u32::from(ready));
+        }
+        // Raster spans are process-local RAM, not window handles. No pointers
+        // are retained, and page-aware operations preserve fork COW isolation.
+        if op == 15 || op == 16 {
+            let (width, height, dst_stride, src_stride) = (a[2], a[3], a[4], a[5]);
+            if width == 0
+                || height == 0
+                || width > MAX_WIDTH
+                || height > MAX_HEIGHT
+                || dst_stride < width
+                || (op == 16 && src_stride < width)
+            {
+                return Err(22);
+            }
+            let count = (height - 1)
+                .checked_mul(dst_stride)
+                .and_then(|n| n.checked_add(width))
+                .ok_or(14u16)?;
+            let dst = span(a[0], count as usize)?;
+            if dst < super::BANK {
+                return Err(14);
+            }
+            if op == 15 {
+                if dst_stride == width {
+                    self.memory.fill(dst..dst + count as usize, a[6] as u16);
+                } else {
+                    for row in 0..height {
+                        let at = dst + (row * dst_stride) as usize;
+                        self.memory.fill(at..at + width as usize, a[6] as u16);
+                    }
+                }
+            } else {
+                let count = (height - 1)
+                    .checked_mul(src_stride)
+                    .and_then(|n| n.checked_add(width))
+                    .ok_or(14u16)?;
+                let src = span(a[1], count as usize)?;
+                if src < super::BANK {
+                    return Err(14);
+                }
+                let dest_count = (height - 1) * dst_stride + width;
+                if dst < src + count as usize && src < dst + dest_count as usize {
+                    return Err(22);
+                }
+                if src_stride == width && dst_stride == width {
+                    self.memory.copy_within(src..src + count as usize, dst);
+                } else {
+                    let mut line = vec![0; width as usize];
+                    for row in 0..height {
+                        self.memory
+                            .read_into(src + (row * src_stride) as usize, &mut line);
+                        self.memory
+                            .write_from(dst + (row * dst_stride) as usize, &line);
+                    }
+                }
+            }
+            return Ok(0);
         }
         if op == 1 {
             let (w, h) = (a[0], a[1]);
@@ -142,8 +249,11 @@ impl Runtime {
                     closed: false,
                     flags: a[3] & 2,
                     resize: None,
+                    resize_in_flight: None,
                     activation: 0,
                     configuration: 0,
+                    pointer_requested: false,
+                    desktop_pointer: None,
                 },
             );
             a[0] = id;
@@ -153,8 +263,68 @@ impl Runtime {
             return Ok(0);
         }
         let mut s = shared.lock().unwrap();
+        if matches!(op, 19 | 20) {
+            if !s.windows.contains_key(&a[0]) { return Err(22); }
+            let count = a[2] as usize;
+            if count > CLIPBOARD_MAX { return Err(22); }
+            if op == 19 {
+                if s.clipboard.len() > count { a[2] = s.clipboard.len() as u32; return Err(7); }
+                let cells: Vec<u16> = s.clipboard.bytes().map(u16::from).collect();
+                write_cells(self, a[1], &cells)?;
+                a[2] = cells.len() as u32;
+            } else {
+                let mut bytes = Vec::with_capacity(count);
+                if count != 0 {
+                    let start = span(a[1], count)?;
+                    for i in 0..count {
+                        let c = self.memory.read(start+i);
+                        if c == 0 || c > 255 { return Err(22); }
+                        bytes.push(c as u8);
+                    }
+                }
+                let text = String::from_utf8(bytes).map_err(|_|22u16)?;
+                s.clipboard.clone_from(&text);
+                s.clipboard_publish = Some(text);
+            }
+            return Ok(0);
+        }
         let window = s.windows.get_mut(&a[0]).ok_or(22u16)?;
         match op {
+            17 | 18 => {
+                let (width, height, stride) = (a[3], a[4], a[5]);
+                if a[1] != 0 || a[2] != 0 || width == 0 || height == 0
+                    || width > MAX_WIDTH || height > MAX_HEIGHT || stride < width
+                { return Err(22); }
+                let count = (height - 1).checked_mul(stride)
+                    .and_then(|n| n.checked_add(width)).ok_or(14u16)?;
+                let start = span(a[6], count as usize)?;
+                let palette = if op == 18 {
+                    let start = span(a[7], 256)?;
+                    Some((0..256).map(|i| self.memory.read(start+i)).collect::<Vec<_>>())
+                } else { None };
+                // Read compatibility RAM once per source pixel. Scaling the
+                // output in a guest loop multiplies expensive C16 accesses.
+                let mut source = Vec::with_capacity((width * height) as usize);
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel = self.memory.read(start + (y * stride + x) as usize);
+                        source.push(palette.as_ref().map_or(pixel, |p| p[(pixel & 255) as usize]));
+                    }
+                }
+                let (mut vw, mut vh) = (window.width, window.width * height / width);
+                if vh > window.height { vh = window.height; vw = window.height * width / height; }
+                vw = vw.max(1); vh = vh.max(1);
+                let (left, top) = ((window.width - vw) / 2, (window.height - vh) / 2);
+                let columns: Vec<_> = (0..vw).map(|x| (x * width / vw) as usize).collect();
+                window.back.fill(0);
+                for y in 0..vh {
+                    let row = (y * height / vh * width) as usize;
+                    let dest = ((top + y) * window.width + left) as usize;
+                    for (x, &column) in columns.iter().enumerate() {
+                        window.back[dest + x] = source[row + column];
+                    }
+                }
+            }
             2 => {
                 s.windows.remove(&a[0]);
             }
@@ -257,6 +427,7 @@ impl Runtime {
                     out.extend([9, 0, 0, window.input.buttons]);
                     out.extend([0; 12]);
                 } else if let Some((width, height)) = window.resize.take() {
+                    window.resize_in_flight = Some((width, height));
                     pair(&mut out, window.input.sequence);
                     out.extend([10, 0, 0, 0]);
                     pair(&mut out, width);
@@ -321,14 +492,22 @@ impl Runtime {
                 if window.resize == Some((width, height)) {
                     window.resize = None;
                 }
+                window.resize_in_flight = None;
                 if window.flags & 2 == 0 && flags & 2 != 0 {
                     window.transition(InputTransition::Focus { focused: false });
                 }
                 window.flags = flags;
+                if flags & 1 != 0 { window.resize=None;window.resize_in_flight=None; }
                 window.configuration = window.configuration.wrapping_add(1);
             }
             13 => {
                 window.activation = window.activation.wrapping_add(1);
+            }
+            14 => {
+                window.pointer_requested = true;
+                let (x, y) = window.desktop_pointer.ok_or(11u16)?;
+                a[1] = x as u32;
+                a[2] = y as u32;
             }
             _ => return Err(42),
         }
@@ -416,6 +595,7 @@ pub(super) fn run(
                                     w.flags & 1 == 0,
                                     w.activation,
                                     w.configuration,
+                                    w.resize.is_some() || w.resize_in_flight.is_some(),
                                 )
                             })
                             .collect()
@@ -430,14 +610,18 @@ pub(super) fn run(
                         resizable,
                         activation,
                         configuration,
+                        resize_pending,
                     ) in descriptions
                     {
                         if !views.contains_key(&id) {
                             let window = WindowBuilder::new()
                                 .with_title(&title)
                                 .with_inner_size(LogicalSize::new(width, height))
+                                .with_min_inner_size(LogicalSize::new(8, 16))
+                                .with_max_inner_size(LogicalSize::new(MAX_WIDTH, MAX_HEIGHT))
                                 .with_resizable(resizable)
                                 .build(target)?;
+                            window.set_ime_allowed(true);
                             let size = window.inner_size();
                             let pixels = Pixels::new(
                                 width,
@@ -473,7 +657,11 @@ pub(super) fn run(
                         if view.configuration != configuration {
                             // A refused guest resize acknowledges the old size too.
                             // Restore native geometry even when pixels did not change.
-                            view.window.set_inner_size(LogicalSize::new(width, height));
+                            let current = view.window.inner_size()
+                                .to_logical::<u32>(view.window.scale_factor());
+                            if !resize_pending && (current.width, current.height) != (width, height) {
+                                view.window.set_inner_size(LogicalSize::new(width, height));
+                            }
                             view.configuration = configuration;
                         }
                         if view.resizable != resizable {
@@ -491,6 +679,28 @@ pub(super) fn run(
                     #[cfg(target_os = "macos")]
                     {
                         use winit::platform::macos::WindowExtMacOS;
+                        for (&id, view) in &views {
+                            let requested = shared
+                                .lock()
+                                .unwrap()
+                                .windows
+                                .get(&id)
+                                .is_some_and(|w| w.pointer_requested);
+                            if requested {
+                                let p = super::hosted_graphics_macos::pointer(&view.window);
+                                let position = (
+                                    p.0 * view.window.scale_factor() as f32,
+                                    p.1 * view.window.scale_factor() as f32,
+                                );
+                                let (x, y) = match view.pixels.window_pos_to_pixel(position) {
+                                    Ok((x, y)) => (x as i32, y as i32),
+                                    Err((x, y)) => (x as i32, y as i32),
+                                };
+                                if let Some(w) = shared.lock().unwrap().windows.get_mut(&id) {
+                                    w.desktop_pointer = Some((x, y));
+                                }
+                            }
+                        }
                         super::hosted_graphics_macos::update(
                             shared.clone(),
                             views
@@ -509,9 +719,16 @@ pub(super) fn run(
                         }
                         let frame = {
                             let s = shared.lock().unwrap();
-                            s.windows.get(&id).map(|w| (w.front.clone(), w.sequence))
+                            s.windows.get(&id).map(|w| (w.front.clone(), w.sequence, (w.width,w.height)))
                         };
-                        if let Some((frame, sequence)) = frame {
+                        if let Some((frame, sequence, dimensions)) = frame {
+                            // The guest can accept another resize between the
+                            // geometry pass and this redraw. Never reinterpret
+                            // its new frame with the previous texture stride.
+                            if dimensions != view.dimensions {
+                                view.window.request_redraw();
+                                return Ok(());
+                            }
                             if sequence != view.sequence {
                                 for (pixel, c) in view
                                     .pixels
@@ -559,6 +776,10 @@ pub(super) fn run(
                                                     | winit::event::VirtualKeyCode::Q
                                                     | winit::event::VirtualKeyCode::H
                                                     | winit::event::VirtualKeyCode::W
+                                                    | winit::event::VirtualKeyCode::C
+                                                    | winit::event::VirtualKeyCode::V
+                                                    | winit::event::VirtualKeyCode::X
+                                                    | winit::event::VirtualKeyCode::A
                                             )
                                         );
                                     if menu_shortcut {
@@ -569,10 +790,32 @@ pub(super) fn run(
                                     .virtual_keycode
                                     .and_then(rvm::display_rgb565::key_usage)
                                 {
-                                    w.transition(InputTransition::Key {
-                                        key,
-                                        down: input.state == ElementState::Pressed,
+                                    #[allow(deprecated)]
+                                    let text = rvm::display_rgb565::text_usage(key)
+                                        && !input.modifiers.ctrl()
+                                        && !input.modifiers.logo();
+                                    let down = input.state == ElementState::Pressed;
+                                    w.transition(if text {
+                                        InputTransition::TextKey { key, down }
+                                    } else {
+                                        InputTransition::Key { key, down }
                                     });
+                                }
+                            }
+                            WindowEvent::Ime(winit::event::Ime::Commit(text)) => {
+                                if w.input.held(224) || w.input.held(228) || w.input.held(227) || w.input.held(231) { return Ok(()); }
+                                for ch in text.chars().filter(|ch| !ch.is_control()) {
+                                    w.transition(InputTransition::Text { scalar: ch as u32 });
+                                }
+                            }
+                            WindowEvent::ReceivedCharacter(ch) => {
+                                if !ch.is_control()
+                                    && !w.input.held(224)
+                                    && !w.input.held(228)
+                                    && !w.input.held(227)
+                                    && !w.input.held(231)
+                                {
+                                    w.transition(InputTransition::Text { scalar: ch as u32 });
                                 }
                             }
                             WindowEvent::ModifiersChanged(mods) => {
@@ -694,6 +937,109 @@ mod tests {
         a[0]
     }
     #[test]
+    fn clipboard_is_bounded_utf8_atomic_and_validated_before_guest_writes() {
+        let mut rt=Runtime::new();let id=create(&mut rt,3,2);
+        let bytes="URL Ж🙂".as_bytes();let start=3*BANK-2;
+        for (i,b) in bytes.iter().enumerate(){rt.memory.write(start+i,u16::from(*b));}
+        let mut a=[id,super::super::memory::pointer(start) as u32,bytes.len() as u32,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(20,&mut a).unwrap();
+        assert_eq!(rt.graphics.shared.lock().unwrap().clipboard,"URL Ж🙂");
+        a[0]=id+1;assert_eq!(rt.graphics_call(20,&mut a),Err(22));a[0]=id;
+        rt.memory.write(start,0x100);assert_eq!(rt.graphics_call(20,&mut a),Err(22));
+        rt.memory.write(start,0xff);assert_eq!(rt.graphics_call(20,&mut a),Err(22));
+        rt.memory.write(start,0);assert_eq!(rt.graphics_call(20,&mut a),Err(22));
+        a[2]=CLIPBOARD_MAX as u32+1;assert_eq!(rt.graphics_call(20,&mut a),Err(22));
+        assert_eq!(rt.graphics.shared.lock().unwrap().clipboard,"URL Ж🙂");
+        a[1]=0x40000;a[2]=2;rt.memory.write(4*BANK,0xbeef);
+        assert_eq!(rt.graphics_call(19,&mut a),Err(7));assert_eq!(rt.memory.read(4*BANK),0xbeef);
+        a[2]=CLIPBOARD_MAX as u32;rt.graphics_call(19,&mut a).unwrap();assert_eq!(a[2],bytes.len() as u32);
+        for (i,b) in bytes.iter().enumerate(){assert_eq!(rt.memory.read(4*BANK+i),u16::from(*b));}
+        a[1]=0;a[2]=0;rt.graphics_call(20,&mut a).unwrap();
+        assert_eq!(rt.graphics.shared.lock().unwrap().clipboard_publish,Some(String::new()));
+    }
+    #[test]
+    fn edit_actions_preserve_input_order_and_never_manufacture_control_keys() {
+        let mut rt=Runtime::new();let id=create(&mut rt,3,2);
+        {let mut s=rt.graphics.shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+         w.transition(InputTransition::Text{scalar:'a' as u32});w.action(2);
+         w.transition(InputTransition::Text{scalar:'b' as u32});
+         assert_eq!(w.input.events.iter().map(|e|e.kind).collect::<Vec<_>>(),[11,12,11]);
+         assert!(w.input.held.iter().all(|x|*x==0)&&w.input.validate(0));}
+        let mut a=[id,0x30000,0,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(8,&mut a).unwrap();rt.graphics_call(8,&mut a).unwrap();
+        assert_eq!(rt.memory.read(3*BANK+5),12);assert_eq!(rt.memory.read(3*BANK+7),2);
+    }
+    #[test]
+    fn dragging_back_to_the_original_size_supersedes_an_in_flight_resize() {
+        let mut rt=Runtime::new();
+        let id=create(&mut rt,600,420);
+        rt.graphics.shared.lock().unwrap().windows.get_mut(&id).unwrap().request_resize(1280,800);
+        let mut event=[id,0x30000,0,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(8,&mut event).unwrap();
+        rt.graphics.shared.lock().unwrap().windows.get_mut(&id).unwrap().request_resize(600,420);
+        let mut ack=[id,1280,800,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(12,&mut ack).unwrap();
+        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&id].resize,Some((600,420)));
+        rt.graphics_call(8,&mut event).unwrap();
+        assert_eq!(rt.memory.read(3*BANK+9),600);
+        assert_eq!(rt.memory.read(3*BANK+11),420);
+        ack[1]=600;ack[2]=420;rt.graphics_call(12,&mut ack).unwrap();
+        assert_eq!(rt.graphics_call(10,&mut event),Ok(0));
+    }
+    #[test]
+    fn full_hd_resize_preserves_overlap_and_rejects_invalid_geometry_atomically() {
+        let mut rt=Runtime::new();let id=create(&mut rt,3,2);
+        let mut fill=[id,0,0,3,2,0xabcd,0,0,0,0,0,0];rt.graphics_call(5,&mut fill).unwrap();
+        let mut ack=[id,MAX_WIDTH,MAX_HEIGHT,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(12,&mut ack).unwrap();
+        {let s=rt.graphics.shared.lock().unwrap();let w=&s.windows[&id];
+         assert_eq!(w.back.len(),(MAX_WIDTH*MAX_HEIGHT)as usize);
+         assert_eq!(w.back[MAX_WIDTH as usize+2],0xabcd);assert_eq!(w.back[MAX_WIDTH as usize+3],0);}
+        ack[1]=MAX_WIDTH+1;assert_eq!(rt.graphics_call(12,&mut ack),Err(22));
+        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&id].width,MAX_WIDTH);
+        ack[1]=2;ack[2]=1;rt.graphics_call(12,&mut ack).unwrap();
+        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&id].back,vec![0xabcd;2]);
+        fill[3]=3;assert_eq!(rt.graphics_call(5,&mut fill),Err(22));
+    }
+    #[test]
+    fn scaled_upload_fits_letterboxes_and_validates_before_modifying_pixels() {
+        let mut rt = Runtime::new();
+        let id = create(&mut rt, 8, 8);
+        let start = 3 * BANK - 2;
+        for (i, value) in [1, 2, 3, 4, 5, 6, 7, 8].iter().enumerate() {
+            rt.memory.write(start + i, *value);
+        }
+        let mut a = [id, 0, 0, 4, 2, 4, super::super::memory::pointer(start) as u32, 0, 0, 0, 0, 0];
+        rt.graphics_call(17, &mut a).unwrap();
+        let before = rt.graphics.shared.lock().unwrap().windows[&id].back.clone();
+        assert_eq!(&before[..16], &[0;16]);
+        assert_eq!(&before[16..24], &[1,1,2,2,3,3,4,4]);
+        assert_eq!(&before[32..40], &[5,5,6,6,7,7,8,8]);
+        assert_eq!(&before[48..], &[0;16]);
+        a[5] = 3; assert_eq!(rt.graphics_call(17, &mut a), Err(22));
+        a[5] = 4; a[6] = 0; assert_eq!(rt.graphics_call(17, &mut a), Err(14));
+        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&id].back, before);
+        a[6] = super::super::memory::pointer(start) as u32;
+        a[7] = 0;
+        assert_eq!(rt.graphics_call(18, &mut a), Err(14));
+        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&id].back, before);
+        for i in 0..256 { rt.memory.write(4 * BANK + i, i as u16 * 16); }
+        a[7] = 0x40000;
+        rt.graphics_call(18, &mut a).unwrap();
+        assert_eq!(&rt.graphics.shared.lock().unwrap().windows[&id].back[16..24], &[16,16,32,32,48,48,64,64]);
+    }
+    #[test]
+    fn unicode_text_survives_the_gx_cell_transport() {
+        let mut rt = Runtime::new();
+        let id = create(&mut rt, 3, 2);
+        rt.graphics.shared.lock().unwrap().windows.get_mut(&id).unwrap()
+            .transition(InputTransition::Text { scalar: 0x1f642 });
+        let mut request = [0; 12]; request[0] = id; request[1] = 0x30000;
+        rt.graphics_call(8, &mut request).unwrap();
+        assert_eq!(rt.memory.read(3 * BANK + 5), 11);
+        assert_eq!(u32::from(rt.memory.read(3 * BANK + 13)) | (u32::from(rt.memory.read(3 * BANK + 14)) << 16), 0x1f642);
+    }
+    #[test]
     fn surfaces_copy_overlap_publish_snapshots_and_reject_stale_handles() {
         let mut rt = Runtime::new();
         let id = create(&mut rt, 3, 2);
@@ -763,7 +1109,7 @@ mod tests {
     #[test]
     fn resource_and_pointer_limits_are_bounded() {
         let mut rt = Runtime::new();
-        let mut a = [1025, 1, 0x10000, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let mut a = [MAX_WIDTH+1, 1, 0x10000, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert_eq!(rt.graphics_call(1, &mut a), Err(22));
         for _ in 0..MAX_WINDOWS {
             create(&mut rt, 1, 1);
@@ -802,6 +1148,27 @@ mod tests {
             .transition(InputTransition::Close);
         rt.graphics_call(8, &mut a).unwrap();
         assert_eq!(rt.memory.read(3 * BANK + 5), 8);
+    }
+    #[test]
+    fn desktop_pointer_is_signed_window_relative_and_does_not_inject_input() {
+        let mut rt = Runtime::new();
+        let id = create(&mut rt, 20, 10);
+        let other = create(&mut rt, 20, 10);
+        let mut a = [0; 12];
+        a[0] = id;
+        assert_eq!(rt.graphics_call(14, &mut a), Err(11));
+        {
+            let mut s = rt.graphics.shared.lock().unwrap();
+            assert!(s.windows[&id].pointer_requested);
+            assert!(!s.windows[&other].pointer_requested);
+            s.windows.get_mut(&id).unwrap().desktop_pointer = Some((-600, 1200));
+        }
+        rt.graphics_call(14, &mut a).unwrap();
+        assert_eq!((a[1] as i32, a[2] as i32), (-600, 1200));
+        assert_eq!(rt.graphics_call(10, &mut a), Ok(0));
+        let s = rt.graphics.shared.lock().unwrap();
+        assert_eq!((s.windows[&id].input.x, s.windows[&id].input.y), (0, 0));
+        assert_eq!(s.windows[&id].input.buttons, 0);
     }
     #[test]
     fn resize_requests_coalesce_per_window_and_owner_acknowledges_geometry() {
@@ -847,7 +1214,10 @@ mod tests {
         let mut activate = [0; 12];
         activate[0] = other;
         rt.graphics_call(13, &mut activate).unwrap();
-        assert_eq!(rt.graphics.shared.lock().unwrap().windows[&other].activation, 1);
+        assert_eq!(
+            rt.graphics.shared.lock().unwrap().windows[&other].activation,
+            1
+        );
         a[3] = 4;
         assert_eq!(rt.graphics_call(12, &mut a), Err(22));
         a[3] = 1;

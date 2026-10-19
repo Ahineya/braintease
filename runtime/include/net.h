@@ -1,6 +1,7 @@
 #ifndef RIPPLE_NET_H
 #define RIPPLE_NET_H
 #include <vm_network.h>
+#include <ripple_net_limits.h>
 
 /* Guest protocols, one wire octet per C byte/cell. No heap or host sockets.
  * Polling and callbacks are synchronous; serialize use of each context. */
@@ -22,16 +23,18 @@
 #define NET_CANCELLED 15
 #define NET_UNSUPPORTED 16
 #ifdef RIPPLE_FUZIX_NETWORK
-#define NET_TCP_CONNECTIONS 16
-#define NET_TCP_LISTENERS 4
+#define NET_TCP_CONNECTIONS RIPPLE_NET_TCP_CONNECTIONS
+#define NET_TCP_LISTENERS RIPPLE_NET_TCP_LISTENERS
+#define NET_TCP_WAIT_SLOTS RIPPLE_NET_TIME_WAIT
+#define NET_UDP_PORTS RIPPLE_NET_UDP_PORTS
 #else
 #define NET_TCP_CONNECTIONS 4
 #define NET_TCP_LISTENERS 2
-#endif
 #define NET_TCP_WAIT_SLOTS 32
+#define NET_UDP_PORTS 4
+#endif
 #define NET_FRAME_SIZE 1514
 #define NET_ARP_ENTRIES 4
-#define NET_UDP_PORTS 4
 #define NET_TX_HISTORY 8
 #define NET_ARP_TTL_MS 60000UL
 #define NET_ARP_COOLDOWN_MS 5000UL
@@ -97,7 +100,7 @@ struct NetContext {
     NetUdpPort ports[NET_UDP_PORTS];
     unsigned short next_arp, pending, packet_id, random;
     unsigned long now;
-    unsigned long rejected, icmp_requests;
+    unsigned long rejected, icmp_requests, received_frames;
     unsigned short event, identifier, sequence, payload_length;
     unsigned char peer[4];
     const unsigned char *payload;

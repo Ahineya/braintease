@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #ifndef __KDATA_DOT_H__
 #define __KDATA_DOT_H__
 
@@ -23,10 +24,11 @@ extern inoptr root;        /* Address of root dir in inode table */
 extern uint16_t root_dev;  /* Device number of root filesystem. */
 extern uint16_t swap_dev;  /* Device number used for swap */
 
-extern struct blkbuf bufpool[];
 #ifndef CONFIG_DYNAMIC_BUFPOOL
+extern struct blkbuf bufpool[];
 #define bufpool_end (bufpool + NBUFS)	/* Define so its a compile time const */
 #else
+extern struct blkbuf *bufpool;
 extern struct blkbuf *bufpool_end;
 #endif
 
@@ -88,7 +90,7 @@ extern struct runload loadavg[];
 #if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 #define FUZIX_SYSCALL_COUNT 80
 #else
-#define FUZIX_SYSCALL_COUNT 68
+#define FUZIX_SYSCALL_COUNT 71
 #endif
 
 typedef arg_t (*syscall_t)(void);

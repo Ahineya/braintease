@@ -1,0 +1,92 @@
+// Bounded patch streaming. Pool strings across commands; flush only at a size
+// boundary. The empty final commit performs no host import.
+import { KeyIndex, key_index } from "std/browser_keys";
+extern "C" {
+    fn ripple_dom_begin();
+    fn ripple_dom_abort();
+    fn ripple_dom_commit();
+    fn ripple_dom_string(text: *const u16, cells: u32) -> u16;
+    fn ripple_dom_command(op: u16, a: u16, b: u16, c: u16, d: u16);
+}
+
+/// An owned, bounded DOM patch stream with per-chunk string pooling.
+export struct Batch {
+    /// Aborts any unfinished patch stream when the batch is dropped.
+    guard: Owned<i16>,
+    /// Number of commands in the current chunk.
+    commands: usize,
+    /// Total commands emitted across all chunks in this batch.
+    total: u32,
+    /// String-pool cells used by the current chunk.
+    cells: usize,
+    /// Pooled strings and their chunk-local identifiers.
+    strings: KeyIndex
+}
+
+/// Begins a patch stream; finish commits it and dropping it aborts pending work.
+export fn batch() -> Batch {
+    ripple_dom_begin();
+    Batch { guard: owned(0, fn(n: &mut i16) => {
+        ripple_dom_abort();
+    }), commands: 0, total: 0, cells: 0, strings: key_index(16) }
+}
+
+fn flush(out: &mut Batch) {
+    ripple_dom_commit();
+    ripple_dom_begin();
+    out.commands = 0;
+    out.cells = 0;
+    out.strings = key_index(16);
+}
+
+fn pool(out: &mut Batch, text: String) -> u16 {
+    match out.strings.find(text) {
+        Some(id) => {
+            return id as u16;
+        },
+        None => {}
+    }
+    let mut cells: Vec<u16> = [];
+    for (i in 0..text.len()) {
+        cells.push(text[i] as u16);
+    }
+    cells.push(0);
+    let id = unsafe {
+        ripple_dom_string(&cells[0], text.len() as u32)
+    };
+    out.cells += text.len() + 1;
+    out.strings.insert(text, id as usize);
+    id
+}
+
+impl Batch {
+    /// Appends a protocol command, pools its strings, and flushes at chunk boundaries.
+    export fn emit(&mut self, op: u16, a: u16, b: u16, c: u16, d: u16, strings: Vec<String>) {
+        let mut needed: usize = 0;
+        for (text in strings) {
+            needed += text.len() + 1;
+        }
+        if (self.commands == 1000 || self.cells + needed > 8192) {
+            flush(self);
+        }
+        let mut b = b;
+        let mut c = c;
+        if (!strings.is_empty()) {
+            if (op == 5) {
+                c = pool(self, strings[0]);
+            } else {
+                b = pool(self, strings[0]);
+            }
+            if (strings.len() == 2) {
+                c = pool(self, strings[1]);
+            }
+        }
+        ripple_dom_command(op, a, b, c, d);
+        self.commands += 1;
+        self.total += 1;
+    }
+    /// Commits the final chunk and consumes the batch.
+    export fn finish(self) {
+        ripple_dom_commit();
+    }
+}

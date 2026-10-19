@@ -64,6 +64,28 @@ static void checks(void) {
     GdBlit(display,203,203,13,13,display,200,200,MWROP_COPY);
     for(y=203;y<216;y++)for(x=203;x<216;x++)
         C(display->ReadPixel(display,x,y)==((x>=207&&x<211&&y>=205&&y<213)?pattern[(y-200)*16+x-200]:pattern[(y-203)*16+x-203]));
+    /* Large, clipped moves must cross many scratch stripes in either vertical
+     * direction. The hole retains its original pixels; every other pixel
+     * must come from the pre-move source. Also cover horizontal-only overlap. */
+    {
+        int dir,dx,dy;unsigned expected;
+        for(dir=0;dir<3;dir++){
+            reset_clip();
+            for(y=0;y<128;y++)for(x=0;x<200;x++)
+                display->DrawPixel(display,300+x,100+y,0x1000+y*200+x);
+            dx=dir==2?7:3;dy=dir==0?9:dir==1?-9:0;
+            r=GdAllocRectRegion(300+dx,100+dy,460+dx,196+dy);C(r!=NULL);
+            hole.left=340;hole.right=375;hole.top=115;hole.bottom=175;
+            GdSubtractRectFromRegion(&hole,r);GdSetClipRegion(display,r);
+            GdBlit(display,300+dx,100+dy,160,96,display,300,100,MWROP_COPY);
+            for(y=100+dy;y<196+dy;y++)for(x=300+dx;x<460+dx;x++){
+                expected=0x1000+(y-100-dy)*200+x-300-dx;
+                if(x>=hole.left&&x<hole.right&&y>=hole.top&&y<hole.bottom)
+                    expected=0x1000+(y-100)*200+x-300;
+                C(display->ReadPixel(display,x,y)==expected);
+            }
+        }
+    }
     reset_clip();puts("NANOX_ENGINE_OK");
 }
 static void scene(void) {

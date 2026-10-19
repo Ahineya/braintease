@@ -40,6 +40,11 @@ pub struct Module {
     /// `extern "C" { fn ...; }` declarations. The bodies live in C.
     pub externs: Vec<ExternDecl>,
     pub imports: Vec<Import>,
+    pub macro_imports: Vec<Import>,
+    pub macro_exports: Vec<String>,
+    pub item_macros: Vec<crate::macros::syntax::Invocation>,
+    pub proc_macros: Vec<String>,
+    pub macro_expansion: Option<std::sync::Arc<crate::macros::source::ExpansionData>>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +53,13 @@ pub struct Import {
     pub names: Vec<ImportItem>,
     pub path: String,
     pub path_span: Span,
+}
+
+impl Import {
+    /// Compiler dependencies have no written import token or editable range.
+    pub fn is_implicit(&self) -> bool {
+        self.span.start == self.span.end
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +145,8 @@ pub struct Ctor {
 
 #[derive(Debug, Clone)]
 pub struct TypeParam {
+    /// Zero for value types; otherwise the number of value-type arguments.
+    pub arity: usize,
     pub bounds: Vec<(String, Span)>,
     pub name: String,
     pub span: Span,
@@ -189,6 +203,7 @@ pub enum ParsedTy {
         args: Vec<ParsedTy>,
     },
     Func {
+        once: bool,
         span: Span,
         params: Vec<ParsedTy>,
         ret: Box<ParsedTy>,
@@ -302,12 +317,13 @@ pub struct Expr {
 
 #[derive(Debug, Clone)]
 pub enum ExprKind {
+    Macro(crate::macros::syntax::Invocation),
     Await(Box<Expr>),
     Int(i64),
     /// Decimal spelling. The checker chooses `f32` or `f64`.
     Float(String),
     Bool(bool),
-    /// A string literal. It is only valid as an argument of `print` or `println`.
+    /// A string literal in UTF-16 code units; checking encodes it into UTF-8.
     Str(Vec<u16>),
     /// `c"..."`. A `*const c_char` pointing at static cells plus a trailing zero.
     CStr(Vec<u16>),
@@ -386,6 +402,7 @@ pub enum ExprKind {
         ty: ParsedTy,
     },
     Lambda {
+        once: bool,
         params: Vec<Param>,
         body: Box<Expr>,
     },
@@ -559,6 +576,8 @@ impl BinOp {
 /// A statically dispatched interface. Signatures deliberately have no bodies.
 #[derive(Debug, Clone)]
 pub struct Trait {
+    /// Kind of Self: zero for a value trait, positive for a constructor trait.
+    pub arity: usize,
     pub span: Span,
     pub name: String,
     pub name_span: Span,

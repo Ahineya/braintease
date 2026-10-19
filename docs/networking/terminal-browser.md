@@ -6,8 +6,8 @@ a browser plan with initial implementation work. The shared
 now pass guest tests on both targets. The [Lynx port](../../ports/lynx/README.md)
 compiles all 82 configured source units with RCC's own preprocessor. Both
 native Fuse-X and RVM/FUZIX link and run Lynx, passing version and two local HTML
-dump tests. Its roughly 231,000 static cells use four banks on either target;
-the packages are about 27 MiB. Guest HTTP, forms and console/Telnet navigation
+dump tests. With guest TLS it uses roughly 308,000 static cells across five banks;
+the packages are about 39 MiB native and 43 MiB on RVM. Guest HTTP, forms and console/Telnet navigation
 now have an independent Ethernet acceptance harness. The port adds complete
 request writes, a 64 KiB response limit and small-cache defaults. Browser heap
 arena measurements are opt-in; stack peak and a broader hostile-HTML audit remain
@@ -15,7 +15,7 @@ open.
 It covers both [FUZIX on RVM](../../ports/fuzix/README.md) and
 [native Fuse-X](../../fuse-x/README.md).
 
-## Current HTTP implementation
+## Current HTTP and HTTPS implementation
 
 The [port README](../../ports/lynx/README.md) gives build, install and test commands.
 Both normal launchers include Lynx in their app build and image-update paths,
@@ -34,8 +34,9 @@ state before suspension and repaints after `fg`, using its own signal handler
 over the shared curses primitives.
 
 Defaults are two cached documents, a 2,048-character URL bound and 15-second
-connect/read waits. The hard transfer cap is 65,536 wire octets **per HTTP
-response**, including headers and chunk framing; it also applies without a
+connect/read waits. The hard transfer cap is 65,536 HTTP octets **per response**, including headers
+and chunk framing; HTTPS counts these after TLS decryption, excluding TLS
+record overhead. It also applies without a
 Content-Length. This does not bound every possible HTML layout allocation.
 `LYNX_RESOURCE_REPORT=1` reports the guest heap arena's high-water reservation;
 `build/runtime-*.json` retains acceptance measurements. Stack peak is not yet
@@ -126,7 +127,7 @@ confuse those results with the host checks above.
 | Terminal | Termios, ANSI output, terminal dimensions, PTYs and job control | Screen library integration, key decoding, editing and resize behavior |
 | Memory | Bank-spanning heap; RVM MMU process data/heap window is up to 1,024,000 C cells | Measure renderer, tables, stack, cache and page limits |
 | Toolchain | Existing multi-file C applications run on RVM and native | Audit browser assumptions about integer widths, C bytes and library APIs |
-| TLS | Not implemented in this port | Independent library/ABI, entropy, certificate and validation work |
+| TLS | Shared guest wolfSSL, HTTPS `htget` and Lynx; see [the TLS port](../../ports/tls/README.md) | Broader interoperability and hostile-input coverage |
 
 The FUZIX `htget` implementation and the freestanding runtime HTTP helper are
 different layers. Their feature sets and buffering limits are not interchangeable.
@@ -135,8 +136,8 @@ HTTP implementation, rather than being forced through the RFL buffered HTTP API.
 See [htget.c](../../ports/fuzix/upstream/Applications/netd/htget.c),
 [runtime HTTP](http.md) and [RFL HTTP](rfl-library.md).
 
-The guest has bounded network pools: the OS profile has 16 Internet socket
-slots, 16 TCP connections and four listeners. These are shared by applications;
+The guest has bounded network pools: the OS profile has 64 Internet socket
+slots, 64 TCP connections, sixteen listeners and sixteen bound UDP ports. These are shared by applications;
 Telnet sessions and DNS also consume resources. Begin with one page load
 at a time, no background downloads or prefetch, a small bounded history/cache,
 and prompt connection closure. A browser used through Telnet must leave room
@@ -292,14 +293,16 @@ tunnel only relays bytes and does not supply the missing TLS implementation.
    primitive and review the adapted code's timing properties.
 2. **Secure randomness.** The existing
    [socket code](../../ports/fuzix/ripple/sockets.c) explicitly describes the VM
-   RNG as non-cryptographic. Provide a defined entropy interface, preferably
-   backed by the host OS cryptographic random source on RVM and native. Define
-   failure behavior and seed the selected library's cryptographic generator;
-   clocks and deterministic VM seeds are not adequate substitutes.
+   RNG as non-cryptographic. The [host entropy device](../arch/entropy.md)
+   now supplies OS cryptographic octets through `/dev/urandom` on RVM/FUZIX
+   and native Fuse-X, with failure and MMU/COW tests. Use that device to seed
+   the cryptographic library; clocks and deterministic VM seeds are not
+   adequate substitutes.
 3. **Server authentication.** Supply trusted roots, certificate-chain and
    hostname verification, validity-date checks and SNI for shared-IP sites.
-   Calendar time exists, but the port still needs usable time integration and
-   a policy for installing/updating the trust store. Store certificates as
+   The client now uses the guest UTC calendar and the pinned guest trust file
+   `/etc/ssl/cert.pem`; updates preserve locally installed trust files and
+   require deliberate replacement when refreshing roots. Store certificates as
    files where practical instead of filling the global-data bank. Disabling
    verification is not completion of the HTTPS milestone.
 4. **TLS-aware I/O.** Connect library send/receive callbacks to guest sockets.
@@ -314,11 +317,11 @@ tunnel only relays bytes and does not supply the missing TLS implementation.
    measured fit. Benchmark handshake arithmetic on RVM and native separately;
    native execution retains C16 ABI constraints.
 
-Mbed TLS and wolfSSL are candidates for a source/configuration audit, not
-verified C16 ports or a final dependency decision. Evaluate a maintained
-configuration with TLS 1.2/1.3, the browser's required API and algorithms, its
-license, memory use and porting surface. Avoid implementing a new TLS protocol
-or cryptographic library for this browser.
+The subsequent source audit selected wolfSSL 5.9.4. Its wide-byte wolfCrypt
+support provided a starting point, with additional C16 TLS/X.509 adaptations
+and compiler fixes. [The TLS port](../../ports/tls/README.md) records the pinned
+source, configuration, trust bundle and actual guest acceptance status. The
+library runs in guest userspace; it is shared by the native and RVM builds.
 
 References: [Mbed TLS integration](https://mbed-tls.readthedocs.io/en/latest/kb/how-to/mbedtls-tutorial/),
 [entropy requirements](https://mbed-tls.readthedocs.io/en/latest/kb/how-to/add-entropy-sources-to-entropy-pool/),
@@ -327,10 +330,10 @@ References: [Mbed TLS integration](https://mbed-tls.readthedocs.io/en/latest/kb/
 
 ### First TLS milestone: HTTPS htget
 
-Prove the selected approach with an HTTPS-capable `htget` before integrating
-it into the browser. A blocking downloader can establish TLS without waiting
-for select to be finished; interactive browser integration needs responsive
-TLS-aware waiting and cancellation.
+The first consumer is HTTPS-capable `htget`, before integrating the transport
+into Lynx. It uses the implemented fine monotonic clock and `select()` for
+bidirectional TLS waits and cancellation. Browser integration must also check
+decrypted plaintext buffered inside the TLS library before sleeping.
 
 The proposed acceptance sequence is:
 
@@ -370,10 +373,29 @@ The proposed acceptance sequence is:
    milestones; follow the [HTTPS plan](#https-complexity-and-implementation-choices)
    for a separate TLS port, beginning with verified HTTPS downloads in `htget`.
 
-Report an HTTPS redirect as unsupported until TLS exists. A future optional
-HTTP-to-HTTPS gateway would terminate encryption outside the guest and must be
-documented as a different deployment mode. A CONNECT tunnel alone does not
-provide TLS to a browser that cannot perform the handshake.
+Lynx now uses the shared guest TLS transport for direct HTTPS connections.
+Other clients still need their own integration; a CONNECT tunnel alone does
+not provide TLS to a client.
 
 Completion means a responsive browser running in the guest, not only a host
 build, successful compilation, an HTML download or a standalone runtime test.
+
+
+The [graphical browser investigation](gui-browser.md) compares Dillo, NetSurf,
+Links and ViewML, and separates a renderer spike from the guest TLS work.
+
+## HTTPS transport and crypto device
+
+Lynx links the shared [guest TLS client](../../ports/tls/README.md), which retains
+certificate parsing, trust, hostname/SAN and date checks inside the guest.
+HTTPS transport calls the same facade as `htget`, with a keyboard polling hook
+for cancellation while waiting on sockets. HTTP and local-file browsing retain
+their existing paths. HTTPS proxy tunneling is unsupported.
+
+The optional [crypto device](../arch/crypto.md) accelerates public-key
+calculations on RVM and native Fuse-X. Software crypto remains selectable with
+`RIPPLE_TLS_SOFTWARE=1`; `RIPPLE_TLS_PROFILE=1` reports stage timings. Guest
+`SSL_CERT_FILE` overrides the default `/etc/ssl/cert.pem` trust bundle for Lynx.
+The acceptance fixture is `ports/tls/tests/test_lynx.py`, covering verified page
+rendering, certificate rejection, link navigation and keyboard cancellation on
+private disks. RVM uses JIT for this coverage.

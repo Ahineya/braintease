@@ -1,0 +1,11 @@
+// Context must also survive conditionals/blocks around a generic receiver.
+trait Identity { fn identity(&self) -> Self; }
+type Wrapped<T> = Empty;
+impl<T> Identity for Wrapped<T> { fn identity(&self) -> Wrapped<T> { *self } }
+fn make<T>() -> Wrapped<T> { Empty }
+fn main() {
+    let branch: Wrapped<i32> = (if (true) { make() } else { make() }).identity();
+    let block: Wrapped<i32> = ({ let ignored = 1; make() }).identity();
+    let matched: Wrapped<i32> = (match true { true => make(), false => make() }).identity();
+    println(match (branch, block, matched) { (Empty, Empty, Empty) => 42 });
+}

@@ -11,6 +11,9 @@ extern int signgam;
 
 /* Compiler with full float/double support */
 
+extern double acosh(double);
+extern double asinh(double);
+extern double atanh(double);
 extern double acos(double);
 extern double asin(double);
 extern double atan(double);
@@ -268,9 +271,10 @@ extern uint32_t __float_bits(float);
 extern int __fpclassifyf(float);
 extern int __signbitf(float);
 
-/* FIXME: sort out the right NaN's */
-#define __sNaN       0x1.fffff0p128
-#define __NaN        0x1.fffff0p128
+/* An IEEE quiet NaN constant, including in double initializers.
+ * Signaling exceptions are not exposed by this guest floating environment. */
+#define __sNaN       (0.0f / 0.0f)
+#define __NaN        (0.0f / 0.0f)
 
 #define __FINFINITY 1e40f
 

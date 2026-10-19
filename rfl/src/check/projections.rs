@@ -43,11 +43,28 @@ pub(super) fn qualify_impl_type(ty: &mut ParsedTy, owner: &ParsedTy, contract: &
             }
             qualify_impl_type(base, owner, contract);
         }
-        ParsedTy::Named { name, span, args } if name == "Self" && args.is_empty() => {
+        ParsedTy::Named { name, span, args } if name == "Self" => {
             let position = *span;
+            let mut applied = std::mem::take(args);
+            for arg in &mut applied {
+                qualify_impl_type(arg, owner, contract);
+            }
             *ty = owner.clone();
-            if let ParsedTy::Named { span, .. } = ty {
+            if let ParsedTy::Named { span, args, .. } = ty {
                 *span = position;
+                if args.iter().any(kinds::is_slot) && !applied.is_empty() {
+                    let mut supplied = applied.into_iter();
+                    for arg in args.iter_mut() {
+                        if kinds::is_slot(arg) {
+                            if let Some(value) = supplied.next() {
+                                *arg = value;
+                            }
+                        }
+                    }
+                    args.extend(supplied);
+                } else {
+                    args.extend(applied);
+                }
             }
         }
         ParsedTy::Named { args, .. } => {
@@ -198,6 +215,7 @@ impl Checker<'_> {
         for tr in self.traits.clone() {
             for item in &tr.associated_types {
                 self.validate_bounds(&[TypeParam {
+                    arity: 0,
                     name: item.name.clone(),
                     span: item.name_span,
                     bounds: item.bounds.clone(),
@@ -212,13 +230,27 @@ impl Checker<'_> {
                 });
             }
             let self_ty = self.rigid(&TypeParam {
+                arity: tr.arity,
                 name: "Self".into(),
                 span: tr.name_span,
                 bounds: vec![(tr.name.clone(), tr.name_span)],
             })?;
             let saved = self.assoc_self.replace((tr.name.clone(), self_ty));
             for method in &tr.methods {
-                self.projected_method_signature(&tr.name, &method.name, self_ty)?;
+                if tr.arity > 0 || !method.type_params.is_empty() {
+                    let mut args = vec![self_ty];
+                    for param in &method.type_params {
+                        args.push(self.rigid(param)?);
+                    }
+                    let saved_subst = std::mem::take(&mut self.subst);
+                    self.instantiate(
+                        &traits::contracts::contract_name(&tr.name, &method.name),
+                        &args,
+                    )?;
+                    self.subst = saved_subst;
+                } else {
+                    self.projected_method_signature(&tr.name, &method.name, self_ty)?;
+                }
             }
             self.assoc_self = saved;
         }
@@ -267,7 +299,11 @@ impl Checker<'_> {
                     "a function cannot return a reference",
                 ));
             }
-            Ok(FuncSig { params, ret })
+            Ok(FuncSig {
+                once: false,
+                params,
+                ret,
+            })
         })();
         self.assoc_self = saved;
         result
@@ -282,6 +318,9 @@ impl Checker<'_> {
         name_span: Span,
         qualifier_span: Option<Span>,
     ) -> Result<Ty, CompileError> {
+        let occurrence = (span.start, span.end, member.to_string());
+        let declared = self.projection_contracts.get(&occurrence).cloned();
+        let explicit = explicit.or(declared.as_deref());
         let mut candidates = Vec::new();
         if let Some(name) = explicit {
             let name = self.trait_name(name).ok_or_else(|| {
@@ -331,6 +370,11 @@ impl Checker<'_> {
                 ),
             )
         })?;
+        if explicit.is_none() && self.opaque.contains_key(&base) && span.end > span.start {
+            // T::Item is selected from T's declaration-time bounds. A concrete
+            // specialization may implement other visible traits with Item too.
+            self.projection_contracts.insert(occurrence, name.clone());
+        }
         let tr = self
             .traits
             .iter()
@@ -355,6 +399,7 @@ impl Checker<'_> {
                 *ty
             } else {
                 let ty = self.rigid(&TypeParam {
+                    arity: 0,
                     name: format!(
                         "<{} as {}>::{member}",
                         self.show(base),
@@ -439,11 +484,7 @@ impl Checker<'_> {
         self_ty: Ty,
         subst: &HashMap<String, Ty>,
     ) -> Result<(), CompileError> {
-        let params: Vec<_> = implementation
-            .type_params
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        let params = &implementation.type_params;
         for item in &implementation.associated_types {
             let value = item.value.as_ref().unwrap();
             self.validate_ty(value, &params)?;

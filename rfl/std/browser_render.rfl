@@ -1,0 +1,347 @@
+// Wasm-resident reconciliation. DOM identity and callbacks never live in JS.
+import { Html, Prop, HtmlText, HtmlElement, HtmlFragment, Attr, Value, Checked, Disabled, Listener, Key, identity, flatten } from "std/html";
+import { Event } from "std/html_event";
+import { Binding, Ids, controlled, update_props, sync_value } from "std/browser_props";
+import { BrowserEvent } from "std/browser";
+import { Batch, batch } from "std/browser_batch";
+import { prepare } from "std/browser_validate";
+import { key_index } from "std/browser_keys";
+import { Option } from "std/option";
+import { replace } from "std/mem";
+
+/// A retained DOM identity, view description, children and listener bindings.
+export type Mounted<M> = Mounted(u16, Html<M>, Vec<Mounted<M>>, Vec<Binding<M>>);
+/// Owned reconciliation state including mounted nodes, composition and dirty controls.
+export type Renderer<M> = Renderer(Owned<Ids>, Vec<Mounted<M>>, Vec<u16>, Vec<u16>);
+/// Creates an empty renderer with fresh node and listener identities.
+export fn renderer<M>() -> Renderer<M> {
+    Renderer(owned(Ids { node: 1, listener: 1 }, fn(ids: &mut Ids) => {}), [], [], [])
+}
+
+fn id<M>(mounted: Mounted<M>) -> u16 {
+    let Mounted(id, _, _, _) = mounted;
+    id
+}
+
+fn description<M>(mounted: Mounted<M>) -> Html<M> {
+    let Mounted(_, view, _, _) = mounted;
+    view
+}
+
+fn node_id(ids: &mut Ids) -> u16 {
+    let n = ids.node;
+    ids.node += 1;
+    Some(n).filter(fn(n: u32) => n <= 65535).expect("UI node IDs exhausted") as u16
+}
+
+fn has(ids: Vec<u16>, id: u16) -> bool {
+    for (value in ids) {
+        if (value == id) {
+            return true;
+        }
+    }
+    false
+}
+
+fn compatible<M>(old: Html<M>, new: Html<M>) -> bool {
+    match (old, new) {
+        (HtmlText(_), HtmlText(_)) => true,
+        (HtmlElement(a, t, _, _), HtmlElement(b, u, _, _)) => a == b && t == u,
+        _ => false
+    }
+}
+
+fn props<M>(view: Html<M>) -> Vec<Prop<M>> {
+    match view {
+        HtmlElement(_, _, props, _) => props,
+        _ => []
+    }
+}
+
+// Mark a longest increasing subsequence of retained old positions. Moving only
+// the other children preserves order in O(n log n) with a minimal move count.
+fn stable(origins: Vec<Option<usize>>) -> Vec<bool> {
+    let mut tails: Vec<usize> = [];
+    let mut previous: Vec<Option<usize>> = [];
+    let mut keep: Vec<bool> = [];
+    for (i in 0..origins.len()) {
+        previous.push(None);
+        keep.push(false);
+        match origins[i] {
+            Some(rank) => {
+                let mut lo: usize = 0;
+                let mut hi = tails.len();
+                while (lo < hi) {
+                    let mid = lo + (hi - lo) / 2;
+                    let other = origins[tails[mid]].unwrap();
+                    if (other < rank) {
+                        lo = mid + 1;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                if (lo > 0) {
+                    previous[i] = Some(tails[lo - 1]);
+                }
+                if (lo == tails.len()) {
+                    tails.push(i);
+                } else {
+                    tails[lo] = i;
+                }
+            },
+            None => {}
+        }
+    }
+    if (!tails.is_empty()) {
+        let mut current = Some(tails[tails.len() - 1]);
+        while (true) {
+            match current {
+                Some(i) => {
+                    keep[i] = true;
+                    current = previous[i];
+                },
+                None => {
+                    break;
+                }
+            }
+        }
+    }
+    keep
+}
+
+fn reconcile<M>(parent: u16, old: Vec<Mounted<M>>, new: Vec<Html<M>>, ids: &mut Ids, out: &mut Batch, dirty: Vec<u16>, composing: Vec<u16>) -> Vec<Mounted<M>> {
+    let mut keys = key_index(old.len());
+    let mut used: Vec<bool> = [];
+    for (i in 0..old.len()) {
+        used.push(false);
+        match identity(description(old[i])) {
+            Some(key) => {
+                keys.insert(key, i);
+            },
+            None => {}
+        }
+    }
+    let mut result: Vec<Mounted<M>> = [];
+    let mut origins: Vec<Option<usize>> = [];
+    for (i in 0..new.len()) {
+        let candidate = match identity(new[i]) {
+            Some(key) => keys.find(key),
+            None => {
+                if (i < old.len()) {
+                    match identity(description(old[i])) {
+                        None => Some(i),
+                        Some(_) => None
+                    }
+                } else {
+                    None
+                }
+            }
+        };
+        let mut before: Option<Mounted<M>> = None;
+        let mut origin: Option<usize> = None;
+        match candidate {
+            Some(index) => {
+                if (!used[index]) {
+                    used[index] = true;
+                    before = Some(old[index]);
+                    origin = Some(index);
+                }
+            },
+            None => {}
+        }
+        let mounted = update_node(before, new[i], ids, out, dirty, composing);
+        match origin {
+            Some(index) => {
+                let current_id = id(mounted);
+                let previous_id = id(old[index]);
+                if (current_id != previous_id) {
+                    origin = None;
+                }
+            },
+            None => {}
+        }
+        origins.push(origin);
+        result.push(mounted);
+    }
+    for (i in 0..old.len()) {
+        if (!used[i]) {
+            out.emit(7, id(old[i]), 0, 0, 0, []);
+        }
+    }
+    let keep = stable(origins);
+    let mut anchor: u16 = 0;
+    let mut i = result.len();
+    while (i > 0) {
+        i -= 1;
+        let node = id(result[i]);
+        if (!keep[i]) {
+            out.emit(6, parent, node, anchor, 0, []);
+        }
+        anchor = node;
+    }
+    result
+}
+
+fn update_node<M>(old: Option<Mounted<M>>, view: Html<M>, ids: &mut Ids, out: &mut Batch, dirty: Vec<u16>, composing: Vec<u16>) -> Mounted<M> {
+    let mut node: u16 = 0;
+    let mut before: Vec<Prop<M>> = [];
+    let mut children: Vec<Mounted<M>> = [];
+    let mut bindings: Vec<Binding<M>> = [];
+    let mut old_text = "";
+    match old {
+        Some(mounted) => {
+            let Mounted(existing, previous, nested, listeners) = mounted;
+            if (compatible(previous, view)) {
+                node = existing;
+                before = props(previous);
+                children = nested;
+                bindings = listeners;
+                match previous {
+                    HtmlText(text) => {
+                        old_text = text;
+                    },
+                    _ => {}
+                }
+            } else {
+                out.emit(7, existing, 0, 0, 0, []);
+            }
+        },
+        None => {}
+    }
+    let created = node == 0;
+    if (created) {
+        node = node_id(ids);
+    }
+    match view {
+        HtmlText(text) => {
+            if (created) {
+                out.emit(2, node, 0, 0, 0, [text]);
+            } else if (old_text != text) {
+                out.emit(3, node, 0, 0, 0, [text]);
+            }
+            Mounted(node, view, [], [])
+        },
+        HtmlElement(ns, tag, properties, nested) => {
+            if (created) {
+                out.emit(1, node, 0, ns, 0, [tag]);
+            }
+            let select = ns == 0 && tag == "select";
+            let listeners = update_props(node, before, properties, bindings, ids, out, has(dirty, node), has(composing, node), select, tag);
+            let commands = out.total;
+            let children = reconcile(node, children, nested, ids, out, dirty, composing);
+            if (select) {
+                let changed = created || has(dirty, node) || out.total != commands;
+                sync_value(node, before, properties, out, changed, has(composing, node));
+            }
+            Mounted(node, view, children, listeners)
+        },
+        HtmlFragment(_) => {
+            let error: Option<Mounted<M>> = None;
+            error.expect("internal UI fragment was not flattened")
+        },
+    }
+}
+
+fn all_bindings<M>(nodes: Vec<Mounted<M>>) -> Vec<(u16, Binding<M>)> {
+    let mut result: Vec<(u16, Binding<M>)> = [];
+    for (node in nodes) {
+        let Mounted(id, _, children, bindings) = node;
+        for (binding in bindings) {
+            result.push((id, binding));
+        }
+        for (binding in all_bindings(children)) {
+            result.push(binding);
+        }
+    }
+    result
+}
+
+fn control_ids<M>(nodes: Vec<Mounted<M>>) -> Vec<u16> {
+    let mut result: Vec<u16> = [];
+    for (node in nodes) {
+        let Mounted(id, view, children, _) = node;
+        if (controlled(props(view))) {
+            result.push(id);
+        }
+        for (id in control_ids(children)) {
+            result.push(id);
+        }
+    }
+    result
+}
+
+impl<M> Renderer<M> {
+    /// Validate a complete view before emitting patches. Unchanged views emit no
+    /// import. Larger renders flush bounded chunks without per-node crossings.
+    export fn render(&mut self, view: Html<M>) -> Result<unit, String> {
+        let views = prepare(view)?;
+        let Renderer(ids, old, composing, dirty) = replace(self, renderer());
+        let mut ids = move(ids);
+        let mut out = batch();
+        let next = {
+            let counters = ids.borrow_mut();
+            reconcile(0, old, views, counters, &mut out, dirty, composing)
+        };
+        move(out).finish();
+        let controls = control_ids(next);
+        let mut active: Vec<u16> = [];
+        for (id in composing) {
+            if (has(controls, id)) {
+                active.push(id);
+            }
+        };
+        *self = Renderer(move(ids), next, active, []);
+        Ok({})
+    }
+    /// Snapshot all message handlers before model updates. Composition state and
+    /// dirty controls stay in Wasm; retired bindings cannot generate messages.
+    export fn messages(&mut self, events: Vec<BrowserEvent>) -> Vec<M> {
+        let Renderer(ids, nodes, composing, dirty) = replace(self, renderer());
+        let mut composing = composing;
+        let mut dirty = dirty;
+        let bindings = all_bindings(nodes);
+        let mut result: Vec<M> = [];
+        for (event in events) {
+            for (pair in bindings) {
+                let (node, binding) = pair;
+                let Binding(id, kind, _, handler) = binding;
+                if (event.listener == id && event.node == node && event.kind == kind) {
+                    if (kind == 2 || kind == 3 || kind == 6 || kind == 7) {
+                        if (!has(dirty, node)) {
+                            dirty.push(node);
+                        }
+                    }
+                    if (kind == 6 || (kind == 2 && (event.modifiers & 16) != 0)) {
+                        if (!has(composing, node)) {
+                            composing.push(node);
+                        }
+                    }
+                    if (kind == 7) {
+                        let mut active: Vec<u16> = [];
+                        for (id in composing) {
+                            if (id != node) {
+                                active.push(id);
+                            }
+                        }
+                        composing = active;
+                    }
+                    match handler {
+                        Some(handler) => {
+                            result.push(handler(Event { listener: event.listener, node: event.node, kind: event.kind, modifiers: event.modifiers, key: event.key, value: event.value, checked: event.checked }));
+                        },
+                        None => {}
+                    }
+                    break;
+                }
+            }
+        };
+        *self = Renderer(move(ids), nodes, composing, dirty);
+        move(result)
+    }
+    /// Reports whether browser-edited controls need a model-to-view synchronization.
+    export fn needs_sync(&self) -> bool {
+        match self {
+            Renderer(_, _, _, dirty) => !dirty.is_empty()
+        }
+    }
+}

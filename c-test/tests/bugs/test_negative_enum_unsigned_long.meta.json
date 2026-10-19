@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Negative enum values sign extend before conversion to unsigned long in comparisons",
+  "expected": "YYYYYYY\n"
+}

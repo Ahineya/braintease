@@ -1,0 +1,53 @@
+// Shared Unicode 16 engine, supplied by the guest SDK. Standalone native
+// programs can import libraries/unicode/unicode.c alongside these bindings.
+extern "C" {
+    fn ru_columns(bytes: *const u8, count: usize) -> usize;
+    fn ru_prefix(bytes: *const u8, count: usize, columns: usize) -> usize;
+    fn ru_next_grapheme(bytes: *const u8, count: usize, at: usize, width: *mut u16) -> usize;
+    fn ru_previous_grapheme(bytes: *const u8, count: usize, at: usize) -> usize;
+}
+
+fn octets(text: String) -> Vec<u8> {
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..text.len()) {
+        bytes.push(text[i] as u8);
+    }
+    bytes.push(0);
+    bytes
+}
+fn ascii(text: String) -> bool {
+    for (i in 0..text.len()) {
+        if ((text[i] as u32) < 32 || (text[i] as u32) >= 127) {
+            return false;
+        }
+    }
+    true
+}
+/// Terminal columns, with wide characters, combining marks and emoji clusters.
+/// ASCII needs no C call or allocation. Strings retain byte offsets.
+export fn columns(text: String) -> usize {
+    if (ascii(text)) { return text.len(); }
+    let bytes = octets(text);
+    unsafe { ru_columns(&bytes[0], text.len()) as usize }
+}
+/// Byte boundary of the largest complete grapheme prefix fitting in `width` cells.
+export fn prefix(text: String, width: usize) -> usize {
+    if (ascii(text)) { return if (width < text.len()) { width } else { text.len() }; }
+    let bytes = octets(text);
+    unsafe { ru_prefix(&bytes[0], text.len(), width) as usize }
+}
+/// Byte boundary following the grapheme at `at`; strings remain byte indexed.
+export fn next(text: String, at: usize) -> usize {
+    if (at >= text.len()) { return text.len(); }
+    if (ascii(text)) { return at + 1; }
+    let bytes = octets(text);
+    let mut width: u16 = 0;
+    unsafe { ru_next_grapheme(&bytes[0], text.len(), at, &mut width) as usize }
+}
+/// Byte boundary preceding `at`. Suitable for cursor motion and Backspace.
+export fn previous(text: String, at: usize) -> usize {
+    if (at == 0) { return 0; }
+    if (ascii(text)) { return if (at <= text.len()) { at - 1 } else { text.len() }; }
+    let bytes = octets(text);
+    unsafe { ru_previous_grapheme(&bytes[0], text.len(), at) as usize }
+}

@@ -163,6 +163,12 @@ impl Preprocessor {
                     }
                     self.current_line += 1;
                 }
+                Directive::InvalidDefinition { message } => {
+                    if self.should_output() {
+                        return Err(anyhow::anyhow!("{message}"));
+                    }
+                    self.current_line += 1;
+                }
                 Directive::Define { .. } => {
                     if self.should_output() { self.handle_define(directive)?; }
                     self.current_line += 1;

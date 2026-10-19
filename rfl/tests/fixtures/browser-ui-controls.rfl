@@ -1,0 +1,45 @@
+import { mount_ui, Ui, UiClosed } from "std/ui";
+import { Html, Prop, node, text, value, checked, on_input, on_change, on_click, attribute } from "std/html";
+import { Future, sleep } from "std/future";
+async fn pending(ui: Ui<Msg>) {
+    let guard = owned(0, fn(n: &mut i16) => {
+        match ui.send(Ignore) {
+            Err(UiClosed) => println("sender closed"),
+            _ => println("BAD")
+        };
+    });
+    sleep(100).unwrap().await;
+}
+
+struct Model {
+    alternate: bool,
+    owner: Owned<i16>
+}
+
+type Msg = Ignore | Toggle;
+fn update(model: Model, msg: Msg, ui: Ui<Msg>) -> Model {
+    let mut model = move(model);
+    match msg {
+        Toggle => {
+            model.alternate = !model.alternate;
+        },
+        Ignore => {}
+    }
+    move(model)
+}
+
+fn view(model: &Model) -> Html<Msg> {
+    let props: Vec<Prop<Msg>> = if (model.alternate) {
+        [attribute("data-phase", "changed")]
+    } else {
+        [attribute("title", "original")]
+    };
+    node("div", props, [node("input", [value("fixed"), on_input(fn(s: String) => Ignore)], []), node("input", [attribute("type", "checkbox"), checked(false), on_change(fn(v: bool) => Ignore)], []), node("button", [on_click(Toggle)], [text("toggle")])])
+}
+
+fn main() {
+    let ui = mount_ui(Model { alternate: false, owner: owned(0, fn(n: &mut i16) => {
+        println("model dropped");
+    }) }, update, view, 4).unwrap();
+    ui.app().spawn(pending(ui)).unwrap();
+}

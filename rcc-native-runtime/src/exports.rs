@@ -115,3 +115,8 @@ service!(rcc_native_ext___rfl_host_sin(_rt, x) { f64::from_bits(x).sin().to_bits
 service!(rcc_native_ext___rfl_host_cos(_rt, x) { f64::from_bits(x).cos().to_bits() });
 service!(rcc_native_ext___rcc_f64_floor(_rt, x) { f64::from_bits(x).floor().to_bits() });
 service!(rcc_native_ext___rcc_f64_sqrt(_rt, x) { f64::from_bits(x).sqrt().to_bits() });
+
+service!(rcc_native_ext___rcc_host_math(_rt, op, a, b) {
+    let op = u16::try_from(op).unwrap_or_else(|_| fatal("invalid host math operation"));
+    rvm::float::evaluate(op, a, b).unwrap_or_else(|_| fatal("invalid host math operands"))
+});

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {ptyDevices} from './pty.mjs';
 // Ripple FUZIX C16 V3 uses 2,048 physical octets per filesystem block.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +9,13 @@ import {installRoot, growRoot} from './install.mjs';
 import {manualFiles} from './manuals.mjs';
 import {sokobanFiles} from './sokoban.mjs';
 import {commanderFiles, riftFiles} from '../../../rfl/os/files.mjs';
+import {basicFiles} from '../../basic/files.mjs';
 import {lynxFiles} from '../../lynx/files.mjs';
+import {tlsFiles} from '../../tls/files.mjs';
+import {fuseDEFiles} from '../../fusede/files.mjs';
+import {compilerFiles} from '../../../rcc-portable/files.mjs';
+import {unicodeFiles} from '../../../libraries/unicode/files.mjs';
+import {netsurfFiles} from '../../netsurf/files.mjs';
 import {
   fat16Image,
   updateFat16Image
@@ -16,6 +23,7 @@ import {
 import {BLOCK, CELLS, INODES_PER_BLOCK, MAGIC, SIGNATURE, SB, ROOT_BLOCKS, inodeBase, DISK_GEOMETRY, layout} from './layout.mjs';
 import {Image, openImage, writeImage} from './image.mjs';
 import {checkRoot} from './fsck.mjs';
+import {backupImage, pruneImageBackups} from './image-backup.mjs';
 export function rootImage(files, blocks = ROOT_BLOCKS, inodeCount = 1024) {
   if (!Number.isInteger(inodeCount) || inodeCount < 16 || inodeCount % INODES_PER_BLOCK || inodeCount > 65520)
     throw Error('invalid inode count');
@@ -64,8 +72,9 @@ export function seedNames(build) {
              : [ 'init', 'hello', 'forkcheck', 'preemptcheck', 'iotest' ];
 }
 export function buildDisk(build, filename, fresh = false, install = false) {
-  const aliases = {vi: '/bin/levee', mc: '/bin/rfl-fm', mv: '/bin/cp', ln: '/bin/cp',
-                   tcl: '/bin/picol', tclsh: '/bin/picol', sokoban: '/bin/sok'};
+  const compiler = compilerFiles(path.join(build, 'compiler'));
+  const aliases = {vi: '/bin/rift', mc: '/bin/rfl-fm', mv: '/bin/cp', ln: '/bin/cp',
+                   tcl: '/bin/picol', tclsh: '/bin/picol', sokoban: '/bin/sok', nslookup: '/bin/host'};
   // Switch aliases immediately after their target. This releases an older
   // shared executable before allocating the next large program during upgrades.
   const installedNames = seedNames(build), orderedNames = [];
@@ -83,7 +92,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
       [...orderedNames.map(
            name => ({
              name : name === 'init' ? '/init' : `/bin/${name}`,
-             ...(aliases[name] ? {link: aliases[name]} :
+             ...(aliases[name] ? {symlink: path.basename(aliases[name])} :
                   {data : fs.readFileSync(path.join(build, `${name}.rxe`))})
            })),
        {
@@ -95,12 +104,12 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        // Before job control, /dev/tty addressed the fixed console directly.
        {name : '/dev/tty', mode : 0o20666, device : 0x200,
         migrateDeviceFrom : 0x201, data : Buffer.alloc(0)},
-       ...Array.from({length: 8}, (_, i) => ([
-         {name: `/dev/ptyp${i}`, mode: 0o20600, device: 0x300 + i, data: Buffer.alloc(0)},
-         {name: `/dev/ttyp${i}`, mode: 0o20600, device: 0x202 + i, data: Buffer.alloc(0)}
-       ])).flat(),
+       ...ptyDevices(),
        {name : '/dev/gfx', mode : 0o20600, device : 0x400, data : Buffer.alloc(0)},
        {name : '/dev/root', mode : 0o60600, device : 0, data : Buffer.alloc(0)},
+       {name:'/dev/urandom',mode:0o20444,device:0x104,data:Buffer.alloc(0)},
+       {name:'/dev/crypto',mode:0o20666,device:0x105,data:Buffer.alloc(0)},
+       {name:'/dev/pcm',mode:0o20666,device:0x500,data:Buffer.alloc(0)},
        ...['null', 'zero', 'proc'].map((name, i) => ({
                                          name : `/dev/${name}`,
                                          mode : 0o20666,
@@ -128,7 +137,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        {name: '/etc/resolv.conf', mode: 0o100644, preserve: true,
         data: Buffer.from('nameserver 1.1.1.1\nnameserver 8.8.8.8\n')},
        {name: '/etc/nxlaunch.cnf', mode: 0o100644, preserve: true,
-        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\n')},
+        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\nTetris - /bin/nxtetris\nImages - /bin/nxview\n')},
        {name: '/etc/hosts', mode: 0o100644, preserve: true,
         data: Buffer.from('192.168.64.250 ripple fuzix\n')},
        {
@@ -143,10 +152,14 @@ export function buildDisk(build, filename, fresh = false, install = false) {
          name: `/usr/lib/${name}`, mode: 0o100644, preserve: true,
          data: fs.readFileSync(fileURLToPath(new URL(`../upstream/Applications/MWC/cmd/${name}`, import.meta.url)))
        })),
-       ...commanderFiles(), ...riftFiles(),
+       ...commanderFiles(), ...riftFiles(), ...unicodeFiles(),
+       ...(installedNames.includes('basic') ? basicFiles() : []),
        ...(installedNames.includes('lynx') ? lynxFiles() : []),
+       ...(installedNames.includes('netsurf') ? netsurfFiles() : []),
+       ...((installedNames.includes('htget') || installedNames.includes('lynx') || installedNames.includes('chat')) ? tlsFiles() : []),
+       ...(installedNames.includes('fdeshowcase') ? fuseDEFiles(path.join(build,'fusede')) : []),
        ...sokobanFiles(),
-       ...manualFiles()];
+       ...manualFiles(), ...compiler];
   const kernel = {
     name : 'FUZIX.SYS',
     data : fs.readFileSync(path.join(build, 'FUZIX.SYS'))
@@ -158,7 +171,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
     const format = layout(root);
     if (format.version !== 3 && !install) throw Error('C16 V2 disk needs an install/upgrade before booting the V3 kernel');
     if (install) {
-      const updated = installRoot(growRoot(root), seedFiles());
+      const updated = installRoot(growRoot(root, ROOT_BLOCKS, compiler.length ? 2048 : 1024), seedFiles());
       if (updated.length !== root.length || format.version !== 3) {
         // The original bootstrap disk was too small for Unix userspace. Keep
         // inode identities and file contents while expanding the native root.
@@ -186,23 +199,18 @@ export function buildDisk(build, filename, fresh = false, install = false) {
       disk = updateFat16Image(old, [ kernel ]);
     if (disk.equals(old))
       return false;
-    let backup = `${filename}.bak`, i = 1;
-    while (fs.existsSync(backup))
-      backup = `${filename}.bak.${i++}`;
-    writeImage(backup, old, true);
+    backupImage(filename, old);
   } else {
     const files = seedFiles();
     disk =
-        fat16Image([ kernel, {name : 'ROOTFS.IMG', data : rootImage(files)} ],
+        fat16Image([ kernel, {name : 'ROOTFS.IMG', data : rootImage(files, ROOT_BLOCKS, compiler.length ? 2048 : 1024)} ],
                    {...DISK_GEOMETRY, imageFactory: size => new Image(size)});
     if (fs.existsSync(filename)) {
-      let backup = `${filename}.bak`, i = 1;
-      while (fs.existsSync(backup))
-        backup = `${filename}.bak.${i++}`;
-      writeImage(backup, openImage(filename), true);
+      backupImage(filename, openImage(filename));
     }
   }
   atomicWrite(filename, disk);
+  pruneImageBackups(filename);
   return true;
 }
 if (process.argv[1] &&

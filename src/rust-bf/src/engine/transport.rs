@@ -269,7 +269,11 @@ impl Transport {
         for &(back, _) in &self.groups {
             let first = (start as isize + back) as usize;
             let last = (first as isize + (count - 1) as isize * self.stride) as usize;
-
+            // The starting vector was cleared and every intermediate destination
+            // was proved zero. The live vector begins one stride beyond this
+            // range. Preserve its exact zero value across predicate-cache
+            // eviction; incompatible deferred lattices safely reject the fact.
+            m.tape.assign_uniform(first, last, step, 0, 0);
             let (slot, _) = m.zero_cache.prepare(step, first);
             m.zero_cache.remember(slot, first, last);
         }

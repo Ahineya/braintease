@@ -97,17 +97,23 @@ fn matches_type(
         ) => (!left || *right) && matches_type(lhs, rhs, generics, bindings),
         (
             ParsedTy::Func {
+                once: lhs_once,
                 params: lhs,
                 ret: left,
                 ..
             },
             ParsedTy::Func {
+                once: rhs_once,
                 params: rhs,
                 ret: right,
                 ..
             },
-        )
-        | (
+        ) => {
+            lhs_once == rhs_once
+                && match_all(lhs, rhs, generics, bindings)
+                && matches_type(left, right, generics, bindings)
+        }
+        (
             ParsedTy::CFn {
                 params: lhs,
                 ret: left,
@@ -258,6 +264,21 @@ mod tests {
         assert_eq!(
             method("fn(m1$List<T>) -> T", &["T"], "m1$List<String>").as_deref(),
             Some("fn() -> String")
+        );
+    }
+
+    #[test]
+    fn consuming_receiver_cardinality_is_exact() {
+        assert!(method("fn(fn(i16) -> bool) -> unit", &[], "once fn(i16) -> bool").is_none());
+        assert!(method("fn(once fn(i16) -> bool) -> unit", &[], "fn(i16) -> bool").is_none());
+        assert_eq!(
+            method(
+                "fn(once fn(T) -> bool, T) -> bool",
+                &["T"],
+                "once fn(i16) -> bool"
+            )
+            .as_deref(),
+            Some("fn(i16) -> bool")
         );
     }
 

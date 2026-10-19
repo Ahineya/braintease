@@ -9,6 +9,8 @@ pub const QUEUE_CAPACITY: usize = 256;
 pub const POINTER_ABSOLUTE: u16 = 0;
 pub const POINTER_RELATIVE: u16 = 1;
 pub const FLAG_DOWN: u16 = 1;
+/// Host text accompanies this physical key; text consumers suppress HID translation.
+pub const FLAG_TEXT_KEY: u16 = 32;
 pub const FLAG_RELATIVE: u16 = 2;
 pub const FLAG_INSIDE: u16 = 4;
 pub const FLAG_FOCUSED: u16 = 8;
@@ -21,6 +23,11 @@ pub const EVENT_ENTER: u16 = 5;
 pub const EVENT_FOCUS: u16 = 6;
 pub const EVENT_CAPTURE: u16 = 7;
 pub const EVENT_CLOSE: u16 = 8;
+/// Committed Unicode scalar in dx; does not alter held-key state.
+pub const EVENT_TEXT: u16 = 11;
+/// Semantic edit action, currently produced by hosted GX menus. It changes no
+/// held-key state. The standalone VM presenter does not yet expose a clipboard.
+pub const EVENT_EDIT: u16 = 12;
 
 /// Absolute coordinates count guest framebuffer pixels; relative deltas count raw
 /// device units (positive X right, positive Y down). Wheel values are signed 16.16 lines:
@@ -33,6 +40,11 @@ pub enum InputTransition {
         key: u16,
         down: bool,
     },
+    /// Physical key with a separate layout/IME text event. Legacy HID clients
+    /// may ignore the flag; text clients avoid generating a duplicate letter.
+    TextKey { key: u16, down: bool },
+    Text { scalar: u32 },
+    Edit { command: u16 },
     Motion {
         x: i32,
         y: i32,
@@ -66,7 +78,9 @@ pub enum InputTransition {
 impl InputTransition {
     pub fn valid(self) -> bool {
         match self {
-            Self::Key { key, .. } => key < 256,
+            Self::Key { key, .. } | Self::TextKey { key, .. } => key < 256,
+            Self::Text { scalar } => char::from_u32(scalar).is_some(),
+            Self::Edit { command } => (1..=4).contains(&command),
             Self::Button { button, .. } => button < 16,
             _ => true,
         }
@@ -112,8 +126,11 @@ impl InputEvent {
         words
     }
     pub fn valid(&self) -> bool {
-        matches!(self.kind, EVENT_KEY..=EVENT_CLOSE)
-            && self.flags & !31 == 0
+        (matches!(self.kind, EVENT_KEY..=EVENT_CLOSE) || matches!(self.kind, EVENT_TEXT | EVENT_EDIT))
+            && self.flags & !63 == 0
+            && (self.kind != EVENT_TEXT || char::from_u32(self.dx as u32).is_some())
+            && (self.kind != EVENT_EDIT || (1..=4).contains(&self.code))
+            && (self.flags & FLAG_TEXT_KEY == 0 || self.kind == EVENT_KEY)
             && (self.kind != EVENT_KEY || self.code < 256)
             && (self.kind != EVENT_BUTTON || self.code < 16)
     }
@@ -196,7 +213,7 @@ impl InputState {
             wheel_y: 0,
         };
         match transition {
-            InputTransition::Key { key, down } => {
+            InputTransition::Key { key, down } | InputTransition::TextKey { key, down } => {
                 if self.held(key) == down {
                     return;
                 }
@@ -209,7 +226,16 @@ impl InputState {
                 }
                 event.kind = EVENT_KEY;
                 event.code = key;
-                event.flags = u16::from(down) * FLAG_DOWN;
+                event.flags = u16::from(down) * FLAG_DOWN
+                    | if matches!(transition, InputTransition::TextKey { .. }) { FLAG_TEXT_KEY } else { 0 };
+            }
+            InputTransition::Text { scalar } => {
+                event.kind = EVENT_TEXT;
+                event.dx = scalar as i32;
+            }
+            InputTransition::Edit { command } => {
+                event.kind = EVENT_EDIT;
+                event.code = command;
             }
             InputTransition::Motion { x, y } => {
                 if self.x == x && self.y == y {
@@ -381,6 +407,31 @@ impl InputState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn edit_commands_are_ordered_validated_and_do_not_hold_control_keys() {
+        let mut state=InputState::default();
+        state.apply(InputTransition::Text {scalar: 65}, 1);
+        state.apply(InputTransition::Edit {command: 2}, 1);
+        state.apply(InputTransition::Edit {command: 0}, 1);
+        assert_eq!(state.events.len(),2);
+        assert_eq!((state.events[1].kind,state.events[1].code),(EVENT_EDIT,2));
+        assert!(state.held.iter().all(|x|*x==0)&&state.validate(1));
+        let mut event=state.events[1];event.code=5;assert!(!event.valid());
+    }
+    #[test]
+    fn committed_text_is_ordered_validated_and_distinct_from_physical_keys() {
+        let mut state = InputState::default();
+        state.apply(InputTransition::TextKey { key: 4, down: true }, 1);
+        for scalar in [0x416, 0x301, 0x1f642] { state.apply(InputTransition::Text { scalar }, 1); }
+        state.apply(InputTransition::Text { scalar: 0xd800 }, 1);
+        assert_eq!(state.events.len(), 4);
+        assert!(state.held(4));
+        assert_eq!(state.events[0].flags, FLAG_DOWN | FLAG_TEXT_KEY);
+        assert_eq!(state.events[3].dx, 0x1f642);
+        assert!(state.validate(1));
+        let restored: InputState = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        assert_eq!(state, restored);
+    }
     #[test]
     fn close_survives_overflow_and_state_recovery() {
         let mut s = InputState::default();

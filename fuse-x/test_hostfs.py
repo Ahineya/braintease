@@ -114,7 +114,7 @@ def main():
             env=environment, timeout=20)
         assert result.returncode == 0 and 'HOST_REPLACED_FILE' in result.stdout, result.stdout + result.stderr
         check_root(old)
-    record_runtime(build, ['levee', 'vi'], 'shared folder integration tested')
+    record_runtime(build, ['levee'], 'shared folder integration tested')
     print('Fuse-X: live read/write Mac folder, native exec, editor saves, host updates, boundaries and root persistence passed')
 
 

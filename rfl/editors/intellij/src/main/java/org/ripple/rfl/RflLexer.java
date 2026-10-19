@@ -41,7 +41,10 @@ public final class RflLexer extends LexerBase {
         type = null;
         if (end >= limit) return;
         char c = buffer.charAt(end++);
-        if (Character.isWhitespace(c)) {
+        if ((c == '{' || c == '(' || c == '[') && macroStart(start)) {
+            macroBody(c);
+            type = RflTokens.MACRO_BODY;
+        } else if (Character.isWhitespace(c)) {
             while (end < limit && Character.isWhitespace(buffer.charAt(end))) end++;
             type = TokenType.WHITE_SPACE;
         } else if (c == '/' && at('/')) {
@@ -96,6 +99,64 @@ public final class RflLexer extends LexerBase {
             };
         }
     }
+
+    private int before(int position) {
+        int p = position - 1;
+        while (p >= 0) {
+            if (Character.isWhitespace(buffer.charAt(p))) { p--; continue; }
+            if (p > 0 && buffer.charAt(p) == '/' && buffer.charAt(p - 1) == '*') {
+                p -= 2;
+                while (p > 0 && !(buffer.charAt(p - 1) == '/' && buffer.charAt(p) == '*')) p--;
+                p -= 2; continue;
+            }
+            break;
+        }
+        return p;
+    }
+    private boolean macroStart(int position) {
+        int p = before(position);
+        if (p < 0 || buffer.charAt(p) != '!') return false;
+        int last = before(p), first = last;
+        while (first >= 0 && (identifierStart(buffer.charAt(first)) || digit(buffer.charAt(first)))) first--;
+        return last > first && identifierStart(buffer.charAt(first + 1))
+            && !KEYWORDS.contains(buffer.subSequence(first + 1, last + 1).toString());
+    }
+    private int characterEnd(int position) {
+        int p = position + 1;
+        if (p >= limit) return position;
+        if (buffer.charAt(p) == '\\') p += 2;
+        else p += Character.charCount(Character.codePointAt(buffer, p));
+        return p < limit && buffer.charAt(p) == '\'' ? p + 1 : position;
+    }
+    private void macroBody(char open) {
+        char[] closes = new char[128];
+        int depth = 1; closes[0] = close(open);
+        while (end < limit) {
+            char c = buffer.charAt(end++);
+            if (c == '\'' && characterEnd(end - 1) > end - 1) { end = characterEnd(end - 1); continue; }
+            if (c == '"') {
+                while (end < limit) { char ch = buffer.charAt(end++); if (ch == '"') break; if (ch == '\\' && end < limit) end++; }
+                continue;
+            }
+            if (c == '/' && at('/')) { while (end < limit && !at('\n')) end++; continue; }
+            if (c == '/' && at('*')) {
+                end++; int comments = 1;
+                while (end < limit && comments > 0) {
+                    char ch = buffer.charAt(end++);
+                    if (ch == '/' && at('*')) { comments++; end++; }
+                    else if (ch == '*' && at('/')) { comments--; end++; }
+                }
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{') {
+                if (depth == closes.length) { end = limit; return; }
+                closes[depth++] = close(c);
+            } else if (c == ')' || c == ']' || c == '}') {
+                if (closes[--depth] != c || depth == 0) return;
+            }
+        }
+    }
+    private static char close(char open) { return open == '(' ? ')' : open == '[' ? ']' : '}'; }
 
     private boolean at(char c) { return end < limit && buffer.charAt(end) == c; }
     private static boolean digit(char c) { return c >= '0' && c <= '9'; }

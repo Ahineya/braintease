@@ -20,6 +20,7 @@ extern off_t lseek(int __fd, off_t __offset, int __whence);
 extern int isatty(int __fd);
 
 extern int lstat(const char *__pathname, struct stat *__buf);
+extern int symlink(const char *__target, const char *__pathname);
 extern int readlink(const char *__pathname, char *__buf, int __bufsiz);
 
 extern unsigned int sleep(unsigned int __seconds);

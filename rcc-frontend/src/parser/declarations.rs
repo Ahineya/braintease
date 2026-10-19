@@ -45,6 +45,7 @@ impl Parser {
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
         self.require_named_declarator(&name)?;
         self.declare_constant_name(name.clone(), None);
+        self.record_object_type(&name, &full_type, None);
         
         // Check if this is a function definition (has a body)
         if let Type::Function { .. } = full_type {
@@ -68,6 +69,7 @@ impl Parser {
             None
         };
         
+        self.record_object_type(&name, &full_type, initializer.as_ref());
         let first_decl = Declaration {
             node_id: self.node_id_gen.next(),
             name,
@@ -86,6 +88,7 @@ impl Parser {
                 let (name, full_type) = self.parse_declarator(base_type.clone())?;
                 self.require_named_declarator(&name)?;
                 self.declare_constant_name(name.clone(), None);
+                self.record_object_type(&name, &full_type, None);
                 
                 // If this is a typedef, register the name
                 if storage_class == StorageClass::Typedef {
@@ -98,6 +101,7 @@ impl Parser {
                     None
                 };
                 
+                self.record_object_type(&name, &full_type, initializer.as_ref());
                 declarations.push(Declaration {
                     node_id: self.node_id_gen.next(),
                     name,
@@ -154,14 +158,17 @@ impl Parser {
         
         // Parameters hide outer enumeration constants throughout the body.
         self.constant_scopes.push(Default::default());
+        self.object_scopes.push(Default::default());
         self.tag_scopes.push(Default::default());
         for parameter in &parameters {
             if let Some(name) = &parameter.name {
                 self.declare_constant_name(name.clone(), None);
+                self.record_object_type(name, &parameter.param_type, None);
             }
         }
         let body = self.parse_compound_statement()?;
         self.constant_scopes.pop();
+        self.object_scopes.pop();
         self.tag_scopes.pop();
         
         let end_location = self.current_location();
@@ -189,6 +196,7 @@ impl Parser {
         let start_location = self.current_location();
         
         self.declare_constant_name(name.clone(), None);
+        self.record_object_type(&name, &decl_type, None);
         // If this is a typedef declaration, register the name
         if storage_class == StorageClass::Typedef {
             self.intern_typedef(name.clone(), decl_type.clone());
@@ -249,6 +257,7 @@ impl Parser {
         let (name, full_type) = self.parse_declarator(base_type.clone())?;
         self.require_named_declarator(&name)?;
         self.declare_constant_name(name.clone(), None);
+        self.record_object_type(&name, &full_type, None);
         
         // If this is a typedef, register the name
         if storage_class == StorageClass::Typedef {
@@ -261,6 +270,7 @@ impl Parser {
             None
         };
         
+        self.record_object_type(&name, &full_type, initializer.as_ref());
         declarations.push(Declaration {
             node_id: self.node_id_gen.next(),
             name,
@@ -276,6 +286,7 @@ impl Parser {
             let (name, full_type) = self.parse_declarator(base_type.clone())?;
             self.require_named_declarator(&name)?;
             self.declare_constant_name(name.clone(), None);
+            self.record_object_type(&name, &full_type, None);
             
             // If this is a typedef, register the name
             if storage_class == StorageClass::Typedef {
@@ -288,6 +299,7 @@ impl Parser {
                 None
             };
             
+            self.record_object_type(&name, &full_type, initializer.as_ref());
             declarations.push(Declaration {
                 node_id: self.node_id_gen.next(),
                 name,

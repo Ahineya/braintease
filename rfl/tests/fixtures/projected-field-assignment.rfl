@@ -1,0 +1,27 @@
+struct Entry {
+    text: String,
+    value: i32
+}
+
+fn index(order: &mut i16) -> usize {
+    *order += 1;
+    0
+}
+
+fn main() -> i16 {
+    let mut order: i16 = 0;
+    let mut rows = [Entry { text: "old", value: 70000 }];
+    let old = rows;
+    rows[index(&mut order)].value += 2;
+    rows[0].text = "new";
+    if (order != 1 || rows[0].value != 70002 || rows[0].text != "new" || old[0].value != 70000 || old[0].text != "old") {
+        return 1;
+    }
+    let mut grid = [[1]];
+    grid[0][0] = 42;
+    if (grid[0][0] != 42) {
+        return 2;
+    }
+    println("projected assignment passed");
+    0
+}

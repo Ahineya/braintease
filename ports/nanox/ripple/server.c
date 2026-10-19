@@ -17,22 +17,30 @@
 #include "nxproto.h"
 #include "screen.h"
 #include "server.h"
+#include <ripple_unicode.h>
+#include "nx_clipboard.h"
 #define OUTPUT_CELLS 8192
 #define CLIENT_LIMIT 12
 struct peer {
-    unsigned used, need, sent, length, opened, bad;
-    char input[MAXREQUESTSZ], output[OUTPUT_CELLS];
+    unsigned used, sent, length, opened, bad, direct;
+    char input[2*MAXREQUESTSZ], output[OUTPUT_CELLS];
 };
 static struct peer *peers[FD_SETSIZE];
 static unsigned peer_count;
+static int trace_wire,trace_reject;
 static volatile int stopping;
+static int wakefd[2]={-1,-1};
 static unsigned held[16];
 static MWKEYMOD modifiers;
 static unsigned repeat_key;
 static MWTIMEOUT repeat_at;
 extern GR_CLIENT *root_client;
 extern int un_sock;
-static void caught(int sig){stopping=1;signal(sig,caught);}
+static void caught(int sig){
+    int saved=errno;char byte=1;stopping=1;signal(sig,caught);
+    if(wakefd[1]>=0)write(wakefd[1],&byte,1);
+    errno=saved;
+}
 void GdPlatformInit(void) {}
 void GdBell(void) {}
 void GdDelay(MWTIMEOUT ms){struct timeval t;t.tv_sec=ms/1000;t.tv_usec=(ms%1000)*1000;select(0,NULL,NULL,NULL,&t);}
@@ -58,11 +66,11 @@ int nxr_accept(int fd){
     struct peer *p;
     if(fd<0||fd>=FD_SETSIZE||peer_count>=CLIENT_LIMIT)return -1;
     p=calloc(1,sizeof(*p));if(!p)return -1;
-    p->need=sizeof(nxReq);peers[fd]=p;++peer_count;
+    peers[fd]=p;++peer_count;
     if(fcntl(fd,F_SETFL,O_NONBLOCK)<0){nxr_forget(fd);return -1;}
     return 0;
 }
-void nxr_forget(int fd){if(fd>=0&&fd<FD_SETSIZE&&peers[fd]){free(peers[fd]);peers[fd]=NULL;--peer_count;}}
+void nxr_forget(int fd){nxr_draw_target(NULL);nxr_workspace_forget(fd);nxr_image_forget(fd);nxr_clipboard_forget(fd);if(fd>=0&&fd<FD_SETSIZE&&peers[fd]){free(peers[fd]);peers[fd]=NULL;--peer_count;}}
 int nxr_write(int fd,const void *data,int n){
     struct peer *p;
     if(fd<0||fd>=FD_SETSIZE||!(p=peers[fd])||n<0)return -1;
@@ -86,7 +94,7 @@ static int resources(nxReq *r){
             for(w=listwp;w;w=w->next)++n;
             return n<256&&depth_ok(find_window(((nxNewWindowReq *)r)->parentid));
         case GrNumNewGC:case GrNumCopyGC:for(g=listgcp;g;g=g->next)++n;return n<128;
-        case GrNumNewPixmapEx:for(p=listpp;p;p=p->next)++n;return n<16;
+        case GrNumNewPixmapEx:n=nxr_image_count();for(p=listpp;p;p=p->next)if(!nxr_internal_pixmap(p))++n;return n<16;
         case GrNumCreateFontEx:for(font=listfontp;font;font=font->next)++n;return n<32;
         case GrNumNewCursor:for(cursor=listcursorp;cursor;cursor=cursor->next)++n;return n<64;
         case GrNumNewRegion:case GrNumNewBitmapRegion:for(region=listregionp;region;region=region->next)++n;return n<128;
@@ -101,14 +109,18 @@ static int resources(nxReq *r){
  * variable requests check their full payload before any upstream code sees it. */
 static int valid(nxReq *r,unsigned n){
     unsigned size=0,extra;char *data;
+    if(r->reqType==251)return nxr_clipboard_valid(r,n);
+    if(r->reqType==252)return nxr_workspace_valid(r,n);
+    if(r->reqType==253)return nxr_image_valid(r,n);
     switch(r->reqType){
+        case NXR_COMMIT:size=sizeof(nxReq);break;
 #include "requests.inc"
         default:return 0;
     }
     if(n<size)return 0;
     extra=n-size;data=(char *)r+size;
     switch(r->reqType){
-        case GrNumOpen:return !extra&&((nxOpenReq *)r)->c16_magic==0x4e583101UL;
+        case GrNumOpen:return !extra&&((nxOpenReq *)r)->c16_magic==0x4e583102UL&&((nxOpenReq *)r)->c16_direct<=1;
         case GrNumText:{nxTextReq *t=(nxTextReq *)r;return t->count>=0&&(unsigned)t->count==extra&&!(t->flags&(MWTF_UC16|MWTF_UC32|MWTF_XCHAR2B));}
         case GrNumGetGCTextSize:{nxGetGCTextSizeReq *t=(nxGetGCTextSizeReq *)r;return t->charcount==extra&&!(t->flags&MWTF_PACKMASK);}
         case GrNumCreateFontEx:return extra&&extra<=128&&memchr(data,0,extra)!=NULL;
@@ -122,35 +134,43 @@ static int valid(nxReq *r,unsigned n){
         default:return !extra;
     }
 }
+/* One read stages many packets. Count completed requests, not header/body reads.
+ * The caller revisits staged packets without sleeping, with a per-client quota. */
+static int staged(struct peer *p){
+    nxReq *r=(nxReq *)p->input;
+    return p->used>=sizeof(nxReq)&&(r->length<sizeof(nxReq)||r->length>MAXREQUESTSZ||r->hilength||p->used>=r->length);
+}
 void nxr_receive(int fd){
-    struct peer *p=peers[fd];nxReq *r;int got;unsigned budget=16;
-    while(p&&!p->bad&&budget--){
-        got=read(fd,p->input+p->used,p->need-p->used);
-        if(got==0){p->bad=1;break;}
-        if(got<0){if(errno!=EAGAIN&&errno!=EINTR)p->bad=1;break;}
-        p->used+=got;if(p->used<p->need)continue;
-        r=(nxReq *)p->input;
-        if(p->need==sizeof(nxReq)){
-            if(r->hilength||r->length<sizeof(nxReq)||r->length>MAXREQUESTSZ){p->bad=1;break;}
-            p->need=r->length;if(p->used<p->need)continue;
-        }
-        if(!valid(r,p->used)||(!p->opened&&r->reqType!=GrNumOpen)||(p->opened&&r->reqType==GrNumOpen)){
-            if(getenv("NANOX_TRACE"))fprintf(stderr,"Nano-X rejected fd=%d type=%u cells=%u opened=%u\n",fd,r->reqType,p->used,p->opened);
+    struct peer *p=peers[fd];nxReq *r;int got;unsigned budget=32,at=0,n;
+    if(!p||p->bad)return;
+    if(p->used<sizeof(p->input)){
+        got=read(fd,p->input+p->used,sizeof(p->input)-p->used);
+        if(got==0){p->bad=1;return;}
+        if(got<0){if(errno!=EAGAIN&&errno!=EINTR){p->bad=1;return;}}
+        else p->used+=got;
+    }
+    while(!p->bad&&budget--&&p->used-at>=sizeof(nxReq)){
+        r=(nxReq *)(p->input+at);n=r->length;
+        if(r->hilength||n<sizeof(nxReq)||n>MAXREQUESTSZ){p->bad=1;break;}
+        if(p->used-at<n)break;
+        if(!valid(r,n)||(!p->opened&&r->reqType!=GrNumOpen)||(p->opened&&r->reqType==GrNumOpen)){
+            if(trace_reject)fprintf(stderr,"Nano-X rejected fd=%d type=%u cells=%u opened=%u\n",fd,r->reqType,n,p->opened);
             p->bad=1;break;
         }
         if(!resources(r)){
+            if(trace_reject)fprintf(stderr,"Nano-X quota fd=%d type=%u\n",fd,r->reqType);
             if(r->reqType==GrNumReparentWindow){p->bad=1;break;}
-            /* Valid allocation requests report a zero resource ID on exhaustion,
-             * as the upstream API does. Preserve the connection and its objects. */
             {short type=r->reqType;GR_ID none=0;nxr_write(fd,&type,sizeof(type));nxr_write(fd,&none,sizeof(none));}
-            p->used=0;p->need=sizeof(nxReq);continue;
+        }else{
+            if(r->reqType==GrNumOpen)p->direct=((nxOpenReq *)r)->c16_direct;
+            p->opened=1;
+            if(trace_wire)fprintf(stderr,"NXREQ %d %u %u\n",fd,r->reqType,n);
+            nxr_dispatch(fd,r);
+            if(peers[fd]!=p)return;
         }
-        p->opened=1;
-        if(getenv("NANOX_TRACE_WIRE"))fprintf(stderr,"NXREQ %d %u %u\n",fd,r->reqType,p->used);
-        nxr_dispatch(fd,r);
-        if(peers[fd]!=p)return;
-        p->used=0;p->need=sizeof(nxReq);
+        at+=n;
     }
+    if(at){p->used-=at;memmove(p->input,p->input+at,p->used);}
 }
 /* GX transports HID usages. Nano-X clients receive its portable key symbols,
  * ASCII characters and modifiers, never host keycodes. */
@@ -170,23 +190,35 @@ static MWKEY key(unsigned code){
         case 73:return MWKEY_INSERT;case 74:return MWKEY_HOME;case 75:return MWKEY_PAGEUP;
         case 76:return MWKEY_DELETE;case 77:return MWKEY_END;case 78:return MWKEY_PAGEDOWN;
         case 79:return MWKEY_RIGHT;case 80:return MWKEY_LEFT;case 81:return MWKEY_DOWN;case 82:return MWKEY_UP;
+        case 88:return MWKEY_ENTER;
     }return 0;
 }
 static void input(void){
     struct gx_event e;MWKEY k;unsigned i,buttons;
     while(nxr_event(&e)==0&&e.type){
         if(e.type==GX_CLOSE){stopping=1;break;}
-        if(e.type==GX_KEY&&e.code<256){
+        if(e.type==GX_ACTION&&e.code>=GX_ACTION_COPY&&e.code<=GX_ACTION_SELECT_ALL){
+            GsDeliverKeyboardEvent(0,GR_EVENT_TYPE_KEY_DOWN,NXR_KEY_COPY+e.code-1,0,0);
+        }else if(e.type==GX_KEY&&e.code<256){
             if(e.flags&GX_DOWN)held[e.code>>4]|=1U<<(e.code&15);else held[e.code>>4]&=~(1U<<(e.code&15));
             modifiers=0;
             if((held[14]&((1U<<1)|(1U<<5))))modifiers|=MWKMOD_SHIFT;
             if((held[14]&((1U<<0)|(1U<<4))))modifiers|=MWKMOD_CTRL;
             if((held[14]&((1U<<2)|(1U<<6))))modifiers|=MWKMOD_ALT;
-            k=key(e.code);
-            if(getenv("NANOX_TRACE_WIRE"))fprintf(stderr,"NXINPUT %u %u %u focus=%u\n",e.code,e.flags,k,focuswp->id);
+            k=(e.flags&GX_TEXT_KEY)?0:key(e.code);
+            if(trace_wire)fprintf(stderr,"NXINPUT %u %u %u focus=%u\n",e.code,e.flags,k,focuswp->id);
             if(k&&(e.flags&GX_DOWN)){repeat_key=e.code;repeat_at=GdGetTickCount()+500;}
             else if(!(e.flags&GX_DOWN)&&repeat_key==e.code)repeat_key=0;
+            if(k&&(e.flags&GX_DOWN)&&nxr_workspace_key(k,modifiers)){repeat_key=0;continue;}
             if(k)GsDeliverKeyboardEvent(0,(e.flags&GX_DOWN)?GR_EVENT_TYPE_KEY_DOWN:GR_EVENT_TYPE_KEY_UP,k,modifiers,e.code);
+        }else if(e.type==GX_TEXT){
+            /* Preserve the legacy 16-bit Nano-X key ABI: printable non-ASCII
+             * text is an ordered UTF-8 byte stream, never KEY_* symbols. */
+            unsigned char bytes[4];unsigned n=ru_encode((uint32_t)e.dx,bytes);
+            if(e.dx<128&&nxr_workspace_key((MWKEY)e.dx,modifiers)){repeat_key=0;continue;}
+            /* Text is already shifted/layout-resolved. Prefix Alt once for
+             * the complete encoding, not once per continuation octet. */
+            for(i=0;i<n;i++)GsDeliverKeyboardEvent(0,GR_EVENT_TYPE_KEY_DOWN,bytes[i],i?0:modifiers&MWKMOD_ALT,0);
         }else if(e.type==GX_MOTION||e.type==GX_BUTTON||e.type==GX_WHEEL){
             if(e.type==GX_WHEEL&&!e.wheel_y)continue;
             buttons=(e.buttons&1?GR_BUTTON_L:0)|(e.buttons&2?GR_BUTTON_R:0)|(e.buttons&4?GR_BUTTON_M:0);
@@ -204,19 +236,26 @@ static void input(void){
 void nxr_select(GR_TIMEOUT timeout){
     fd_set readset,writeset;struct timeval tv,*wait=NULL;GR_CLIENT *c;int fd,maxfd,ready;
     static int started;
-    if(!started){started=1;signal(SIGTERM,caught);signal(SIGINT,caught);fcntl(un_sock,F_SETFL,O_NONBLOCK);puts("Nano-X ready");
+    if(!started){started=1;
+        if(pipe(wakefd)<0||fcntl(wakefd[0],F_SETFL,O_NONBLOCK)<0||fcntl(wakefd[1],F_SETFL,O_NONBLOCK)<0)GsTerminate();
+        trace_wire=getenv("NANOX_TRACE_WIRE")!=NULL;trace_reject=getenv("NANOX_TRACE")!=NULL;signal(SIGTERM,caught);signal(SIGINT,caught);fcntl(un_sock,F_SETFL,O_NONBLOCK);puts("Nano-X ready");
         {char *ready=getenv("NANOX_READY_FD");if(ready&&*ready){int out=atoi(ready);write(out,"R",1);close(out);}}}
-    input();
+    nxr_draw_target(NULL);input();
     if(stopping)GsTerminate();
     if(repeat_key&&(long)(GdGetTickCount()-repeat_at)>=0){
         GsDeliverKeyboardEvent(0,GR_EVENT_TYPE_KEY_DOWN,key(repeat_key),modifiers,repeat_key);
         repeat_at=GdGetTickCount()+50;
     }
+    /* Complete staged packets even when the socket has no new data. */
+    for(fd=0;fd<FD_SETSIZE;fd++)if(peers[fd]&&staged(peers[fd]))nxr_receive(fd);
+    nxr_workspace_sync();
     /* Drain upstream event queues fairly before waiting. */
     for(c=root_client;c;c=c->next)if(c->waiting_for_event&&c->eventhead){curclient=c;c->waiting_for_event=0;GrGetNextEventWrapperFinish(c->id);}
     for(fd=0;fd<FD_SETSIZE;fd++)if(peers[fd]){if(peers[fd]->bad)GsClose(fd);else {flush(fd);if(peers[fd]&&peers[fd]->bad)GsClose(fd);}}
     if(nxr_present()<0){stopping=1;return;}
     FD_ZERO(&readset);FD_ZERO(&writeset);maxfd=un_sock;FD_SET(un_sock,&readset);
+    /* Preserve a signal arriving between the stop check and select(). */
+    FD_SET(wakefd[0],&readset);if(wakefd[0]>maxfd)maxfd=wakefd[0];
     fd=nxr_descriptor();if(fd>=0){FD_SET(fd,&readset);if(fd>maxfd)maxfd=fd;}
     for(fd=0;fd<FD_SETSIZE;fd++)if(peers[fd]){
         FD_SET(fd,&readset);if(peers[fd]->length>peers[fd]->sent)FD_SET(fd,&writeset);if(fd>maxfd)maxfd=fd;
@@ -228,7 +267,9 @@ void nxr_select(GR_TIMEOUT timeout){
             tv.tv_sec=remaining/1000;tv.tv_usec=(remaining%1000)*1000;wait=&tv;
         }
     }
+    for(fd=0;fd<FD_SETSIZE;fd++)if(peers[fd]&&staged(peers[fd])){tv.tv_sec=tv.tv_usec=0;wait=&tv;break;}
     ready=select(maxfd+1,&readset,&writeset,NULL,wait);
+    if(stopping)GsTerminate();
     if(ready<0&&errno!=EINTR){stopping=1;return;}
     if(ready>0){
         fd=nxr_descriptor();if(fd>=0&&FD_ISSET(fd,&readset))input();
@@ -248,3 +289,52 @@ KBDDEVICE kbddev={no_keyboard,no_close,keymods,no_key};
 static int no_mouse(MOUSEDEVICE *d){return -3;}static int buttons(void){return GR_BUTTON_L|GR_BUTTON_R|GR_BUTTON_M;}
 static void accel(int *s,int *t){*s=1;*t=0;}static int no_motion(MWCOORD *x,MWCOORD *y,MWCOORD *z,int *b){return 0;}
 MOUSEDEVICE mousedev={no_mouse,no_close,buttons,accel,no_motion};
+
+/* Only this request's target can accumulate backing-buffer damage. */
+static GR_WINDOW *paint_target;
+void nxr_draw_target(GR_WINDOW *w){paint_target=w;}
+int nxr_internal_pixmap(GR_PIXMAP *p){GR_WINDOW *w;for(w=listwp;w;w=w->next)if(w->buffer==p)return 1;return 0;}
+int nxr_buffer_window(GR_WINDOW *w){
+    int required=(w->props&GR_WM_PROPS_BUFFERED)!=0;
+    if(curclient&&peers[curclient->id]&&peers[curclient->id]->direct)return 1;
+    w->props|=GR_WM_PROPS_BUFFERED|GR_WM_PROPS_BUFFER_MWPF|GR_WM_PROPS_C16_BATCHED;
+    GsInitWindowBuffer(w,w->width,w->height);
+    if(w->buffer)return 1;
+    w->props&=~(GR_WM_PROPS_BUFFERED|GR_WM_PROPS_BUFFER_MWPF|GR_WM_PROPS_C16_BATCHED|GR_WM_PROPS_DRAWING_DONE);
+    w->c16_dirty=0;
+    /* Automatic backing stores are an optimization. Exposure-driven clients
+     * can continue drawing directly when another large window fills the heap.
+     * Explicitly requested buffered windows still report allocation failure. */
+    if(!required){if(trace_reject)fprintf(stderr,"NXR_DIRECT_FALLBACK %u %d %d\n",w->id,w->width,w->height);return 1;}
+    fprintf(stderr,"NXR_BUFFER_FAILED %u %d %d\n",w->id,w->width,w->height);return 0;
+}
+void nxr_buffer_damage(PSD p,int x,int y,int width,int height){
+    GR_WINDOW *w=paint_target;
+    if(!w||!w->buffer||w->buffer->psd!=p||!(w->props&GR_WM_PROPS_C16_BATCHED)||width<=0||height<=0)return;
+    if(x<0){width+=x;x=0;}if(y<0){height+=y;y=0;}
+    if(x+width>w->width)width=w->width-x;if(y+height>w->height)height=w->height-y;
+    if(width<=0||height<=0)return;
+    if(!w->c16_dirty){w->c16_left=x;w->c16_top=y;w->c16_right=x+width;w->c16_bottom=y+height;w->c16_dirty=1;}
+    else{if(x<w->c16_left)w->c16_left=x;if(y<w->c16_top)w->c16_top=y;
+        if(x+width>w->c16_right)w->c16_right=x+width;if(y+height>w->c16_bottom)w->c16_bottom=y+height;}
+    w->props&=~GR_WM_PROPS_DRAWING_DONE;
+}
+int nxr_clear_buffer(GR_WINDOW *w,int x,int y,int width,int height,int expose){
+    PSD p;
+    if(!(w->props&GR_WM_PROPS_C16_BATCHED)||!w->buffer||expose==2)return 0;
+    p=w->buffer->psd;nxr_draw_target(w);clipwp=NULL;curgcp=NULL;
+    GdSetClipRegion(p,GdAllocRectRegion(0,0,w->width,w->height));
+    GdSetMode(MWROP_COPY);GdSetForegroundColor(p,w->background);GdFillRect(p,x,y,width,height);
+    if(expose)GsDeliverExposureEvent(w,x,y,width,height);
+    return 1;
+}
+void nxr_commit(int fd){
+    GR_WINDOW *w;GR_CLIENT *client=GsFindClient(fd);if(!client)return;
+    curclient=client;nxr_draw_target(NULL);
+    for(w=listwp;w;w=w->next)if(w->owner==client&&w->c16_dirty&&(w->props&GR_WM_PROPS_C16_BATCHED)){
+        w->props|=GR_WM_PROPS_DRAWING_DONE;
+        GrClearArea(w->id,w->c16_left,w->c16_top,w->c16_right-w->c16_left,w->c16_bottom-w->c16_top,2);
+        w->c16_dirty=0;
+    }
+    curgcp=NULL;clipwp=NULL;
+}

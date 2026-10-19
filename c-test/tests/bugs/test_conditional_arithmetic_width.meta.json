@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYY\n",
+  "use_runtime": true,
+  "description": "Conditional arithmetic uses common width and integer promotions in either operand order"
+}

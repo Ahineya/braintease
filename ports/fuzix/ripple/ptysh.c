@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     }
     if (!isatty(0) || tcgetattr(0, &saved) < 0) { fputs("ptysh: interactive terminal required\n", stderr); return 1; }
     for (i = 0; i < RIPPLE_PTY_COUNT; i++) {
-        path[9] = slave[9] = '0' + i;
+        path[9] = slave[9] = RIPPLE_PTY_DIGIT(i);
         master = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
         if (master >= 0) break;
         if (errno != EBUSY) { perror("ptysh"); return 1; }
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
         dup2(fd, 0); dup2(fd, 1); dup2(fd, 2);
         if (fd > 2) close(fd);
         /* Do not retain the outer shell's safe tty descriptor. */
-        for (i = 3; i < 16; i++) close(i);
+        for (i = 3; i < 32; i++) close(i);
         execvp(argc > 1 ? argv[1] : "/bin/sh", argc > 1 ? argv + 1 : sh);
         _exit(127);
     }

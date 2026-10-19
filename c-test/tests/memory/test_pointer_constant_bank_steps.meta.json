@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYY\n",
+  "description": "Constant and native-word pointer carry, borrow, scaled steps and live source preservation",
+  "use_runtime": true
+}

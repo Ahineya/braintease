@@ -27,7 +27,7 @@ FUZIX and a native linker for Fuse-X). Run from a checkout containing the SDK;
 the compiler uses its build-time checkout path to locate the helper and libraries.
 
 Both normal OS builds include `rfl-demo` and `rfl-fm`, with `mc` as a short
-alias for Commander. The two Commander names share one guest executable inode.
+symbolic alias for Commander.
 Their normal offline image install/upgrade step installs these under `/bin`,
 preserving guest data.
 Rebuild with `scripts/run-fuzix.sh` or `scripts/run-fuse-x.sh` to make them
@@ -129,8 +129,9 @@ Use these libraries with `rfl build --os …`, rather than standalone `rfl run`.
 The existing `std/mmio`, `std/host`, `std/net`, HTTP and hardware reactor path
 targets standalone programs that own the devices. They cannot be used as guest
 process services; the build rejects their MMIO/host dependencies. Guest socket,
-select and timer wrappers are future additions. Pure computational libraries
-and the existing language features remain available.
+select, monotonic timer/reactor and crypto wrappers are provided separately
+below. Pure computational libraries and the existing language features remain
+available.
 
 ## Commander controls and behavior
 
@@ -143,7 +144,7 @@ and the existing language features remain available.
 | Left/Backspace/h | Parent directory |
 | Tab/Shift-Tab | Switch active panel |
 | F2 or Ctrl-R | Reload both panels |
-| F3 or v | View the first 16 KiB of a regular file, including executable files |
+| F3 or v | Preview the first 16 KiB of a text file, including executable scripts |
 | F4 or e | Edit with VISUAL, EDITOR, or vi |
 | r | Rename within the active directory; selection follows the new name |
 | F5 or c | Copy to the other panel; destination is editable |
@@ -157,11 +158,21 @@ and the existing language features remain available.
 
 Prompts accept printable ASCII, Backspace, Ctrl-U to clear, Enter to submit,
 and Esc/Ctrl-C to cancel. Overwrites and deletions require confirmation.
-The floating viewer supports scrolling, Home/End, and q/Esc to close. Prompts,
+The floating text viewer wraps long lines at word boundaries by default without
+changing the file. Up/Down and Page Up/Page Down scroll displayed rows; Home/End
+jump to the start/end of the preview. Press `w` to toggle wrapping; Left/Right
+scroll horizontally when wrapping is off. UTF-8 graphemes, wide characters,
+combining marks, CRLF and tabs use the same text engine as Rift. Resize reflows
+the preview while retaining its position. The preview remains limited to the
+first 16 KiB and rejects binary NUL data; q/Esc closes it. Prompts,
 confirmations and theme selection also use centered floating windows with
 shadows. The theme selector supports arrows, Enter, Esc and first-letter jumps.
 Directory panels retain their own selection/scroll positions, show a scrollbar
 for long listings and distinguish active and inactive selections.
+
+`python3 rfl/tools/test_commander_view.py --os both` checks wrapping, Unicode,
+scrolling, wrap toggling and resize on disposable images of both real kernels,
+and verifies that viewing leaves the source file unchanged.
 
 F4 uses the first nonempty `VISUAL`, `EDITOR`, then `vi`. Both systems initialize
 `EDITOR=/bin/vi` (the Levee alias). Editor values may contain shell arguments;
@@ -180,19 +191,25 @@ status. The shared curses library uses the terminal's alternate screen;
 quitting restores the previous shell screen, attributes, cursor and input mode,
 without leftover panels or placing the shell prompt inside the file list.
 
-The Ctrl-O prompt starts in the active panel's directory. An empty command
-returns to the panels and refreshes their contents. Each command runs through
-guest `system()`, so shell syntax and pipelines work; a child shell's `cd` or
-environment changes do not persist into the next command. This is a first
-command interface; persistent interactive shell integration and a command line
-alongside the panels are separate extensions.
+Ctrl-O starts an interactive guest `/bin/sh -i` in the active panel's directory.
+It uses the normal shell's Tab completion, history, startup settings, pipelines
+and job control; `cd` and variable changes persist throughout that shell session.
+Use `exit` or Ctrl-D on an empty line to return to the panels. An empty command
+stays in the shell. Commander restores terminal ownership before resuming curses
+and refreshes the panels; subshell directory/environment changes do not alter
+the file manager's own state.
 
 Copies stream regular files through an exclusively created sibling temporary.
 The destination is replaced by rename only after copying and close succeed;
 error paths remove the temporary, and same-file copies are rejected. Copies
 preserve ordinary permission bits, including executability, and replace destination
 symlinks rather than following them. Ownership, special mode bits and timestamps
-are not preserved. Moves first try guest rename. On EXDEV, regular files use the
+are not preserved. Moves first try guest rename. Directory trees can be moved
+with F6 or renamed with `r` within the same filesystem on both FUZIX and Fuse-X.
+These operations preserve the directory and file inodes, hard links, symlinks
+and open files; moving between parents also updates `..` and parent link counts.
+Moves into the directory's own descendants and replacement of nonempty
+directories are rejected. On EXDEV, regular files use the
 same complete-copy path and remove the source only after committing the copy.
 If removing the source fails, Commander reports "Copied; source kept" with the
 error, and both files remain. Cross-filesystem directory/symlink moves,
@@ -288,6 +305,7 @@ With both OS kernels and their normal tools built:
 python3 rfl/tools/test_os.py --os both
 make -C fuse-x test-rfl
 make -C ports/fuzix BUILD="$PWD/build/fuzix" test-rfl
+python3 ports/fuzix/tools/test_directory_moves.py --os both
 ```
 
 The integration runner builds its own RFL programs and uses disposable private
@@ -306,3 +324,159 @@ colors and user configuration. Live checks assert the rendered selection colors,
 line borders, F9 theme changes, floating viewer dismissal, paged directory
 scrolling, monochrome selection and shrink/recovery while a dialog is open.
 Logs are saved as `/tmp/rfl-os-fuzix.log` and `/tmp/rfl-os-fuse-x.log`.
+The directory-move runner separately checks tree identity, parent/link-count
+updates, collision and permission errors, Commander F6/rename/cancel, and
+persistence plus filesystem consistency after reboot, using disposable disks.
+
+## Guest networking, readiness and crypto
+
+`std/socket`, `std/poll` and `std/crypto` are OS services for both `--os fuzix`
+and `--os fuse-x`. The builder detects their externs and links the C adapters
+automatically. The implementation uses the existing RFL `std/shared` API;
+this work does not modify the RFL compiler or its FP implementation.
+
+### Shared asynchronous I/O
+
+`std/poll::poller()` creates a **copyable registration handle**. Its copies
+share the same engine and language-side waker table. `io.reactor()` acquires
+that engine's sole driver, implementing `std/executor::Reactor`; another live
+driver returns `SocketOsError(EBUSY)`. Dropping the driver permits a replacement
+to resume pending operations. Dropping the original registration handle does
+not invalidate its copies or futures.
+
+A running future may retain `io`, resolve a name, connect, and register the next
+read/write while the executor owns the driver. Registration never borrows the
+reactor. The old requirement to register waits between executor calls is removed.
+`std/shared` protects managed waker storage with short synchronous borrows;
+no borrow crosses an await, and no managed RFL layout is exposed to C.
+
+The engine lives in `os/poll.c`, `os/dns.c` and `os/socket.c`. C owns operation
+records, descriptor interests, retries, transfer offsets, buffers, clock
+accounting and deadline scans. Each turn makes bounded nonblocking progress,
+then the kernel's `select` waits on descriptors and deadlines together. A turn
+idles at most 100 ms; `Some(0)` never sleeps, and service work reduces the
+remaining idle duration. At most 32 completed slot indices cross the C/RFL
+boundary per turn. RFL collects their wakers, releases the shared table borrow,
+then invokes the wakes. There are no callbacks into RFL for individual bytes
+or packets.
+
+The registration handle offers:
+
+- `resolve_async(name, timeout_ms) -> ResolveFuture`, returning an IPv4 `Address`.
+- `connect(address, port, timeout_ms) -> ConnectFuture`, returning an owned `Socket`
+  after checking connection errors and peer state.
+- `read(&socket, limit, timeout_ms) -> ReadFuture`, returning one received chunk,
+  at most 32767 octets. Empty success means EOF, or a zero read limit.
+- `write_all(&socket, bytes, timeout_ms) -> WriteFuture`, returning the number of
+  bytes queued after writing the entire supplied buffer, at most 65536 octets.
+  The buffer is copied once into C-owned storage; partial writes stay in C.
+- `socket(&socket, READABLE|WRITABLE)` and `descriptor(fd, events)`, returning
+  one-shot owned `Readiness` futures for lower-level event loops.
+
+One asynchronous read and one asynchronous write may own an endpoint at once,
+including across registry/socket clones. A competing same-direction transfer
+or raw `try_read`/`try_write` returns `EBUSY`; independent read and write may
+progress concurrently. Serialize application messages before sending them.
+This prevents partial writes from silently interleaving separate messages.
+
+Deadlines start on the operation's first poll and cover the entire operation,
+including DNS retries, CNAME lookups and TCP fallback. Durations fit the
+wrapping clock's half range (`0..2147483647` ms); zero expires immediately.
+`move(wait).with_timeout(ms)` configures a raw readiness wait before polling.
+Expiry returns `SocketTimedOut`. Drop/cancel synchronously unregisters pending
+work, closes owned DNS/connect descriptors, and frees pending transfer buffers.
+Cancellation does not undo bytes already sent. Completed receive data remains
+owned until copied into the RFL result and the future is dropped.
+
+Socket waits retain their endpoints. Descriptor waits own a duplicate, so
+closing/reusing the caller's fd cannot redirect a pending wait. There are at
+most 32 operations per registry, with actual network capacity also bounded by
+guest socket/descriptor limits. Unpolled operations can be dropped safely;
+DNS performs no network work before its first poll.
+
+### DNS behavior
+
+The C asynchronous resolver reuses guest libc's bounded DNS name/RR parsers.
+It copies its own state instead of sharing libc's `hostent` response storage.
+IPv4 literals and bounded `/etc/hosts` scans need no DNS query. It snapshots up
+to three `nameserver` entries in `/etc/resolv.conf` (default `1.1.1.1`), retries
+UDP twice per server with 2-second attempt intervals, and tries subsequent
+servers on transient failure. Query IDs use the guest entropy device. Connected
+UDP endpoints, transaction IDs and exact questions are checked before accepting
+replies. Malformed/unrelated packets do not extend deadlines.
+
+The resolver follows up to eight CNAME links, handles arbitrary answer order,
+checks record ownership, rejects loops and unrelated address records, and
+supports nonblocking TCP fallback for a matching truncated UDP response. TCP
+length/payload transfers handle split reads and writes. Responses are capped
+at 4096 octets and 128 records; invalid lengths fail without growing a buffer.
+A turn consumes at most four UDP packets per lookup. Local configuration scans
+are bounded to 64 lines for resolv.conf and 256 lines for hosts; these ordinary
+filesystem reads remain synchronous. Network DNS waits are asynchronous and
+cancellable. This first implementation supports IPv4 A lookups, with no IDNA,
+AAAA, search suffixes or DNS cache.
+
+`std/socket::resolve` retains its synchronous guest-libc behavior for existing
+callers. New asynchronous code should use `io.resolve_async`.
+
+### Low-level sockets and terminal input
+
+`std/socket` also provides owned nonblocking IPv4 TCP endpoints, connected local
+`socket_pair()` streams, shutdown and partial binary I/O. `try_clone` retains an
+endpoint without consuming another descriptor. `try_read` returns `None` for
+would-block/interruption and `Some([])` for EOF; `try_write` takes an offset and
+reports partial progress. Raw operations transfer at most 32767 octets per call.
+Raw connecting is `start_connect`, write readiness when pending, then
+`finish_connect` to inspect `SO_ERROR` and peer state.
+
+When combining curses with readiness, use nonblocking key reads and drain
+buffered/decoded keys before waiting: descriptor readiness cannot see keys
+already buffered inside curses. EOF is readable and must be handled explicitly.
+The same readiness interface works for terminal, file and pipe descriptors;
+descriptor watches consume a guest `dup` slot until released.
+
+### Example and verification
+
+The same registration handle is available both inside the async function and
+to the independently driven reactor:
+
+```rfl
+import { Poller, poller } from "std/poll";
+import { SocketError } from "std/socket";
+import { block_on } from "std/executor";
+
+async fn greeting(io: Poller) -> Result<unit, SocketError> {
+    let ip = io.resolve_async("example.com", 5000)?.await?;
+    let socket = io.connect(ip, 80, 5000)?.await?;
+    io.write_all(&socket, [71, 69, 84, 32, 47, 13, 10], 5000)?.await?;
+    let reply = io.read(&socket, 4096, 5000)?.await?;
+    Ok({})
+}
+
+let io = poller()?;
+let mut reactor = io.reactor()?;
+let mut task = greeting(io);
+let result = block_on(&mut task, &mut reactor);
+```
+
+`std/crypto` exposes the stateless crypto mailbox through the checked guest
+`/dev/crypto` driver, plus `/dev/urandom`. It includes discovery, secret-exponent
+2048-bit modular arithmetic, PBKDF2-HMAC-SHA512, AES-256-IGE and bounded SHA-256/512.
+See [the device contract](../../docs/arch/crypto.md) for encodings and limits.
+Telegram MTProto, authentication, session persistence and TUI are application work.
+
+Run the disposable-kernel acceptance suite:
+
+```sh
+python3 rfl/tools/test_guest_services.py --target both
+```
+
+`tests/fixtures/guest_services.rfl` covers the original socket/readiness/crypto
+API; `tests/fixtures/guest_async.rfl` covers the C asynchronous engine and dynamic
+registration from running futures. Tests use private disks and an independent
+Ethernet peer. Coverage includes concurrent binary transfers and DNS, timer
+progress while DNS is pending, hosts/literals, NXDOMAIN/no-data, malformed and
+unrelated replies, CNAME chains/loops, split TCP DNS and invalid lengths, UDP
+retry/server failover, deadline expiry, exclusive transfers, driver ownership,
+EOF, cancellation and descriptor reuse. No public Internet or Telegram account
+is used, and the user's normal guest disk is never attached.

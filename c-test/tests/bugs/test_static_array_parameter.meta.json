@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "C99 minimum-size array parameters used by QuickJS Date code",
+  "expected": "YYY\n"
+}

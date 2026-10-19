@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYY\n",
+  "description": "Static union storage preserves scalar widths nested padding floating bits and address relocations",
+  "use_runtime": true
+}

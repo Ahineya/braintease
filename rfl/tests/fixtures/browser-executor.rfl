@@ -1,0 +1,21 @@
+import { mount_app, BrowserApp } from "std/browser_app";
+import { BrowserEvent } from "std/browser";
+import { Future, yield_now, sleep } from "std/future";
+async fn child() {
+    println("child");
+}
+
+async fn work(app: BrowserApp) {
+    println("start");
+    yield_now().await;
+    println("yielded");
+    app.spawn(child()).unwrap();
+    sleep(25).unwrap().await;
+    println("clock timer");
+}
+
+fn main() {
+    let app = mount_app(4, fn(events: Vec<BrowserEvent>, app: BrowserApp) => {}).unwrap();
+    app.spawn(work(app)).unwrap();
+    println("main returned");
+}

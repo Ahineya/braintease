@@ -12,6 +12,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 PORT = ROOT / 'ports/fuzix'
+sys.path.insert(0, str(ROOT / 'scripts'))
+from build_cache import c_dependencies
 
 
 def main():
@@ -37,7 +39,7 @@ def main():
     includes = [PORT / 'ripple/include', PORT / 'upstream/Library/include',
                 ROOT / 'runtime/include', PORT / 'ripple', ROOT / 'ports/graphics/include',
                 ROOT / 'libraries/ini', ROOT / 'libraries/tui-theme']
-    flags = ['--target', 'native', '--bank-size', '64000', '-DRIPPLE_MMU=1', '-DNO_64BIT']
+    flags = ['--target', 'native', '--bank-size', '64000', '-DRIPPLE_MMU=1', '-DFUSE_X_USER=1', '-DNO_64BIT']
     if args.float_format:
         flags.remove('-DNO_64BIT')
     for directory in includes:
@@ -48,14 +50,14 @@ def main():
                    '__rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow '
                    'sin cos atan atan2 strtod ecvt fmod frexp ldexp modf'.split())
     libraries = [PORT / f'ripple/libc/{name}.c'
-                 for name in 'syscalls stdio format scan wait clock dirent misc heap pipe sockets resolver search identity'.split()]
+                 for name in 'syscalls stdio format scan wait clock timezone dirent misc heap pipe sockets resolver search identity'.split()]
     libraries += sorted(p for p in (PORT / 'upstream/Library/libs').glob('*.c')
                         if p.stem not in excluded)
-    libraries += [ROOT / 'fuse-x/libc/bridge.c', PORT / 'ripple/userlib.c']
+    libraries += [ROOT / 'fuse-x/libc/bridge.c', PORT / 'ripple/userlib.c', ROOT / 'libraries/unicode/unicode.c']
     if args.curses:
         curses = PORT / 'upstream/Library/libs/curses'
         flags += ['-I', str(curses)]
-        overrides = {'initscr', 'endwin', 'newwin', 'windel', 'wgetch', 'wgetstr', 'doupdt', 'refresh', 'winscrol'}
+        overrides = {'initscr', 'endwin', 'newwin', 'windel', 'wgetch', 'wgetstr', 'doupdt', 'refresh', 'winscrol', 'waddch', 'waddstr'}
         libraries += sorted(p for p in curses.glob('*.c') if p.stem not in overrides)
         libraries += sorted((PORT / 'ripple/curses').glob('*.c'))
     if args.ini:
@@ -63,9 +65,9 @@ def main():
     if args.tui_theme:
         libraries += [ROOT / 'libraries/tui-theme/tui_theme.c', ROOT / 'libraries/tui-theme/tui_curses.c']
     if args.float_format:
-        libraries += [PORT / 'ripple/libc/math-bits.c']
+        libraries += [PORT / 'ripple/libc/math-bits.c', PORT / 'ripple/libc/math-host.c']
         libraries += [PORT / f'upstream/Library/libs/{name}.c' for name in
-                      '__sin __cos __rem_pio2 __rem_pio2_large scalbn fabs sqrt floor log exp pow sin cos atan atan2 strtod ecvt fmod frexp ldexp modf'.split()]
+                      'scalbn strtod ecvt frexp ldexp modf'.split()]
     digest = hashlib.sha256()
     digest.update(str((compiler, compiler.stat().st_mtime_ns, flags)).encode())
     for directory in includes:
@@ -77,7 +79,10 @@ def main():
 
     def compile_library(source):
         library_flags = flags + (['-DRIPPLE_FLOAT_FORMAT'] if args.float_format and source.name == 'format.c' else [])
-        key = hashlib.sha256(fingerprint + str((source, library_flags)).encode() + source.read_bytes()).hexdigest()
+        key_hash = hashlib.sha256(fingerprint + str((source, library_flags)).encode())
+        for dependency in c_dependencies(source, includes):
+            key_hash.update(str(dependency).encode());key_hash.update(dependency.read_bytes())
+        key = key_hash.hexdigest()
         output = cache / f'{source.stem}-{key[:24]}.ir'
         if not output.exists():
             result = subprocess.run([str(compiler), 'compile', str(source), *library_flags, '--emit-ir'],
@@ -90,8 +95,10 @@ def main():
             os.replace(temporary, output)
         return output
 
+    print(f'Build: Preparing shared SDK for {args.output.name}', flush=True)
     with ThreadPoolExecutor(max_workers=4) as pool:
         library_ir = list(pool.map(compile_library, libraries))
+    print(f'Build: Compiling {args.output.name} application inputs', flush=True)
     with tempfile.TemporaryDirectory(prefix='fuse-x-cc-') as temporary:
         directory = Path(temporary)
         inputs = []
@@ -136,8 +143,10 @@ def main():
             raise RuntimeError(result.stderr.decode(errors='replace'))
         startup_ir = directory / 'startup.ir'
         startup_ir.write_bytes(result.stdout)
+        print(f'Build: Linking {args.output.name} (native code generation)', flush=True)
         subprocess.run([str(linker), 'link-app', str(startup_ir), *map(str, inputs),
-                        *map(str, args.object_ir), *map(str, library_ir), '-o', str(args.output)], check=True)
+                        *map(str, args.object_ir), *map(str, library_ir), '-o', str(args.output)], check=True,
+                       env=dict(os.environ, RCC_NATIVE_PROGRESS='1'))
     print(f'Built Fuse-X executable: {args.output}')
 
 

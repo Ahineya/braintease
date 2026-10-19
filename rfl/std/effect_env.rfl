@@ -1,0 +1,125 @@
+import { write_text } from "std/io";
+import { take } from "std/mem";
+import { Option } from "std/option";
+extern "C" {
+    fn rfl_halt();
+}
+
+/// A copyable access capability for one running effect's environment. Access is
+/// synchronous and exclusive; the capability becomes invalid when its run ends.
+export type Environment<R> = Environment(fn(once fn(&mut R) -> unit) -> unit);
+
+/// Reports stale or reentrant environment access and stops execution.
+export fn invalid_environment() {
+    write_text("error: effect environment is unavailable or already borrowed\n");
+    rfl_halt();
+}
+
+/// Runs f with temporary exclusive environment access and returns its owned
+/// result. References cannot escape. Never retain an environment borrow in a future.
+export fn with_environment<R, A>(environment: Environment<R>, f: once fn(&mut R) -> A) -> A {
+    let mut result: Option<A> = None;
+    let pointer = unsafe {
+        let p: *mut Option<A> = &mut result;
+        p
+    };
+    let mut live = true;
+    let gate: fn(bool) -> bool = fn(close: bool) => {
+        if (close) {
+            live = false;
+        }
+        live
+    };
+    let dispatch_gate = gate;
+    let visitor: once fn(&mut R) -> unit = once fn(r: &mut R) => {
+        if (!dispatch_gate(false)) {
+            invalid_environment();
+            return;
+        }
+        let value = f(r);
+        // The provider may retain visitor, but cannot use this result slot after
+        // the access call closes its separately retained lifetime gate.
+        unsafe {
+            let output = __borrow_raw(pointer);
+            *output = Some(move(value));
+        }
+    };
+    match environment {
+        Environment(provider) => provider(move(visitor))
+    };
+    gate(true);
+    take(&mut result).expect("effect environment provider did not invoke its visitor")
+}
+
+const ENTER: u16 = 0;
+const LEAVE: u16 = 1;
+const CLOSE: u16 = 2;
+
+// Only private closures retain the raw storage view.
+/// Internal lifetime and exclusivity guard for an owned environment.
+fn environment_gate() -> fn(u16) -> bool {
+    let mut live = true;
+    let mut busy = false;
+    fn(op: u16) => {
+        if (op == ENTER) {
+            if (!live || busy) {
+                invalid_environment();
+                return false;
+            }
+            busy = true;
+            return true;
+        }
+        if (op == LEAVE) {
+            busy = false;
+            return true;
+        }
+        if (busy) {
+            invalid_environment();
+            return false;
+        }
+        live = false;
+        false
+    }
+}
+
+/// Moves an environment into stable storage and returns its opaque owner and
+/// access capability. Dropping the owner revokes access before freeing R.
+export fn own_environment<R>(value: R) -> (ErasedOwner, Environment<R>) {
+    own_environment_with_cleanup(move(value), fn(value: &mut R) => {})
+}
+
+/// Owns stable environment storage with a synchronous finalizer. Revokes access
+/// before running cleanup, then releases the payload and its nested resources.
+export fn own_environment_with_cleanup<R>(value: R, cleanup: fn(&mut R) -> unit) -> (ErasedOwner, Environment<R>) {
+    let (owner, view) = environment_storage(move(value), cleanup);
+    (__erase_owned(move(owner)), view)
+}
+
+/// Internal shared storage: copying the opaque owner retains R.
+export fn share_environment<R>(value: R, cleanup: fn(&mut R) -> unit) -> (SharedOwner, Environment<R>) {
+    let (owner, view) = environment_storage(move(value), cleanup);
+    (__share_owned(move(owner)), view)
+}
+
+fn environment_storage<R>(value: R, cleanup: fn(&mut R) -> unit) -> (Owned<R>, Environment<R>) {
+    let gate = environment_gate();
+    let close = gate;
+    let mut owner = owned(move(value), fn(value: &mut R) => {
+        close(CLOSE);
+        cleanup(value);
+    });
+    let pointer = unsafe {
+        let value = owner.borrow_mut();
+        let p: *mut R = &mut *value;
+        p
+    };
+    let view = Environment(fn(visitor: once fn(&mut R) -> unit) => {
+        gate(ENTER);
+        unsafe {
+            let value = __borrow_raw(pointer);
+            visitor(value);
+        }
+        gate(LEAVE);
+    });
+    (move(owner), view)
+}

@@ -9,6 +9,7 @@ use std::{
     io::{Seek, SeekFrom, Write},
     path::Path,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 #[derive(Default)]
@@ -42,6 +43,9 @@ impl Output {
         self.speaker = None;
         self.playback = None;
         self.attempted = false;
+        // Opening a physical device can block. Do it while the guest is
+        // configuring a paused stream, before its real-time clock starts.
+        self.ensure_speaker(rate);
         Ok(())
     }
     pub fn clear_playback(&mut self) {
@@ -49,24 +53,19 @@ impl Output {
             let mut p = p.lock().unwrap();
             p.frames.clear();
             p.phase = 0;
+            p.drain_until = None;
+            p.started = false;
+            p.empty_frames = 0;
         }
     }
     pub fn write(&mut self, rate: u32, channels: u16, pcm: &[i16]) -> Result<(), String> {
         if let Some(wav) = &mut self.wav {
             wav.write(rate, channels, pcm)?;
         }
-        if self.live && !self.attempted {
-            self.attempted = true;
-            match speaker(rate) {
-                Ok((stream, queue)) => {
-                    self.speaker = Some(stream);
-                    self.playback = Some(queue);
-                }
-                Err(e) => eprintln!("Audio output unavailable; continuing muted: {e}"),
-            }
-        }
+        self.ensure_speaker(rate);
         if let Some(p) = &self.playback {
             let mut p = p.lock().unwrap();
+            p.resume();
             for frame in pcm.chunks_exact(usize::from(channels)) {
                 // Bound host latency independently of the guest's logical queue.
                 if p.frames.len() >= rate as usize / 4 {
@@ -80,11 +79,51 @@ impl Output {
         }
         Ok(())
     }
+    fn ensure_speaker(&mut self, rate: u32) {
+        if self.live && !self.attempted {
+            self.attempted = true;
+            match speaker(rate) {
+                Ok((stream, queue)) => {
+                    self.speaker = Some(stream);
+                    self.playback = Some(queue);
+                }
+                Err(e) => eprintln!("Audio output unavailable; continuing muted: {e}"),
+            }
+        }
+    }
     pub fn finish(&mut self) -> Result<(), String> {
         if let Some(wav) = &mut self.wav {
             wav.file.flush().map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+    pub fn live(&self) -> bool {
+        self.speaker.is_some()
+    }
+    // Count gaps only once subsequent PCM arrives. Initial silence, a normal
+    // final drain, and explicit pause/stop are not playback underruns.
+    pub fn statistics(&self) -> (u64, u64, u64) {
+        self.playback.as_ref().map_or((0, 0, 0), |p| {
+            let p = p.lock().unwrap();
+            (
+                p.gaps,
+                p.missing_frames,
+                p.max_gap_frames.saturating_mul(1000) / u64::from(p.output_rate),
+            )
+        })
+    }
+    pub fn pending_frames(&self, rate: u32) -> u32 {
+        let Some(playback) = &self.playback else {
+            return 0;
+        };
+        let queue = playback.lock().unwrap();
+        let hardware = queue
+            .drain_until
+            .and_then(|end| end.checked_duration_since(Instant::now()))
+            .map_or(0, |left| {
+                (left.as_secs_f64() * f64::from(rate)).ceil() as u32
+            });
+        (queue.frames.len() as u32).saturating_add(hardware)
     }
 }
 struct Playback {
@@ -92,13 +131,38 @@ struct Playback {
     phase: u64,
     source_rate: u32,
     output_rate: u32,
+    drain_until: Option<Instant>,
+    started: bool,
+    empty_frames: u64,
+    gaps: u64,
+    missing_frames: u64,
+    max_gap_frames: u64,
+    preroll_frames: usize,
 }
 impl Playback {
+    fn resume(&mut self) {
+        if self.empty_frames != 0 {
+            self.gaps = self.gaps.saturating_add(1);
+            self.missing_frames = self.missing_frames.saturating_add(self.empty_frames);
+            self.max_gap_frames = self.max_gap_frames.max(self.empty_frames);
+            self.empty_frames = 0;
+        }
+        // The Unix renderer submits elapsed wall time in small bursts. Keep
+        // 40 ms ahead of the speaker so a late checkpoint is not audible.
+        // This sink-only lead never changes deterministic PCM/WAV captures.
+        if !self.started && self.frames.is_empty() {
+            self.frames.resize(self.preroll_frames, [0.0; 2]);
+        }
+    }
     fn next(&mut self) -> [f32; 2] {
         let Some(a) = self.frames.front().copied() else {
             self.phase = 0;
+            if self.started {
+                self.empty_frames = self.empty_frames.saturating_add(1);
+            }
             return [0.0; 2];
         };
+        self.started = true;
         let b = self.frames.get(1).copied().unwrap_or(a);
         let f = self.phase as f32 / self.output_rate as f32;
         let result = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
@@ -121,6 +185,13 @@ fn speaker(rate: u32) -> Result<(cpal::Stream, Arc<Mutex<Playback>>), String> {
         phase: 0,
         source_rate: rate,
         output_rate: config.sample_rate,
+        drain_until: None,
+        started: false,
+        empty_frames: 0,
+        gaps: 0,
+        missing_frames: 0,
+        max_gap_frames: 0,
+        preroll_frames: (rate / 25) as usize,
     }));
     let stream = match supported.sample_format() {
         cpal::SampleFormat::F32 => build::<f32>(&device, config, queue.clone()),
@@ -141,11 +212,16 @@ fn build<T: cpal::SizedSample + FromSample<f32>>(
     queue: Arc<Mutex<Playback>>,
 ) -> Result<cpal::Stream, cpal::Error> {
     let channels = usize::from(config.channels);
+    let output_rate = config.sample_rate;
     device.build_output_stream(
         config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+        move |data: &mut [T], info: &cpal::OutputCallbackInfo| {
             let mut queue = queue.lock().unwrap();
-            for frame in data.chunks_exact_mut(channels) {
+            let mut last = None;
+            for (index, frame) in data.chunks_exact_mut(channels).enumerate() {
+                if !queue.frames.is_empty() {
+                    last = Some(index + 1);
+                }
                 let pair = queue.next();
                 if channels == 1 {
                     frame[0] = T::from_sample((pair[0] + pair[1]) * 0.5);
@@ -158,6 +234,12 @@ fn build<T: cpal::SizedSample + FromSample<f32>>(
                         };
                     }
                 }
+            }
+            if let Some(frames) = last {
+                let timestamp = info.timestamp();
+                let delay = timestamp.playback.duration_since(timestamp.callback)
+                    + Duration::from_secs_f64(frames as f64 / f64::from(output_rate));
+                queue.drain_until = Instant::now().checked_add(delay);
             }
         },
         |error| eprintln!("Audio stream error: {error}"),
@@ -231,5 +313,73 @@ impl Wav {
         self.file.write_all(&data).map_err(|e| e.to_string())?;
         self.bytes = bytes;
         self.header()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn playback() -> Arc<Mutex<Playback>> {
+        Arc::new(Mutex::new(Playback {
+            frames: VecDeque::new(),
+            phase: 0,
+            source_rate: 8000,
+            output_rate: 48000,
+            drain_until: None,
+            started: false,
+            empty_frames: 0,
+            gaps: 0,
+            missing_frames: 0,
+            max_gap_frames: 0,
+            preroll_frames: 0,
+        }))
+    }
+    #[test]
+    fn speaker_starvation_is_distinct_from_logical_pcm_and_ignores_idle() {
+        let queue = playback();
+        let mut output = Output {
+            playback: Some(queue.clone()),
+            ..Output::default()
+        };
+        // No logical renderer is involved: these are the actual sink's samples.
+        for _ in 0..480 {
+            queue.lock().unwrap().next();
+        }
+        output.write(8000, 1, &[123]).unwrap();
+        assert_eq!(output.statistics(), (0, 0, 0));
+        for _ in 0..486 {
+            queue.lock().unwrap().next();
+        }
+        assert_eq!(queue.lock().unwrap().empty_frames, 480);
+        output.write(8000, 1, &[456]).unwrap();
+        assert_eq!(output.statistics(), (1, 480, 10));
+        for _ in 0..966 {
+            queue.lock().unwrap().next();
+        }
+        output.write(8000, 1, &[789]).unwrap();
+        assert_eq!(output.statistics(), (2, 1440, 20));
+        for _ in 0..48000 {
+            queue.lock().unwrap().next();
+        }
+        output.clear_playback(); // Normal final drain/pause/stop.
+        for _ in 0..48000 {
+            queue.lock().unwrap().next();
+        }
+        output.write(8000, 1, &[0]).unwrap();
+        assert_eq!(output.statistics(), (2, 1440, 20));
+    }
+    #[test]
+    fn speaker_preroll_absorbs_jitter_and_is_reapplied_after_pause() {
+        let queue = playback();
+        queue.lock().unwrap().preroll_frames = 320; // 40 ms at 8 kHz.
+        let mut output = Output { playback: Some(queue.clone()), ..Output::default() };
+        output.write(8000, 1, &[1000; 80]).unwrap();
+        assert_eq!(queue.lock().unwrap().frames.len(), 400);
+        for _ in 0..960 { queue.lock().unwrap().next(); } // 20 ms.
+        output.write(8000, 1, &[1000; 80]).unwrap();
+        assert_eq!(output.statistics(), (0, 0, 0));
+        output.clear_playback();
+        output.write(8000, 1, &[1000; 10]).unwrap();
+        assert_eq!(queue.lock().unwrap().frames.len(), 330);
     }
 }

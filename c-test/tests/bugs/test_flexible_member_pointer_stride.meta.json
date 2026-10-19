@@ -1,0 +1,5 @@
+{
+  "description": "Flexible array tails occupy no cells in aggregate pointer arithmetic",
+  "expected": "YYYYY\n",
+  "use_runtime": true
+}

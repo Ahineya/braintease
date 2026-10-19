@@ -1,18 +1,143 @@
 # Nano-X on Ripple
 
 Nano-X now runs as a separate server on MMU FUZIX/RVM, with the upstream
-client library, NanoWM and text-button `nxlaunch`. `nxterm` connects the shared
+client library, NanoWM and NXDSKTOP. `nxterm` connects the shared
 terminal model to Nano-X and a real guest PTY. RVM still presents one host
-window containing the whole guest desktop. The Fuse-X native-window backend
-is a later integration; these desktop executables are not installed there.
+window containing the whole guest desktop. Fuse-X provides native top-level
+windows and independently built companion apps, retaining macOS window
+management rather than running a guest desktop.
 
 Run `scripts/run-fuzix.sh --visual`, then `startx` at the guest console.
-NanoWM decorates the terminal and handles focus, stacking, title-bar dragging,
-close buttons and corner resizing. The launcher opens additional applications.
-Closing the last terminal leaves the launcher available. Closing the host
+NanoWM uses Slate decorations and handles focus, stacking, title-bar dragging,
+minimize/maximize/close buttons and border resizing. Alt+Tab restores and switches
+between applications; Alt+Shift+Tab switches backwards. Border resizing commits
+on release. `fdectl list` and its window actions expose the shared
+[workspace service](../../docs/fusede/workspace.md). NXDSKTOP's bottom-left Start menu opens
+additional applications. Closing the last terminal leaves the desktop available.
+`startx --minimal` selects the original text-button `nxlaunch` instead. Closing the host
 display ends the graphics session and returns to the original console; use
 `shutdown` there to stop FUZIX cleanly. `gterm` and `nxdraw` remain available as
 standalone tools; close them before `startx`, since GX has one display lease.
+
+## NXDSKTOP and companion apps
+
+The upstream NXDSKTOP 1.1 menu/bar drawing is retained, with platform lifecycle
+and process handling in `desktop_adapt.py` and `ripple/nxdsktop-platform.*`.
+The Start menu offers About, Help, Calculator, Terminal, Edit file, Processes,
+Clock, Eyes, Roaches, Tetris, Image Viewer, Sync disk, Exit to terminal and Shut down.
+Mines and the world map remain later ports.
+
+The taskbar reports physical free/total KiB through `/dev/proc` and wall time.
+It blocks on Nano-X events, a one-second status timer and registered wake/result
+pipes; unchanged status text is not repainted. Separate taskbar/popup windows
+leave the root desktop available to Roaches. Panel work-area reservation and
+full window task switching belong to later FuseDE work.
+
+`nxmsg`, `nxselect`, `nxcalc` and `nxview` are independently installed companions.
+The selector navigates directories and pages through up to 511 entries plus
+the parent row. Select a file and click OK to open it in Levee. Closing the
+selector or pressing Escape cancels; filenames are passed as arguments rather
+than interpolated into a shell command. In Levee, Esc followed by `:wq` and
+Enter saves and quits. Calculator supports basic decimal arithmetic and reports
+division by zero. These three clients currently use fixed window geometry.
+
+Exit to terminal ends the graphics session and returns to the original shell;
+Shut down invokes the guest's orderly filesystem shutdown. Ordinary window
+close actions do not stop FUZIX. Child reaping, signal wakeups and dialog
+results are handled outside signal handlers; desktop cleanup bounds termination
+of its remaining child applications.
+
+On Fuse-X, run `nxcalc &`, `nxselect`, or `nxmsg 'Title' 'Message'` after starting
+its Nano-X service. They create native macOS windows, with dialog results on
+stdout (`OK` or `[]`; a selected file produces its path). NXDSKTOP itself is an
+RVM desktop client; native `startx` continues to open Applications and Terminal.
+The [FuseDE plan](../../docs/fusede/README.md) tracks the remaining companion
+apps, toolkit evaluation and custom desktop.
+
+`fdeshowcase` is the first FuseDE colour/skin client on RVM and Fuse-X. It loads
+Slate skins and a small Lucide icon atlas from `/usr/share/fusede/`, demonstrates
+masked/tinted drawing, nine-slice scaling and keyboard/pointer control states,
+and blocks without repainting while idle. The versioned C16 image extension
+retains ownership, quotas, clipping and buffered repaint boundaries; upstream
+image codecs remain disabled. See [usage, API and verification](../../docs/fusede/colour-resources.md).
+
+## Tetris
+
+Choose Start → Tetris on RVM, or run `nxtetris &` from a graphical terminal on
+either platform. The original NanoTetris pieces, board and drawing run in a
+fixed-size window; a game starts immediately.
+
+| Key | Action |
+| --- | --- |
+| Left / Right | Move |
+| Up / F | Rotate clockwise |
+| D | Rotate anticlockwise |
+| Down | Soft drop |
+| Space | Hard drop |
+| P | Pause / resume |
+| C | Continue |
+| N | New game |
+| Q / Escape | Quit the game |
+
+The mouse buttons provide the same controls. Pausing freezes gravity; movement
+keys leave the game paused. A completed line earns 100 points. The best score
+is saved in `$HOME/.nxtetris-score` as lines clear and on new game/exit, using
+a temporary file and rename followed by disk synchronization. Scores use
+32-bit arithmetic. `nxtetris --help` lists controls; `--seed 0..32767` gives a
+repeatable piece sequence for testing.
+
+Existing launcher configurations are preserved. To add Tetris to an older
+minimal RVM launcher or Fuse-X Applications window, append
+`Tetris - /bin/nxtetris` to `/etc/nxlaunch.cnf`; new configurations include it.
+
+## Image viewer
+
+Choose Start → Image Viewer on RVM, or run `nxview &` in either graphical
+environment. With no filename it opens `nxselect`; it can also take one or
+several files:
+
+```sh
+nxview /usr/share/netsurf/images/landscape.jpg
+nxview /pictures/first.png /pictures/second.jpg &
+```
+
+Open / **O** / **Ctrl+O** opens another local file. **F** fits the image into
+the window without enlarging small images; **1** shows actual pixels.
+**+ / -** zoom around the visible centre. Drag or use arrows to pan;
+the wheel pans vertically. **[ / ]** or PageUp/PageDown browse the filenames
+supplied on the command line. **Q**, Escape or the close button quits.
+Resizing recomputes fit geometry or clamps the existing pan. The toolbar
+exposes the same viewing controls, and the status bar shows dimensions/zoom/path
+or an opening/decoding error. Closing/cancelling the file picker and failed
+loads leave the previous image available.
+
+This is a new small frontend using `libraries/image`, rather than the upstream
+demo's disabled server codec APIs. PNG, baseline JPEG, first-frame GIF and BMP
+share NetSurf's bounded decoders and RGB565/alpha upload path. Transparency uses
+a checkerboard. Retained images avoid repeat uploads when their resource budget
+allows; larger pictures use the shared visible-tile fallback and existing
+GX/DMA presentation. No browser process or network connection is required.
+The initial limits are 1 MiB input, 262144 pixels, 4096 per dimension and 2 Mi
+temporary decoder cells. Progressive JPEG, animated playback, SVG and editing
+are outside this version. A picture above a limit reports an error rather than
+changing process or server quotas.
+Available memory can impose a lower limit, particularly within RVM's current
+23-bank data/heap window. Input, decoded RGBA and decoder workspace coexist
+during a load; memory exhaustion leaves the previous picture intact.
+
+Normal builds install `/bin/nxview` on both systems. New minimal-launcher and
+Fuse-X Applications configurations include Images; existing configurations
+are preserved. Add `Images - /bin/nxview` to `/etc/nxlaunch.cnf` if desired.
+
+`python3 ports/nanox/tools/test_viewer.py` checks real hosted and RVM/JIT
+processes using private disks. It checks decoded PNG/alpha pixels, all four
+formats, zoom/pan, native resize, picker cancellation, failed-load preservation,
+idle rendering and clean exit/filesystems. Captures/logs are retained under
+`fuse-x/build/nxview-tests/` and `build/fuzix/nxview-tests/`.
+`tools/view-model.c` additionally checks fit/zoom/resize coordinate bounds with
+a host undefined-behaviour sanitizer.
+
+## Minimal launcher configuration
 
 The launcher reads `/etc/nxlaunch.cnf`. Its initial configuration is installed
 without replacing existing user configuration. Each line is `Name - COMMAND
@@ -79,9 +204,14 @@ monotonic application timers; the standalone engine demo omits them.
 `ripple/screen.c` implements raster operations, word-based monochrome conversion
 and GX presentation. Framebuffer/pitch units are cells, one per RGB565 pixel.
 Drawing happens in guest memory; dirty rectangles upload through GX's MMU-aware
-DMA path. Self-blits snapshot their source so disjoint clip bands cannot read
-already-overwritten pixels. This initial implementation prioritizes correctness;
-it does not yet accelerate local rasterization with DMA.
+DMA path. Self-blits use a reserved 640-by-16-pixel scratch stripe, traversed
+in overlap-safe order, so disjoint clip bands cannot read overwritten pixels.
+Moving a large window does not allocate a second window-sized snapshot.
+Fully visible copies and nonoverlapping rectangles bypass scratch storage.
+Large fills and RGB565 copies use GX_RASTER_FILL/COPY on validated process RAM:
+RVM resolves COW pages and uses DMA, while Fuse-X uses page-aware host bulk
+operations. Small or unsupported operations retain the software path. Opaque
+8-pixel font rows use direct stores instead of per-pixel division and masking.
 
 The standalone demo handles display close/Escape/Q through `select()`. The
 server uses the upstream software cursor and Nano-X event delivery, translating
@@ -101,12 +231,37 @@ The C16 protocol counts target cells and uses matching target struct layouts,
 not upstream's octet ABI. Connections must open with the versioned C16 magic;
 requests are capped at 4,096 cells and checked against an explicit allowlist,
 fixed structure sizes and variable payload lengths before upstream dispatch.
-Each of at most twelve clients has bounded input/output queues. Partial reads,
+Each of at most twelve clients has bounded input/output queues. One receive
+stages multiple requests and dispatches at most 32 before yielding; complete
+staged packets remain ready even if the socket has no new data. Partial reads,
 slow readers, malformed packets and disconnects cannot block another client;
 queue exhaustion disconnects that client. Queued events and resource counts
 are bounded, and reparenting checks prevent cycles or excessive tree depth.
 Object allocation at a resource limit returns a zero ID while leaving the
 connection and existing objects usable.
+`paint_adapt.py` adds exposure-preserving backing buffers to client windows,
+including child widgets. Public `GrFlush()` commits their accumulated dirty
+rectangles together; automatic transport flushes and synchronous queries do not
+publish incomplete repaints. The C16 handshake is versioned with this extension,
+so rebuild server and clients together. NanoWM decorations remain direct to
+avoid unnecessary container buffers; its direct-mode flag is sent during the
+initial connection handshake. Ordinary exposure-driven windows fall back to
+direct drawing when automatic backing-store allocation fails; explicitly
+requested buffered windows still report failure. Resized backing pixmaps retain their
+window owner's lifetime. The fixed system-colour table is cached by clients.
+Stretched theme strips sample a single source column or a uniform source row
+once per scanline, retaining exact nearest-neighbour sampling and mask semantics.
+A focused JIT RVM benchmark of five 28-by-16 theme strips stretched to 560-by-400
+pixels took 3,404 ms with the previous sampler and 528 ms with the optimized
+sampler on the development host (6.4 times faster), with identical checksums.
+This measures theme rasterization rather than complete desktop frame latency.
+
+`nxterm` compares cells with its rendered shadow and sends only changed text
+spans. Scrolling copies existing pixels and moves the shadow, while explicitly
+restoring the old cursor and drawing the new one. Calculator caches font/label
+measurements, redraws only the display and pressed/released button on input,
+and reserves full redraws for exposure. Its original arithmetic is retained.
+
 Presentation remains damage-driven through the MMU-aware GX DMA upload path.
 Offscreen pixmaps use RGB565 cell storage; optional image/shm/raw-input APIs
 remain outside the enabled protocol profile.
@@ -114,7 +269,7 @@ Bitmap-derived regions and bounding window masks are enabled with checked
 dimensions/payload lengths and the shared region quota. Shaped-child clipping
 uses each child's actual region rather than subtracting its whole rectangle.
 
-`startx` supervises the server, window manager and launcher. Service startup
+`startx` supervises the server, window manager and desktop. Service startup
 uses readiness pipes rather than a fixed sleep. Active socket paths are not
 replaced; stale Nano-X sockets can be recovered. Closing the desktop releases
 the display and session resources so another `startx` can acquire them.
@@ -125,6 +280,8 @@ Build and verify without touching the user's disk:
 make -C ports/fuzix BUILD="$PWD/build/fuzix" test-nanox -j4
 make -C ports/fuzix BUILD="$PWD/build/fuzix" test-desktop -j4
 make -C ports/fuzix BUILD="$PWD/build/fuzix" test-roach -j4
+make -C ports/fuzix BUILD="$PWD/build/fuzix" test-nxdsktop -j4
+make -C ports/fuzix BUILD="$PWD/build/fuzix" test-tetris -j4
 python3 ports/nanox/tools/verify.py
 ```
 
@@ -142,7 +299,7 @@ Levee's insert/command modes and shell/canonical input, both terminals' erase
 settings, multiple PTYs,
 movement/resize, focus after resize, close buttons, reopening a terminal after
 closing the last one, session close/reopen and filesystem consistency on an
-isolated 96 MiB disk. Logs and
+isolated 192 MiB disk. Logs and
 PPM snapshots are retained under `build/fuzix/nanox/`.
 
 The roach integration test compares all 24 orientations against independently
@@ -150,5 +307,21 @@ decoded original XBM pixels on a checkerboard, including child-window and edge
 clipping. It also runs the real client under NanoWM, covers/reveals a stationary
 coloured roach, checks animation, Ctrl-C/right-click cleanup, launcher startup
 and desktop-session teardown. It uses its own private disk and stores captures
-under `build/fuzix/nanox/roach/`. `test-desktop` runs both suites; `test-roach`
+under `build/fuzix/nanox/roach/`. `test-desktop` runs all desktop suites; `test-roach`
 runs only the roach suite.
+
+The Tetris test drives a seeded game through rotation, both walls, hard drops
+and a complete 12-cell line. It compares board pixels, checks monotonic gravity,
+keyboard/mouse pause, signal wakeup, both launchers, score persistence and a
+40,000-point score across desktop sessions. Its disposable disk is checked after
+shutdown; logs and a demo capture live under `build/fuzix/nanox/tetris/`.
+
+The repaint regression (`tools/test_desktop.py --only paint`) leaves a parent
+and child partly repainted, issues a synchronous query, then lets an independent
+client draw. It checks that the previous committed colours remain visible until
+an explicit flush publishes both new colours. It retains three full frame buffers
+(screen, window and offscreen pixmap), then checks disconnect and idle-server
+shutdown. A nonblocking wakeup pipe prevents a stop signal from being lost
+between the stop check and an indefinite `select()`. The native graphics suite checks
+the same behavior. Shared GX raster probes cover bank crossings, strides,
+guards, invalid/overlapping spans and scattered COW pages in a forked child.

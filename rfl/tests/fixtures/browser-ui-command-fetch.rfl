@@ -1,0 +1,38 @@
+import { program, Cmd, perform_with } from "std/ui_command";
+import { Ui } from "std/ui";
+import { Html, text } from "std/html";
+import { get, BrowserEffects } from "std/browser_effects";
+import { Future } from "std/future";
+type Msg = Load | Loaded(bool);
+async fn request(effects: BrowserEffects) -> Msg {
+    let response = get(effects, "./body", 16).unwrap().await.unwrap();
+    Loaded(response.status == 200 && response.body.len() == 3)
+}
+
+fn update(model: bool, msg: Msg) -> (bool, Vec<Cmd<Msg>>) {
+    match msg {
+        Load => {
+            let owner = owned(7, fn(n: &mut i16) => {
+                println("builder dropped");
+            });
+            (model, [perform_with(once fn(ui: Ui<Msg>) => {
+                drop(move(owner));
+                request(ui.app().effects())
+            })])
+        },
+        Loaded(ok) => (ok, []),
+    }
+}
+
+fn view(model: &bool) -> Html<Msg> {
+    text(if (*model) {
+        "fetched"
+    } else {
+        "waiting"
+    })
+}
+
+fn main() {
+    let ui = program(false, update, view, 4).unwrap();
+    ui.send(Load).unwrap();
+}

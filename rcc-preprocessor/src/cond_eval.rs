@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Tok {
-    Number(i64),
+    Number(Integer),
     Ident(String),
     Plus,
     Minus,
@@ -201,37 +201,23 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_number(&mut self) -> Result<Tok> {
-        let mut s = String::new();
-        if self.peek() == '0' && (self.peek_at(1) == 'x' || self.peek_at(1) == 'X') {
-            s.push(self.bump());
-            s.push(self.bump());
-            while self.peek().is_ascii_hexdigit() {
-                s.push(self.bump());
-            }
-            self.skip_number_suffix();
-            let digits = &s[2..];
-            let value = i64::from_str_radix(digits, 16)
-                .map_err(|_| anyhow!("Invalid hex constant in #if: {s}"))?;
-            return Ok(Tok::Number(value));
-        }
-
-        while self.peek().is_ascii_digit() {
-            s.push(self.bump());
-        }
-        self.skip_number_suffix();
-
-        let value = if s.starts_with('0') && s.len() > 1 {
-            i64::from_str_radix(&s, 8).map_err(|_| anyhow!("Invalid octal constant in #if: {s}"))?
+        let mut text = String::new();
+        let radix = if self.peek() == '0' && matches!(self.peek_at(1), 'x' | 'X') {
+            self.bump(); self.bump();
+            while self.peek().is_ascii_hexdigit() { text.push(self.bump()); }
+            16
         } else {
-            s.parse::<i64>().map_err(|_| anyhow!("Invalid integer constant in #if: {s}"))?
+            while self.peek().is_ascii_digit() { text.push(self.bump()); }
+            if text.starts_with('0') && text.len() > 1 { 8 } else { 10 }
         };
-        Ok(Tok::Number(value))
-    }
-
-    fn skip_number_suffix(&mut self) {
+        let mut unsigned = false;
         while matches!(self.peek(), 'u' | 'U' | 'l' | 'L') {
-            self.bump();
+            unsigned |= matches!(self.bump(), 'u' | 'U');
         }
+        let bits = u64::from_str_radix(&text, radix).map_err(|_| anyhow!("Invalid integer constant in #if: {text}"))?;
+        unsigned |= radix != 10 && bits > i64::MAX as u64;
+        if !unsigned && bits > i64::MAX as u64 { return Err(anyhow!("Signed integer constant too large in #if")); }
+        Ok(Tok::Number(Integer { bits, unsigned }))
     }
 
     fn lex_char(&mut self) -> Result<Tok> {
@@ -263,243 +249,94 @@ impl<'a> Lexer<'a> {
             return Err(anyhow!("Unterminated character constant in #if"));
         }
         self.bump();
-        Ok(Tok::Number(value))
+        Ok(Tok::Number(Integer::signed(value)))
     }
 }
 
-struct Parser {
-    tokens: Vec<Tok>,
-    pos: usize,
+/// C99 preprocessing arithmetic uses intmax_t/uintmax_t (both 64 bits here).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Integer { bits: u64, unsigned: bool }
+impl Integer {
+    fn signed(n: i64) -> Self { Self { bits: n as u64, unsigned: false } }
+    fn truth(self) -> bool { self.bits != 0 }
 }
 
+struct Parser { tokens: Vec<Tok>, pos: usize }
 impl Parser {
-    fn peek(&self) -> &Tok {
-        self.tokens.get(self.pos).unwrap_or(&Tok::Eof)
+    fn peek(&self) -> &Tok { self.tokens.get(self.pos).unwrap_or(&Tok::Eof) }
+    fn bump(&mut self) -> Tok { let t = self.peek().clone(); self.pos += 1; t }
+    fn expect(&mut self, token: Tok, what: &str) -> Result<()> {
+        if self.peek() == &token { self.bump(); Ok(()) }
+        else { Err(anyhow!("Expected {what} in #if expression, got {:?}", self.peek())) }
     }
-
-    fn bump(&mut self) -> Tok {
-        if self.pos < self.tokens.len() {
-            let tok = self.tokens[self.pos].clone();
-            self.pos += 1;
-            tok
-        } else {
-            Tok::Eof
-        }
+    fn precedence(t: &Tok) -> Option<u8> {
+        Some(match t {
+            Tok::OrOr => 1, Tok::AndAnd => 2, Tok::BitOr => 3, Tok::BitXor => 4,
+            Tok::BitAnd => 5, Tok::Eq | Tok::Ne => 6,
+            Tok::Lt | Tok::Gt | Tok::Le | Tok::Ge => 7,
+            Tok::Shl | Tok::Shr => 8, Tok::Plus | Tok::Minus => 9,
+            Tok::Star | Tok::Slash | Tok::Percent => 10, _ => return None,
+        })
     }
-
-    fn expect(&mut self, expected: Tok, what: &str) -> Result<()> {
-        if std::mem::discriminant(self.peek()) == std::mem::discriminant(&expected) {
-            self.bump();
-            Ok(())
-        } else {
-            Err(anyhow!("Expected {what} in #if expression, got {:?}", self.peek()))
-        }
-    }
-
-    fn parse_cond(&mut self) -> Result<i64> {
-        let value = self.parse_lor()?;
-        if matches!(self.peek(), Tok::Question) {
-            self.bump();
-            let then_v = self.parse_cond()?;
-            self.expect(Tok::Colon, "':'")?;
-            let else_v = self.parse_cond()?;
-            Ok(if value != 0 { then_v } else { else_v })
-        } else {
-            Ok(value)
-        }
-    }
-
-    fn parse_lor(&mut self) -> Result<i64> {
-        let mut v = self.parse_land()?;
-        while matches!(self.peek(), Tok::OrOr) {
-            self.bump();
-            let r = self.parse_land()?;
-            v = i64::from(v != 0 || r != 0);
-        }
-        Ok(v)
-    }
-
-    fn parse_land(&mut self) -> Result<i64> {
-        let mut v = self.parse_bitor()?;
-        while matches!(self.peek(), Tok::AndAnd) {
-            self.bump();
-            let r = self.parse_bitor()?;
-            v = i64::from(v != 0 && r != 0);
-        }
-        Ok(v)
-    }
-
-    fn parse_bitor(&mut self) -> Result<i64> {
-        let mut v = self.parse_bitxor()?;
-        while matches!(self.peek(), Tok::BitOr) {
-            self.bump();
-            v |= self.parse_bitxor()?;
-        }
-        Ok(v)
-    }
-
-    fn parse_bitxor(&mut self) -> Result<i64> {
-        let mut v = self.parse_bitand()?;
-        while matches!(self.peek(), Tok::BitXor) {
-            self.bump();
-            v ^= self.parse_bitand()?;
-        }
-        Ok(v)
-    }
-
-    fn parse_bitand(&mut self) -> Result<i64> {
-        let mut v = self.parse_eq()?;
-        while matches!(self.peek(), Tok::BitAnd) {
-            self.bump();
-            v &= self.parse_eq()?;
-        }
-        Ok(v)
-    }
-
-    fn parse_eq(&mut self) -> Result<i64> {
-        let mut v = self.parse_rel()?;
-        loop {
-            match self.peek() {
-                Tok::Eq => {
-                    self.bump();
-                    v = i64::from(v == self.parse_rel()?);
-                }
-                Tok::Ne => {
-                    self.bump();
-                    v = i64::from(v != self.parse_rel()?);
-                }
-                _ => break,
-            }
-        }
-        Ok(v)
-    }
-
-    fn parse_rel(&mut self) -> Result<i64> {
-        let mut v = self.parse_shift()?;
-        loop {
-            match self.peek() {
-                Tok::Lt => {
-                    self.bump();
-                    v = i64::from(v < self.parse_shift()?);
-                }
-                Tok::Gt => {
-                    self.bump();
-                    v = i64::from(v > self.parse_shift()?);
-                }
-                Tok::Le => {
-                    self.bump();
-                    v = i64::from(v <= self.parse_shift()?);
-                }
-                Tok::Ge => {
-                    self.bump();
-                    v = i64::from(v >= self.parse_shift()?);
-                }
-                _ => break,
-            }
-        }
-        Ok(v)
-    }
-
-    fn parse_shift(&mut self) -> Result<i64> {
-        let mut v = self.parse_add()?;
-        loop {
-            match self.peek() {
-                Tok::Shl => {
-                    self.bump();
-                    v = v.wrapping_shl((self.parse_add()? as u32) & 63);
-                }
-                Tok::Shr => {
-                    self.bump();
-                    v = v.wrapping_shr((self.parse_add()? as u32) & 63);
-                }
-                _ => break,
-            }
-        }
-        Ok(v)
-    }
-
-    fn parse_add(&mut self) -> Result<i64> {
-        let mut v = self.parse_mul()?;
-        loop {
-            match self.peek() {
-                Tok::Plus => {
-                    self.bump();
-                    v = v.wrapping_add(self.parse_mul()?);
-                }
-                Tok::Minus => {
-                    self.bump();
-                    v = v.wrapping_sub(self.parse_mul()?);
-                }
-                _ => break,
-            }
-        }
-        Ok(v)
-    }
-
-    fn parse_mul(&mut self) -> Result<i64> {
-        let mut v = self.parse_unary()?;
-        loop {
-            match self.peek() {
-                Tok::Star => {
-                    self.bump();
-                    v = v.wrapping_mul(self.parse_unary()?);
-                }
-                Tok::Slash => {
-                    self.bump();
-                    let r = self.parse_unary()?;
-                    if r == 0 {
-                        return Err(anyhow!("Division by zero in #if expression"));
-                    }
-                    v /= r;
-                }
-                Tok::Percent => {
-                    self.bump();
-                    let r = self.parse_unary()?;
-                    if r == 0 {
-                        return Err(anyhow!("Modulo by zero in #if expression"));
-                    }
-                    v %= r;
-                }
-                _ => break,
-            }
-        }
-        Ok(v)
-    }
-
-    fn parse_unary(&mut self) -> Result<i64> {
-        match self.peek() {
-            Tok::Plus => {
-                self.bump();
-                self.parse_unary()
-            }
-            Tok::Minus => {
-                self.bump();
-                Ok(self.parse_unary()?.wrapping_neg())
-            }
-            Tok::Not => {
-                self.bump();
-                Ok(i64::from(self.parse_unary()? == 0))
-            }
-            Tok::BitNot => {
-                self.bump();
-                Ok(!self.parse_unary()?)
-            }
-            _ => self.parse_primary(),
-        }
-    }
-
-    fn parse_primary(&mut self) -> Result<i64> {
+    fn unary(&mut self, evaluate: bool) -> Result<Integer> {
         match self.bump() {
-            Tok::Number(n) => Ok(n),
-            Tok::Ident(_) => Ok(0),
-            Tok::LParen => {
-                let v = self.parse_cond()?;
-                self.expect(Tok::RParen, "')'")?;
-                Ok(v)
-            }
-            Tok::Eof => Err(anyhow!("Unexpected end of #if expression")),
-            other => Err(anyhow!("Unexpected token {other:?} in #if expression")),
+            Tok::Number(n) => Ok(n), Tok::Ident(_) => Ok(Integer::signed(0)),
+            Tok::Plus => self.unary(evaluate),
+            Tok::Minus => { let mut n = self.unary(evaluate)?; n.bits = n.bits.wrapping_neg(); Ok(n) }
+            Tok::BitNot => { let mut n = self.unary(evaluate)?; n.bits = !n.bits; Ok(n) }
+            Tok::Not => Ok(Integer::signed((!self.unary(evaluate)?.truth()) as i64)),
+            Tok::LParen => { let n = self.expression(0, evaluate)?; self.expect(Tok::RParen, "')'")?; Ok(n) }
+            t => Err(anyhow!("Unexpected token {t:?} in #if expression")),
         }
+    }
+    fn expression(&mut self, minimum: u8, evaluate: bool) -> Result<Integer> {
+        let mut left = self.unary(evaluate)?;
+        while let Some(precedence) = Self::precedence(self.peek()) {
+            if precedence < minimum { break; }
+            let op = self.bump();
+            let active = evaluate && !(op == Tok::AndAnd && !left.truth() || op == Tok::OrOr && left.truth());
+            let right = self.expression(precedence + 1, active)?;
+            left = Self::binary(op, left, right, evaluate)?;
+        }
+        if minimum == 0 && self.peek() == &Tok::Question {
+            self.bump();
+            let yes = self.expression(0, evaluate && left.truth())?;
+            self.expect(Tok::Colon, "':'")?;
+            let no = self.expression(0, evaluate && !left.truth())?;
+            let unsigned = yes.unsigned || no.unsigned;
+            left = if left.truth() { yes } else { no };
+            left.unsigned = unsigned;
+        }
+        Ok(left)
+    }
+    fn binary(op: Tok, a: Integer, b: Integer, evaluate: bool) -> Result<Integer> {
+        let unsigned = a.unsigned || b.unsigned;
+        let x = a.bits; let y = b.bits;
+        let signed_x = x as i64; let signed_y = y as i64;
+        let boolean = |v| Ok(Integer::signed(v as i64));
+        let bits = match op {
+            Tok::AndAnd => return boolean(a.truth() && b.truth()),
+            Tok::OrOr => return boolean(a.truth() || b.truth()),
+            Tok::Eq => return boolean(x == y), Tok::Ne => return boolean(x != y),
+            Tok::Lt => return boolean(if unsigned { x < y } else { signed_x < signed_y }),
+            Tok::Gt => return boolean(if unsigned { x > y } else { signed_x > signed_y }),
+            Tok::Le => return boolean(if unsigned { x <= y } else { signed_x <= signed_y }),
+            Tok::Ge => return boolean(if unsigned { x >= y } else { signed_x >= signed_y }),
+            Tok::Plus => x.wrapping_add(y), Tok::Minus => x.wrapping_sub(y), Tok::Star => x.wrapping_mul(y),
+            Tok::BitAnd => x & y, Tok::BitOr => x | y, Tok::BitXor => x ^ y,
+            Tok::Shl | Tok::Shr => {
+                if y >= 64 { if evaluate { return Err(anyhow!("Invalid shift count in #if expression")); } else { return Ok(a); } }
+                return Ok(Integer { bits: if op == Tok::Shl { x.wrapping_shl(y as u32) }
+                    else if a.unsigned { x >> y } else { (signed_x >> y) as u64 }, unsigned: a.unsigned });
+            }
+            Tok::Slash | Tok::Percent => {
+                if y == 0 { if evaluate { return Err(anyhow!("Division by zero in #if expression")); } else { return Ok(Integer { bits: 0, unsigned }); } }
+                if op == Tok::Slash { if unsigned { x / y } else { signed_x.wrapping_div(signed_y) as u64 } }
+                else if unsigned { x % y } else { signed_x.wrapping_rem(signed_y) as u64 }
+            }
+            _ => unreachable!(),
+        };
+        Ok(Integer { bits, unsigned })
     }
 }
 
@@ -517,14 +354,14 @@ pub fn eval_expanded(expr: &str) -> Result<i64> {
         }
     }
     let mut parser = Parser { tokens, pos: 0 };
-    let value = parser.parse_cond()?;
+    let value = parser.expression(0, true)?;
     if !matches!(parser.peek(), Tok::Eof) {
         return Err(anyhow!(
             "Trailing tokens in #if expression starting at {:?}",
             parser.peek()
         ));
     }
-    Ok(value)
+    Ok(value.bits as i64)
 }
 
 #[cfg(test)]
@@ -545,5 +382,18 @@ mod tests {
         assert_eq!(eval_expanded("199901L >= 199901L").unwrap(), 1);
         assert_eq!(eval_expanded("!0").unwrap(), 1);
         assert_eq!(eval_expanded("'A' == 65").unwrap(), 1);
+    }
+}
+
+#[cfg(test)]
+mod wide_tests {
+    use super::eval_expanded as eval;
+    #[test]
+    fn unsigned_intmax_constants_and_conversions() {
+        for e in ["18446744073709551615ULL > 0", "0xffffffffffffffff > 0", "-1 < 1U == 0", "(18446744073709551615ULL >> 63) == 1", "(0 ? 1U : -1) > 0", "(1 ? -1 : 1U) > 0", "18446744073709551615ULL / 3 == 6148914691236517205ULL", "(18446744073709551615ULL + 1) == 0", "(1 || 1/0)", "(0 && 1/0) == 0", "1 ? 7 : 1/0"] {
+            assert_ne!(eval(e).unwrap(), 0, "{e}");
+        }
+        assert!(eval("18446744073709551616ULL").is_err());
+        assert!(eval("1 / 0").is_err());
     }
 }

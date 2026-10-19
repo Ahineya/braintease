@@ -1,0 +1,196 @@
+import { Playlist, playlist, MAX_TRACKS } from "./playlist";
+import { File, IoError, open_read, create_new, rename, remove_file, set_permissions, process_id, Errno, error_message } from "std/posix";
+import { number } from "lib/tui";
+import {} from "std/result";
+
+export struct Saved {
+    queue: Playlist,
+    folder: String,
+    volume: u16,
+    selected: usize
+}
+
+export fn defaults(folder: String, seed: u32) -> Saved {
+    Saved { queue: playlist(seed), folder: folder, volume: 75, selected: 0 }
+}
+
+fn decimal(text: String, limit: usize) -> Result<usize, String> {
+    if (text.is_empty()) {
+        return Err("Invalid music setting");
+    }
+    let mut n: usize = 0;
+    for (ch in text) {
+        if (ch < '0' || ch > '9') {
+            return Err("Invalid music setting");
+        }
+        let digit = (ch as u32 - 48) as usize;
+        if (n > limit / 10 || (n == limit / 10 && digit > limit % 10)) {
+            return Err("Music setting is out of range");
+        }
+        n = n * 10 + digit;
+    }
+    Ok(n)
+}
+
+fn hex(path: String) -> String {
+    let digits = "0123456789abcdef";
+    let mut result = "";
+    for (ch in path) {
+        let n = ch as usize;
+        result = result + from_byte(digits[n / 16] as u8) + from_byte(digits[n % 16] as u8);
+    }
+    result
+}
+
+fn nibble(ch: char) -> Result<usize, String> {
+    if (ch >= '0' && ch <= '9') {
+        return Ok((ch as u32 - 48) as usize);
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return Ok((ch as u32 - 87) as usize);
+    }
+    Err("Invalid encoded music path")
+}
+
+fn unhex(text: String) -> Result<String, String> {
+    if (text.is_empty() || text.len() % 2 != 0 || text.len() > 510) {
+        return Err("Invalid saved music path");
+    }
+    let mut result = "";
+    let mut i: usize = 0;
+    while (i < text.len()) {
+        let high = nibble(text[i])?;
+        let low = nibble(text[i + 1])?;
+        let n = high * 16 + low;
+        if (n == 0) {
+            return Err("NUL in saved music path");
+        }
+        result = result + from_byte(n as u8);
+        i += 2;
+    }
+    if (result[0] != '/') {
+        return Err("Saved music paths must be absolute");
+    }
+    Ok(result)
+}
+
+fn line(saved: &mut Saved, text: String, index: usize) -> Result<unit, String> {
+    if (index == 0) {
+        if (text != "MUSIC1") {
+            return Err("Unknown music state format");
+        }
+    } else if (index == 1) {
+        saved.volume = decimal(text, 100)? as u16;
+    } else if (index == 2) {
+        let value = decimal(text, 1)?;
+        saved.queue.shuffle = value == 1;
+    } else if (index == 3) {
+        saved.selected = decimal(text, MAX_TRACKS - 1)?;
+    } else if (index == 4) {
+        saved.folder = unhex(text)?;
+    } else {
+        let count = saved.queue.tracks.len();
+        saved.queue.add(unhex(text)?)?;
+        if (saved.queue.tracks.len() == count) {
+            return Err("Duplicate saved music track");
+        }
+    }
+    Ok({})
+}
+
+/// Parse into a temporary model so malformed/partial state cannot partly apply.
+export fn restore(path: String, saved: &mut Saved) -> Result<unit, String> {
+    let file = match open_read(path) {
+        Ok(file) => move(file),
+        Err(Errno(2)) => {
+            return Ok({});
+        },
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let mut next = defaults(saved.folder, saved.queue.seed);
+    let mut text = "";
+    let mut index: usize = 0;
+    let mut total: usize = 0;
+    while (true) {
+        let bytes = file.read(4096).map_err(fn(e) => error_message(e))?;
+        if (bytes.is_empty()) {
+            break;
+        }
+        total += bytes.len();
+        if (total > 132608) {
+            return Err("Saved playlist is too large");
+        }
+        for (byte in bytes) {
+            if (byte == 10) {
+                line(&mut next, text, index)?;
+                index += 1;
+                text = "";
+            } else {
+                if (byte == 0 || text.len() >= 510) {
+                    return Err("Invalid music state line");
+                }
+                text = text + from_byte(byte);
+            }
+        }
+    }
+    if (!text.is_empty() || index < 5) {
+        return Err("Incomplete saved playlist");
+    }
+    if (next.selected >= next.queue.tracks.len()) {
+        next.selected = 0;
+    } *saved = next;
+    Ok({})
+}
+
+fn write_path(file: &File, path: String) -> Result<unit, IoError> {
+    let digits = "0123456789abcdef";
+    let mut bytes: Vec<u8> = [];
+    for (ch in path) {
+        let n = ch as usize;
+        bytes.push(digits[n / 16] as u8);
+        bytes.push(digits[n % 16] as u8);
+    }
+    bytes.push(10);
+    file.write_all(bytes)
+}
+
+/// Pump the audio between bounded file writes, even for a full playlist on RVM.
+export fn persist_live<T>(path: String, saved: &Saved, context: &T, pulse: fn(&T) -> unit) -> Result<unit, String> {
+    let temporary = path + ".tmp-" + number(process_id() as usize);
+    let file = match create_new(temporary) {
+        Ok(file) => move(file),
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let mut result = file.write_text("MUSIC1\n" + number(saved.volume as usize) + "\n" + if (saved.queue.shuffle) {
+        "1\n"
+    } else {
+        "0\n"
+    } + number(saved.selected) + "\n" + hex(saved.folder) + "\n");
+    for (track in saved.queue.tracks) {
+        pulse(context);
+        if (result.is_ok()) {
+            result = write_path(&file, track);
+        }
+    }
+    let closed = move(file).close();
+    if (result.is_err() || closed.is_err() || set_permissions(temporary, 384).is_err()) {
+        remove_file(temporary);
+        return Err("Cannot write music playlist/settings");
+    }
+    match rename(temporary, path) {
+        Ok(_) => Ok({}),
+        Err(error) => {
+            remove_file(temporary);
+            Err(error_message(error))
+        }
+    }
+}
+
+export fn persist(path: String, saved: &Saved) -> Result<unit, String> {
+    let context: u8 = 0;
+    persist_live(path, saved, &context, fn(value: &u8) => {})
+}

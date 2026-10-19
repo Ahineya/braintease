@@ -31,6 +31,10 @@
 #define VM_DEVICE_HOST_REALTIME 9
 #define VM_DEVICE_HOST_IDLE 10
 #define VM_DEVICE_HOST_TERMINAL 11
+#define VM_DEVICE_HOST_RANDOM 12
+#define VM_DEVICE_TTY_WRITE 14
+#define VM_TTY_WRITE_MAX 4096U
+#define VM_HOST_RANDOM_MAX 256U
 #define VM_HOST_IDLE_MAX_MS 10U
 #define VM_INPUT_EVENT_CELLS 20
 #define VM_INPUT_BATCH_MAX 64
@@ -42,6 +46,8 @@
 #define VM_INPUT_FOCUS 6
 #define VM_INPUT_CAPTURE 7
 #define VM_INPUT_CLOSE 8
+#define VM_INPUT_TEXT 11 /* committed Unicode scalar in dx */
+#define VM_INPUT_TEXT_KEY 32 /* physical key has a separate text event */
 #define VM_INPUT_DOWN 1
 #define VM_INPUT_RELATIVE 2
 #define VM_INPUT_INSIDE 4
@@ -68,6 +74,7 @@
 #define VM_CAP_HOST_CLOCK 0x1000U
 #define VM_CAP_HOST_IDLE 0x2000U
 #define VM_CAP_HOST_TERMINAL 0x4000U
+#define VM_CAP_HOST_RANDOM 0x8000U
 #define VM_KEY_COUNT 256
 #define VM_KEY_STATE_WORDS 16
 
@@ -257,6 +264,17 @@ unsigned short vm_input_state(VmInputState *state);
  * VM_INPUT_CAPTURED or VM_INPUT_CAPTURE events to determine host acceptance. */
 unsigned short vm_input_configure(unsigned short mode);
 
+/* One independent host CSPRNG octet per C16 cell, count 1..256.
+ * Synchronous; output is unchanged on failure. Never uses the seeded VM RNG.
+ * Buffer addresses are physical on RVM: kernels must stage and copy to users. */
+unsigned short vm_host_random(unsigned char *output, unsigned short count);
+
 int vm_key_is_down(const VmInputState *state, unsigned short key);
+
+/* Raw synchronous octets (low eight bits per cell), with no LF conversion.
+ * Physical RAM address on RVM; serialize the mailbox against interrupts.
+ * Count 0 flushes. On I/O error, completed still reports accepted octets.
+ * UNKNOWN_COMMAND/UNSUPPORTED allow scalar fallback without duplication. */
+unsigned short vm_tty_write(const void *data, unsigned short count, unsigned short *completed);
 
 #endif

@@ -1,0 +1,182 @@
+import { Console, ConsoleError, ConsoleReadError, ConsoleWriteError, ConsoleBusy, ConsoleLineTooLong } from "std/console";
+import { Shared, share, with_shared } from "std/shared";
+import { Future, yield_now, sleep } from "std/future";
+import { write_byte } from "std/io";
+import { Result } from "std/result";
+
+#[cfg(target = "native")]
+extern "C" {
+    fn rcc_hosted_input() -> u16;
+}
+
+#[cfg(target = "ripple")]
+import { read, TTY_IN, TTY_IN_STATUS } from "std/mmio";
+
+/// Maximum line length accepted by Terminal, measured in octets without CR/LF.
+export const MAX_LINE: usize = 4096;
+const QUANTUM: usize = 64;
+struct TerminalState {
+    reading: bool,
+    writing: bool,
+    skip_lf: bool
+}
+
+/// A cooperative standalone console for native or Ripple execution. Copies
+/// share read/write guards. Construct one service per physical terminal; this
+/// adapter does not coordinate independently constructed services or raw I/O.
+export struct Terminal {
+    /// Shared stream guards and CR/LF state. Prefer terminal().
+    state: Shared<TerminalState>
+}
+
+/// Constructs a terminal service without reading or writing. Input polls are
+/// nonblocking; each 64-byte quantum yields. Requires a millisecond reactor.
+export fn terminal() -> Terminal {
+    Terminal { state: share(TerminalState { reading: false, writing: false, skip_lf: false }) }
+}
+
+#[cfg(target = "native")]
+fn input() -> u16 {
+    rcc_hosted_input()
+}
+
+#[cfg(target = "ripple")]
+fn input() -> u16 {
+    if ((read(TTY_IN_STATUS) & 1) != 0) {
+        read(TTY_IN)
+    } else {
+        65535
+    }
+}
+
+fn release_read(state: &mut Shared<TerminalState>) {
+    with_shared(*state, once fn(s: &mut TerminalState) => {
+        s.reading = false;
+    });
+}
+
+fn release_write(state: &mut Shared<TerminalState>) {
+    with_shared(*state, once fn(s: &mut TerminalState) => {
+        s.writing = false;
+    });
+}
+
+// Balanced concatenation preserves String's octet semantics without growing
+// a string one byte at a time (quadratic copying for long pasted lines).
+fn text_range(bytes: Vec<u8>, start: usize, end: usize) -> String {
+    if (end - start > 32) {
+        let middle = start + (end - start) / 2;
+        return text_range(bytes, start, middle) + text_range(bytes, middle, end);
+    }
+    let mut text = "";
+    for (i in start..end) {
+        text = text + from_byte(bytes[i]);
+    }
+    text
+}
+
+fn finish_line(bytes: Vec<u8>) -> Option<String> {
+    Some(text_range(bytes, 0, bytes.len()))
+}
+
+async fn read_terminal(state: Shared<TerminalState>) -> Result<Option<String>, ConsoleError> {
+    let available = with_shared(state, once fn(s: &mut TerminalState) => {
+        if (s.reading) {
+            false
+        } else {
+            s.reading = true;
+            true
+        }
+    });
+    if (!available) {
+        return Err(ConsoleBusy);
+    }
+    let guard = owned(state, release_read);
+    let mut skip_lf = with_shared(state, once fn(s: &mut TerminalState) => s.skip_lf);
+    let mut bytes: Vec<u8> = [];
+    while (true) {
+        let mut count: usize = 0;
+        while (count < QUANTUM) {
+            let next = input();
+            if (next == 65535) {
+                sleep(1).unwrap().await;
+                break;
+            }
+            if (next == 65534) {
+                return Ok(if (bytes.is_empty()) {
+                    None
+                } else {
+                    finish_line(bytes)
+                });
+            }
+            if (next > 255) {
+                return Err(ConsoleReadError);
+            }
+            count += 1;
+            if (skip_lf) {
+                skip_lf = false;
+                with_shared(state, once fn(s: &mut TerminalState) => {
+                    s.skip_lf = false;
+                });
+                if (next == 10) {
+                    continue;
+                }
+            }
+            if (next == 10 || next == 13) {
+                if (next == 13) {
+                    with_shared(state, once fn(s: &mut TerminalState) => {
+                        s.skip_lf = true;
+                    });
+                }
+                return Ok(finish_line(bytes));
+            }
+            if (bytes.len() == MAX_LINE) {
+                return Err(ConsoleLineTooLong);
+            }
+            bytes.push(next as u8);
+        }
+        if (count == QUANTUM) {
+            yield_now().await;
+        }
+    }
+    Ok(None)
+}
+
+async fn write_terminal(state: Shared<TerminalState>, text: String) -> Result<unit, ConsoleError> {
+    let available = with_shared(state, once fn(s: &mut TerminalState) => {
+        if (s.writing) {
+            false
+        } else {
+            s.writing = true;
+            true
+        }
+    });
+    if (!available) {
+        return Err(ConsoleBusy);
+    }
+    let guard = owned(state, release_write);
+    let mut at: usize = 0;
+    while (at < text.len()) {
+        let mut count: usize = 0;
+        while (at < text.len() && count < QUANTUM) {
+            if (write_byte(text[at] as c_int) < 0) {
+                return Err(ConsoleWriteError);
+            }
+            at += 1;
+            count += 1;
+        }
+        if (at < text.len()) {
+            yield_now().await;
+        }
+    }
+    Ok({})
+}
+
+impl Console for Terminal {
+    fn read_line(&mut self) -> Async<Result<Option<String>, ConsoleError>> {
+        read_terminal(self.state)
+    }
+    fn write_text(&mut self, text: String) -> Async<Result<unit, ConsoleError>> {
+        write_terminal(self.state, text)
+    }
+}

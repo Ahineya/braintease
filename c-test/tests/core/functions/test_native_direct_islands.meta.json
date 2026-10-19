@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "YYYYYY\n",
+  "description": "Direct native helpers preserve side effects, wide values and resumable function-pointer entry points"
+}

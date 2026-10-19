@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
+mod transport;
+
 use crate::ide::{Analysis, CompletionKind, SymbolKind};
 use crate::lexer::{self, TokenKind};
 
@@ -16,19 +18,18 @@ struct Doc {
     path: Option<PathBuf>,
     lines: Vec<usize>,
     analysis: Analysis,
+    dependency_stamp: u64,
 }
 
 pub fn serve() {
+    transport::serve();
+}
+
+fn serve_semantics(messages: impl IntoIterator<Item = Value>) {
     let mut docs: HashMap<String, Doc> = HashMap::new();
     let mut versioned_edits = false;
     let mut workspace_roots = Vec::new();
-    let stdin = io::stdin();
-    let mut reader = stdin.lock();
-    let mut stdout = io::stdout().lock();
-    loop {
-        let Some(message) = read_message(&mut reader) else {
-            break;
-        };
+    for message in messages {
         let method = message
             .get("method")
             .and_then(Value::as_str)
@@ -58,25 +59,21 @@ pub fn serve() {
             break;
         }
         if method == "shutdown" {
-            send(
-                &mut stdout,
-                &json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }),
-            );
+            emit(&json!({ "jsonrpc": "2.0", "id": id, "result": Value::Null }));
             continue;
         }
         if id.is_none() {
             notify(&mut docs, &method, &params);
             continue;
         }
+        refresh_dependencies(&mut docs);
+        let _overlay = crate::macros::source::overlay(open_sources(&docs));
         let result = if method == "textDocument/rename" {
             match rename(&docs, &params, &workspace_roots, versioned_edits) {
                 Ok(result) => result,
                 Err(message) => {
-                    send(
-                        &mut stdout,
-                        &json!({ "jsonrpc": "2.0", "id": id,
-                        "error": { "code": -32803, "message": message } }),
-                    );
+                    emit(&json!({ "jsonrpc": "2.0", "id": id,
+                        "error": { "code": -32803, "message": message } }));
                     continue;
                 }
             }
@@ -89,10 +86,7 @@ pub fn serve() {
                 &workspace_roots,
             )
         };
-        send(
-            &mut stdout,
-            &json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-        );
+        emit(&json!({ "jsonrpc": "2.0", "id": id, "result": result }));
     }
 }
 
@@ -121,6 +115,7 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
         }
         "textDocument/didClose" => {
             docs.remove(&text_of(&params["textDocument"]["uri"]));
+            refresh_dependencies(docs);
         }
         _ => {}
     }
@@ -128,8 +123,14 @@ fn notify(docs: &mut HashMap<String, Doc>, method: &str, params: &Value) {
 
 fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String, version: Option<i64>) {
     let path = uri_path(&uri);
+    let mut sources = open_sources(docs);
+    if let Some(path) = &path {
+        sources.insert(crate::rename::canonical(path), text.clone());
+    }
+    let _overlay = crate::macros::source::overlay(sources);
     let analysis = Analysis::open(path.as_deref(), &text);
-    publish(&uri, &analysis, &text);
+    let dependency_stamp = crate::macros::editor::fingerprint(path.as_deref(), &text);
+    publish(&uri, &analysis, &text, version);
     docs.insert(
         uri,
         Doc {
@@ -138,8 +139,32 @@ fn open_doc(docs: &mut HashMap<String, Doc>, uri: String, text: String, version:
             source: text,
             path,
             analysis,
+            dependency_stamp,
         },
     );
+    refresh_dependencies(docs);
+}
+
+fn open_sources(docs: &HashMap<String, Doc>) -> BTreeMap<PathBuf, String> {
+    docs.values()
+        .filter_map(|d| {
+            Some((
+                crate::rename::canonical(d.path.as_deref()?),
+                d.source.clone(),
+            ))
+        })
+        .collect()
+}
+fn refresh_dependencies(docs: &mut HashMap<String, Doc>) {
+    let _overlay = crate::macros::source::overlay(open_sources(docs));
+    for (uri, doc) in docs {
+        let stamp = crate::macros::editor::fingerprint(doc.path.as_deref(), &doc.source);
+        if stamp != doc.dependency_stamp {
+            doc.analysis = Analysis::open(doc.path.as_deref(), &doc.source);
+            doc.dependency_stamp = stamp;
+            publish(uri, &doc.analysis, &doc.source, doc.version);
+        }
+    }
 }
 
 fn request(
@@ -198,11 +223,15 @@ fn formatting(docs: &HashMap<String, Doc>, params: &Value, selection: bool) -> V
     let Some(doc) = document(docs, params) else {
         return json!([]);
     };
+    formatting_source(&doc.source, &doc.lines, params, selection)
+}
+
+fn formatting_source(source: &str, lines: &[usize], params: &Value, selection: bool) -> Value {
     let bounds = if selection {
-        let Some(start) = offset_of(doc, &params["range"]["start"]) else {
+        let Some(start) = offset_in(source, lines, &params["range"]["start"]) else {
             return json!([]);
         };
-        let Some(end) = offset_of(doc, &params["range"]["end"]) else {
+        let Some(end) = offset_in(source, lines, &params["range"]["end"]) else {
             return json!([]);
         };
         if start > end {
@@ -210,9 +239,9 @@ fn formatting(docs: &HashMap<String, Doc>, params: &Value, selection: bool) -> V
         }
         start..end
     } else {
-        0..doc.source.len()
+        0..source.len()
     };
-    let Ok(edits) = crate::format::format_edits(&doc.source) else {
+    let Ok(edits) = crate::format::format_edits(source) else {
         // Incomplete syntax is common while editing. Never rewrite a damaged file.
         return json!([]);
     };
@@ -221,7 +250,7 @@ fn formatting(docs: &HashMap<String, Doc>, params: &Value, selection: bool) -> V
         .filter(|edit| edit.start >= bounds.start
             && edit.end <= bounds.end
             && (!selection || edit.start < bounds.end))
-        .map(|edit| json!({ "range": range(doc, edit.start, edit.end), "newText": edit.new_text }))
+        .map(|edit| json!({ "range": range_of(lines, source, edit.start, edit.end), "newText": edit.new_text }))
         .collect::<Vec<_>>())
 }
 
@@ -629,6 +658,7 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
                     | "Owned"
                     | "Async"
                     | "ErasedOwner"
+                    | "SharedOwner"
                     | "Option"
                     | "Result"
                     | "c_int"
@@ -679,7 +709,7 @@ fn token_kind(analysis: &Analysis, token: &crate::lexer::Token) -> Option<u32> {
     })
 }
 
-fn publish(uri: &str, analysis: &Analysis, source: &str) {
+fn publish(uri: &str, analysis: &Analysis, source: &str, version: Option<i64>) {
     let lines = line_starts(source);
     let tokens = lexer::tokenize_with_trivia(source).unwrap_or_default();
     let diagnostics: Vec<Value> = analysis
@@ -690,13 +720,13 @@ fn publish(uri: &str, analysis: &Analysis, source: &str) {
             let (start, end) = tokens
                 .iter()
                 .find(|token| token.span.contains(offset))
-                .map(|token| (token.span.start, token.span.end))
+                .map(|token| {if matches!(token.kind,TokenKind::MacroBody(_)){let end=source[offset..].char_indices().take_while(|(_,c)|c.is_ascii_alphanumeric()||*c=='_').last().map_or(offset+source[offset..].chars().next().map_or(0,char::len_utf8),|(n,c)|offset+n+c.len_utf8());(offset,end)}else{(token.span.start, token.span.end)}})
                 .unwrap_or((offset, (offset + 1).min(source.len())));
             json!({
                 "range": range_of(&lines, source, start, end.max(start)),
                 "severity": 1,
                 "source": "rfl",
-                "message": err.detail,
+                "message": format!("{}{}",err.detail,err.message.lines().filter(|s|s.starts_with("note:")).map(|s|format!("\n{s}")).collect::<String>()),
             })
         })
         .collect();
@@ -705,7 +735,7 @@ fn publish(uri: &str, analysis: &Analysis, source: &str) {
         &json!({
             "jsonrpc": "2.0",
             "method": "textDocument/publishDiagnostics",
-            "params": { "uri": uri, "diagnostics": diagnostics }
+            "params": { "uri": uri, "version": version, "diagnostics": diagnostics }
         }),
     );
 }
@@ -732,7 +762,7 @@ fn place_range(doc: &Doc, path: Option<&std::path::Path>, start: usize, end: usi
         return range(doc, start, end);
     }
     let text = path
-        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|path| crate::macros::source::read(path).ok())
         .unwrap_or_default();
     let lines = line_starts(&text);
     range_of(&lines, &text, start, end)
@@ -756,11 +786,15 @@ fn position_at(lines: &[usize], source: &str, offset: usize) -> Value {
 }
 
 fn offset_of(doc: &Doc, position: &Value) -> Option<usize> {
+    offset_in(&doc.source, &doc.lines, position)
+}
+
+fn offset_in(source: &str, lines: &[usize], position: &Value) -> Option<usize> {
     let line = position["line"].as_u64()? as usize;
     let character = position["character"].as_u64()? as usize;
-    let start = *doc.lines.get(line)?;
-    let end = doc.lines.get(line + 1).copied().unwrap_or(doc.source.len());
-    let slice = doc.source.get(start..end)?;
+    let start = *lines.get(line)?;
+    let end = lines.get(line + 1).copied().unwrap_or(source.len());
+    let slice = source.get(start..end)?;
     let mut utf16 = 0;
     for (index, ch) in slice.char_indices() {
         if utf16 >= character {
@@ -860,6 +894,10 @@ fn read_message(reader: &mut impl BufRead) -> Option<Value> {
     serde_json::from_slice(&body).ok()
 }
 
+fn emit(message: &Value) {
+    send(&mut io::stdout().lock(), message);
+}
+
 fn send(stdout: &mut impl Write, message: &Value) {
     let body = message.to_string();
     let _ = write!(stdout, "Content-Length: {}\r\n\r\n{body}", body.len());
@@ -876,6 +914,7 @@ mod tests {
             version: Some(1),
             path: None,
             lines: line_starts(source),
+            dependency_stamp: 0,
             analysis: Analysis::open(None, source),
         }
     }
@@ -961,6 +1000,7 @@ mod tests {
             version: Some(7),
             path: Some(path.clone()),
             lines: line_starts(source),
+            dependency_stamp: 0,
             analysis: Analysis::open(Some(&path), source),
         }
     }
@@ -1094,6 +1134,7 @@ mod rename_tests {
             version: Some(version),
             path: Some(path.to_path_buf()),
             lines: line_starts(text),
+            dependency_stamp: 0,
             analysis: Analysis::open(Some(path), text),
         }
     }

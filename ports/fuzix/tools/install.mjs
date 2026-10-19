@@ -166,7 +166,7 @@ export function installRoot(input, files) {
       setEntry(parent, name, node.ino);
       continue;
     }
-    if (old && (w(old.base) & 0xf000) !== 0x8000)
+    if (old && ![0x8000, 0xa000].includes(w(old.base) & 0xf000))
       throw Error(`refusing to replace nonregular ${f.name}`);
     if (old && f.preserve)
       continue;
@@ -201,7 +201,12 @@ export function installRoot(input, files) {
       changed = true;
       continue;
     }
-    const data = f.data, mode = f.mode ?? 0o100755;
+    const symbolic = f.symlink !== undefined;
+    if (symbolic && (typeof f.symlink !== 'string' || !f.symlink.length ||
+        f.symlink.length >= 512 || f.symlink.includes('\0')))
+      throw Error('invalid install symbolic link target');
+    const data = symbolic ? f.symlink.split('').map(c => c.charCodeAt(0)) : f.data,
+          mode = symbolic ? 0o120777 : (f.mode ?? 0o100755);
     if (old && w(old.base) === mode && old.size === data.length &&
         cells(old).every((c, i) => c === data[i]))
       continue;
@@ -243,8 +248,10 @@ export function installBlock(image, base, index, block, allocate) {
   image.writeUInt32LE(block, at * 2);
 }
 
-export function growRoot(input, blocks = ROOT_BLOCKS) {
-  const old = checkRoot(input), count = Math.max(1024, (old.isize - 2) * old.format.inodes);
+export function growRoot(input, blocks = ROOT_BLOCKS, inodeCount = 1024) {
+  if (!Number.isInteger(inodeCount) || inodeCount < 16 || inodeCount > 65520 || inodeCount % INODES_PER_BLOCK)
+    throw Error('invalid inode count');
+  const old = checkRoot(input), count = Math.max(inodeCount, (old.isize - 2) * old.format.inodes);
   if (!Number.isInteger(blocks) || blocks < 1 || blocks * BLOCK > 0xffffffff) throw Error('invalid root size');
   if (old.format.version === 3 && old.blocks >= blocks && old.format.inodes * (old.isize - 2) >= count) return input;
   if (old.issues.length) throw Error('root expansion requires a clean filesystem');

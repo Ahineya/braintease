@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "description": "Cast and sizeof checkpoints must scale without cloning remaining tokens",
+  "use_runtime": true
+}

@@ -1,0 +1,249 @@
+import { Screen, NO_KEY, CLOSED, RESIZE, DOWN, UP, LEFT, RIGHT, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
+import { metadata, error_message, DIRECTORY, REGULAR, SYMLINK, Errno } from "std/posix";
+import { joined, parent } from "lib/path";
+import { Rect, fitted } from "lib/tui";
+import { FilePanel, PanelPalette, file_panel, draw_cached, panel_paint, visible_rows } from "lib/tui_files";
+import { LineEdit, line_edit } from "lib/tui_input";
+import { Palette, popup, present } from "lib/tui_dialog";
+
+/// Open-dialog policy. Paths are guest paths; no process chdir is performed.
+export struct OpenOptions {
+    /// Initial absolute directory. A failed initial read is returned to the caller.
+    directory: String,
+    /// Initially highlighted basename; the editable filename starts empty.
+    selected_name: String,
+    /// Whether a typed missing path can be returned to the caller for later creation.
+    allow_new: bool,
+    /// Initial hidden-file visibility, independent of the containing application.
+    show_hidden: bool,
+    /// DEC separators when true, ASCII separators when false; match the session theme.
+    lines: bool
+}
+
+fn panel_colors(colors: Palette) -> PanelPalette {
+    PanelPalette { body: colors.body, directory: colors.title, selected: colors.selected, inactive: colors.body, frame: colors.body, title: colors.title, muted: colors.body }
+}
+
+fn name_from_selection(files: &FilePanel) -> LineEdit {
+    let entry = files.entries[files.cursor.selected];
+    line_edit(if (entry.info.kind == DIRECTORY) {
+        ""
+    } else {
+        entry.name
+    })
+}
+
+/// Browsable open dialog composed from FilePanel and LineEdit. Tab switches
+/// filename/list focus; arrows/page keys navigate, typing in the list finds a
+/// prefix, Ctrl-B goes up, Ctrl-T toggles hidden files, Ctrl-R refreshes.
+/// Enter validates fresh metadata. Symlinks/special files are rejected rather
+/// than silently followed. Esc/Ctrl-C/terminal loss cancel. A resize preserves
+/// directory, selection, filename and cursor, even through an undersized screen.
+/// Returns an absolute path only; opening/creating it remains application policy.
+export fn open_file(screen: &Screen, colors: Palette, options: OpenOptions) -> Result<Option<String>, String> {
+    let mut files = match file_panel(options.directory, options.show_hidden) {
+        Ok(files) => files,
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    files.select_name(options.selected_name);
+    let mut input = line_edit("");
+    let mut editing = true;
+    let mut prefix = "";
+    let mut notice = "";
+    while (true) {
+        if (screen.rows() < 13 || screen.columns() < 40) {
+            // The editor's retained screen remains below this temporary layer.
+            let small = match screen.window(screen.rows(), screen.columns(), 0, 0) {
+                Ok(window) => move(window),
+                Err(_) => {
+                    return Err("Cannot allocate file dialog");
+                }
+            };
+            small.background(colors.body);
+            small.text(0, 0, "Open file: resize to 40x13", colors.title);
+            small.text(1, 0, "Esc cancels", colors.body);
+            small.cursor(0, 0, false);
+            screen.stage();
+            small.stage();
+            screen.present();
+            while (true) {
+                let key = small.key();
+                if (key == RESIZE) {
+                    break;
+                }
+                if (key == 27 || key == 3 || key == CLOSED) {
+                    return Ok(None);
+                }
+            }
+            continue;
+        }
+        let modal = match popup(screen, colors, "Open file", screen.rows() - 2) {
+            Ok(modal) => move(modal),
+            Err(_) => {
+                return Err("Cannot allocate file dialog");
+            }
+        };
+        let h = modal.front.rows();
+        let w = modal.front.columns();
+        let area = Rect { row: 1, column: 2, rows: h - 6, columns: w - 4 };
+        let rows = visible_rows(area);
+        let mut painted = panel_paint();
+        let mut dirty = true;
+        let mut listing_dirty = true;
+        while (true) {
+            if (dirty) {
+                // Typing changes only the filename/footer, not every directory row.
+                if (listing_dirty) {
+                    files.reveal(rows);
+                    draw_cached(&modal.front, &files, area, panel_colors(colors), !editing, options.lines, &mut painted);
+                    listing_dirty = false;
+                }
+                modal.front.text(h - 4, 2, "File:", if (editing) {
+                    colors.title
+                } else {
+                    colors.body
+                });
+                input.draw(&modal.front, h - 4, 8, w - 10, if (editing) {
+                    colors.input
+                } else {
+                    colors.body
+                });
+                modal.front.fill(h - 3, 2, w - 4, ' ', colors.body);
+                modal.front.text(h - 3, 2, fitted(if (notice != "") {
+                    notice
+                } else {
+                    "Enter open  Esc cancel  Hidden: " + if (files.show_hidden) {
+                        "on"
+                    } else {
+                        "off"
+                    }
+                }, w - 4), colors.body);
+                modal.front.text(h - 2, 2, fitted("Tab List/Name  ^B Parent  ^T Hidden  ^R Reload", w - 4), colors.title);
+                modal.front.cursor(h - 4, 8 + input.column((w - 10) as usize) as i16, editing);
+                present(screen, &modal);
+                dirty = false;
+            }
+            let event = modal.front.event();
+            let key = event.key();
+            if (event.kind == NO_KEY) {
+                continue;
+            }
+            if (key == RESIZE) {
+                break;
+            }
+            if (key == 27 || key == 3 || key == CLOSED) {
+                return Ok(None);
+            }
+            dirty = true;
+            if (key == 9 || key == 353) {
+                editing = !editing;
+                listing_dirty = true;
+                prefix = "";
+            } else if (key == 20 || key == 18) {
+                let hidden = if (key == 20) {
+                    !files.show_hidden
+                } else {
+                    files.show_hidden
+                };
+                listing_dirty = true;
+                match files.refresh(hidden) {
+                    Ok(_) => {
+                        notice = "";
+                        prefix = "";
+                    },
+                    Err(error) => {
+                        notice = error_message(error);
+                    }
+                }
+            } else if (key == 2 || (!editing && (key == LEFT || key == BACKSPACE))) {
+                let up = parent(files.path);
+                listing_dirty = true;
+                match files.enter(up) {
+                    Ok(_) => {
+                        input = line_edit("");
+                        prefix = "";
+                        notice = "";
+                    },
+                    Err(error) => {
+                        notice = error_message(error);
+                    }
+                }
+            } else if (key == 10 || key == 13 || (!editing && key == RIGHT)) {
+                let path = if (editing && input.text != "") {
+                    joined(files.path, input.text)
+                } else {
+                    files.selected_path()
+                };
+                match metadata(path) {
+                    Ok(info) => {
+                        if (info.kind == DIRECTORY) {
+                            listing_dirty = true;
+                            match files.enter(path) {
+                                Ok(_) => {
+                                    input = line_edit("");
+                                    prefix = "";
+                                    notice = "";
+                                },
+                                Err(error) => {
+                                    notice = error_message(error);
+                                }
+                            }
+                        } else if (key == RIGHT) {
+                            // Right navigates directories; only Enter accepts files.
+                        } else if (info.kind == REGULAR) {
+                            return Ok(Some(path));
+                        } else {
+                            notice = if (info.kind == SYMLINK) {
+                                "Open the symbolic link's target directly"
+                            } else {
+                                "Choose a regular file"
+                            };
+                        }
+                    },
+                    Err(Errno(2)) if (options.allow_new && editing && input.text != "") => {
+                        return Ok(Some(path));
+                    },
+                    Err(error) => {
+                        notice = error_message(error);
+                    }
+                }
+            } else if (editing && (key == DOWN || key == UP || key == PAGE_UP || key == PAGE_DOWN)) {
+                editing = false;
+                listing_dirty = true;
+                files.key(key, rows);
+                input = name_from_selection(&files);
+                notice = "";
+            } else if (editing) {
+                if (input.event(event)) {
+                    notice = "";
+                }
+            } else if (files.key(key, rows)) {
+                listing_dirty = true;
+                prefix = "";
+                input = name_from_selection(&files);
+                notice = "";
+            } else if (key == 47) {
+                editing = true;
+                listing_dirty = true;
+                input = line_edit("/");
+                prefix = "";
+            } else if (event.kind == 0 && event.value >= 32) {
+                listing_dirty = true;
+                let next = prefix + from_char(event.value as char);
+                if (files.find_prefix(next, rows)) {
+                    prefix = next;
+                } else {
+                    prefix = from_char(event.value as char);
+                    files.find_prefix(prefix, rows);
+                }
+                input = name_from_selection(&files);
+                notice = "Find: " + prefix;
+            } else {
+                dirty = false;
+            }
+        }
+    }
+    Ok(None)
+}

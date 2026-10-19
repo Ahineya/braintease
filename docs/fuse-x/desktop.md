@@ -14,6 +14,12 @@ mode: it ensures the service is running, opens Applications and Terminal, then
 returns to the shell. It reuses an existing service. No NanoWM or composite
 desktop is started in hosted mode. The RVM desktop keeps its own window manager.
 
+NXDSKTOP's independent companions `nxcalc`, `nxselect`, `nxmsg`, `nxtetris` and `nxview`
+also run as native windows. The selector and message box preserve redirected
+stdout for their results; close/Escape returns `[]`, OK returns a path or `OK`.
+The NXDSKTOP taskbar itself remains an RVM desktop component. See the
+[shared application guide](../../ports/nanox/README.md#nxdsktop-and-companion-apps).
+
 Multiple GX and Nano-X programs share one `Fuse-X.app` identity. File → New
 Terminal / Command-N creates a fresh PTY shell, including after the last window
 closes. Window and Dock lists activate and restore individual windows. Quit /
@@ -29,17 +35,74 @@ normal Nano-X semantics. Titles, map/unmap, reparent, destruction, focus and
 close requests are adapted at the server boundary. Explicit raise/focus
 requests activate the corresponding Mac window.
 
+Eyes also follows the cursor across the Mac desktop, including outside Fuse-X
+windows. The UI thread samples AppKit's desktop cursor relative to the requested
+window; `GX_DESKTOP_POINTER` exposes signed guest-pixel coordinates without
+injecting motion, clicks or keyboard input. Native `GrQueryPointer` uses the
+calling client's first mapped top-level as its coordinate origin. Eyes polls
+this query at 20 Hz through the existing Nano-X protocol. Normal input routing
+and the RVM client remain unchanged.
+
 Resizable Nano-X windows receive content-size updates, resize their canvases,
 and notify clients through normal Nano-X events. The maximum accepted size is
-1024×768; allocation failure restores the previous size. Terminal clients
-update their PTY rows/columns. Fixed-size clients such as Clock remain fixed.
-Standalone GX programs such as `gterm` keep their fixed guest resolution and
-scale on host resize. The four-PTY pool is shared by native terminals, Nano-X
+1920×1080 guest pixels; allocation failure restores the previous size without
+terminating the application. Growth reserves the canvas and backing store
+together; shrinking compacts existing storage without a second canvas.
+The SDK can use the native 192-bank heap described in
+[native executables](../../fuse-x/EXECUTABLES.md). Native presentation ignores
+stale frame geometry while a newer resize is being acknowledged.
+Both `nxterm` and `gterm` resize their terminal models, update PTY rows/columns
+and deliver `SIGWINCH` to foreground applications. `gterm` rounds its content
+size to whole 8×16 cells; `nxterm` also supports spare edge pixels.
+Fixed-size clients such as Clock remain fixed. The sixteen-PTY pool is shared by native terminals, Nano-X
 terminals and Telnet sessions; surfaces also consume bounded guest memory.
 
-Clipboard, host-folder/network menus, Finder launch configuration, shaped
+Host-folder/network menus, Finder launch configuration, shaped
 transparent host windows and a high-DPI layout policy remain follow-up work.
 See the [runtime guide](../../fuse-x/README.md#native-graphics) for checks.
+
+## Text clipboard
+
+Edit → Copy, Cut, Paste and Select All (Command-C/X/V/A) route to the focused
+hosted window. They are typed `GX_ACTION` events in the ordered input queue;
+they never synthesize printable shortcut letters or terminal Ctrl-C. Ordinary
+Ctrl-C still belongs to the PTY and foreground job. Apps must implement these
+commands for their own editing/selection model; the host cannot infer text from
+arbitrary RGB565 pixels.
+
+`nxterm` and `gterm` accept Command-V and Ctrl-Shift-V. Drag to select visible
+terminal text, then Command-C or Ctrl-Shift-C to copy; Command-A selects the
+visible screen. Terminal Cut copies the selection without deleting output.
+Selection is cleared when output changes or the terminal resizes. There is no
+scrollback selection yet. Pasting preserves UTF-8, normalizes line endings and
+filters embedded control characters other than tabs/newlines. An app requesting
+DEC mode 2004 receives bracketed paste. Input is queued in order, with partial
+PTY writes and backpressure; a paste can exceed the PTY's input ring.
+
+NetSurf supports these commands in its address editor and through its core
+clipboard callbacks for page selections and HTML fields. Bare web addresses
+use HTTPS; explicit HTTP and local file addresses remain available.
+
+`GX_CAP_CLIPBOARD` advertises `GX_CLIPBOARD_READ/WRITE`. Requests require a
+window lease owned by the caller. Plain UTF-8 text is limited to 32,768 octets,
+one octet per C16 cell, with no embedded NUL. Writes validate the complete text
+before publication. Buffers are borrowed synchronously; the host keeps owned
+strings, never guest pointers. AppKit's main thread synchronizes the macOS
+text pasteboard and publishes guest copies. Non-text or oversized host content
+is unavailable as text; images, rich text and file promises are outside this
+contract.
+
+Nano-X private request 251 adds `nx_clipboard_get/set`, using 512-cell chunks
+and per-connection transfer state. A read is a stable snapshot, a write commits
+atomically, disconnect frees staging, and a client must own the named window.
+The common RVM server supplies a local text clipboard; macOS sharing is a
+Fuse-X backend feature and adds no VM/MMIO requirement. Other GUI apps need
+clipboard hooks before their own editors can copy/paste.
+
+Checks: `python3 ports/graphics/tests/run.py`,
+`python3 ports/nanox/tools/test_clipboard.py`, runtime hosted-graphics tests,
+`python3 ports/nanox/tools/clipboard_guest.py` (native and RVM/JIT),
+and `python3 fuse-x/test_clipboard.py` against disposable guest disks.
 
 ## Launching and using windows
 
@@ -140,7 +203,7 @@ for New Terminal.
 Guest widgets and application contents can use a consistent dark theme while
 native mode keeps macOS window chrome. A standalone RVM desktop may add its own
 chrome, compositor, and dock-like launcher behind the same surface interface.
-Native widgets, clipboard integration, high-DPI behavior, and drawing
+Native widgets, high-DPI behavior, and drawing
 acceleration remain separate design tasks.
 
 ## Shared graphics contract
@@ -150,3 +213,11 @@ window/surface/event boundary and the first RVM terminal. Fuse-X implements
 native top-level windows, capability discovery, hidden creation, resize
 acknowledgement and activation. Native build adaptations are generated under
 `fuse-x/build/`; shared Nano-X and RVM application sources stay unchanged.
+
+Headless acceptance checks set `FUSE_X_FRAMES` for published snapshots and
+`FUSE_X_TEST_EVENT` for an atomic one-command mailbox. A JSON object containing
+`window` and one of `resize: [width, height]`, `close: true`, `input` (an input
+transition), or `action: 1..4` (copy/paste/cut/select-all) follows the same
+host event path as a native gesture. An action may supply a bounded UTF-8
+`clipboard` string to test pasting without touching the OS pasteboard. The mailbox is enabled only with
+`RCC_NATIVE_HEADLESS`; normal sessions do not read it.

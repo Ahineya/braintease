@@ -39,6 +39,8 @@ final class RflLspCustomization extends LspCustomization {
 
     @Override public @NotNull LspRenameCustomizer getRenameCustomizer() { return rename; }
 
+    private static boolean ident(char c) { return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'; }
+
     static @Nullable TextRange identifierRange(CharSequence text, int offset) {
         if (offset < 0 || offset > text.length()) return null;
         RflLexer lexer = new RflLexer();
@@ -47,6 +49,14 @@ final class RflLspCustomization extends LspCustomization {
         while (lexer.getTokenType() != null) {
             int start = lexer.getTokenStart(), end = lexer.getTokenEnd();
             if (start > offset) break;
+            if (lexer.getTokenType() == RflTokens.MACRO_BODY && start <= offset && offset <= end) {
+                // Only a candidate range: compiler prepareRename establishes
+                // whether this word is an editable interpolation binding.
+                int a = offset, b = offset;
+                while (a > start && ident(text.charAt(a - 1))) a--;
+                while (b < end && ident(text.charAt(b))) b++;
+                return a < b ? new TextRange(a,b) : null;
+            }
             if (lexer.getTokenType() == RflTokens.IDENTIFIER) {
                 if (start <= offset && offset < end) return new TextRange(start, end);
                 if (end == offset) left = new TextRange(start, end);

@@ -47,8 +47,7 @@ Ripple. Both targets use the same guest wait core and socket bridge.
 
 The public [`sys/select.h`](../../ports/fuzix/ripple/include/sys/select.h)
 provides the conventional API. `fd_set` has two 16-bit words and capacity 32.
-RVM accepts `nfds` through 32; native currently accepts through 16 and returns
-`EINVAL` above its active limit. Descriptor bits at or above `nfds` are ignored.
+Both RVM and native Fuse-X accept `nfds` through 32 and return `EINVAL` above that limit. Descriptor bits at or above `nfds` are ignored.
 `poll()` and `pselect()` remain unimplemented.
 
 Wait registrations live in in-memory inode maps, separate from filesystem
@@ -113,8 +112,7 @@ before a split desktop server.
    declaration in `sys/time.h`; do not introduce an incompatible duplicate.
 2. Use a C16 `fd_set` with capacity 32 on both targets, represented by two
    16-bit mask words. Keep `FD_SETSIZE` distinct from the active process limit.
-   The native kernel may reject `nfds > 16` until its descriptor limit grows;
-   RVM must support its full 32. Do not shift a 16-bit `int` by 16 or more.
+   Both kernels support all 32 process descriptors. Do not shift a 16-bit `int` by 16 or more.
 3. Keep the public interface independent of the internal syscall representation.
    Syscall 72 uses the versioned C16 pointer request described above, replacing
    the old 16-descriptor payload and byte-offset assumptions. No host `fd_set`,

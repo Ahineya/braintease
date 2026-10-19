@@ -1,0 +1,35 @@
+{
+  "name": "Slate",
+  "version": 1,
+  "palette": {
+    "desktop": "#243740",
+    "surface": "#30383e",
+    "field": "#20282e",
+    "text": "#ebeeec",
+    "muted": "#aeb9bd",
+    "accent": "#50849b",
+    "selection": "#355d70",
+    "outline": "#151d22",
+    "highlight": "#8a9b9f"
+  },
+  "metrics": {
+    "title_height": 26,
+    "border": 5,
+    "button_height": 24,
+    "panel_height": 24,
+    "resize_hit_width": 7,
+    "spacing": 6
+  },
+  "assets": {
+    "window-active": {"size": [40, 40], "insets": [5, 26, 5, 5], "top": "#65757e", "bottom": "#3a464e", "radius": 5},
+    "window-inactive": {"size": [40, 40], "insets": [5, 26, 5, 5], "top": "#465158", "bottom": "#343e44", "radius": 5},
+    "button-normal": {"size": [24, 24], "insets": [5, 5, 5, 5], "top": "#627078", "bottom": "#414c54", "radius": 4},
+    "button-hover": {"size": [24, 24], "insets": [5, 5, 5, 5], "top": "#71848c", "bottom": "#4d606b", "radius": 4},
+    "button-pressed": {"size": [24, 24], "insets": [5, 5, 5, 5], "top": "#32414a", "bottom": "#475b66", "radius": 4},
+    "button-disabled": {"size": [24, 24], "insets": [5, 5, 5, 5], "top": "#414b51", "bottom": "#374047", "radius": 4},
+    "button-default": {"size": [24, 24], "insets": [5, 5, 5, 5], "top": "#608ea2", "bottom": "#3d6579", "radius": 4},
+    "field": {"size": [18, 18], "insets": [3, 3, 3, 3], "top": "#1d252b", "bottom": "#252f35", "radius": 2},
+    "panel": {"size": [24, 24], "insets": [3, 3, 3, 3], "top": "#4d5960", "bottom": "#343e45", "radius": 0},
+    "selection": {"size": [12, 12], "insets": [2, 2, 2, 2], "top": "#416d81", "bottom": "#305267", "radius": 0}
+  }
+}

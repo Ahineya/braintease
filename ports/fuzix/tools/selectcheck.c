@@ -16,9 +16,11 @@
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
+#include <ripple_net_limits.h>
 static fd_set r,w,x;
 static char data[1024];
 static volatile int caught;
+static int capacity_stress;
 extern long call(unsigned,long,long,long,long);
 static void fail(unsigned line){printf("selectcheck FAILED line %u errno %d\n",line,errno);exit(1);}
 #define C(a) do { if(!(a))fail(__LINE__); } while(0)
@@ -39,22 +41,16 @@ static void api(void){
     C(r.bits[0]==0x8001&&r.bits[1]==0x8001);FD_CLR(16,&r);C(!FD_ISSET(16,&r)&&FD_ISSET(31,&r));
     C(select(-1,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
     C(select(33,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
-#ifdef SELECT_NATIVE
-    C(select(17,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
-#endif
     FD_ZERO(&r);FD_SET(14,&r);C(select(15,&r,NULL,NULL,&t)==-1&&errno==EBADF);
     FD_ZERO(&r);FD_SET(31,&r);C(select(0,&r,NULL,NULL,&t)==0&&!r.bits[0]&&!r.bits[1]);
     t.tv_usec=1000000UL;C(select(0,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
     t.tv_usec=(unsigned long)-1;C(select(0,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
     t.tv_usec=0;t.tv_sec=(unsigned long)-1;C(select(0,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
     t.tv_sec=0;
-    C(select(0,(fd_set *)0x180000UL,NULL,NULL,&t)==-1&&errno==EFAULT);
-    C(select(0,NULL,NULL,NULL,(void *)0x180000UL)==-1&&errno==EFAULT);
+    C(select(0,(fd_set *)0x60000UL,NULL,NULL,&t)==-1&&errno==EFAULT);
+    C(select(0,NULL,NULL,NULL,(void *)0x60000UL)==-1&&errno==EFAULT);
     fd=open("/etc/passwd",O_RDONLY);C(fd>=0);
     for(n=15;n<32;n++) {
-#ifdef SELECT_NATIVE
-        if(n>15)break;
-#endif
         if(n!=15&&n!=16&&n!=31)continue;
         high=dup2(fd,n);C(high==n);FD_ZERO(&r);FD_ZERO(&w);FD_ZERO(&x);
         FD_SET(fd,&r);FD_SET(n,&r);FD_SET(n,&w);FD_SET(n,&x);
@@ -192,38 +188,100 @@ static void network(void){
     C(waitfd(fd,0)==1&&read(fd,data,1)==-1&&errno==ENETDOWN);waited(pid);close(fd);
     puts("selectcheck: listener accept, reset and network loss passed");
 }
+/* Four processes keep the per-process descriptor ceiling independent from
+ * the system socket ceiling. No connections are inherited across fork. */
+static void capacity_group(unsigned group,int network,int ready,int release){
+    struct sockaddr_in a;int fds[16],i,n;char byte,reply[64],pattern[64];
+    memset(&a,0,sizeof(a));a.sin_family=AF_INET;a.sin_port=htons(7001);
+    C(inet_pton(AF_INET,"192.168.64.1",&a.sin_addr)==1);
+    for(i=0;i<16;i++) {
+        fds[i]=socket(AF_INET,SOCK_STREAM,0);C(fds[i]>=0);
+        if(network) {
+            C(fcntl(fds[i],F_SETFL,O_NONBLOCK)==0);
+            C(connect(fds[i],(void *)&a,sizeof(a))==-1&&errno==EINPROGRESS&&waitfd(fds[i],1)==1);
+            for(n=0;n<64;n++)pattern[n]=(group*16+i+n)&255;
+            C(write(fds[i],pattern,64)==64);
+            C(waitfd(fds[i],0)==1); /* Leave distinct data queued across memory pressure. */
+        }
+    }
+    if(group) {C(write(ready,"r",1)==1&&read(release,&byte,1)==1);}
+    else {
+        for(i=0;i<3;i++)C(read(ready,&byte,1)==1);
+        C(socket(AF_INET,SOCK_STREAM,0)==-1&&errno==ENOBUFS);
+        if(network&&capacity_stress) {
+            int pid=fork();C(pid>=0);
+            if(!pid) {
+                char *args[]={"/bin/mmucheck","--stress",NULL};
+                execv(args[0],args);_exit(89);
+            }
+            waited(pid);
+            puts("CAPACITY_MEMORY_PRESSURE_OK");
+        }
+        C(write(release,"ddd",3)==3);
+    }
+    for(i=0;i<16;i++) {
+        if(network) {
+            C(waitfd(fds[i],0)==1&&read(fds[i],reply,64)==64);
+            for(n=0;n<64;n++)C((unsigned char)reply[n]==((group*16+i+n)&255));
+            C(shutdown(fds[i],SHUT_WR)==0&&waitfd(fds[i],0)==1&&read(fds[i],&byte,1)==0);
+        }
+        close(fds[i]);
+    }
+}
 static void capacity(void){
-    struct sockaddr_in a;int listeners[4],fds[8],p[2],q[2],pid,i,fd;char byte;
+    struct sockaddr_in a;int listeners[RIPPLE_NET_TCP_LISTENERS],p[2],q[2],kids[3],pid,i,j,fd;
+    char byte;unsigned pass;
+    C(RIPPLE_NET_SOCKETS==64&&RIPPLE_NET_TCP_CONNECTIONS==64);
     memset(&a,0,sizeof(a));a.sin_family=AF_INET;
-    for(i=0;i<4;i++) {
+    for(i=0;i<RIPPLE_NET_TCP_LISTENERS;i++) {
         listeners[i]=socket(AF_INET,SOCK_STREAM,0);C(listeners[i]>=0);a.sin_port=htons(7400+i);
         C(bind(listeners[i],(void *)&a,sizeof(a))==0&&listen(listeners[i],4)==0);
     }
-    fd=socket(AF_INET,SOCK_STREAM,0);C(fd>=0);a.sin_port=htons(7410);
+    fd=socket(AF_INET,SOCK_STREAM,0);C(fd>=0);a.sin_port=htons(7490);
     C(bind(fd,(void *)&a,sizeof(a))==0&&listen(fd,1)==-1&&errno==ENOBUFS);close(fd);
-    for(i=0;i<4;i++)close(listeners[i]);
-    C(pipe(p)==0&&pipe(q)==0);pid=fork();C(pid>=0);
-    if(!pid){close(p[0]);close(q[1]);}else{close(p[1]);close(q[0]);C(read(p[0],&byte,1)==1);}
-    a.sin_port=htons(7001);C(inet_pton(AF_INET,"192.168.64.1",&a.sin_addr)==1);
-    for(i=0;i<8;i++) {
-        fds[i]=socket(AF_INET,SOCK_STREAM,0);C(fds[i]>=0);
-        C(fcntl(fds[i],F_SETFL,O_NONBLOCK)==0);
-        C(connect(fds[i],(void *)&a,sizeof(a))==-1&&errno==EINPROGRESS&&waitfd(fds[i],1)==1);
-        C(write(fds[i],"c",1)==1);
-        C(waitfd(fds[i],0)==1);
-        C(read(fds[i],&byte,1)==1&&byte=='c');
-        printf("capacity: %s connection %d ready\n",pid?"parent":"child",i+1);
+    puts("SELECT_CAPACITY_LISTENERS_READY");fflush(stdout);
+    for(i=0;i<RIPPLE_NET_TCP_LISTENERS;i++) {
+        C(waitfd(listeners[i],0)==1);fd=accept(listeners[i],NULL,NULL);C(fd>=0);
+        C(waitfd(fd,0)==1&&read(fd,&byte,1)==1&&(unsigned char)byte==i);
+        C(write(fd,&byte,1)==1&&shutdown(fd,SHUT_WR)==0);
+        C(waitfd(fd,0)==1&&read(fd,&byte,1)==0);close(fd);close(listeners[i]);
     }
-    if(!pid){C(write(p[1],"r",1)==1&&read(q[0],&byte,1)==1);}
-    else {C(socket(AF_INET,SOCK_STREAM,0)==-1&&errno==ENOBUFS);C(write(q[1],"d",1)==1);}
-    for(i=0;i<8;i++) {
-        C(shutdown(fds[i],SHUT_WR)==0&&waitfd(fds[i],0)==1&&read(fds[i],&byte,1)==0);close(fds[i]);
+    delay(100000);
+    /* Exercise all sixteen independently bound UDP ports and binary queues. */
+    for(i=0;i<RIPPLE_NET_UDP_PORTS;i++) {
+        listeners[i]=socket(AF_INET,SOCK_DGRAM,0);C(listeners[i]>=0);
+        a.sin_addr.s_addr=0;a.sin_port=htons(7500+i);
+        C(bind(listeners[i],(void *)&a,sizeof(a))==0);
     }
-    if(!pid)_exit(0);
-    waited(pid);close(p[0]);close(q[1]);
+    C(inet_pton(AF_INET,"192.168.64.1",&a.sin_addr)==1);a.sin_port=htons(7000);
+    for(i=0;i<RIPPLE_NET_UDP_PORTS;i++) {
+        byte=i;C(sendto(listeners[i],&byte,1,0,(void *)&a,sizeof(a))==1);
+    }
+    for(i=0;i<RIPPLE_NET_UDP_PORTS;i++) {
+        C(waitfd(listeners[i],0)==1&&read(listeners[i],&byte,1)==1&&(unsigned char)byte==i);
+        close(listeners[i]);
+    }
+    /* Verify sixty-four live streams, then reuse every endpoint after close. */
+    for(pass=0;pass<2;pass++) {
+        C(pipe(p)==0&&pipe(q)==0);
+        for(i=0;i<3;i++) {
+            pid=fork();C(pid>=0);
+            if(!pid) {
+                close(p[0]);close(q[1]);
+                capacity_group(i+1,!pass,p[1],q[0]);_exit(0);
+            }
+            kids[i]=pid;
+        }
+        close(p[1]);close(q[0]);capacity_group(0,!pass,p[0],q[1]);
+        for(j=0;j<3;j++)waited(kids[j]);close(p[0]);close(q[1]);
+        delay(100000);
+    }
+    puts("selectcheck: 16 listeners, 16 UDP ports, 64 live TCP streams, exhaustion and reuse passed");
     puts("SELECT_CAPACITY_OK");
 }
+
 int main(int argc,char **argv){
+    if(argc>1&&!strcmp(argv[1],"capacity-stress")){capacity_stress=1;capacity();return 0;}
     if(argc>1&&!strcmp(argv[1],"capacity")){capacity();return 0;}
     if(argc>1&&!strcmp(argv[1],"network")){network();puts("SELECT_NETWORK_OK");return 0;}
     if(argc>1&&!strcmp(argv[1],"input")){char c;puts("SELECT_INPUT_READY");fflush(stdout);C(waitfd(0,0)==1&&read(0,&c,1)==1&&c=='k');puts("SELECT_INPUT_OK");return 0;}

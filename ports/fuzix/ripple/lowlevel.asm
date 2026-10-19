@@ -596,12 +596,13 @@ ripple_ptr_zero:
 ripple_ptr_done:
     RET
 
-; Every argument is a physical table bank. The layout lives in mmu.c.
+; A0 is the physical table bank; A1 is this task's table offset within it.
 ripple_mmu_roots:
     CSRW A0, 14
     CSRW A0, 16
-    CSRW R0, 15
+    CSRW A1, 15
     LI T0, 1536
+    ADD T0, T0, A1
     CSRW T0, 17
     LI T0, 8
     CSRW T0, 18

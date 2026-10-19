@@ -53,16 +53,40 @@ struct Binding {
 pub(crate) fn check_root(
     path: &Path,
     source: &str,
-    ast: Module,
+    mut ast: Module,
 ) -> Result<(crate::check::ProgramInfo, Vec<CompileError>), CompileError> {
-    if ast.imports.is_empty() {
-        let (info, result) = crate::check::analyze(source, &ast);
-        return Ok((info, result.err().into_iter().collect()));
-    }
     let canon = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut expanded = source.to_string();
+    crate::macros::prepare(
+        &canon,
+        &mut expanded,
+        &mut ast,
+        rcc_ir::target::Target::Ripple,
+    )?;
+    let expansion = ast.macro_expansion.clone();
+    if ast.imports.is_empty() {
+        let (info, result) = crate::check::analyze(&expanded, &ast);
+        let info = if let Some(data) = &expansion {
+            data.editor(info)
+        } else {
+            info
+        };
+        let errors = result
+            .err()
+            .into_iter()
+            .map(|e| {
+                if let Some(data) = &expansion {
+                    data.diagnostic(e)
+                } else {
+                    e
+                }
+            })
+            .collect();
+        return Ok((info, errors));
+    }
     let mut rfls = vec![RflUnit {
         path: canon.clone(),
-        source: source.to_string(),
+        source: expanded,
         ast,
         resolved: Vec::new(),
     }];
@@ -81,6 +105,41 @@ pub(crate) fn check_root(
     for (index, unit) in rfls.iter().enumerate() {
         bindings.push(own_bindings(unit, index, index == 0, &mut taken_c)?);
     }
+    let definition_spans: Vec<HashMap<String, Span>> = rfls
+        .iter()
+        .map(|unit| {
+            unit.ast
+                .functions
+                .iter()
+                .map(|i| (i.name.clone(), i.name_span))
+                .chain(
+                    unit.ast
+                        .structs
+                        .iter()
+                        .map(|i| (i.name.clone(), i.name_span)),
+                )
+                .chain(unit.ast.adts.iter().map(|i| (i.name.clone(), i.name_span)))
+                .chain(
+                    unit.ast
+                        .adts
+                        .iter()
+                        .flat_map(|i| i.ctors.iter().map(|c| (c.name.clone(), c.name_span))),
+                )
+                .chain(
+                    unit.ast
+                        .traits
+                        .iter()
+                        .map(|i| (i.name.clone(), i.name_span)),
+                )
+                .chain(
+                    unit.ast
+                        .consts
+                        .iter()
+                        .map(|i| (i.name.clone(), i.name_span)),
+                )
+                .collect()
+        })
+        .collect();
     let mut maps: Vec<HashMap<String, String>> = bindings
         .iter()
         .map(|table| {
@@ -164,7 +223,7 @@ pub(crate) fn check_root(
         let mut declaration = |name: &str, span: Span, ty: Option<String>| {
             let mut aliases: Vec<_> = maps[0]
                 .iter()
-                .filter(|(_, target)| target.as_str() == name)
+                .filter(|(alias, target)| !alias.starts_with('$') && target.as_str() == name)
                 .map(|(alias, _)| alias.clone())
                 .collect();
             aliases.sort();
@@ -235,6 +294,11 @@ pub(crate) fn check_root(
         functions: Vec::new(),
         externs: Vec::new(),
         imports: Vec::new(),
+        macro_imports: Vec::new(),
+        macro_exports: Vec::new(),
+        item_macros: Vec::new(),
+        proc_macros: Vec::new(),
+        macro_expansion: None,
     };
     for unit in &mut rfls {
         merged.adts.append(&mut unit.ast.adts);
@@ -260,7 +324,10 @@ pub(crate) fn check_root(
                 .insert(binding.mangled.clone(), name.clone());
         }
     }
-    let mut aliases: Vec<_> = maps[0].iter().collect();
+    let mut aliases: Vec<_> = maps[0]
+        .iter()
+        .filter(|(alias, _)| !alias.starts_with('$'))
+        .collect();
     aliases.sort_by(|(a, _), (b, _)| a.cmp(b));
     let mut displayed = HashSet::new();
     for (alias, target) in aliases {
@@ -315,11 +382,65 @@ pub(crate) fn check_root(
         .enumerate()
         .map(|(index, unit)| (unit.path.clone(), bases[index], lengths[index]))
         .collect();
-    let info = shift_info(info, &chunks, 0);
+    // Capture import navigation from the already-expanded, checked module graph.
+    // Re-parsing a dependency on every hover would execute its macros again.
+    let mut import_uses = Vec::new();
+    for resolved in &rfls[0].resolved {
+        if resolved.import.is_implicit() {
+            continue;
+        }
+        let Target::Rfl(target) = resolved.target else {
+            continue;
+        };
+        for item in &resolved.import.names {
+            let Some(span) = definition_spans[target].get(&item.name).copied() else {
+                continue;
+            };
+            let packed = Span::new(span.start + bases[target], span.end + bases[target]);
+            let ty = info
+                .facts
+                .iter()
+                .find(|f| f.def == packed)
+                .map_or_else(String::new, |f| f.ty.clone());
+            for span_in_root in [item.span, item.alias_span] {
+                import_uses.push(crate::check::NameUse {
+                    span: span_in_root,
+                    def: span,
+                    def_file: Some(rfls[target].path.clone()),
+                    ty: ty.clone(),
+                });
+            }
+        }
+    }
+    let mut info = shift_info(info, &chunks, 0);
+    info.uses.extend(import_uses);
+    for name in &mut info.uses {
+        if let Some(path) = &name.def_file {
+            if let Some(data) = rfls
+                .iter()
+                .find(|u| &u.path == path)
+                .and_then(|u| u.ast.macro_expansion.as_ref())
+            {
+                name.def = data.original(name.def);
+            }
+        }
+    }
+    let info = if let Some(data) = &expansion {
+        data.editor(info)
+    } else {
+        info
+    };
     let diagnostics = result
         .err()
         .into_iter()
-        .map(|err| shift_error(err, source, chunks[0].1, chunks[0].2))
+        .map(|err| {
+            let local = shift_error(err, &rfls[0].source, chunks[0].1, chunks[0].2);
+            if let Some(data) = &expansion {
+                data.diagnostic(local)
+            } else {
+                local
+            }
+        })
         .collect();
     Ok((info, diagnostics))
 }
@@ -466,14 +587,32 @@ pub(super) fn check_path_for_target(
     path: &Path,
     target: rcc_ir::target::Target,
 ) -> Result<(crate::typed::TModule, Vec<CMod>), CompileError> {
-    let canon = std::fs::canonicalize(path)
+    let canon = crate::macros::source::canonical(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
-    let source = read_text(&canon)?;
-    let at_file = |err: CompileError| match err.offset {
-        Some(offset) => CompileError::at_file(&canon, &source, offset, err.detail),
-        None => err,
+    let mut source = read_text(&canon)?;
+    let mut ast = parse_source_for_target(&source, target).map_err(|e| match e.offset {
+        Some(at) => CompileError::at_file(&canon, &source, at, e.detail),
+        None => e,
+    })?;
+    crate::macros::prepare(&canon, &mut source, &mut ast, target)?;
+    let expansion = ast.macro_expansion.clone();
+    let at_file = |err: CompileError| {
+        if let Some(data) = &expansion {
+            if data
+                .at(Span::new(
+                    err.offset.unwrap_or(usize::MAX),
+                    err.offset.unwrap_or(usize::MAX),
+                ))
+                .is_some()
+            {
+                return data.diagnostic(err);
+            }
+        }
+        match err.offset {
+            Some(offset) => CompileError::at_file(&canon, &source, offset, err.detail),
+            None => err,
+        }
     };
-    let ast = parse_source_for_target(&source, target).map_err(at_file)?;
     if ast.imports.is_empty() {
         let typed = crate::check::check(&source, &ast).map_err(at_file)?;
         return Ok((typed, Vec::new()));
@@ -588,6 +727,11 @@ fn link(
         functions: Vec::new(),
         externs: Vec::new(),
         imports: Vec::new(),
+        macro_imports: Vec::new(),
+        macro_exports: Vec::new(),
+        item_macros: Vec::new(),
+        proc_macros: Vec::new(),
+        macro_expansion: None,
     };
     for unit in &mut rfls {
         merged.adts.append(&mut unit.ast.adts);
@@ -610,12 +754,34 @@ fn link(
         };
         for (unit, base) in rfls.iter().zip(&bases) {
             if (*base..=base + unit.source.len()).contains(&offset) {
-                return CompileError::at_file(&unit.path, &unit.source, offset - base, err.detail);
+                let error =
+                    CompileError::at_file(&unit.path, &unit.source, offset - base, err.detail);
+                return unit
+                    .ast
+                    .macro_expansion
+                    .as_ref()
+                    .map_or(error.clone(), |data| data.diagnostic(error));
             }
         }
         err
     })?;
     Ok((typed, cmods))
+}
+
+/// Written imports need a path; compiler-only std dependencies also work for
+/// string inputs. Their resolver never needs to read the virtual root file.
+pub(super) fn source_dependencies(
+    source: &str,
+    ast: Module,
+    target: rcc_ir::target::Target,
+) -> Result<crate::typed::TModule, CompileError> {
+    let (typed, cmods) = link(PathBuf::from("<source>"), source.into(), ast, target)?;
+    if !cmods.is_empty() {
+        return Err(CompileError::plain(
+            "compiler-only source dependencies cannot contain C imports",
+        ));
+    }
+    Ok(typed)
 }
 
 impl RflUnit {
@@ -669,7 +835,7 @@ fn load_rfl(
     cmods: &mut Vec<CMod>,
     target: rcc_ir::target::Target,
 ) -> Result<usize, CompileError> {
-    let canon = std::fs::canonicalize(path)
+    let canon = crate::macros::source::canonical(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     if let Some(start) = stack.iter().position(|found| found == &canon) {
         let mut chain: Vec<String> = stack[start..].iter().map(|path| file_label(path)).collect();
@@ -682,8 +848,10 @@ fn load_rfl(
     if let Some(index) = rfls.iter().position(|unit| unit.path == canon) {
         return Ok(index);
     }
-    let source = read_text(&canon)?;
-    let ast = parse_source_for_target(&source, target)?;
+    let mut source = read_text(&canon)?;
+    let mut ast = parse_source_for_target(&source, target)?;
+    crate::macros::namespace::runtime(&canon, &mut ast, target)?;
+    crate::macros::prepare(&canon, &mut source, &mut ast, target)?;
     let index = rfls.len();
     rfls.push(RflUnit {
         path: canon.clone(),
@@ -698,7 +866,7 @@ fn load_rfl(
 }
 
 fn load_c(path: &Path, cmods: &mut Vec<CMod>) -> Result<usize, CompileError> {
-    let canon = std::fs::canonicalize(path)
+    let canon = crate::macros::source::canonical(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))?;
     if let Some(index) = cmods.iter().position(|unit| unit.path == canon) {
         return Ok(index);
@@ -1040,13 +1208,23 @@ fn apply_import(
     match resolved.target {
         Target::Rfl(target) => {
             for item in &resolved.import.names {
+                if !crate::macros::executor_host()
+                    && rfls[target].ast.proc_macros.contains(&item.name)
+                {
+                    return Err(CompileError::plain(format!(
+                        "`{}` is a compile-time macro; use import macro",
+                        item.name
+                    )));
+                }
                 let Some(binding) = bindings[target].get(&item.name) else {
                     return Err(CompileError::plain(format!(
                         "`{}` is not exported",
                         item.name
                     )));
                 };
-                if !binding.exported {
+                if !binding.exported
+                    && !(resolved.import.is_implicit() && item.alias.starts_with("$macro$"))
+                {
                     return Err(CompileError::plain(format!(
                         "`{}` is not exported",
                         item.name
@@ -1059,7 +1237,9 @@ fn apply_import(
                 if binding.is_fn {
                     fn_names[index].insert(item.alias.clone());
                 }
-                for (ctor, mangled) in &binding.ctors {
+                for (ctor, mangled) in binding.ctors.iter().filter(|_| {
+                    !(resolved.import.is_implicit() && item.alias.starts_with("$macro$"))
+                }) {
                     bind_name(&mut maps[index], ctor, mangled, true)?;
                     ctor_names[index].insert(ctor.clone());
                 }
@@ -1279,7 +1459,22 @@ fn rewrite_uses(
         .chain(ast.adts.iter().map(|a| a.name.clone()))
         .filter_map(|name| map.get(&name).cloned())
         .collect();
-    let mut visible: Vec<_> = map.values().cloned().collect();
+    // Macro method scopes precede the enclosing module scope. Hidden helper
+    // imports must not make definition-site traits visible to caller code.
+    for scope in &mut ast.trait_scopes {
+        scope.span.start += base;
+        scope.span.end += base;
+        for name in &mut scope.visible {
+            if let Some(target) = map.get(name) {
+                *name = target.clone();
+            }
+        }
+    }
+    let mut visible: Vec<_> = map
+        .iter()
+        .filter(|(alias, _)| !alias.starts_with("$macro$"))
+        .map(|(_, target)| target.clone())
+        .collect();
     if !map.contains_key("Printable") {
         visible.push("$std$Printable".into());
     }
@@ -1547,6 +1742,7 @@ impl Rewriter<'_> {
     fn expr(&mut self, expr: &mut Expr) {
         self.bump(&mut expr.span);
         match &mut expr.kind {
+            ExprKind::Macro(_) => {}
             ExprKind::Int(_)
             | ExprKind::Float(_)
             | ExprKind::Bool(_)
@@ -1583,7 +1779,11 @@ impl Rewriter<'_> {
             } => {
                 self.bump(method_span);
                 self.expr(receiver);
-                if self.fns.contains(method) && !self.hidden_value(method) {
+                if self.fns.contains(method) && !self.hidden_value(method)
+                    || resolved != method
+                        && self.fns.contains(resolved)
+                        && !self.hidden_value(resolved)
+                {
                     self.rewrite_value(resolved);
                 }
                 for arg in args {
@@ -1650,7 +1850,7 @@ impl Rewriter<'_> {
                 self.expr(expr);
                 self.ty(ty);
             }
-            ExprKind::Lambda { params, body } => {
+            ExprKind::Lambda { params, body, .. } => {
                 for param in params.iter_mut() {
                     self.bump(&mut param.name_span);
                     if let Some(ty) = &mut param.ty {
@@ -1761,7 +1961,10 @@ impl Rewriter<'_> {
                     self.ty(arg);
                 }
             }
-            ParsedTy::Func { span, params, ret } | ParsedTy::CFn { span, params, ret } => {
+            ParsedTy::Func {
+                span, params, ret, ..
+            }
+            | ParsedTy::CFn { span, params, ret } => {
                 self.bump(span);
                 for param in params {
                     self.ty(param);
@@ -1834,6 +2037,9 @@ fn std_units() -> Vec<(String, RflUnit)> {
         let Some(module) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
+        if matches!(module, "macro" | "macro_host") {
+            continue;
+        }
         let Ok(source) = read_text(&path) else {
             continue;
         };
@@ -1868,7 +2074,7 @@ pub(crate) fn import_definition(
     name: Option<&str>,
 ) -> Option<(PathBuf, Span)> {
     let from = std::fs::canonicalize(from).unwrap_or_else(|_| from.to_path_buf());
-    let path = std::fs::canonicalize(resolve_spec(&from, spec).ok()?).ok()?;
+    let path = crate::macros::source::canonical(&resolve_spec(&from, spec).ok()?).ok()?;
     let Some(name) = name else {
         return Some((path, Span::empty()));
     };
@@ -1878,6 +2084,13 @@ pub(crate) fn import_definition(
     }
     let source = read_text(&path).ok()?;
     let ast = parse_source(&source).ok()?;
+    if ast.macro_exports.iter().any(|n| n == name) {
+        let (definition, entry) = crate::macros::namespace::resolve(&path, name).ok()?;
+        let text = read_text(&definition).ok()?;
+        let ast = parse_source(&text).ok()?;
+        let span = ast.functions.iter().find(|f| f.name == entry)?.name_span;
+        return Some((definition, span));
+    }
     let unit = RflUnit {
         path: path.clone(),
         source,
@@ -1955,7 +2168,7 @@ pub(crate) fn resolve_spec(from: &Path, spec: &str) -> Result<PathBuf, CompileEr
     };
     let base = from.parent().unwrap_or_else(|| Path::new("."));
     let path = base.join(spec);
-    if !path.exists() {
+    if !crate::macros::source::exists(&path) {
         return Err(CompileError::plain(format!(
             "cannot read {}",
             path.display()
@@ -1971,7 +2184,7 @@ fn file_label(path: &Path) -> String {
 }
 
 fn read_text(path: &Path) -> Result<String, CompileError> {
-    std::fs::read_to_string(path)
+    crate::macros::source::read(path)
         .map_err(|err| CompileError::plain(format!("cannot read {}: {err}", path.display())))
 }
 
@@ -2262,4 +2475,31 @@ pub(crate) fn isolate_prelude_types(ast: &mut Module) {
             }
         }
     }
+}
+
+/// Reuse ordinary lexical resolution for phase classification. Local values and
+/// type parameters must not be mistaken for identically named compiler imports.
+pub(crate) fn macro_phase_names(ast: &Module, host: &HashSet<String>) -> Module {
+    let mut result = ast.clone();
+    let names = host
+        .iter()
+        .map(|n| (n.clone(), format!("$phase$host${n}")))
+        .collect();
+    let ctors = ast
+        .adts
+        .iter()
+        .flat_map(|a| a.ctors.iter().map(|c| c.name.clone()))
+        .collect();
+    let functions = ast
+        .functions
+        .iter()
+        .map(|f| f.name.clone())
+        .chain(
+            ast.imports
+                .iter()
+                .flat_map(|i| i.names.iter().map(|n| n.alias.clone())),
+        )
+        .collect();
+    rewrite_uses(&mut result, &names, &ctors, &functions, 0);
+    result
 }

@@ -1,0 +1,6 @@
+import { map } from "std/fp";
+fn main() {
+    println(map<_, u32, _>(Some(70000), fn(n) => n + 1));
+    println(map<_, i16, _>(None, fn(n) => n + 1));
+    println(map<_, u32, _>([70000], fn(n) => n + 1));
+}

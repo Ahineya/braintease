@@ -180,11 +180,7 @@ pub fn generate_compound_assignment(
     use super::unary_ops::generate_lvalue_address;
     
     let lhs_addr = generate_lvalue_address(gen, lhs)?;
-    let lhs_val = {
-        let ir_type = convert_type_default(lhs.get_type())?;
-        let temp = gen.builder.build_load_volatile(lhs_addr.clone(), ir_type.clone(), lhs.get_declared_type().is_volatile())?;
-        Value::Temp(temp)
-    };
+    let (lhs_val, old_unit) = super::bit_fields::load(gen, lhs, lhs_addr.clone())?;
     let rhs_val = gen.generate(rhs)?;
     let lhs_ty = lhs.get_type();
     let rhs_ty = rhs.get_type();
@@ -240,7 +236,6 @@ pub fn generate_compound_assignment(
         .builder
         .build_binary(ir_op, lhs_val, rhs_val, ir_type)?;
     let result = convert_integer(gen, Value::Temp(result), &common, lhs_ty)?;
-    gen.builder.build_store_volatile(result.clone(), lhs_addr, convert_type_default(lhs_ty)?, lhs.get_declared_type().is_volatile())?;
-    
-    Ok(result)
+    let result = convert_integer(gen, result, lhs_ty, lhs.get_declared_type())?;
+    super::bit_fields::store(gen, lhs, lhs_addr, result, old_unit)
 }

@@ -3,17 +3,28 @@ import { IoError, arguments, working_directory, metadata, executable, DIRECTORY,
 import { Browser, active, destination, selected_path, joined, load_panel, enter, reload, select_by, select_name, keep_visible } from "./model";
 import { action, Navigate, First, Last, Enter, Parent, Switch, Reload, Copy, Move, Mkdir, Delete, View, Quit, Console, SinglePanel, NoAction, ThemeMenu, About, Edit, Rename } from "./keys";
 import { default_theme, choose_theme, Theme } from "./theme";
-import { render, visible_rows } from "./ui";
+import { render, render_cached, painting, visible_rows } from "./ui";
 import { number } from "./format";
 import { prompt, confirm, view, console, choose, about, external } from "./widgets";
 import { copy_file, move_path, delete_path, Moved, CopiedSourceRetained, editor_command } from "./actions";
+import { parent } from "lib/path";
 
 fn refresh(state: &mut Browser) {
+    let mut shared = false;
     match reload(&mut state.left) {
-        Ok(_) => {},
+        Ok(_) => {
+            if (state.left.path == state.right.path) {
+                let snapshot = state.left;
+                state.right.share_listing(&snapshot);
+                shared = true;
+            }
+        },
         Err(error) => {
             state.status = error_message(error);
         }
+    }
+    if (shared) {
+        return;
     }
     match reload(&mut state.right) {
         Ok(_) => {},
@@ -23,9 +34,41 @@ fn refresh(state: &mut Browser) {
     }
 }
 
+fn inside(path: String, directory: String) -> bool {
+    path == directory || path.len() > directory.len() && path[0..directory.len()] == directory && path[directory.len()] == '/'
+}
+
+fn refresh_affected(state: &mut Browser, source: String, target: String) {
+    let from = parent(source);
+    let to = parent(target);
+    let mut shared = false;
+    if (state.left.path == from || state.left.path == to || inside(state.left.path, source) || inside(state.left.path, target)) {
+        match reload(&mut state.left) {
+            Ok(_) => {
+                if (state.left.path == state.right.path) {
+                    let snapshot = state.left;
+                    state.right.share_listing(&snapshot);
+                    shared = true;
+                }
+            },
+            Err(error) => {
+                state.status = error_message(error);
+            }
+        }
+    }
+    if (!shared && (state.right.path == from || state.right.path == to || inside(state.right.path, source) || inside(state.right.path, target))) {
+        match reload(&mut state.right) {
+            Ok(_) => {},
+            Err(error) => {
+                state.status = error_message(error);
+            }
+        }
+    }
+}
+
 fn operation(screen: &Screen, theme: &Theme, state: &mut Browser, copy: bool) -> Result<unit, IoError> {
     let panel = active(&*state);
-    let entry = panel.entries[panel.selected];
+    let entry = panel.entries[panel.cursor.selected];
     if (entry.name == "..") {
         state.status = "Select a file or directory first";
         return Ok({});
@@ -65,7 +108,8 @@ fn operation(screen: &Screen, theme: &Theme, state: &mut Browser, copy: bool) ->
                     }
                 }
             }
-            refresh(state);
+            let original = selected_path(&*state);
+            refresh_affected(state, original, target);
         },
     }
     Ok({})
@@ -73,7 +117,7 @@ fn operation(screen: &Screen, theme: &Theme, state: &mut Browser, copy: bool) ->
 
 fn rename_selected(screen: &Screen, theme: &Theme, state: &mut Browser) -> Result<unit, IoError> {
     let panel = active(&*state);
-    let entry = panel.entries[panel.selected];
+    let entry = panel.entries[panel.cursor.selected];
     if (entry.name == "..") {
         state.status = "Select a file or directory first";
         return Ok({});
@@ -111,7 +155,8 @@ fn rename_selected(screen: &Screen, theme: &Theme, state: &mut Browser) -> Resul
                     state.status = "Copied; source kept: " + error_message(error);
                 }
             }
-            refresh(state);
+            let original = selected_path(&*state);
+            refresh_affected(state, original, target);
             if (state.right_active) {
                 select_name(&mut state.right, name);
             } else {
@@ -158,13 +203,14 @@ fn launch(screen: &Screen, state: &mut Browser, edit: bool) -> bool {
 
 fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
     let mut theme = initial_theme;
+    let mut painted = painting();
     let mut dirty = true;
     while (true) {
         let rows = visible_rows(screen);
         keep_visible(&mut state.left, rows);
         keep_visible(&mut state.right, rows);
         if (dirty) {
-            render(screen, &theme, &*state);
+            render_cached(screen, &theme, &*state, &mut painted);
             dirty = false;
         }
         let key = screen.key();
@@ -177,6 +223,20 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
         }
         dirty = true;
         let command = action(key, rows as i16);
+        let quick = match command {
+            Navigate(_) => true,
+            First => true,
+            Last => true,
+            Switch => true,
+            NoAction => true,
+            _ => false
+        };
+        let prior_left = state.left.cursor.selected;
+        let prior_right = state.right.cursor.selected;
+        let prior_focus = state.right_active;
+        if (!quick) {
+            painted.valid = false;
+        }
         match command {
             Quit => {
                 return;
@@ -190,16 +250,16 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             First => {
                 if (state.right_active) {
-                    state.right.selected = 0;
+                    state.right.cursor.selected = 0;
                 } else {
-                    state.left.selected = 0;
+                    state.left.cursor.selected = 0;
                 }
             },
             Last => {
                 if (state.right_active) {
-                    state.right.selected = state.right.entries.len() - 1;
+                    state.right.cursor.selected = state.right.entries.len() - 1;
                 } else {
-                    state.left.selected = state.left.entries.len() - 1;
+                    state.left.cursor.selected = state.left.entries.len() - 1;
                 }
             },
             Switch => {
@@ -220,7 +280,7 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             Enter => {
                 let panel = active(&*state);
-                let entry = panel.entries[panel.selected];
+                let entry = panel.entries[panel.cursor.selected];
                 let path = selected_path(&*state);
                 let result = if (entry.info.kind == DIRECTORY) {
                     enter(state, path)
@@ -245,7 +305,7 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             View => {
                 let panel = active(&*state);
-                if (panel.entries[panel.selected].info.kind != DIRECTORY) {
+                if (panel.entries[panel.cursor.selected].info.kind != DIRECTORY) {
                     match view(screen, &theme, selected_path(&*state)) {
                         Ok(_) => {},
                         Err(error) => {
@@ -259,7 +319,7 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             Edit => {
                 let panel = active(&*state);
-                if (panel.entries[panel.selected].info.kind != DIRECTORY) {
+                if (panel.entries[panel.cursor.selected].info.kind != DIRECTORY) {
                     if (!launch(screen, state, true)) {
                         return;
                     }
@@ -298,7 +358,8 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
                             match create_dir(joined(panel.path, name)) {
                                 Ok(_) => {
                                     state.status = "Directory created";
-                                    refresh(state);
+                                    let path = joined(panel.path, name);
+                                    refresh_affected(state, path, path);
                                 },
                                 Err(error) => {
                                     state.status = error_message(error);
@@ -310,12 +371,13 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             Delete => {
                 let panel = active(&*state);
-                let entry = panel.entries[panel.selected];
+                let entry = panel.entries[panel.cursor.selected];
                 if (entry.name != ".." && confirm(screen, &theme, "Delete " + entry.name + "?")) {
                     match delete_path(selected_path(&*state)) {
                         Ok(_) => {
                             state.status = "Deleted successfully";
-                            refresh(state);
+                            let path = selected_path(&*state);
+                            refresh_affected(state, path, path);
                         },
                         Err(error) => {
                             state.status = error_message(error);
@@ -363,6 +425,9 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             },
             NoAction => {},
         }
+        if (quick && prior_left == state.left.cursor.selected && prior_right == state.right.cursor.selected && (prior_focus && state.right_active || !prior_focus && !state.right_active)) {
+            dirty = false;
+        }
     }
 }
 
@@ -392,11 +457,15 @@ fn main() -> i16 {
             return 1;
         }
     };
-    let right = match load_panel(right_path) {
-        Ok(panel) => panel,
-        Err(error) => {
-            println(error_message(error));
-            return 1;
+    let right = if (right_path == left.path) {
+        left
+    } else {
+        match load_panel(right_path) {
+            Ok(panel) => panel,
+            Err(error) => {
+                println(error_message(error));
+                return 1;
+            }
         }
     };
     let mut state = Browser { left: left, right: right, right_active: false, single: false, status: "Enter: open/run/view; F4 edit; r rename; Ctrl-A about" };

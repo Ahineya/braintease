@@ -2,6 +2,7 @@
 #ifndef FUZIX_RIPPLE_COMMON_CONFIG_H
 #define FUZIX_RIPPLE_COMMON_CONFIG_H
 #define CONFIG_RIPPLE
+#include "exec-args.h"
 #define CONFIG_32BIT
 #define CONFIG_MULTI
 #define CONFIG_PARENT_FIRST
@@ -9,7 +10,9 @@
 #define CONFIG_SMALL
 #define CONFIG_BANKS 1
 #define CONFIG_STACKSIZE 2048
+#ifndef NBUFS
 #define NBUFS 8
+#endif
 #define NMOUNTS 2
 #define CONFIG_JOB_CONTROL
 #define CONFIG_SELECT
@@ -21,7 +24,8 @@
 #define CONFIG_PLATFORM_CLOCK
 #define CONFIG_NET
 #define RIPPLE_FUZIX_NETWORK
-#define NSOCKET 16
+#include <ripple_net_limits.h>
+#define NSOCKET RIPPLE_NET_SOCKETS
 #define CMDLINE "0 rw"
 #define BOOTDEVICENAMES "hd#"
 #define PROGBASE 0x00080000UL

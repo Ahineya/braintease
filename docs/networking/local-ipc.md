@@ -79,28 +79,34 @@ blocking operations with `EINTR`.
 
 | Resource | FUZIX/Ripple and Fuse-X |
 |---|---:|
-| Internet socket endpoints, all protocols | 16 (previously 8) |
-| Active TCP connections across listeners and outbound connections | 16 (previously 4) |
-| TCP listeners | 4 (previously 2) |
+| Internet socket endpoints, all protocols | 64 |
+| Active TCP connections across listeners and outbound connections | 64 |
+| TCP listeners | 16 |
 | Connection slots per TCP listener | 4 |
-| Bound UDP ports | 4 (unchanged) |
+| Bound UDP ports | 16 |
 | Local endpoints, including listeners and pending accepts | 32 |
 | Pending connections per local listener | Up to 8 |
 | Receive storage per local endpoint | 1,024 C16 cells |
 
 An established local connection uses two endpoints. Internet and local pools
-are independent but share the system inode/open-file tables. Descriptor limits
-remain 32 per Ripple process and 16 per native process. Closing internet sockets
+are independent but share the system inode/open-file tables. Descriptor limits are 32 per process on both kernels. Closing internet sockets
 may retain a slot during protocol cleanup; local slots are released immediately.
-The compact TCP TIME_WAIT table remains 32 entries.
+The compact TCP TIME_WAIT table holds 128 entries. Listener descriptors and
+accepted connections share the 64 internet endpoints; these ceilings are not
+additive. A single process still has 32 descriptors for sockets and other files.
 
-Ripple reserves bank 5 for protocol state, bank 6 for internet endpoints and
-bank 7 for local endpoints. Each table is checked at compile time to fit one
-64,000-cell bank. These supervisor banks do not reduce the existing user page
-pool or overlap graphics storage. Fuse-X allocates the same tables in shared
-kernel memory. `RIPPLE_FUZIX_NETWORK` selects the larger TCP context consistently
-for the bridge and every linked network implementation unit; standalone
-runtime/RFL contexts retain their existing four-connection/two-listener defaults.
+Ripple keeps the control table in bank 5, the first sixteen internet endpoints
+in bank 6, and local endpoints in bank 7. Additional endpoint chunks, active TCP
+chunks and per-listener accept pools use permanent supervisor allocations from
+the MMU page pool. Every object fits a 64,000-cell bank, and stable pointer tables
+index the chunks. Reserved pages cannot enter a user map or be reclaimed by exit,
+exec or heap growth. They are included in physical pool usage reported by `free`,
+but excluded from process mappings and shared COW counts. Tables do not overlap
+graphics storage. Fuse-X allocates the same chunks in shared kernel memory.
+The limits are centralized in `runtime/include/ripple_net_limits.h`;
+`RIPPLE_FUZIX_NETWORK` selects that profile for every linked network unit.
+Standalone runtime/RFL contexts retain four connections, two listeners, four UDP
+bindings and 32 TIME_WAIT records.
 
 ## Verification
 
@@ -120,7 +126,11 @@ waits, accept descriptor exhaustion, socketpair allocation rollback, bank-spanni
 addresses/buffers and blocked-connect listener reuse. A real second boot checks
 stale pathname refusal and unlink/rebind; native managed installation and the
 offline checker preserve socket nodes without treating them as data files. The
-network readiness suite also verifies four listeners and sixteen simultaneous
-outbound connections distributed across two guest processes, exchanges data
-on every connection and checks endpoint exhaustion. Internet fixtures use a
+network readiness suite also verifies traffic through sixteen listeners,
+sixteen independently bound UDP ports and sixty-four simultaneous outbound
+connections distributed across four guest processes. It checks independent
+queued data, endpoint exhaustion and full reuse after close. Add
+`--memory-stress` to the RVM test to exhaust/recover physical RAM and process
+slots while distinct data remains queued on all sixty-four TCP streams, then
+verify every payload and close the connections. Internet fixtures use a
 local Unix datagram socket and require no internet connection.

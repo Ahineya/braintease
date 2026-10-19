@@ -28,6 +28,13 @@ process-local allocator state belong to individual processes. Fork shares
 private pages until writes detach them, while shared kernel allocations remain
 visible to all processes.
 
+Current SDK applications select a 192-bank heap at banks 48–239 before their
+first allocator growth. Frames use 2–4, arguments bank 31, extended globals
+32–47, and the shared kernel 240–255. Older packages keep the bounded legacy
+heap at 8–30. Both windows stay addressable, but heap growth cannot cross the
+argument/global gap. The new heap is private and copy-on-write across fork;
+the reported capacity is not a physical memory reservation.
+
 The hosted linker places globals from `--kernel` translation units in the
 shared arena. Application globals remain private. Kernel-owned runtime file
 handles also live in shared storage, so exec cannot invalidate the root disk
@@ -52,9 +59,20 @@ handlers run after completed syscalls and user-code checkpoints. Newly compiled
 applications check loop edges and existing call continuations; a roughly 5 ms
 slice hands control to a registered kernel callback. That callback advances
 timers, polls input/networking, handles signals and invokes FUZIX's scheduler.
+The return-to-caller boundary defers callbacks until the caller continuation
+has copied aggregate return storage. Otherwise a callback could reuse the
+released callee frame before that copy.
 No Rust borrow or host call stack survives a switch. Kernel callbacks are not
-preempted, including handlers entered from them. The hosted configuration has
-16 process slots.
+asynchronously preempted, including handlers entered from them. Executable loading
+has explicit safe scheduling points: after filesystem buffers are released,
+streaming services timers/devices and yields at roughly 5 ms intervals. Two host
+loader workers validate manifests, build relocation templates, write native
+libraries and resolve exports without accessing guest memory. Polling installs at
+most 128 function bindings before yielding again. Construction and staging belong
+to the loading process; only the final exec commit replaces its address space.
+Signals remain deferred during that resource-owning loader continuation. Other
+long synchronous kernel/host operations still need their own safe yield points.
+The hosted configuration has 64 process slots.
 
 ## Host application
 
@@ -63,6 +81,9 @@ Fuse-X.app
   macOS main thread
     native windows, Dock menu, menu bar, presentation, host input
               | owned commands, events, and frame snapshots
+  native loader pool (two workers)
+    immutable executable preparation; no guest/kernel memory access
+              | owned results, bounded function-table installation
   guest execution worker
     hosted FUZIX kernel and process continuations
     terminals, filesystems, networking, guest applications

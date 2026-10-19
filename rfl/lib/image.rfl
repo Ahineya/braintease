@@ -1,0 +1,72 @@
+import {} from "image.c";
+extern "C" {
+    fn rfl_image_decode(bytes: *const u8, length: u32, status: *mut i16) -> *mut u16;
+    fn ri_image_free(image: *mut u16);
+    fn rfl_image_width(image: *mut u16) -> u16;
+    fn rfl_image_height(image: *mut u16) -> u16;
+    fn rfl_image_opaque(image: *mut u16) -> u16;
+    fn rfl_image_rgba(image: *mut u16, x: u16, y: u16) -> u32;
+}
+
+export type ImageError = InvalidImageFormat | CorruptImage | ImageTooLarge | ImageMemoryFailed | UnsupportedImageEncoding;
+/// An owned straight RGBA canvas. Decoding performs no I/O or graphics calls.
+export struct Image {
+    state: Owned<*mut u16>
+}
+
+/// Decode PNG, GIF's first frame, baseline JPEG or uncompressed BMP.
+/// Limits: 512 per dimension, 65,536 pixels and 256 Ki input octets.
+export fn decode(bytes: Vec<u8>) -> Result<Image, ImageError> {
+    if (bytes.len() < 2) {
+        return Err(CorruptImage);
+    }
+    if (bytes.len() > 262144) {
+        return Err(ImageTooLarge);
+    }
+    let mut status: i16 = 0;
+    let value = unsafe {
+        rfl_image_decode(&bytes[0], bytes.len() as u32, &mut status)
+    };
+    if (value.is_null()) {
+        if (status == -1) {
+            return Err(InvalidImageFormat);
+        }
+        if (status == -3) {
+            return Err(ImageTooLarge);
+        }
+        if (status == -4) {
+            return Err(ImageMemoryFailed);
+        }
+        if (status == -5) {
+            return Err(UnsupportedImageEncoding);
+        }
+        return Err(CorruptImage);
+    }
+    Ok(Image { state: owned(value, fn(p: &mut *mut u16) => {
+        ri_image_free(*p);
+    }) })
+}
+
+impl Image {
+    fn raw(&self) -> *mut u16 {
+        let value = self.state.borrow();
+        *value
+    }
+    export fn width(&self) -> u16 {
+        rfl_image_width(self.raw())
+    }
+    export fn height(&self) -> u16 {
+        rfl_image_height(self.raw())
+    }
+    /// True when every pixel has alpha 255.
+    export fn opaque(&self) -> bool {
+        rfl_image_opaque(self.raw()) != 0
+    }
+    /// Packed 0xRRGGBBAA, with unassociated alpha; None outside the canvas.
+    export fn rgba(&self, x: u16, y: u16) -> Option<u32> {
+        if (x >= self.width() || y >= self.height()) {
+            return None;
+        }
+        Some(rfl_image_rgba(self.raw(), x, y))
+    }
+}

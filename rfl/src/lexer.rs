@@ -13,9 +13,9 @@ pub enum TokenKind {
     Int(i64),
     /// Source spelling of a float literal, such as `1.5` or `1e-2`.
     Float(String),
-    /// Decoded string literal. Cells are Unicode scalars that fit in 16 bits.
+    /// Decoded string literal in UTF-16 code units; checked strings become UTF-8.
     Str(Vec<u16>),
-    /// `c"..."`. Same cell encoding as a string, including escapes.
+    /// `c"..."`. One C16 cell per BMP scalar; supplementary scalars are rejected.
     CStr(Vec<u16>),
     /// A character literal. The value is a Unicode scalar.
     Char(u32),
@@ -96,6 +96,7 @@ pub enum TokenKind {
     LineComment,
     /// `/* ... */`, including the delimiters.
     BlockComment,
+    MacroBody(crate::macros::syntax::RawGroup),
     Eof,
 }
 
@@ -116,7 +117,25 @@ pub fn tokenize_with_trivia(source: &str) -> Result<Vec<Token>, CompileError> {
     };
     let mut tokens = Vec::new();
     loop {
-        let token = lexer.next_token()?;
+        let mut token = lexer.next_token()?;
+        if matches!(
+            token.kind,
+            TokenKind::LBrace | TokenKind::LParen | TokenKind::LBracket
+        ) {
+            let mut previous = tokens.iter().rev().filter(|t: &&Token| {
+                !matches!(t.kind, TokenKind::LineComment | TokenKind::BlockComment)
+            });
+            if previous.next().is_some_and(|t| t.kind == TokenKind::Not)
+                && previous
+                    .next()
+                    .is_some_and(|t| matches!(t.kind, TokenKind::Ident(_)))
+            {
+                let (group, end) = crate::macros::syntax::capture(source, token.span.start)?;
+                lexer.index = end;
+                token.span.end = end;
+                token.kind = TokenKind::MacroBody(group);
+            }
+        }
         let is_eof = token.kind == TokenKind::Eof;
         tokens.push(token);
         if is_eof {
@@ -337,7 +356,20 @@ impl<'a> Lexer<'a> {
                     self.bump();
                     break;
                 }
-                Some(_) => chars.push(self.escape(start)?),
+                Some(_) => {
+                    let scalar = self.escape(start)?;
+                    if cstr {
+                        chars.push(u16::try_from(scalar).map_err(|_| {
+                            self.error(start, "C string character does not fit in a cell")
+                        })?);
+                    } else {
+                        let ch = char::from_u32(scalar).ok_or_else(|| {
+                            self.error(start, "string contains an invalid Unicode scalar")
+                        })?;
+                        let mut units = [0u16; 2];
+                        chars.extend_from_slice(ch.encode_utf16(&mut units));
+                    }
+                }
             }
         }
         let kind = if cstr {
@@ -361,36 +393,33 @@ impl<'a> Lexer<'a> {
             return Err(self.error(start, "character literal must be one character"));
         }
         self.bump();
-        let scalar = u32::from(ch);
+        let scalar = ch;
         if (0xD800..=0xDFFF).contains(&scalar) {
             return Err(self.error(start, "character literal is not a Unicode scalar"));
         }
         Ok(TokenKind::Char(scalar))
     }
 
-    fn escape(&mut self, start: usize) -> Result<u16, CompileError> {
+    fn escape(&mut self, start: usize) -> Result<u32, CompileError> {
         let Some(ch) = self.peek_char() else {
             return Err(self.error(start, "unterminated literal"));
         };
         self.bump();
         if ch != '\\' {
-            if (ch as u32) > 0xffff {
-                return Err(self.error(start, "character does not fit in a cell"));
-            }
-            return Ok(ch as u16);
+            return Ok(ch as u32);
         }
         let Some(esc) = self.peek_char() else {
             return Err(self.error(start, "unterminated escape"));
         };
         self.bump();
         Ok(match esc {
-            'n' => '\n' as u16,
-            'r' => '\r' as u16,
-            't' => '\t' as u16,
+            'n' => '\n' as u32,
+            'r' => '\r' as u32,
+            't' => '\t' as u32,
             '0' => 0,
-            '\\' => '\\' as u16,
-            '\'' => '\'' as u16,
-            '"' => '"' as u16,
+            '\\' => '\\' as u32,
+            '\'' => '\'' as u32,
+            '"' => '"' as u32,
             _ => return Err(self.error(start, format!("unknown escape '\\{esc}'"))),
         })
     }

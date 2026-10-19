@@ -1,0 +1,46 @@
+import { Result } from "std/result";
+import { Todo, All, Active, path, route } from "../../apps/todomvc/model";
+import { encode, decode } from "../../apps/todomvc/codec";
+import { parse_route, route_href } from "std/router";
+fn main() -> i16 {
+    let todos = [Todo { id: 42, title: "🌍 <script>\nline", completed: false }, Todo { id: 70000, title: "second", completed: true }];
+    let wire = encode(todos).unwrap();
+    let restored = decode(wire).unwrap();
+    if (restored.len() != 2 || restored[0].id != 42 || restored[0].title != todos[0].title || !restored[1].completed) {
+        return 1;
+    }
+    let invalid = ["", "RFLTODO2\n0\n", "RFLTODO1\n01\n", "RFLTODO1\n1\n0\n0\n1\nx\n", "RFLTODO1\n1\n1\n2\n1\nx\n", "RFLTODO1\n1\n1\n0\n9\nx\n", "RFLTODO1\n1\n4294967295\n0\n1\nx\n", "RFLTODO1\n1\n1\n0\n2\n x\n", "RFLTODO1\n0\ntrailing", "RFLTODO1\n2\n1\n0\n1\nx\n1\n0\n1\ny\n"];
+    for (data in invalid) {
+        match decode(data) {
+            Err(_) => {},
+            Ok(_) => {
+                return 2;
+            }
+        }
+    }
+    match parse_route("#/active", route) {
+        Ok(Active) => {},
+        _ => {
+            return 3;
+        }
+    }
+    match parse_route("", route) {
+        Ok(All) => {},
+        _ => {
+            return 4;
+        }
+    }
+    for (hash in ["javascript:bad", "#/active?x=1", "#/%61ctive", "#/unknown"]) {
+        match parse_route(hash, route) {
+            Err(_) => {},
+            Ok(_) => {
+                return 5;
+            }
+        }
+    }
+    if (route_href(Active, path).unwrap() != "#/active") {
+        return 6;
+    }
+    println("codec and typed routes passed");
+    0
+}

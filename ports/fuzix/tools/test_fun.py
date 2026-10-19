@@ -141,7 +141,7 @@ atomicWrite(f,root.replace(installRoot(root.data,JSON.parse(fs.readFileSync(proc
 
 def run(image, commands, jit, label):
     cmd = [str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),
-           '--memory','16384000','--headless','--input',commands,'--timeout','360']
+           '--memory','16384000','--headless','--net','off','--input',commands,'--timeout','360']
     if jit: cmd.append('--jit')
     log = Path('/tmp/fuzix-fun-' + label + '.log')
     with log.open('w') as stream:
@@ -154,7 +154,7 @@ def run(image, commands, jit, label):
 
 def live(image, jit):
     master, slave = pty.openpty()
-    cmd = [str(ROOT/'scripts/run-fuzix.sh'),'--run-only','--disk',str(image),'--timeout','240']
+    cmd = [str(ROOT/'scripts/run-fuzix.sh'),'--run-only','--disk',str(image),'--net','off','--timeout','240']
     if not jit: cmd.append('--no-jit')
     proc = subprocess.Popen(cmd,cwd=ROOT,env=dict(os.environ,FUZIX_BUILD=str(build)),
                             stdin=slave,stdout=slave,stderr=slave,start_new_session=True)
@@ -202,9 +202,9 @@ with tempfile.TemporaryDirectory(prefix='fuzix-fun-') as tmp:
         fixtures = {
             '/tcl-suite.tcl':SCRIPT, '/tcl-source.tcl':'set sourced source_ok\n',
             '/cow-long':'longword'*80+'\nsecond line\n', '/cow-too-long':'x'*4097,
-            '/tcl-exact':'x'*12000, '/tcl-over':'x'*12001,
+            '/tcl-exact':'x'*30000, '/tcl-over':'x'*30001,
             '/tcl-big.tcl':'# filler\n'*1100+'puts BIG_TAIL\n',
-            '/tcl-oversize.tcl':'#'+'x'*12000,
+            '/tcl-oversize.tcl':'#'+'x'*30000,
         }
         seed(image,[{'name':n,'mode':0o100644,'data':list(s.encode())} for n,s in fixtures.items()])
         output=run(image,COMMANDS,jit,label)
@@ -217,7 +217,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-fun-') as tmp:
                          'GET1:9:two lines','GET2:5:three','GETEOF:-1:1','CHANNELERR:1:1','SOURCE:source_ok',
                          'EXEC:semi; literal','EXECERR:1','ARGS:2:first:two words','SCRIPT_DONE','ALIAS:42',
                          'OTHER_ALIAS','PIPE_TCL','BADBRACE:1','BADBRACKET:1','BADQUOTE:1','SCRIPT_ERROR:1',
-                         'TCL_EXIT:7','BAD_BREAK:1','EXACT:12000','READ_LIMIT:1','BIG_TAIL','SCRIPT_LIMIT:1',
+                         'TCL_EXIT:7','BAD_BREAK:1','EXACT:30000','READ_LIMIT:1','BIG_TAIL','SCRIPT_LIMIT:1',
                          'Hello, coffee! Tcl is alive.','square(5) = 25']:
             assert expected in output,(expected,output)
         subprocess.run(['python3',str(PORT/'tools/fsck.py'),str(image)],check=True)

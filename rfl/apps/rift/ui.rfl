@@ -1,5 +1,6 @@
 import { Screen } from "std/curses";
-import { paint } from "lib/text_curses";
+import { Buffer, Bounds, WrappedRow } from "lib/text";
+import { paint_line } from "lib/text_curses";
 import { fitted } from "lib/tui_dialog";
 import { basename } from "lib/path";
 import { Document, number } from "./files";
@@ -7,8 +8,8 @@ import { View, Vi, selection, clamp } from "./vi";
 import { Theme } from "./theme";
 import { Settings } from "./config";
 // Retain the virtual screen between keys. Dialogs, tools, tabs and settings
-// invalidate it explicitly; a mutation repaints all visible text because its
-// lexical state can affect later lines.
+// invalidate it explicitly; the engine accumulates edit damage and propagates
+// multiline syntax state until the unchanged suffix converges.
 export struct Paint {
     valid: bool,
     width: i16,
@@ -26,11 +27,12 @@ export struct Paint {
     status: String,
     operator: i16,
     pending: i16,
-    count: u16
+    count: u16,
+    wrap: bool
 }
 
 export fn painting() -> Paint {
-    Paint { valid: false, width: 0, rows: 0, top: 0, left: 0, generation: 0, lines: 0, cursor: 0, row: 0, from: 0, to: 0, mode: 0, modified: false, status: "", operator: 0, pending: 0, count: 0 }
+    Paint { valid: false, width: 0, rows: 0, top: 0, left: 0, generation: 0, lines: 0, cursor: 0, row: 0, from: 0, to: 0, mode: 0, modified: false, status: "", operator: 0, pending: 0, count: 0, wrap: true }
 }
 
 export fn height(screen: &Screen) -> usize {
@@ -51,12 +53,30 @@ export fn gutter(settings: &Settings) -> i16 {
 
 export fn visible(screen: &Screen, b: &Document, v: &mut View, vi: &Vi, settings: &Settings) {
     clamp(&b.buffer, v, vi.mode == 1);
-    let row = b.buffer.row(v.cursor);
+    let width = if (screen.columns() > gutter(settings) + 2) {
+        if (screen.columns() - gutter(settings) - 1 > 512) {
+            512 as u16
+        } else {
+            (screen.columns() - gutter(settings) - 1) as u16
+        }
+    } else {
+        2 as u16
+    };
+    v.columns = width;
+    let row = if (settings.wrap) {
+        b.buffer.wrap_at(v.cursor, width, settings.tabstop)
+    } else {
+        b.buffer.row(v.cursor)
+    };
     let rows = height(screen);
     if (row < v.top) {
         v.top = row;
     } else if (row >= v.top + rows) {
         v.top = row - rows + 1;
+    }
+    if (settings.wrap) {
+        v.left = 0;
+        return;
     }
     let column = b.buffer.visual(v.cursor, settings.tabstop);
     let width = if (screen.columns() > gutter(settings) + 2) {
@@ -66,9 +86,24 @@ export fn visible(screen: &Screen, b: &Document, v: &mut View, vi: &Vi, settings
     };
     if (column < v.left) {
         v.left = column;
-    } else if (column >= v.left + width) {
-        v.left = column - width + 1;
+    } else {
+        let extent = if (v.cursor < b.buffer.endline(row)) {
+            b.buffer.visual(b.buffer.next(v.cursor), settings.tabstop) - column
+        } else {
+            1 as usize
+        };
+        if (column + extent > v.left + width) {
+            v.left = column + extent - width;
+        }
     }
+}
+
+fn selected_row(b: &Buffer, row: usize, from: usize, to: usize) -> bool {
+    from < to && b.start(row) < to && (if (row + 1 < b.lines()) {
+        b.start(row + 1)
+    } else {
+        b.len() + 1
+    }) > from
 }
 
 export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, selected: usize, v: View, vi: &Vi, settings: &Settings, old: &mut Paint, force: bool) {
@@ -148,9 +183,15 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
     let generation = b.generation();
     let line_count = b.lines();
     let cursor_row = b.row(v.cursor);
-    let body = full || old.top != v.top || old.left != v.left;
-    let text_changed = body || generation != old.generation || selected_text.start != old.from || selected_text.end != old.to;
-    let painted_lines = if (body) {
+    let body = full || old.top != v.top || old.left != v.left || (old.wrap && !settings.wrap || !old.wrap && settings.wrap) || settings.wrap && generation != old.generation;
+    let damage = if (generation != old.generation || body) {
+        b.damage()
+    } else {
+        Bounds { start: 0, end: 0 }
+    };
+    let selection_changed = selected_text.start != old.from || selected_text.end != old.to;
+    let cursor_column = b.visual(v.cursor, settings.tabstop);
+    let painted_lines = if (body || settings.wrap) {
         height(screen)
     } else {
         let count = if (line_count > old.lines) {
@@ -166,7 +207,26 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
     };
     for (line in 0..painted_lines) {
         let y = line as i16 + 2;
-        let row = v.top + line;
+        let wrapped = if (settings.wrap) {
+            b.wrapped(v.top + line, columns as u16, settings.tabstop)
+        } else {
+            WrappedRow { row: 0, left: 0, columns: 0, start: 0, present: false }
+        };
+        let row = if (settings.wrap) {
+            if (wrapped.present) {
+                wrapped.row
+            } else {
+                line_count
+            }
+        } else {
+            v.top + line
+        };
+        let left = if (settings.wrap) {
+            wrapped.left
+        } else {
+            v.left
+        };
+        let text_changed = body || row >= damage.start && row < damage.end || selection_changed && (selected_row(b, row, old.from, old.to) || selected_row(b, row, selected_text.start, selected_text.end));
         if (!text_changed && (row != cursor_row && row != old.row || cursor_row == old.row)) {
             continue;
         }
@@ -177,7 +237,11 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
         }
         if (row < line_count) {
             if (settings.numbers) {
-                let label = number(row + 1);
+                let label = if (settings.wrap && left > 0) {
+                    ">"
+                } else {
+                    number(row + 1)
+                };
                 screen.text(y, 5 - label.len() as i16, label, if (row == cursor_row) {
                     colors[12]
                 } else {
@@ -185,11 +249,20 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
                 });
             }
             if (text_changed) {
-                if (!paint(screen, b, y, margin, row, v.left, columns as u16, settings.tabstop, syntax, colors[7], selected_text.start, selected_text.end)) {
+                let size = if (settings.wrap && wrapped.columns < columns as u16) {
+                    if (wrapped.columns == 0) {
+                        1 as u16
+                    } else {
+                        wrapped.columns
+                    }
+                } else {
+                    columns as u16
+                };
+                let painted = paint_line(screen, b, y, margin, row, left, size, settings.tabstop, syntax, colors[7], selected_text.start, selected_text.end);
+                if (painted < 0) {
                     screen.text(y, margin, "[render failed]", colors[14]);
                 }
-                let visual_end = b.visual(b.endline(row), settings.tabstop);
-                if (visual_end > v.left + columns as usize) {
+                if (painted > 0 && !settings.wrap) {
                     screen.text(y, width - 1, ">", colors[12]);
                 }
             }
@@ -208,7 +281,7 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
             " NORMAL "
         };
         screen.fill(rows - 3, 0, width, ' ', colors[8]);
-        let location = number(b.row(v.cursor) + 1) + ":" + number(b.visual(v.cursor, settings.tabstop) + 1) + "  " + document.language.name;
+        let location = number(cursor_row + 1) + ":" + number(cursor_column + 1) + "  " + document.language.name;
         screen.text(rows - 3, 0, fitted(mode + if (document.path == "") {
             "[Untitled]"
         } else {
@@ -252,7 +325,17 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
             1
         });
     };
-    *old = Paint { valid: true, width: width, rows: rows, top: v.top, left: v.left, generation: generation, lines: line_count, cursor: v.cursor, row: cursor_row, from: selected_text.start, to: selected_text.end, mode: vi.mode, modified: modified, status: vi.status, operator: vi.operator, pending: vi.pending, count: vi.count };
-    screen.cursor((b.row(v.cursor) - v.top) as i16 + 2, margin + (b.visual(v.cursor, settings.tabstop) - v.left) as i16, true);
+    *old = Paint { valid: true, width: width, rows: rows, top: v.top, left: v.left, generation: generation, lines: line_count, cursor: v.cursor, row: cursor_row, from: selected_text.start, to: selected_text.end, mode: vi.mode, modified: modified, status: vi.status, operator: vi.operator, pending: vi.pending, count: vi.count, wrap: settings.wrap };
+    let visual_row = if (settings.wrap) {
+        b.wrap_at(v.cursor, columns as u16, settings.tabstop)
+    } else {
+        cursor_row
+    };
+    let cursor_left = if (settings.wrap) {
+        b.wrapped(visual_row, columns as u16, settings.tabstop).left
+    } else {
+        v.left
+    };
+    screen.cursor((visual_row - v.top) as i16 + 2, margin + (cursor_column - cursor_left) as i16, true);
     screen.refresh();
 }

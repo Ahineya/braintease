@@ -2,7 +2,14 @@
 #define RIPPLE_NET_TCP_H
 #include <net.h>
 #define NET_TCP_BUFFER 512
+#ifdef RIPPLE_FUZIX_NETWORK
+/* 128 active/backlog TCBs must fit the hosted 16-bank shared arena. */
+#define NET_TCP_RX_BUFFER 4096
+#define NET_TCP_MSS 1460
+#else
+#define NET_TCP_RX_BUFFER NET_TCP_BUFFER
 #define NET_TCP_MSS 512
+#endif
 #define NET_TCP_TIME_WAIT_MS 120000UL
 #define NET_TCP_CLOSED 0
 #define NET_TCP_SYN_SENT 1
@@ -27,7 +34,7 @@ typedef struct NetTcpConfig {
  * One reliable segment in flight; all queued stream data is copied here. */
 struct NetTcp {
     NetContext *net;
-    unsigned char peer[4], tx[NET_TCP_BUFFER], rx[NET_TCP_BUFFER];
+    unsigned char peer[4], tx[NET_TCP_BUFFER], rx[NET_TCP_RX_BUFFER];
     unsigned short local_port, remote_port, state, error, active;
     unsigned short tx_used, rx_used, rx_head, mss, window;
     unsigned short shutting, peer_fin, ack_pending;

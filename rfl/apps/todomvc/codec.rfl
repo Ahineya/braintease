@@ -1,0 +1,96 @@
+// Versioned, length-prefixed UTF-8 records. No JSON parsing or model crosses to JS.
+import { Todo } from "./model";
+import { trim } from "std/string";
+export fn decimal(value: u32) -> String {
+    let mut n = value;
+    let mut out = "";
+    while (true) {
+        out = from_char((48 + n % 10) as char) + out;
+        n /= 10;
+        if (n == 0) {
+            break;
+        }
+    }
+    out
+}
+
+export fn encode(todos: Vec<Todo>) -> Result<String, String> {
+    if (todos.len() > 128) {
+        return Err("At most 128 todos can be stored.");
+    }
+    let mut out = "RFLTODO1\n" + decimal(todos.len() as u32) + "\n";
+    let mut ids: Vec<u32> = [];
+    for (todo in todos) {
+        if (todo.id == 0 || todo.id == 4294967295 || todo.title.len() == 0 || todo.title.len() > 256 || trim(todo.title) != todo.title) {
+            return Err("Invalid todo record.");
+        }
+        for (id in ids) {
+            if (id == todo.id) {
+                return Err("Duplicate todo identity.");
+            }
+        }
+        ids.push(todo.id);
+        out = out + decimal(todo.id) + "\n" + (if (todo.completed) {
+            "1"
+        } else {
+            "0"
+        }) + "\n" + decimal(todo.title.len() as u32) + "\n" + todo.title + "\n";
+        if (out.len() > 16384) {
+            return Err("Todo snapshot exceeds the 16 KiB storage limit.");
+        }
+    }
+    Ok(out)
+}
+
+fn number(data: &String, at: &mut usize, limit: u32) -> Result<u32, String> {
+    let begin = *at;
+    let mut n: u32 = 0;
+    while (*at < data.len() && data[*at] != '\n') {
+        let ch = data[*at];
+        if (ch < '0' || ch > '9') {
+            return Err("Malformed todo number.");
+        }
+        let digit = ch as u32 - 48;
+        if (digit > limit || n >(limit - digit) / 10) {
+            return Err("Todo number is out of range.");
+        }
+        n = n * 10 + digit;
+        *at += 1;
+    }
+    if (*at == begin || *at == data.len() || (*at - begin > 1 && data[begin] == '0')) {
+        return Err("Malformed todo record.");
+    } *at += 1;
+    Ok(n)
+}
+
+export fn decode(data: String) -> Result<Vec<Todo>, String> {
+    if (data.len() < 9 || data.len() > 16384 || data[0..9] != "RFLTODO1\n") {
+        return Err("Unsupported or malformed todo snapshot.");
+    }
+    let mut at: usize = 9;
+    let count = number(&data, &mut at, 128)?;
+    let mut todos: Vec<Todo> = [];
+    for (i in 0..count) {
+        let id = number(&data, &mut at, 4294967294)?;
+        let done = number(&data, &mut at, 1)?;
+        let length = number(&data, &mut at, 256)? as usize;
+        if (id == 0 || length == 0 || at + length >= data.len() || data[at + length] != '\n') {
+            return Err("Malformed todo title.");
+        }
+        for (todo in todos) {
+            if (todo.id == id) {
+                return Err("Duplicate todo identity.");
+            }
+        }
+        let title = data[at..at + length];
+        if (trim(title) != title || title.len() == 0) {
+            return Err("Malformed todo title.");
+        }
+        todos.push(Todo { id: id, title: title, completed: done == 1 });
+        at += length + 1;
+    }
+    if (at != data.len()) {
+        return Err("Trailing data in todo snapshot.");
+    }
+    Ok(todos)
+}

@@ -1,0 +1,39 @@
+import { Effect, access, flat_map, from_async, ensuring, run } from "std/effect";
+import { Environment } from "std/effect_env";
+import { Future, sleep } from "std/future";
+import { block_on } from "std/executor";
+import { host_reactor } from "std/host";
+import { Result } from "std/result";
+
+struct Console {
+    greeting: String
+}
+
+// The timer and println only run when the program is executed and polled.
+async fn delayed_greeting(message: String) -> Result<unit, String> {
+    sleep(25).unwrap().await;
+    println(message);
+    Ok({})
+}
+
+fn greeting() -> Effect<Console, String, unit> {
+    let message: Effect<Console, String, String> = access(fn(console: &mut Console) => console.greeting);
+    flat_map(message, fn(message: String) => from_async(fn(environment: Environment<Console>) => delayed_greeting(message)))
+}
+
+fn main() -> i16 {
+    let program = ensuring(greeting(), fn() => println("console program finished"));
+    let mut future = run(program, Console { greeting: "Hello from a lazy, outrageously pure-looking program!" });
+    println("Program built; no greeting yet.");
+    let mut reactor = host_reactor().unwrap();
+    block_on(&mut future, &mut reactor).unwrap().unwrap();
+    // A second execution gets its own future and environment.
+    let mut again = run(program, Console { greeting: "Same recipe, another execution!" });
+    match block_on(&mut again, &mut reactor).unwrap() {
+        Ok(_) => 0,
+        Err(error) => {
+            println(error);
+            1
+        }
+    }
+}

@@ -183,10 +183,40 @@ export fn read_bytes(fd: i16, limit: usize) -> Result<Vec<u8>, IoError> {
 /// Writes every octet to a descriptor, handling partial and interrupted writes.
 /// A zero-progress write returns `WriteZero`; other syscall failures return `Errno`.
 export fn write_all(fd: i16, bytes: Vec<u8>) -> Result<unit, IoError> {
+    write_prefix(fd, &bytes, bytes.len())
+}
+
+/// Reads into initialized reusable storage. Returns the valid prefix length;
+/// zero means EOF. Storage length is unchanged, including on an error.
+export fn read_into(fd: i16, bytes: &mut Vec<u8>) -> Result<usize, IoError> {
+    if (bytes.len() > MAX_READ) {
+        return Err(InvalidLength);
+    }
+    if (bytes.is_empty()) {
+        return Ok(0);
+    }
+    let length = bytes.len();
+    let count = unsafe {
+        rfl_posix_read(fd, &mut bytes[0], length)
+    };
+    if (count < 0) {
+        return Err(last_error());
+    }
+    if (count as usize > bytes.len()) {
+        return Err(InvalidLength);
+    }
+    Ok(count as usize)
+}
+
+/// Writes only initialized bytes in a reusable buffer's valid prefix.
+export fn write_prefix(fd: i16, bytes: &Vec<u8>, length: usize) -> Result<unit, IoError> {
+    if (length > bytes.len()) {
+        return Err(InvalidLength);
+    }
     let mut at: usize = 0;
-    while (at < bytes.len()) {
+    while (at < length) {
         let count = unsafe {
-            rfl_posix_write(fd, &bytes[at], bytes.len() - at)
+            rfl_posix_write(fd, &bytes[at], length - at)
         };
         if (count < 0) {
             return Err(last_error());
@@ -226,6 +256,14 @@ impl File {
     /// Reads at most `limit` octets, advancing the shared file position.
     export fn read(&self, limit: usize) -> Result<Vec<u8>, IoError> {
         read_bytes(self.descriptor(), limit)
+    }
+    /// Reads into reusable initialized storage, returning its valid prefix.
+    export fn read_into(&self, bytes: &mut Vec<u8>) -> Result<usize, IoError> {
+        read_into(self.descriptor(), bytes)
+    }
+    /// Writes a reusable buffer's valid prefix without slicing or copying it.
+    export fn write_prefix(&self, bytes: &Vec<u8>, length: usize) -> Result<unit, IoError> {
+        write_prefix(self.descriptor(), bytes, length)
     }
     /// Writes all octets, advancing the shared file position.
     export fn write_all(&self, bytes: Vec<u8>) -> Result<unit, IoError> {

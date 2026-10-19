@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Hex float precision, subnormals, negative zero, macros and static initialization",
+  "expected": "YYYYYYYYYYYY\n"
+}

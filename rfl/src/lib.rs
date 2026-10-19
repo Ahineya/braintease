@@ -11,6 +11,7 @@ mod ide;
 mod lexer;
 mod lower;
 mod lsp;
+mod macros;
 mod modules;
 mod native;
 mod parser;
@@ -19,20 +20,29 @@ mod resources;
 mod run;
 mod ty;
 mod typed;
+mod wasm;
 
 pub use error::CompileError;
 pub use format::{format_edits, format_source, FormatEdit};
-pub use native::{compile_file_to_native, run_native_file, run_native_program};
-pub use rcc_ir::target::Target;
 pub use lsp::serve as serve_lsp;
+pub use native::{compile_file_to_native, run_native_file, run_native_program};
 pub use rcc_ir::ir::Module;
-pub use run::{run_file, run_file_in_terminal, run_program, RunResult};
+pub use rcc_ir::target::Target;
+pub use run::{run_file, run_file_in_brainfuck, run_file_in_terminal, run_program, RunResult};
+pub use wasm::{compile_file_to_wasm, run_wasm_file, run_wasm_program};
 
 /// Check a standalone source without constructing executable IR. Libraries
-/// may omit `main`; imports require [`check_file`] so their paths can resolve.
+/// may omit `main`; written imports require [`check_file`] so their paths can
+/// resolve. Compiler-generated standard dependencies also work without a file.
 pub fn check_source(source: &str) -> Result<(), CompileError> {
     let tokens = lexer::tokenize(source)?;
     let ast = parser::parse(source, &tokens)?;
+    if !ast.macro_imports.is_empty() || !ast.item_macros.is_empty() || !ast.proc_macros.is_empty() {
+        return Err(CompileError::plain("procedural macros need a source file"));
+    }
+    if !ast.imports.is_empty() && ast.imports.iter().all(ast::Import::is_implicit) {
+        return modules::source_dependencies(source, ast, Target::Ripple).map(|_| ());
+    }
     if !ast.imports.is_empty() {
         return Err(CompileError::plain("import needs a source file"));
     }
@@ -51,6 +61,15 @@ pub fn compile_to_ir(source: &str) -> Result<Module, CompileError> {
 pub fn compile_to_ir_for_target(source: &str, target: Target) -> Result<Module, CompileError> {
     let tokens = lexer::tokenize(source)?;
     let ast = parser::parse_for_target(source, &tokens, target)?;
+    if !ast.macro_imports.is_empty() || !ast.item_macros.is_empty() || !ast.proc_macros.is_empty() {
+        return Err(CompileError::plain("procedural macros need a source file"));
+    }
+    if !ast.imports.is_empty() && ast.imports.iter().all(ast::Import::is_implicit) {
+        let typed = modules::source_dependencies(source, ast, target)?;
+        let mut module = lower::lower("program", &typed)?;
+        module.target = target;
+        return Ok(module);
+    }
     if !ast.imports.is_empty() {
         return Err(CompileError::plain("import needs a source file"));
     }
@@ -64,7 +83,10 @@ pub fn compile_file(path: &std::path::Path) -> Result<Module, CompileError> {
     modules::compile_path(path)
 }
 
-pub fn compile_file_for_target(path: &std::path::Path, target: Target) -> Result<Module, CompileError> {
+pub fn compile_file_for_target(
+    path: &std::path::Path,
+    target: Target,
+) -> Result<Module, CompileError> {
     modules::compile_path_for_target(path, target)
 }
 

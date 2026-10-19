@@ -1,0 +1,30 @@
+fn different(data: *const u16) -> bool {
+    unsafe {
+        data[0] != 21061
+    }
+}
+
+fn widened(data: *const u32) -> bool {
+    unsafe {
+        data[0] + 1 == 70001
+    }
+}
+
+fn narrow(data: *const i8) -> bool {
+    unsafe {
+        data[0] < 0
+    }
+}
+
+fn main() -> i16 {
+    let words: [u16; 1] = [21061];
+    let wide: [u32; 1] = [70000];
+    let signed: [i8; 1] = [-1];
+    unsafe {
+        if (!different(&words[0]) && widened(&wide[0]) && narrow(&signed[0])) {
+            0
+        } else {
+            1
+        }
+    }
+}

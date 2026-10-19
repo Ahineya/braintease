@@ -94,7 +94,7 @@ def main():
         subprocess.run(['node', str(HERE / 'image.mjs'), 'create', str(image),
                         '--apps', str(build / 'apps')], check=True)
         check = directory / 'netcheck.fxe'
-        subprocess.run(['python3', str(HERE / 'cc.py'), str(PORT / 'tools/netcheck.c'), '-DNETCHECK_NATIVE',
+        subprocess.run(['python3', str(HERE / 'cc.py'), str(PORT / 'tools/netcheck.c'),
                         '--compiler', str(args.compiler.resolve()), '--build', str(build),
                         '-o', str(check)], check=True)
         subprocess.run(['node', str(HERE / 'image.mjs'), 'put', str(image), '/bin/netcheck', str(check)], check=True)
@@ -206,6 +206,25 @@ def main():
                     assert b'REUSED\n' in line(session, b'echo REUSED')
                     session.queue(b'exit\r\n'); until(lambda: session.closed)
                 assert b'STILL_ALIVE\n' in line(second, b'echo STILL_ALIVE')
+                # Lose the actual RNET worker, then reconnect the same MAC with
+                # a fresh host socket. The kernel must invalidate old TCP/ARP
+                # state and let new applications connect without a restart.
+                peer.send(b'RNET\x03')
+                until(lambda: b'network backend: network helper reported a link failure' in console())
+                peer.streams.clear()
+                peer.address = None
+                until(lambda: b'network: Ethernet attachment restored' in console())
+                send('htget http://fuse-x.test/binary /tmp/recovered; echo RECOVERED_HTTP:$?')
+                until(lambda: b'RECOVERED_HTTP:0\n' in console())
+                # telnetd intentionally exits when its blocking accept reports
+                # ENETDOWN. Start a fresh service on the recovered interface.
+                at = len(console())
+                send('telnetd &')
+                until(lambda: b'telnetd: listening on ' in console()[at:])
+                recovered = connect(50200)
+                assert b'RECOVERED_TELNET\n' in line(recovered, b'echo RECOVERED_TELNET')
+                recovered.queue(b'exit\r\n'); until(lambda: recovered.closed)
+                print('Native link failure, fresh HTTP and Telnet after automatic recovery passed', flush=True)
                 send('shutdown')
                 until(lambda: b'session stopped' in console())
                 assert guest.wait(timeout=10) == 0, console()

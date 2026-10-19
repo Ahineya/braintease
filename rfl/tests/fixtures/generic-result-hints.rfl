@@ -1,0 +1,2 @@
+fn number<T>(ignored:T)->u16{42}
+fn main(){println(number(true)==number(false));}

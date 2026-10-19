@@ -70,6 +70,9 @@ impl UnaryOperationAnalyzer {
             }
 
             UnaryOp::AddressOf => {
+                if self.type_analyzer.borrow().expression_bit_width(operand).is_some() {
+                    return Err(CompilerError::semantic_error("Cannot take the address of a bit-field".into(), operand.span.start.clone()));
+                }
                 if TypeAnalyzer::is_lvalue(operand) {
                     // Determine bank based on operand
                     let bank = self.determine_bank_for_address_of(operand);

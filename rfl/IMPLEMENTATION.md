@@ -770,3 +770,273 @@ r Rename, and Enter to run executable files. Curses suspends to the normal
 screen for commands/editors and restores the pre-application screen on exit.
 Regular-file EXDEV moves use complete-copy then unlink, preserving ordinary
 permission bits; a failed unlink reports that the source was retained.
+
+### Constructor-polymorphic functional programming
+
+The first-order constructor milestone accepts `F<_>`/`F<_, _>` parameters in
+functions and ADTs, checks applications and constructor identity, and specializes
+concrete types before lowering. `std/fp` supplies explicit-callback mapping,
+binding and conversion helpers. The subsequent [generic-trait extension](generic-traits.md)
+adds generic receiver methods, kinded constructor contracts, statically selected
+Functor/Monad operations and Option/Vec instances. Lambda result inference now
+uses checked values/returns rather than guessing i16 for container callbacks.
+[Partial type application](partial-type-application.md) now adds explicit slots,
+generic fixed-argument impls and fixed-error Result instances.
+[Consuming callables](consuming-callables.md) now add `once fn` ownership, transitive
+captures, and separate Option/Result FP contracts. Typed effects now build on
+those contracts; comprehensions remain a follow-up in
+[`higher-kinded-types.md`](higher-kinded-types.md).
+
+The consuming-callable checkpoint passes the complete **458-test release set**,
+validated across the initial and resumed suite runs, including 16 new ownership,
+FP and cancellation tests. Native/RVM execution and a bounded Brainfuck CPU case
+cover the new runtime paths. All ten LSP protocol suites and the IntelliJ
+editor/run-configuration checks pass. See [the callable contract](consuming-callables.md)
+and [the example](examples/consuming-fp.rfl).
+
+### Lazy effect programs
+
+The first checkpoint implemented one-shot effect descriptions (now
+`std/effect_once::OwnedEffect<R,E,A>`): deferred
+synchronous/async work, consuming composition, typed errors/recovery, checked
+access to one owned environment, environment provision, scoped acquisition and
+synchronous finalizers. Execution uses existing lazy Async frames, executors and
+TaskScope. Cancellation releases child work before resource/environment cleanup.
+The support module keeps raw environment views behind retained lifetime and
+exclusivity gates, including stale/reentrant access checks.
+
+Generic declaration resource checking now supplies explicit empty capture lists
+for named functions whose concrete bodies have not been visited yet. This fixes
+the named cleanup callback panic exposed by the library without skipping capture
+checks for lifted lambdas. Missing capture metadata reports a compiler error.
+
+The long-chain cancellation regression exposed recursive destruction through
+compiler-owned awaited children. `lower/async_drop.rs` now walks those edges
+iteratively, reusing suspended CALLER links for parent owners. Each child is
+detached before descent; ordinary finalizers run synchronously after the child.
+Custom futures keep their cancel methods. Native tests exercise 6,000 pending
+frames and verify cleanup order; RVM checks 256 finalizing frames and 512-stage
+effect chains, with no ISA changes.
+
+See [the effect contract](effects.md), [example](examples/effects.rfl), and
+`tests/effects.rs`. These programs remain subject to ordinary machine memory and
+destructor-stack limits; the library does not enforce purity, provide async
+finalizers, or add service layers/fiber supervision. The
+[FP roadmap](higher-kinded-types.md) records the next steps.
+
+This checkpoint passes **170 targeted release tests**: 85 library/editor unit
+checks and the constructor-trait, consuming-callable, effect, async-function,
+resource and task-scope suites. This includes 13 effect tests and two new compiler
+regressions. Execution covers native/RVM; the existing bounded BF cases in the
+selected suites also pass. Three LSP protocol suites (effects, consuming callables
+and generic traits) pass, and the new example runs on native and RVM. This is a
+focused follow-up validation, rather than a rerun of every integration suite.
+
+
+### Reusable effects and explicit shared ownership
+
+`std/effect::Effect<R,E,A>` is now a reusable recipe with ordinary fn factories
+and continuations; each run produces its own move-only Async, environment and
+cleanup registrations. The consuming API remains available as
+`std/effect_once::OwnedEffect`, including per-run adapters in both directions.
+Value-based succeed/fail/provide require the compiler-derived std/value::Copy
+capability; factory constructors accept fresh owned outputs/errors/environments.
+Effect implements Functor/FlatMap/FromFactory independently of the unrestricted
+value-injecting Monad contract; OwnedEffect retains FunctorOnce/MonadOnce.
+
+`std/shared::Shared<T>` explicitly retains shared identity, even for Owned<T>.
+A copyable opaque SharedOwner reuses typed erased-owner allocation/destruction;
+last-reference cleanup closes the access gate before user cleanup and nested
+payload destruction. Synchronous exclusive visits cannot return a reference,
+suspend or reenter the same payload. Recipes can return another handle to the
+same socket on every run. Whole asynchronous protocol operations still require
+explicit serialization; shared ownership is not an async mutex. Reference cycles
+are not collected. No ISA or host-only ownership operations were added.
+
+The runtime tests exposed hidden argument/callee snapshots retaining handles
+until frame exit. Lowering now releases these after resumable calls return,
+along with selected pattern snapshots and discarded managed expressions.
+A separate destruction proof propagates shared ownership through aggregates and
+closure environments without changing move checking or transfer decisions.
+Lexical shared aliases clean up on normal/early/loop/cancellation exits. Borrowed
+temporary receivers conservatively extend their owner to the enclosing lexical
+scope, preserving storage throughout the call. These lifetime changes have
+focused execution regressions, including the initially failing temporary receiver.
+
+See [the revised contract](effects.md) and [FP roadmap](higher-kinded-types.md).
+The reusable suite exercises fresh/shared/transferred resources, repeat/overlap,
+independent cancellation, per-run finalizers/environments/scopes, generic copy
+proofs and rejection, COW containers/closures, consumed children, long chains
+and stale/reentrant capabilities. A small compiled BF test checks shared-owner
+copy and release through the original CPU. The consuming suite remains intact
+against the explicitly consuming module.
+
+The structural Copy proof visits each reachable type once. A 64-level Pair<T>
+DAG regression first reproduced exponential revisiting, then passed with graph
+visitation; recursive graphs with an owned leaf still reject copying.
+
+Validation covers **334 targeted release checks** across the combined regression
+run and focused reruns: 85 library/editor unit checks and 249 integration cases,
+including 27 new reusable/shared/proof tests. Execution covers native/RVM and
+bounded BF ownership cases. Three LSP protocol suites pass, and the timer example
+runs twice with matching native/RVM output. This is focused validation, not a
+rerun of every workspace suite.
+
+At that checkpoint the deep repeated-chain case used 6,000 native stages and 64
+interpreter stages. A separate 256-stage interpreter run completed, but executed
+1,956,742,803 instructions; 128 stages executed 527,239,945. The allocator
+follow-up below addresses this performance obstacle.
+
+### Guest allocation for persistent effect graphs
+
+Instruction-by-instruction profiling attributes 93% of the 128-stage workload
+to malloc/free alone. The old allocator scanned all live allocations both when
+finding space and when locating a pointer to free. `runtime/malloc.c` now uses
+segregated free lists, direct allocation headers and doubly linked physical
+neighbors. Free/realloc no longer search live blocks; adjacent free blocks
+coalesce immediately, and allocation searches only eligible free lists. Small
+sizes have exact bins, larger bins use doubling bounds and may search multiple
+free candidates. Classification needs no bit operations or new ISA support.
+
+Relinking the same guest objects changes 128 stages from 527,239,945 to
+53,780,554 instructions and 256 stages from 1,956,742,803 to 106,565,682.
+Doubling depth costs 1.98 times as many instructions instead of 3.71; the
+256-stage workload executes 18.4 times fewer instructions. Native uses the host
+allocator, so this is a guest-runtime improvement. Each allocation's header
+grows from five to eleven C16 cells. Allocation remains subject to fragmentation
+and is not claimed to have a constant-time worst case.
+
+`tests/fixtures/reusable_chain.rfl` is shared between the regression and
+`tools/bench_effects.py`. The regression retains 6,000 native stages, increases
+interpreter depths to 128/256, and enforces instruction and growth budgets rather
+than relying on host timing. The original allocator exceeds the new budget.
+A separate 512-stage fixture run completes in 212,192,064 instructions. See
+[reproduction and limits](effects.md#allocation-performance).
+
+New registered C heap tests cover coalescing in both directions, small and large
+size-class boundaries, undersized free-list nodes, split headers at every bank
+boundary position, realloc growth/shrink/move/failure, calloc overflow/zeroing,
+deterministic fragmentation with unrelated live blocks and full-arena recovery.
+The existing cross-bank payload test is adjusted for the larger header.
+
+Validation passes **105 C checks** (104 memory tests and the runtime calloc
+case), **249 RFL integration cases** and **84 library/editor unit checks**.
+Execution covers native/RVM and bounded compiled Brainfuck ownership cases.
+The latest shared-fixture chain regression also passes independently. One
+unrelated stdlib documentation-coverage unit test fails because the newly added
+`std/poll::poller` lacks documentation; it was excluded from the combined rerun.
+The benchmark's 128/256/512-stage instruction and growth checks pass, and the
+saved original allocator exceeds the new regression's instruction budget.
+
+### Sequential Applicative, traversal and injectable Console
+
+`std/applicative` adds Apply/ApplyOnce, map2/zip/ap/ap_owned and sequence.
+Apply plus the existing FromFactory capability provides factory-based
+Applicative operations without claiming an unrestricted resource-copying pure.
+Option, Result, Effect and OwnedEffect combine successes by moving them;
+left failures skip the right effect and release unused captures. Vec Cartesian
+helpers explicitly require copyable inputs and preserve left-major order. Vec
+does not receive an unrestricted Apply instance.
+
+`std/traverse` provides destination constructors for Vec-source traversal, not
+yet arbitrary-source Cats Traverse. Fresh factories support exclusive inputs;
+consuming traversal transfers existing inputs. Effect/OwnedEffect have iterative
+sequence/traverse implementations, ownership-transferring reversal and cooperative
+yields between 64-item batches. Failure/cancellation releases partial outputs
+and remaining inputs, with awaited-child cleanup first. Reusable traversal can
+create consuming children that retain a fresh resource across suspension.
+Factories remain deferred until first poll, including direct start_in calls.
+
+The shared traversal fixture runs twice and checks values and exact owned-result
+cleanup. At 128/256/512 inputs it executes 35,136,392 / 69,916,238 / 139,140,682
+VM instructions, approximately doubling with input size. The regression enforces
+55/110-million instruction budgets and a sub-2.5x doubling ratio. The benchmark
+now accepts --case traversal; the persistent-chain case remains available.
+
+`std/console` supplies lazy environment-dependent read_line/print/println effects
+and a Console capability whose temporary borrow ends before suspension. The
+standalone Terminal uses existing nonblocking host input or original TTY MMIO,
+with bounded byte batches, CR/LF handling, byte-preserving strings, line limits
+and cancellation-safe stream guards. RecordingConsole shares an explicit input
+cursor/write log and returns COW snapshots for deterministic tests. The same
+generic greeting runs twice with either interpreter. Guest OS adapters remain
+future work; build_os rejects standalone host-input/MMIO dependencies.
+
+A focused RED checker regression exposed chained collection/String len results
+being inferred as i16 in numeric comparisons. Receiver type hints now recognize
+known temporary collection/String receivers and preserve usize, while ordinary
+user methods retain their declared return types. Both rejection and native/RVM
+execution regressions cover the distinction. No ISA extension was introduced.
+
+See [Applicative contracts and measurements](applicative.md),
+[Console usage and platform limits](console.md), and the
+[remaining comprehension/layer/concurrency roadmap](higher-kinded-types.md).
+
+Validation passes **370 selected RFL checks**: 84 library/editor unit checks and
+286 integration cases, including 37 new Applicative/traversal/Console/type-hint
+regressions. The combined runner passes 285 integration cases; the additional
+direct-start factory-laziness regression passes independently. Execution covers
+native/RVM and bounded compiled Brainfuck cases. Four actual LSP protocol suites
+pass, the OS-build dependency guard passes for both guest targets, formatting
+checks pass, and the 128/256/512-item benchmark satisfies instruction/growth
+budgets. The unrelated public-API documentation check still reports missing docs
+for std/poll::poller and is excluded from the combined run. This is focused RFL
+validation, not a rerun of every workspace package.
+
+### Sequential comprehension syntax
+
+`for { a <- first; let value = work(a); b <- next(value); yield result }`
+now expands into std/fp bind/map calls. `for once { ... }` chooses consuming
+flat_map_once/map_once continuations. Unary heads infer normally; partial heads
+are explicit (`for<Result<_,E>>`, `for<Effect<R,E,_>>`, or
+`for once<OwnedEffect<R,E,_>>`). Binding annotations also contextualize sources.
+The final yield maps a value while executing, allowing fresh exclusive results
+without introducing unrestricted pure/value copying. Ordinary source evaluation,
+continuation cardinality, capture/move checking and cancellation apply unchanged.
+
+The parser implementation lives in a focused expansion module, with a separate
+control-flow validator. Helper dependencies use unspellable private aliases and
+noneditable implicit-import spans. The normal module resolver, checker and
+lowering then process ordinary calls/closures; no runtime instruction or effect
+interpreter was added. The source-only compiler API resolves these standard-only
+dependencies without permitting written imports with missing source paths.
+Disabled top-level declarations do not create dependencies. Formatting/auto-import edits
+ignore compiler imports, and completion excludes private aliases.
+
+Comprehensions accept irrefutable parameter patterns and local lets, with one
+required final yield. Missing clauses, guards/refutable patterns and nonlocal
+return/try/await produce explicit errors. Loops written inside a local expression
+block and explicit nested callbacks retain their own control flow. Existing for
+loops and identifiers named yield/once remain valid. The original two-token <-
+spelling is joined by the formatter only at actual comprehension arrows, retaining
+ordinary comparisons against negative values.
+
+Focused RED checker regressions reproduced generic lambdas defaulting known
+input types to i16 while their return slot was unresolved, and solved element
+constraints being discarded before checking inline variants/vector literals.
+Contextual checking now preserves those constraints without guessing open slots
+of partial constructors. This fixes ordinary combinator calls as well as sugar;
+explicit callback types, cardinality and ownership still receive normal checks.
+
+The new Console greeting example uses comprehension syntax and runs one reusable
+recipe twice with identical native/RVM output. Source-level LSP checks cover
+bindings, visibility in initializers, navigation, callable signatures, private
+helper exclusion and ordinary/constructor-parameter rename. IDEA's tolerant
+lexer needs no grammar change; editor tests cover the new syntax and contextual
+identifiers, and its build helper includes the new protocol suite. Compiler
+executable discovery is unchanged.
+
+See [the comprehension contract and example](comprehensions.md) and the updated
+[FP roadmap](higher-kinded-types.md). Guards/filtering, parallel operations, type
+aliases and service/layer construction remain follow-ups.
+
+Validation passes **301 selected release checks**: 86 library/editor unit checks
+and 215 integration cases, including 22 new comprehension/inference/editor
+regressions. Execution covers native/RVM and bounded compiled Brainfuck CPU
+cases. The equivalent explicit bind/map workload passes the guest-instruction
+overhead budget. Five actual LSP protocol suites pass, including the new
+comprehension suite; IDEA's editor/run-configuration checks pass and its plugin
+archive builds. The Console example produces identical native/RVM output. The
+known unrelated documentation-coverage test for std/poll::poller is excluded
+from the combined run. This is focused RFL validation, not a rerun of every
+workspace package. Temporary aggregate sources and their executables are removed.

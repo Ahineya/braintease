@@ -2,6 +2,7 @@
 #ifndef RIPPLE_FUZIX_PLATFORM_H
 #define RIPPLE_FUZIX_PLATFORM_H
 #include <kernel.h>
+#include <process-state.h>
 #define KERNEL_GP 3
 #define USER_GP 8
 #include "mmu.h"
@@ -25,6 +26,7 @@ extern void ripple_irq(void);
 extern void ripple_bank_copy(unsigned, unsigned);
 extern int ripple_copy(void *, const void *, usize_t);
 extern int ripple_zero(void *, usize_t);
+extern int ripple_fill(void *,unsigned,usize_t);
 extern unsigned dmem_load(unsigned, unsigned);
 extern void dmem_store(unsigned, unsigned, unsigned);
 extern void imem_store(unsigned, unsigned, unsigned *);

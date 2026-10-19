@@ -101,6 +101,7 @@ impl<'a> Checker<'a> {
                 .iter()
                 .enumerate()
                 .map(|(slot, _)| TypeParam {
+                    arity: 0,
                     bounds: Vec::new(),
                     name: type_var_name(slot),
                     span: func.name_span,
@@ -179,13 +180,15 @@ impl<'a> Checker<'a> {
                 }
                 Ok(solver.adt(schema, vars))
             }
-            ParsedTy::Func { params, ret, .. } => {
+            ParsedTy::Func {
+                once, params, ret, ..
+            } => {
                 let mut vars = Vec::new();
                 for param in params {
                     vars.push(self.parsed_var(solver, param, subst)?);
                 }
                 let ret = self.parsed_var(solver, ret, subst)?;
-                Ok(solver.func(vars, ret))
+                Ok(solver.func_mode(vars, ret, *once))
             }
             ParsedTy::Tuple { fields, .. } => {
                 let mut vars = Vec::new();
@@ -568,7 +571,11 @@ impl<'a> Checker<'a> {
         for map in scope.iter().rev() {
             if let Some(var) = map.get(callee) {
                 let result = solver.fresh();
-                let func = solver.func(arg_vars, result);
+                let once = matches!(
+                    solver.info[solver.find(*var) as usize],
+                    Some(IInfo::Func { once: true, .. })
+                );
+                let func = solver.func_mode(arg_vars, result, once);
                 solver
                     .unify(*var, func)
                     .map_err(|_| CompileError::at(self.source, span, "incompatible types"))?;
@@ -601,6 +608,10 @@ impl<'a> Checker<'a> {
             ));
         };
         if !func.type_params.is_empty() {
+            if func.type_params.iter().any(|p| p.arity > 0) {
+                return Err(CompileError::at(self.source, span,
+                    "add parameter types to a function that calls a constructor-polymorphic function"));
+            }
             let mut subst = HashMap::new();
             for param in &func.type_params {
                 subst.insert(param.name.clone(), solver.fresh());
@@ -674,6 +685,13 @@ impl<'a> Checker<'a> {
                 format!("unknown constructor `{name}`"),
             ));
         };
+        if self.schemas[schema].type_params.iter().any(|p| p.arity > 0) {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "add parameter types to a function that constructs a constructor-polymorphic type",
+            ));
+        }
         let params = self.schemas[schema].params.clone();
         let fields = self.schemas[schema].ctors[tag as usize].clone();
         if fields.len() != args.len() {
@@ -802,7 +820,7 @@ impl<'a> Checker<'a> {
                 }
             }
             Some(IInfo::Concrete(_)) | Some(IInfo::Struct(_)) => {}
-            Some(IInfo::Func { params, ret }) => {
+            Some(IInfo::Func { params, ret, .. }) => {
                 for param in params.clone() {
                     self.collect_free(solver, param, free, seen);
                 }
@@ -845,12 +863,13 @@ impl<'a> Checker<'a> {
                 name: self.structs[id as usize].name.clone(),
                 args: Vec::new(),
             }),
-            IInfo::Func { params, ret } => {
+            IInfo::Func { once, params, ret } => {
                 let mut parsed = Vec::new();
                 for param in params {
                     parsed.push(self.render_var(solver, param, names)?);
                 }
                 Ok(ParsedTy::Func {
+                    once,
                     span: Span::empty(),
                     params: parsed,
                     ret: Box::new(self.render_var(solver, ret, names)?),
@@ -883,6 +902,7 @@ impl<'a> Checker<'a> {
     pub(super) fn ty_to_parsed(&self, ty: Ty) -> ParsedTy {
         let span = Span::empty();
         match ty {
+            Ty::Constructor(_) => self.constructor_to_parsed(ty),
             Ty::Adt(id) => {
                 let adt = &self.adts[id as usize];
                 ParsedTy::Named {
@@ -894,6 +914,7 @@ impl<'a> Checker<'a> {
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
                 ParsedTy::Func {
+                    once: sig.once,
                     span,
                     params: sig
                         .params

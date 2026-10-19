@@ -8,7 +8,7 @@ static void received_fin(NetTcp *tcp) {
 }
 void tcp_payload(NetTcp *tcp, const TcpSegment *segment) {
     unsigned long sequence = segment->sequence, skip = 0;
-    unsigned short size = segment->length, available, i;
+    unsigned short size = segment->length, available, tail, first;
     if (!size && !(segment->flags & TCP_FIN)) return;
     tcp->ack_pending = 1;
     if (tcp->peer_fin) return;
@@ -18,9 +18,12 @@ void tcp_payload(NetTcp *tcp, const TcpSegment *segment) {
         sequence += skip; size -= skip;
     }
     if (sequence != tcp->rcv_nxt) return; /* Bounded memory: duplicate ACK, no out-of-order queue. */
-    available = NET_TCP_BUFFER - tcp->rx_used;
+    available = NET_TCP_RX_BUFFER - tcp->rx_used;
     if (size > available) size = available;
-    for (i = 0; i < size; ++i) tcp->rx[(tcp->rx_head + tcp->rx_used + i) % NET_TCP_BUFFER] = segment->data[skip + i];
+    tail = (tcp->rx_head + tcp->rx_used) % NET_TCP_RX_BUFFER;
+    first = NET_TCP_RX_BUFFER - tail; if (first > size) first = size;
+    if (first) memcpy(tcp->rx + tail, segment->data + skip, first);
+    if (size > first) memcpy(tcp->rx, segment->data + skip + first, size - first);
     tcp->rx_used += size; tcp->rcv_nxt += size; tcp->bytes_received += size;
     if (size) tcp->last_progress = tcp->now;
     if ((segment->flags & TCP_FIN) && segment->sequence + segment->length == tcp->rcv_nxt && size < available) received_fin(tcp);

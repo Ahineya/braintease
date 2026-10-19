@@ -233,7 +233,7 @@
 +    strcpy(fname, dir);
 +    while (n > 1 && fname[n-1] == '/')
 +        fname[--n] = 0;
-+    if (stat(fname, &sb) < 0) {
++    if (lstat(fname, &sb) < 0) {
 +        warn("%s", fname);
 +        failed = 1;
 +        return;
@@ -354,7 +354,7 @@
 +        }
 +        position = telldir(dir);
 +        closedir(dir);
-+        if (stat(fname, &sb) < 0) {
++        if (lstat(fname, &sb) < 0) {
 +            warn("%s", fname);
 +            failed = 1;
 +        } else
@@ -378,12 +378,15 @@
 @@ -686 +691 @@
 -	mode = np->n_type<0 ? sb.st_mode&017777 : sb.st_mode&0777;
 +	mode = np->n_type<0 ? sb.st_mode&017777 : sb.st_mode&07777;
-@@ -724,0 +730 @@
+@@ -720,0 +726,2 @@
++		case 'l':
++            return (ftype == S_IFLNK);
+@@ -724,0 +732 @@
 +    return 0;
-@@ -730 +736 @@
+@@ -730 +738 @@
 -int ncomp(NODE *np, unsigned int val)
 +int ncomp(NODE *np, unsigned long val)
-@@ -769,4 +775,4 @@
+@@ -769,4 +777,4 @@
 -	register int fsize;
 -
 -	fsize = (sb.st_size+BUFSIZ-1)/BUFSIZ;
@@ -392,7 +395,7 @@
 +    if (!np->n_chars)
 +        size = (size + 511) / 512;
 +    return ncomp(np, size);
-@@ -789,4 +795,5 @@
+@@ -789,4 +797,5 @@
 -	register int days;
 -
 -	days = (curtime-t+DAYSEC/2)/DAYSEC;
@@ -402,9 +405,9 @@
 +    if (delta<0)
 +        return np->n_type<0;
 +    return ncomp(np,delta/DAYSEC);
-@@ -825,0 +833 @@
+@@ -825,0 +835 @@
 +/* Pass arguments directly: spaces/metacharacters in a pathname are data. */
-@@ -828,23 +836,44 @@
+@@ -828,23 +838,44 @@
 -	static char command[200];
 -	register char *ap, **app;
 -	register int c;
@@ -472,7 +475,7 @@
 +        return 0;
 +    }
 +    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-@@ -879,2 +908,3 @@
+@@ -879,2 +910,3 @@
 -	fprintf(stderr, "Usage: find directory ... [ expression ]\n");
 -}
 +	fprintf(stderr, "Usage: find path ... [ expression ]\n");
@@ -578,30 +581,70 @@
 +}
 --- a/Applications/MWC/cmd/make.c
 +++ b/Applications/MWC/cmd/make.c
-@@ -80 +80,5 @@
+@@ -46,0 +47 @@
++int delete_on_error;
+@@ -60 +61 @@
+-char		*mvarval[4];		/* list of macro variable values */
++char		*mvarval[5];		/* list of macro variable values */
+@@ -80 +81,5 @@
 -	verrx(ERROR, s, args);
 +	fputs("make: ", stderr);
 +	vfprintf(stderr, s, args);
 +	fputc('\n', stderr);
 +	va_end(args);
 +	exit(ERROR);
-@@ -101,0 +106 @@
+@@ -101,0 +107 @@
 +	return NULL;
-@@ -387,0 +393,3 @@
+@@ -361 +367 @@
+-	if (strcmp(p, "include") == 0) {
++	if (strcmp(p, "include") == 0 || strcmp(p, "-include") == 0) {
+@@ -369 +375 @@
+-			input(tp->value);
++			if (strcmp(p, "-include") || access(tp->value, F_OK) == 0) input(tp->value);
+@@ -387,0 +394,3 @@
 +	FILE *saved_fd = fd;
 +	int saved_last = lastc, saved_line = lineno, saved_count = nbackup;
 +	unsigned char saved_backup[NBACKUP];
-@@ -391,0 +400,2 @@
+@@ -390,2 +399,4 @@
+-	int twocolons;
+-
++	int twocolons, assignment;
++
 +	memcpy(saved_backup, backup, nbackup);
 +	nbackup = 0;
-@@ -415 +425,3 @@
+@@ -415 +426,3 @@
 -			fclose(fd);
 +			if (fd != stdin) fclose(fd);
 +			fd = saved_fd; lastc = saved_last; lineno = saved_line;
 +			nbackup = saved_count; memcpy(backup, saved_backup, nbackup);
-@@ -503,0 +516 @@
+@@ -428,2 +441,12 @@
+-			if (tp==NULL || tp->next!=NULL)
+-				doerr("= without macro name or in token list");
++            assignment = '=';
++            if (tp && tp->next && !tp->next->next && strlen(tp->next->value) == 1 &&
++                strchr("+?", tp->next->value[0])) {
++                assignment = tp->next->value[0];
++            } else if (tp && !tp->next && *tp->value) {
++                size_t n = strlen(tp->value);
++                if (strchr("+?", tp->value[n-1])) {
++                    assignment = tp->value[n-1]; tp->value[n-1] = 0;
++                }
++            }
++            if (!tp || !*tp->value || (tp->next && assignment == '='))
++                doerr("= without macro name or in token list");
+@@ -438 +461,8 @@
+-			define(tp->value, token, 0);
++			if (assignment == '?' && mexists(tp->value)) free(token);
++            else {
++                if (assignment == '+' && mexists(tp->value)) {
++                    char *joined = mmalloc(strlen(mexists(tp->value)) + strlen(token) + 2);
++                    sprintf(joined, "%s %s", mexists(tp->value), token); free(token); token = joined;
++                }
++                define(tp->value, token, 0);
++            }
+@@ -503,0 +534 @@
 +	pv = NULL;
-@@ -513 +526,12 @@
+@@ -513 +544,12 @@
 -	cp = path(p, file, R_OK);
 +	cp = NULL;
 +	while (*p) {
@@ -615,7 +658,7 @@
 +		if (!end) break;
 +		p = end + 1;
 +	}
-@@ -521,19 +545,9 @@
+@@ -521,19 +563,9 @@
 -	register char *vp, *cp;
 -	va_list ap;
 -	va_start(ap, file);
@@ -644,17 +687,73 @@
 +    }
 +    va_end(ap);
 +    input(found ? found : file);
-@@ -803,0 +818 @@
+@@ -612 +644,2 @@
+-	return getmdate(name) != 0;
++	/* Image-seeded files may legitimately have an epoch-zero timestamp. */
++	return stat(name, &statbuf) == 0 || getmdate(name) != 0;
+@@ -682,0 +716 @@
++    sp->phony=0;
+@@ -733,0 +768,5 @@
++    if (Streq(cons->value, ".PHONY")) {
++        for (ap = ante; ap; ap = ap->next) lookup(ap->value)->phony = 1;
++        return;
++    }
++    if (Streq(cons->value, ".DELETE_ON_ERROR")) { delete_on_error = 1; return; }
+@@ -803,0 +843 @@
 +	if (s->type==4) doerr("dependency cycle at %s", name);
-@@ -814 +829 @@
+@@ -814 +854 @@
 -	s->type=T_DONE;
 +	s->type=4;
-@@ -851,0 +867 @@
+@@ -821 +861 @@
+-			if (dep->symbol->moddate > s->moddate)
++			if (dep->symbol->phony || dep->symbol->moddate > s->moddate)
+@@ -824 +864 @@
+-		update=0;
++		update=s->phony;
+@@ -831 +871 @@
+-			if (dep->symbol->moddate>s->moddate){
++			if (dep->symbol->phony || dep->symbol->moddate>s->moddate){
+@@ -851,0 +892 @@
 +	s->type=T_DONE;
-@@ -996 +1012 @@
+@@ -872,0 +914 @@
++            case '^': p = mvarval[4]; break;
+@@ -905 +947 @@
+-	register DEP *dep;
++	register DEP *dep, *prior;
+@@ -911 +953,3 @@
+-		addtoken(' ');
++        for (prior = s->deplist; prior != dep && prior->symbol != dep->symbol; prior = prior->next);
++        if (prior != dep) continue;
++		if (toklen) addtoken(' ');
+@@ -927 +971 @@
+-	docmd(s, cmd, at, ques, less, prefix);
++	docmd(s, cmd, at, ques, s->deplist ? s->deplist->symbol->filename : "", prefix, less);
+@@ -935 +979 @@
+-void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star)
++void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star, char *all)
+@@ -950,0 +995 @@
++    mvarval[4] = all;
+@@ -965 +1010,2 @@
+-	int sflg, iflg, rstat;
++	int sflg, iflg, rstat, existed;
++    struct stat before, after;
+@@ -970,0 +1017 @@
++    existed = stat(mvarval[0], &before) == 0;
+@@ -988 +1035 @@
+-		rstat = system(cmd);
++        rstat = system(cmd);
+@@ -989,0 +1037,4 @@
++            if (delete_on_error && (!sexists(mvarval[0]) || !sexists(mvarval[0])->phony) && stat(mvarval[0], &after) == 0 &&
++                (!existed || before.st_mtime != after.st_mtime || before.st_size != after.st_size))
++                unlink(mvarval[0]);
++            rstat = WIFEXITED(rstat) ? WEXITSTATUS(rstat) : 128 + WTERMSIG(rstat);
+@@ -996 +1047 @@
 -		cmd = mark + 1;
 +		cmd = mark ? mark + 1 : NULL;
-@@ -1189 +1205 @@
+@@ -1069 +1120 @@
+-						obj->name, ques, file, prefix);
++						obj->name, ques, file, prefix, file);
+@@ -1189 +1240 @@
 -		inpath("makefile", "Makefile", NULL);
 +		inpath("makefile", "makefile", "Makefile", (char *)NULL);
 --- a/Applications/MWC/cmd/make.h
@@ -666,27 +765,33 @@
 @@ -19 +20 @@
 -#define MAKEPATH	"/opt/fcc/lib:/lib:/usr/lib"
 +#define MAKEPATH	"/usr/lib"
+@@ -64,0 +66 @@
++    int phony;
+@@ -112 +114 @@
+-extern void docmd(SYM *, char *, char *, char *, char *, char *);
++extern void docmd(SYM *, char *, char *, char *, char *, char *, char *);
 --- a/Applications/TCL/picol.c
 +++ b/Applications/TCL/picol.c
-@@ -30,0 +31,5 @@
+@@ -30,0 +31,6 @@
 +#include <errno.h>
 +#include <limits.h>
 +#include <ctype.h>
-+#define PICOL_LIMIT 12000
++#define PICOL_LIMIT 30000
++#define PICOL_WORDS 1024
 +#define PICOL_DEPTH 32
-@@ -41,0 +47,2 @@
+@@ -41,0 +48,2 @@
 +    const char *error;
 +    int haveword;
-@@ -54,0 +62 @@
+@@ -54,0 +63 @@
 +    int active;
-@@ -65,0 +74 @@
+@@ -65,0 +75 @@
 +    int exiting, exitcode;
-@@ -80 +89,3 @@
+@@ -80 +90,3 @@
 -    void *p = malloc(s);
 +    void *p;
 +    if (s > PICOL_LIMIT + 1) picol_oom();
 +    p = malloc(s);
-@@ -86,5 +97,4 @@
+@@ -86,5 +98,4 @@
 -char *picol_strdup(const char *p)
 -{
 -    char *r = strdup(p);
@@ -696,7 +801,7 @@
 +    size_t n = strlen(p) + 1;
 +    char *r = picol_malloc(n);
 +    memcpy(r, p, n);
-@@ -92,0 +103,13 @@
+@@ -92,0 +104,14 @@
 +void *picol_realloc(void *p, size_t n) {
 +    void *q;
 +    if (n > PICOL_LIMIT + 1) picol_oom();
@@ -704,25 +809,26 @@
 +    if (!q) picol_oom();
 +    return q;
 +}
++static int expandLastWord(struct picolInterp *, int *, char ***);
 +static int picolCondition(struct picolInterp *, char *);
 +static int splitList(struct picolInterp *, const char *, int *, char ***);
 +static void freeWords(int, char **);
 +static char *makeList(int, char **);
 +static int picolInteger(struct picolInterp *, const char *, long *);
 +static int picolMath(struct picolInterp *, const char *, long, long, long *);
-@@ -97,0 +121 @@
+@@ -97,0 +123 @@
 +    p->error = NULL; p->haveword = 0;
-@@ -103 +127 @@
+@@ -103 +129 @@
 -    while(*p->p == ' ' || *p->p == '\t' || *p->p == '\n' || *p->p == '\r') {
 +    while(*p->p == ' ' || *p->p == '\t' || *p->p == '\r') {
-@@ -129 +153,2 @@
+@@ -129 +155,2 @@
 -            break;
 +            p->error = "missing close-bracket";
 +            return PICOL_ERR;
-@@ -134 +159 @@
+@@ -134 +161 @@
 -        } else if (*p->p == '\\') {
 +        } else if (*p->p == '\\' && p->len >= 2) {
-@@ -152,16 +177,12 @@
+@@ -152,16 +179,18 @@
 -    p->start = ++p->p; p->len--; /* skip the $ */
 -    while(1) {
 -        if ((*p->p >= 'a' && *p->p <= 'z') || (*p->p >= 'A' && *p->p <= 'Z') ||
@@ -748,27 +854,33 @@
 +        return PICOL_OK;
 +    }
 +    while (p->len && (isalnum(*p->p) || *p->p == '_')) { p->p++; p->len--; }
++    if (p->len && *p->p == '(' && p->start != p->p) {
++        p->p++; p->len--;
++        while (p->len && *p->p != ')') { p->p++; p->len--; }
++        if (!p->len) { p->error = "missing array close-parenthesis"; return PICOL_ERR; }
++        p->p++; p->len--;
++    }
 +    if (p->start == p->p) {
 +        p->start = p->end = p->p - 1; p->type = PT_STR;
 +    } else { p->end = p->p - 1; p->type = PT_VAR; }
-@@ -177 +198,4 @@
+@@ -177 +206,4 @@
 -        } else if (p->len == 0 || *p->p == '}') {
 +        } else if (p->len == 0) {
 +            p->error = "missing close-brace";
 +            return PICOL_ERR;
 +        } else if (*p->p == '}') {
-@@ -247 +271 @@
+@@ -247 +279 @@
 -int picolGetToken(struct picolParser *p) {
 +static int picolNextToken(struct picolParser *p) {
-@@ -249,0 +274,4 @@
+@@ -249,0 +282,4 @@
 +            if (p->insidequote) {
 +                p->error = "missing close-quote";
 +                return PICOL_ERR;
 +            }
-@@ -268 +296 @@
+@@ -268 +304 @@
 -            if (p->type == PT_EOL) {
 +            if (!p->haveword) {
-@@ -279,0 +308,7 @@
+@@ -279,0 +316,7 @@
 +int picolGetToken(struct picolParser *p) {
 +    int code = picolNextToken(p);
 +    if (p->type == PT_EOL) p->haveword = 0;
@@ -776,36 +888,63 @@
 +    return code;
 +}
 +
-@@ -281 +316 @@
+@@ -281 +324 @@
 -    i->level = 0;
 +    i->level = i->exiting = i->exitcode = 0;
-@@ -286 +321 @@
+@@ -286 +329 @@
 -    i->result = strdup("");
 +    i->result = picol_strdup("");
-@@ -289,0 +325 @@
+@@ -289,0 +333 @@
 +    char *copy = picol_strdup(s);
-@@ -291 +327 @@
+@@ -291 +335,7 @@
 -    i->result = strdup(s);
 +    i->result = copy;
-@@ -305,0 +342 @@
++}
++
++static char *environmentName(const char *name) {
++    static char key[256]; size_t n = strlen(name);
++    if (n < 6 || n > 260 || strncmp(name, "env(", 4) || name[n-1] != ')') return NULL;
++    memcpy(key, name + 4, n - 5); key[n-5] = 0; return key;
+@@ -295,0 +346,3 @@
++    static struct picolVar environment;
++    char *key = environmentName(name);
++    if (key) { environment.val = getenv(key); return environment.val ? &environment : NULL; }
+@@ -304 +357,15 @@
+-    struct picolVar *v = picolGetVar(i,name);
++    struct picolVar *v;
++    char *key = environmentName(name);
++    if (key) {
++        static struct picolVar *exports;
++        struct picolVar *owned = exports;
++        char *pair = picol_malloc(strlen(key) + strlen(val) + 2);
++        sprintf(pair, "%s=%s", key, val);
++        if (putenv(pair)) { free(pair); picolSetResult(i, "cannot set environment variable"); return PICOL_ERR; }
++        while (owned && strcmp(owned->name, key)) owned = owned->next;
++        if (!owned) { owned = picol_malloc(sizeof(*owned)); owned->name = picol_strdup(key);
++            owned->val = NULL; owned->next = exports; exports = owned; }
++        free(owned->val); owned->val = pair;
++        return PICOL_OK;
++    }
++    v = picolGetVar(i,name);
+@@ -305,0 +373 @@
 +        char *copy = picol_strdup(val);
-@@ -307 +344 @@
+@@ -307 +375 @@
 -        v->val = strdup(val);
 +        v->val = copy;
-@@ -310,2 +347,2 @@
+@@ -310,2 +378,2 @@
 -        v->name = strdup(name);
 -        v->val = strdup(val);
 +        v->name = picol_strdup(name);
 +        v->val = picol_strdup(val);
-@@ -329 +366 @@
+@@ -329 +397 @@
 -    char errbuf[1024];
 +    char errbuf[256];
-@@ -331 +368 @@
+@@ -331 +399 @@
 -        snprintf(errbuf,1024,"Command '%s' already defined",name);
 +        snprintf(errbuf,sizeof(errbuf),"Command '%s' already defined",name);
-@@ -336,0 +374 @@
+@@ -336,0 +405 @@
 +    c->active = 0;
-@@ -344,2 +382,20 @@
+@@ -344,2 +413,20 @@
 -/* EVAL! */
 -int picolEval(struct picolInterp *i, char *t) {
 +/* EVAL! Escape decoding happens only on substituting words, never braces. */
@@ -828,7 +967,7 @@
 +    *w = 0;
 +}
 +int picolEval(struct picolInterp *i, char *script) {
-@@ -347,11 +403,17 @@
+@@ -347,11 +434,25 @@
 -    int argc = 0, j;
 -    char **argv = NULL;
 -    char errbuf[1024];
@@ -840,13 +979,13 @@
 -        int tlen;
 -        int prevtype = p.type;
 -        picolGetToken(&p);
-+    int argc = 0, j, retcode = PICOL_OK;
++    int argc = 0, j, retcode = PICOL_OK, expandword = 0;
 +    char **argv = NULL, errbuf[256];
 +    if (i->level >= PICOL_DEPTH) {
 +        picolSetResult(i, "evaluation nesting limit exceeded"); return PICOL_ERR;
 +    }
 +    if (strlen(script) > PICOL_LIMIT) {
-+        picolSetResult(i, "script exceeds 12000 characters"); return PICOL_ERR;
++        picolSetResult(i, "script exceeds 30000 characters"); return PICOL_ERR;
 +    }
 +    i->level++;
 +    picolSetResult(i, "");
@@ -854,10 +993,18 @@
 +    while (1) {
 +        char *token;
 +        int len, previous = p.type;
++        if ((previous == PT_SEP || previous == PT_EOL) && p.len > 3 &&
++            !strncmp(p.p, "{*}", 3) && !isspace(p.p[3]) && p.p[3] != ';') {
++            p.p += 3; p.len -= 3; expandword = 1;
++        }
 +        if (picolGetToken(&p) != PICOL_OK) {
 +            picolSetResult(i, (char *)p.error); retcode = PICOL_ERR; break;
 +        }
-@@ -359,29 +421 @@
++        if (expandword && (p.type == PT_SEP || p.type == PT_EOL || p.type == PT_EOF)) {
++            retcode = expandLastWord(i, &argc, &argv); expandword = 0;
++            if (retcode != PICOL_OK) break;
++        }
+@@ -359,29 +460 @@
 -        tlen = p.end-p.start+1;
 -        if (tlen < 0) tlen = 0;
 -        t = picol_malloc(tlen+1);
@@ -888,10 +1035,10 @@
 -        }
 -        /* We have a complete command + args. Call it! */
 +        if (p.type == PT_SEP) continue;
-@@ -390,2 +423,0 @@
+@@ -390,2 +462,0 @@
 -            free(t);
 -            prevtype = p.type;
-@@ -393,5 +425,4 @@
+@@ -393,5 +464,4 @@
 -                if ((c = picolGetCommand(i,argv[0])) == NULL) {
 -                    snprintf(errbuf,1024,"No such command '%s'",argv[0]);
 -                    picolSetResult(i,errbuf);
@@ -901,7 +1048,7 @@
 +                if (!c) {
 +                    snprintf(errbuf, sizeof(errbuf), "No such command '%s'", argv[0]);
 +                    picolSetResult(i, errbuf); retcode = PICOL_ERR; break;
-@@ -399,4 +430,6 @@
+@@ -399,4 +469,6 @@
 -                retcode = c->func(i,argc,argv,c->privdata);
 -                if (retcode != PICOL_OK) goto err;
 -            }
@@ -912,12 +1059,12 @@
 +                if (i->exiting) retcode = PICOL_RETURN;
 +                if (retcode != PICOL_OK) break;
 +            }
-@@ -404,3 +437 @@
+@@ -404,3 +476 @@
 -            free(argv);
 -            argv = NULL;
 -            argc = 0;
 +            free(argv); argv = NULL; argc = 0;
-@@ -409,15 +440,28 @@
+@@ -409,15 +479,28 @@
 -        /* We have a new token, append to the previous or as new arg? */
 -        if (prevtype == PT_SEP || prevtype == PT_EOL) {
 -            argv = realloc(argv, sizeof(char*)*(argc+1));
@@ -950,7 +1097,7 @@
 +            token = picol_strdup(i->result);
 +        } else if (p.type == PT_ESC) picolUnescape(token);
 +        if (previous == PT_SEP || previous == PT_EOL) {
-+            if (argc >= 128) {
++            if (argc >= PICOL_WORDS) {
 +                free(token); picolSetResult(i, "too many arguments"); retcode = PICOL_ERR; break;
 +            }
 +            argv = picol_realloc(argv, sizeof(char *) * (argc + 1));
@@ -961,15 +1108,15 @@
 +            memcpy(argv[argc - 1] + old, token, add + 1); free(token);
 +        }
 +    }
-@@ -425 +469 @@
+@@ -425 +508 @@
 -    free(argv);
 +    free(argv); i->level--;
-@@ -431,2 +475,2 @@
+@@ -431,2 +514,2 @@
 -    char buf[1024];
 -    snprintf(buf,1024,"Wrong number of args for %s",name);
 +    char buf[256];
 +    snprintf(buf,sizeof(buf),"Wrong number of args for %s",name);
-@@ -438,20 +482,5 @@
+@@ -438,20 +521,5 @@
 -    char buf[64]; long a, b, c;
 -    if (argc != 3) return picolArityErr(i,argv[0]);
 -    a = atol(argv[1]); b = atol(argv[2]);
@@ -995,20 +1142,20 @@
 +    if (picolInteger(i, argv[1], &a) || picolInteger(i, argv[2], &b) ||
 +        picolMath(i, argv[0], a, b, &c)) return PICOL_ERR;
 +    snprintf(buf, sizeof(buf), "%ld", c); picolSetResult(i, buf);
-@@ -461,0 +491,5 @@
+@@ -461,0 +530,5 @@
 +    if (argc == 2) {
 +        struct picolVar *v = picolGetVar(i, argv[1]);
 +        if (!v) { picolSetResult(i, "No such variable"); return PICOL_ERR; }
 +        picolSetResult(i, v->val); return PICOL_OK;
 +    }
-@@ -468,6 +501,0 @@
+@@ -468,6 +540,0 @@
 -int picolCommandPuts(struct picolInterp *i, int argc, char **argv, void *pd) {
 -    if (argc != 2) return picolArityErr(i,argv[0]);
 -    printf("%s\n", argv[1]);
 -    return PICOL_OK;
 -}
 -
-@@ -475,8 +503,11 @@
+@@ -475,8 +542,11 @@
 -    int retcode;
 -    if (argc != 3 && argc != 5) return picolArityErr(i,argv[0]);
 -    if ((retcode = picolEval(i,argv[1])) != PICOL_OK) return retcode;
@@ -1028,7 +1175,7 @@
 +    if (argc == 5) return picolEval(i, argv[4]);
 +    picolSetResult(i, ""); return PICOL_OK;
 +}
-@@ -484,12 +515,8 @@
+@@ -484,12 +554,8 @@
 -    if (argc != 3) return picolArityErr(i,argv[0]);
 -    while(1) {
 -        int retcode = picolEval(i,argv[1]);
@@ -1049,7 +1196,7 @@
 +        code = picolEval(i, argv[2]);
 +        if (code == PICOL_BREAK) { picolSetResult(i, ""); return PICOL_OK; }
 +        if (code != PICOL_OK && code != PICOL_CONTINUE) return code;
-@@ -521,32 +548,18 @@
+@@ -521,32 +587,18 @@
 -    char **x=pd, *alist=x[0], *body=x[1], *p=strdup(alist), *tofree;
 -    struct picolCallFrame *cf = picol_malloc(sizeof(*cf));
 -    int arity = 0, done = 0, errcode = PICOL_OK;
@@ -1100,7 +1247,7 @@
 +    freeWords(n, formals); code = picolEval(i, data[1]);
 +    if (code == PICOL_RETURN && !i->exiting) code = PICOL_OK;
 +    picolDropCallFrame(i); return code;
-@@ -556,5 +569,15 @@
+@@ -556,5 +608,15 @@
 -    char **procdata = picol_malloc(sizeof(char*)*2);
 -    if (argc != 4) return picolArityErr(i,argv[0]);
 -    procdata[0] = strdup(argv[2]); /* arguments list */
@@ -1121,12 +1268,12 @@
 +        picolSetResult(i, ""); return PICOL_OK;
 +    }
 +    return picolRegisterCommand(i, argv[1], picolCommandCallProc, procdata);
-@@ -570 +593 @@
+@@ -570 +632 @@
 -    int j; char *name[] = {"+","-","*","/",">",">=","<","<=","==","!="};
 +    int j; char *name[] = {"+","-","*","/","%",">",">=","<","<=","==","!="};
-@@ -574 +596,0 @@
+@@ -574 +635,0 @@
 -    picolRegisterCommand(i,"puts",picolCommandPuts,NULL);
-@@ -583,27 +605,2 @@
+@@ -583,27 +644,2 @@
 -int main(int argc, char **argv) {
 -    struct picolInterp interp;
 -    picolInitInterp(&interp);
@@ -1218,17 +1365,32 @@
 +++ b/Applications/V7/cmd/diff.c
 @@ -75,0 +76 @@
 +#include <errno.h>
-@@ -111,0 +113 @@
+@@ -100,0 +102 @@
++int candidate_capacity = 32;
+@@ -111,0 +114 @@
 +static int made_temp;
-@@ -116 +118,3 @@
+@@ -116 +119,5 @@
 -	exit(status);
 +	if (made_temp)
 +        unlink(tempfilebuf);
++    if (fflush(stdout) || ferror(stdout))
++        status = 2;
 +    exit(status);
-@@ -198,3 +202,10 @@
+@@ -158,0 +166 @@
++	long step;
+@@ -160,2 +168,2 @@
+-	for (j = 1; j <= n; j *= 2)
+-		m = 2 * j - 1;
++	for (step = 1; step <= n; step *= 2)
++		m = 2 * step - 1;
+@@ -196,5 +204,11 @@
+-int skipline(int f)
+-{
 -	register int i;
 -	for (i = 1; getc(input[f]) != '\n'; i++);
 -	return (i);
++long skipline(int f)
++{
 +    int c;
 +    long n = 0;
 +    while ((c = getc(input[f])) != EOF) {
@@ -1236,10 +1398,9 @@
 +        if (c == '\n')
 +            break;
 +    }
-+    if (n > 32767)
-+        noroom();
++    if (ferror(input[f])) { mesg("cannot read input", empty); done(); }
 +    return n;
-@@ -229,4 +240,11 @@
+@@ -229,4 +243,11 @@
 -		unlink(tempfilebuf);
 -		while ((i = read(0, buf, 512)) > 0)
 -			write(f, buf, i);
@@ -1255,76 +1416,875 @@
 +            }
 +        }
 +        if (i < 0 || close(f) < 0) { mesg("cannot read stdin", empty); done(); }
-@@ -244,0 +263 @@
+@@ -243 +264 @@
+-	long sum;
++	unsigned long sum;
+@@ -244,0 +266 @@
 +    int have = 0;
-@@ -251,2 +270,2 @@
+@@ -251,3 +273,3 @@
 -			if (t == -1)
 -				return (0);
+-			sum += (long) t << (shift %= HALFLONG);
 +			if (t == EOF) { if (!have) return 0; break; }
 +            have = 1;
-@@ -258 +277,2 @@
++			sum += (unsigned long) t << (shift %= HALFLONG);
+@@ -258 +280,2 @@
 -				return (0);
 +                if (!have) return 0;
 +                goto hash_done;
-@@ -260,0 +281 @@
+@@ -260,0 +284 @@
 +                have = 1;
-@@ -263,0 +285 @@
+@@ -263,0 +288 @@
 +                have = 1;
-@@ -276,2 +298,4 @@
+@@ -268 +293 @@
+-				sum += (long) t << (shift %= HALFLONG);
++				sum += (unsigned long) t << (shift %= HALFLONG);
+@@ -276,2 +301,4 @@
 -	sum = low(sum) + high(sum);
 -	return ((short) low(sum) + (short) high(sum));
 +hash_done:
 +    sum = low(sum) + high(sum);
-+    t = (short)low(sum) + (short)high(sum);
++    t = (short)((unsigned short)low(sum) + (unsigned short)high(sum));
 +    return t ? t : 1;
-@@ -290,2 +314,2 @@
+@@ -283,0 +311 @@
++	int capacity = 32;
+@@ -288 +316 @@
+-	p = (struct line *) talloc(3 * sizeof(line));
++	p = (struct line *) talloc((size_t)capacity * sizeof(line));
+@@ -290,3 +318,6 @@
 -		p = (struct line *) ralloc((char *) p,
 -					   (++j + 3) * sizeof(line));
+-		p[j].value = h;
 +		if (j >= 30000) noroom();
-+        p = (struct line *) ralloc((char *)p, (++j + 3) * sizeof(line));
-@@ -433 +457 @@
++        if (j + 3 >= capacity) {
++            capacity = capacity > 15000 ? 30003 : capacity * 2;
++            p = (struct line *) ralloc((char *)p, (size_t)capacity * sizeof(line));
++        }
++		p[++j].value = h;
+@@ -295,0 +327,7 @@
++	if (ferror(input[i])) { mesg("cannot read ", arg); done(); }
++	if (opt && ftell(input[i]) > 0) {
++        if (fseek(input[i], -1L, SEEK_END) || getc(input[i]) != '\n') {
++            mesg("editor scripts require newline-terminated input", empty);
++            done();
++        }
++    }
+@@ -344,3 +382,6 @@
+-	clist =
+-	    (struct cand *) ralloc((char *) clist, ++clen * sizeof(cand));
+-	q = clist + clen - 1;
++	if (clen >= 32766) noroom();
++    if (clen == candidate_capacity) {
++        candidate_capacity = candidate_capacity > 16383 ? 32766 : candidate_capacity * 2;
++        clist = (struct cand *) ralloc((char *)clist, (size_t)candidate_capacity * sizeof(cand));
++    }
++	q = clist + clen++;
+@@ -361 +402 @@
+-	while ((l = (i + j) / 2) > i) {
++	while ((l = i + (j - i) / 2) > i) {
+@@ -433 +474 @@
 -	char c, d;
 +	int c, d;
-@@ -452,2 +476,4 @@
+@@ -435,0 +477 @@
++    if (!input[0] || !input[1]) { mesg("cannot reopen input", empty); done(); }
+@@ -452,2 +494,4 @@
 -			ctold++;
 -			ctnew++;
 +            if (c == EOF && d == EOF)
 +                break;
 +            if (c != EOF) ctold++;
 +            if (d != EOF) ctnew++;
-@@ -469 +495 @@
+@@ -469 +513 @@
 -				if (c != '\n')
 +				if (c != '\n' && c != EOF)
-@@ -471 +497 @@
+@@ -471 +515 @@
 -				if (d != '\n')
 +				if (d != '\n' && d != EOF)
-@@ -503,2 +529,2 @@
+@@ -484,0 +529 @@
++    if (ferror(input[0]) || ferror(input[1])) { mesg("cannot read input", empty); done(); }
+@@ -500,0 +546,7 @@
++int dotline(long *offset, int line, FILE *file)
++{
++    if (offset[line] - offset[line - 1] != 2) return 0;
++    if (fseek(file, offset[line - 1], SEEK_SET)) { mesg("cannot seek input", empty); done(); }
++    return getc(file) == '.' && getc(file) == '\n';
++}
++
+@@ -503,2 +555,2 @@
 -	register int i, j;
 -	register int nc;
 +	register int i;
 +    long j, nc;
-@@ -510 +536,3 @@
+@@ -506 +558,3 @@
+-		fseek(lb, f[i - 1], 0);
++        int dot = opt && dotline(f, i, lb);
++        if (dot && opt == 1) { mesg("-f cannot represent a single-dot line; use -e", empty); done(); }
++		if (fseek(lb, f[i - 1], 0)) { mesg("cannot seek input", empty); done(); }
+@@ -508,0 +563 @@
++        if (dot) putchar('.');
+@@ -510 +565,4 @@
 -			putchar(getc(lb));
 +            putchar(getc(lb));
++        if (ferror(lb) || feof(lb)) { mesg("cannot read input", empty); done(); }
 +        if (nc && fseek(lb, f[i]-1, SEEK_SET) == 0 && getc(lb) != '\n')
 +            prints("\n\\ No newline at end of file\n");
-@@ -598,3 +626,6 @@
+@@ -515,0 +574 @@
++	int i;
+@@ -536,0 +596,4 @@
++    if (opt == -1)
++        for (i = c; i <= d; i++)
++            if (dotline(ixnew, i, input[1]))
++                printf("%lds/.././\n", (long)a + i - c);
+@@ -545,0 +609 @@
++    if (!input[0] || !input[1]) { mesg("cannot reopen input", empty); done(); }
+@@ -580,8 +644,6 @@
+-	char **args;
+-
+-	args = argv;
+-	if (argc > 3 && *argv[1] == '-') {
+-		argc--;
+-		argv++;
+-		for (k = 1; argv[0][k]; k++) {
+-			switch (argv[0][k]) {
++	int first = 1, heuristic = 0;
++    char *heuristic_args[5];
++	while (first < argc && argv[first][0] == '-' && argv[first][1]) {
++        if (!strcmp(argv[first], "--")) { first++; break; }
++		for (k = 1; argv[first][k]; k++) {
++			switch (argv[first][k]) {
+@@ -598,3 +660,5 @@
 -				execv("/usr/lib/diffh", (char**)args);
 -				mesg("cannot find diffh", empty);
 -				done();
-+				execv("/bin/diffh", (char**)args);
-+                mesg("cannot find diffh", empty);
-+                done();
++                heuristic = 1;
++                break;
 +            default:
 +                mesg("unsupported option", empty);
 +                done();
-@@ -609 +640,5 @@
+@@ -603,2 +667,3 @@
+-	}
+-	if (argc != 3) {
++		first++;
++	}
++	if (argc - first != 2) {
+@@ -608,2 +673,16 @@
+-
 -	filename(&argv[1], &argv[2]);
++    if (heuristic) {
++        if (opt) { mesg("-h cannot generate editor scripts", empty); done(); }
++        heuristic_args[0] = "diffh";
++        heuristic_args[1] = bflag ? "-b" : "-h";
++        heuristic_args[2] = argv[first]; heuristic_args[3] = argv[first + 1];
++        heuristic_args[4] = NULL;
++        execv("/bin/diffh", heuristic_args);
++        mesg("cannot find diffh", empty); done();
++    }
++    argv += first - 1;
++
 +	if (!strcmp(argv[1], "-") && !strcmp(argv[2], "-")) {
 +        mesg("cannot compare stdin with itself", empty);
 +        done();
 +    }
 +    filename(&argv[1], &argv[2]);
+@@ -628 +707 @@
+-	clist = (struct cand *) talloc(sizeof(cand));
++	clist = (struct cand *) talloc((size_t)candidate_capacity * sizeof(cand));
+--- a/Applications/V7/cmd/diff3.c
++++ b/Applications/V7/cmd/diff3.c
+@@ -1,3 +1,5 @@
+-/* UNIX V7 source code: see /COPYRIGHT or www.tuhs.org for details. */
+-/* ANSIfied for FUZIX */
+-
++/* UNIX V7 source code: see Applications/V7/COPYRIGHT or www.tuhs.org. */
++/* ANSIfied for FUZIX. Ripple/Fuse-X adaptation: checked three-file front end,
++ * dynamic change tables, wide offsets, streaming lines and safe ed scripts.
++ * The range-coalescing algorithm below is retained from the V7 implementation.
++ */
+@@ -8,288 +10,257 @@
+-
+-/* diff3 - 3-way differential file comparison*/
+-
+-/* diff3 [-e] d13 d23 f1 f2 f3 
+- *
+- * d13 = diff report on f1 vs f3
+- * d23 = diff report on f2 vs f3
+- * f1, f2, f3 the 3 files
+-*/
+-
+-struct range {
+-	int from, to;
+-};
+-	/* from is first in range of changed lines
+-	 * to is last+1
+-	 * from=to=line after point of insertion
+-	 * for added lines
+-	 */
+-struct diff {
+-	struct range old, new;
+-};
+-
+-#define NC 200
+-/* de is used to gather editing scripts,
+- * that are later spewed out in reverse order.
+- * its first element must be all zero
+- * the "new" component of de contains line positions
+- * or byte positions depending on when you look(!?)
+-*/
+-struct diff d13[NC];
+-struct diff d23[NC];
+-struct diff de[NC];
+-char line[256];
+-char block[512];
+-FILE *fp[3];
+-int linct[3] = { 0, 0, 0 };
+-
+-/*	the number of the last-read line in each file
+- *	is kept in cline[0-2]
+-*/
+-int cline[3];
+-/*	the latest known correspondence between line
+- *	numbers of the 3 files is stored in last[1-3]
+-*/
+-int last[4];
+-int eflag;
+-int debug = 0;
+-
+-void repos(int nchar)
+-{
+-	register int i;
+-	for (i = 0; i < 2; i++)
+-		fseek(fp[i], (long) -nchar, 1);
+-}
+-
+-void trouble(void)
+-{
+-	fprintf(stderr, "diff3: logic error\n");
+-	abort();
+-}
+-
+-int digit(char c)
+-{
+-	return (c >= '0' && c <= '9');
+-}
+-
+-
+-int number(char **lc)
+-{
+-	register int nn;
+-	nn = 0;
+-	while (digit(**lc))
+-		nn = nn * 10 + *(*lc)++ - '0';
+-	return (nn);
+-}
+-
+-int getline(FILE * b)
+-{
+-	register int i, c;
+-	for (i = 0; i < sizeof(line) - 1; i++) {
+-		c = getc(b);
+-		if (c == EOF)
+-			break;
+-		line[i] = c;
+-		if (c == '\n') {
+-			line[++i] = 0;
+-			return (i);
+-		}
+-	}
+-	return (0);
+-}
+-
+-int getchange(FILE * b)
+-{
+-	while (getline(b))
+-		if (digit(line[0]))
+-			return (1);
+-	return (0);
+-}
+-
+-/*pick up the line numbers of allcahnges from
+- * one change file
+- * (this puts the numbers in a vector, which is not
+- * strictly necessary, since the vector is processed
+- * in one sequential pass. The vector could be optimized
+- * out of existence)
+-*/
+-
+-int readin(const char *name, struct diff *dd)
+-{
+-	register int i;
+-	int a, b, c, d;
+-	char kind;
+-	char *p;
+-	fp[0] = fopen(name, "r");
+-	for (i = 0; getchange(fp[0]); i++) {
+-		if (i >= NC) {
+-			fprintf(stderr, "diff3: too many changes\n");
+-			exit(0);
+-		}
+-		p = line;
+-		a = b = number(&p);
+-		if (*p == ',') {
+-			p++;
+-			b = number(&p);
+-		}
+-		kind = *p++;
+-		c = d = number(&p);
+-		if (*p == ',') {
+-			p++;
+-			d = number(&p);
+-		}
+-		if (kind == 'a')
+-			a++;
+-		if (kind == 'd')
+-			c++;
+-		b++;
+-		d++;
+-		dd[i].old.from = a;
+-		dd[i].old.to = b;
+-		dd[i].new.from = c;
+-		dd[i].new.to = d;
+-	}
+-	dd[i].old.from = dd[i - 1].old.to;
+-	dd[i].new.from = dd[i - 1].new.to;
+-	fclose(fp[0]);
+-	return (i);
+-}
+-
+-
+-void separate(char *s)
+-{
+-	printf("====%s\n", s);
+-}
+-
+-/*	print the range of line numbers, rold.from  thru rold.to
+- *	as n1,n2 or n1
+-*/
+-
+-void prange(struct range *rold)
+-{
+-	if (rold->to <= rold->from)
+-		printf("%da\n", rold->from - 1);
+-	else {
+-		printf("%d", rold->from);
+-		if (rold->to > rold->from + 1)
+-			printf(",%d", rold->to - 1);
+-		printf("c\n");
+-	}
+-}
+-
+-/*	skip to just befor line number from in file i
+- *	if "pr" is nonzero, print all skipped stuff
+- * 	with string pr as a prefix
+-*/
+-
+-int skip(int i, int from, char *pr)
+-{
+-	register int j, n;
+-	for (n = 0; cline[i] < from - 1; n += j) {
+-		if ((j = getline(fp[i])) == 0)
+-			trouble();
+-		if (pr)
+-			printf("%s%s", pr, line);
+-		cline[i]++;
+-	}
+-	return (n);
+-}
+-
+-/*	the range of ines rold.from thru rold.to in file i
+- *	is to be changed. it is to be printed only if
+- *	it does not duplicate something to be printed later
+-*/
+-void change(int i, struct range *rold, int dup)
+-{
+-	printf("%d:", i);
+-	last[i] = rold->to;
+-	prange(rold);
+-	if (dup)
+-		return;
+-	if (debug)
+-		return;
+-	i--;
+-	skip(i, rold->from, (char *) 0);
+-	skip(i, rold->to, "  ");
+-}
+-
+-
+-/*	no difference was reported by diff between file 1(or 2)
+- *	and file 3, and an artificial dummy difference (trange)
+- *	must be ginned up to correspond to the change reported
+- *	in the other file
+-*/
+-void keep(int i, struct range *rold, struct range *rnew)
+-{
+-	register int delta;
+-	struct range trange;
+-	delta = last[3] - last[i];
+-	trange.from = rnew->from - delta;
+-	trange.to = rnew->to - delta;
+-	change(i, &trange, 1);
+-}
+-
+-
+-/*	return 1 or 0 according as the old range
+- *	(in file 1) contains exactly the same data
+- *	as the new range (in file 2)
+-*/
+-
+-int duplicate(struct range *r1, struct range *r2)
+-{
+-	register int c, d;
+-	register int nchar;
+-	int nline;
+-	if (r1->to - r1->from != r2->to - r2->from)
+-		return (0);
+-	skip(0, r1->from, (char *) 0);
+-	skip(1, r2->from, (char *) 0);
+-	nchar = 0;
+-	for (nline = 0; nline < r1->to - r1->from; nline++) {
+-		do {
+-			c = getc(fp[0]);
+-			d = getc(fp[1]);
+-			if (c == -1 || d == -1)
+-				trouble();
+-			nchar++;
+-			if (c != d) {
+-				repos(nchar);
+-				return 0;
+-			}
+-		} while (c != '\n');
+-	}
+-	repos(nchar);
+-	return (1);
+-}
+-
+-/*	collect an editing script for later regurgitation
+-*/
+-int edit(struct diff *diff, int dup, int j)
+-{
+-	if (((dup + 1) & eflag) == 0)
+-		return (j);
+-	j++;
+-	de[j].old.from = diff->old.from;
+-	de[j].old.to = diff->old.to;
+-	de[j].new.from = de[j - 1].new.to
+-	    + skip(2, diff->new.from, (char *) 0);
+-	de[j].new.to = de[j].new.from + skip(2, diff->new.to, (char *) 0);
+-	return (j);
+-}
+-
+-/*		regurgitate */
+-void edscript(int n)
+-{
+-	register int j, k;
+-	for (n = n; n > 0; n--) {
+-		prange(&de[n].old);
+-		fseek(fp[2], (long) de[n].new.from, 0);
+-		for (k = de[n].new.to - de[n].new.from; k > 0; k -= j) {
+-			j = k > 512 ? 512 : k;
+-			if (fread(block, 1, j, fp[2]) != j)
+-				trouble();
+-			fwrite(block, 1, j, stdout);
+-		}
+-		printf(".\n");
+-	}
+-}
+-
++#include <fcntl.h>
++#include <signal.h>
++#include <errno.h>
++#include <sys/stat.h>
++#include <sys/wait.h>
++
++#define MAX_LINES 30000
++struct range { long from, to; };
++struct diff { struct range old, new; };
++static struct diff *d13, *d23, *de;
++static FILE *fp[3];
++static long cline[3], last[4];
++static int eflag;
++static char temporary[3][32];
++static int temporary_count;
++
++static void cleanup(void)
++{
++    int i;
++    for (i = 0; i < temporary_count; i++)
++        unlink(temporary[i]);
++}
++
++static void fail(const char *message)
++{
++    fprintf(stderr, "diff3: %s\n", message);
++    exit(2);
++}
++
++static void interrupted(int sig)
++{
++    cleanup();
++    _exit(2);
++}
++
++static int make_temp(char **path)
++{
++    int fd;
++    if (temporary_count == 3) fail("too many temporary files");
++    *path = temporary[temporary_count];
++    strcpy(*path, "/tmp/d3XXXXXX");
++    fd = mkstemp(*path);
++    if (fd < 0) fail("cannot create temporary file");
++    temporary_count++;
++    return fd;
++}
++
++static void seek_file(FILE *file, long offset)
++{
++    if (offset < 0 || fseek(file, offset, SEEK_SET))
++        fail("cannot seek input");
++}
++
++/* Only diff's command lines are parsed; consume whole physical lines so a
++ * long payload cannot be mistaken for another command at a buffer boundary. */
++static int report_line(FILE *file, char *line)
++{
++    unsigned n = 0;
++    int c, have = 0;
++    while ((c = getc(file)) != EOF) {
++        have = 1;
++        if (c == '\n') break;
++        if (n < 95) line[n++] = c;
++    }
++    if (ferror(file)) fail("cannot read diff report");
++    line[n] = 0;
++    return have;
++}
++
++static long number(char **text)
++{
++    char *end;
++    long n;
++    errno = 0;
++    n = strtol(*text, &end, 10);
++    if (end == *text || errno || n < 0 || n > MAX_LINES)
++        fail("invalid diff range");
++    *text = end;
++    return n;
++}
++
++static struct diff *readin(const char *path, int *count)
++{
++    FILE *file = fopen(path, "r");
++    struct diff *table = NULL, *grown;
++    int capacity = 0, used = 0;
++    char line[96], *p, kind;
++    long a, b, c, d;
++    if (!file) fail("cannot open diff report");
++    while (report_line(file, line)) {
++        if (line[0] < '0' || line[0] > '9') continue;
++        p = line;
++        a = b = number(&p);
++        if (*p == ',') { p++; b = number(&p); }
++        kind = *p++;
++        if (kind != 'a' && kind != 'c' && kind != 'd')
++            fail("invalid diff command");
++        c = d = number(&p);
++        if (*p == ',') { p++; d = number(&p); }
++        if (*p || a > b || c > d) fail("invalid diff command");
++        if (kind == 'a') a++;
++        if (kind == 'd') c++;
++        b++; d++;
++        if (used >= MAX_LINES) fail("too many changes");
++        if (used + 1 >= capacity) {
++            capacity = capacity > 15000 ? MAX_LINES + 1 : capacity ? capacity * 2 : 32;
++            grown = realloc(table, (size_t)capacity * sizeof(*table));
++            if (!grown) fail("out of memory");
++            table = grown;
++        }
++        if (used && (a < table[used - 1].old.to || c < table[used - 1].new.to))
++            fail("unordered diff ranges");
++        table[used].old.from = a; table[used].old.to = b;
++        table[used].new.from = c; table[used].new.to = d;
++        used++;
++    }
++    if (fclose(file)) fail("cannot close diff report");
++    if (!table) {
++        table = calloc(1, sizeof(*table));
++        if (!table) fail("out of memory");
++    } else memset(table + used, 0, sizeof(*table));
++    *count = used;
++    return table;
++}
++
++static void separate(const char *tag) { printf("====%s\n", tag); }
++
++static void prange(struct range *range)
++{
++    if (range->to <= range->from) printf("%lda\n", range->from - 1);
++    else {
++        printf("%ld", range->from);
++        if (range->to > range->from + 1) printf(",%ld", range->to - 1);
++        printf("c\n");
++    }
++}
++
++/* Count native characters rather than host octets. No line buffer or 16-bit
++ * byte offset: long lines and files larger than 64K remain streamable. */
++static long skip(int i, long from, const char *prefix)
++{
++    long total = 0, length;
++    int c = EOF;
++    while (cline[i] < from - 1) {
++        length = 0;
++        if (prefix) fputs(prefix, stdout);
++        while ((c = getc(fp[i])) != EOF) {
++            length++; total++;
++            if (prefix) putchar(c);
++            if (c == '\n') break;
++        }
++        if (ferror(fp[i])) fail("cannot read input");
++        if (!length) fail("input changed or inconsistent diff report");
++        if (prefix && c != '\n') fputs("\n\\ No newline at end of file\n", stdout);
++        cline[i]++;
++    }
++    return total;
++}
++
++static void change(int i, struct range *range, int duplicate)
++{
++    printf("%d:", i);
++    last[i] = range->to;
++    prange(range);
++    if (!duplicate) {
++        skip(i - 1, range->from, NULL);
++        skip(i - 1, range->to, "  ");
++    }
++}
++
++static void keep(int i, struct range *old, struct range *new)
++{
++    long delta = last[3] - last[i];
++    struct range range;
++    range.from = new->from - delta;
++    range.to = new->to - delta;
++    change(i, &range, 1);
++}
++
++static int duplicate(struct range *left, struct range *right)
++{
++    long position[2], n;
++    int a, b, equal = 1;
++    if (left->to - left->from != right->to - right->from) return 0;
++    skip(0, left->from, NULL); skip(1, right->from, NULL);
++    position[0] = ftell(fp[0]); position[1] = ftell(fp[1]);
++    if (position[0] < 0 || position[1] < 0) fail("cannot tell input position");
++    for (n = left->from; n < left->to && equal; n++) {
++        do {
++            a = getc(fp[0]); b = getc(fp[1]);
++            if (ferror(fp[0]) || ferror(fp[1])) fail("cannot read input");
++            if (a != b) { equal = 0; break; }
++        } while (a != '\n' && a != EOF);
++    }
++    seek_file(fp[0], position[0]); seek_file(fp[1], position[1]);
++    return equal;
++}
++
++static int edit(struct diff *diff, int same, int j)
++{
++    if (((same + 1) & eflag) == 0) return j;
++    j++;
++    de[j].old = diff->old;
++    de[j].new.from = de[j - 1].new.to + skip(2, diff->new.from, NULL);
++    de[j].new.to = de[j].new.from + skip(2, diff->new.to, NULL);
++    return j;
++}
++
++/* Escape a literal single-dot line, then emit address-specific substitutions
++ * after the input block. Applying the script must preserve the actual text. */
++static void script_text(struct diff *edit, int substitutions)
++{
++    long pos = edit->new.from, row = edit->old.from, length;
++    int c, first;
++    seek_file(fp[2], pos);
++    while (pos < edit->new.to) {
++        length = 0; first = 0;
++        do {
++            c = getc(fp[2]);
++            if (c == EOF) fail("cannot read script text");
++            if (!length) first = c;
++            if (!substitutions) {
++                if (c == '\n' && length == 1 && first == '.') putchar('.');
++                putchar(c);
++            }
++            length++; pos++;
++        } while (c != '\n' && pos < edit->new.to);
++        if (c != '\n') fail("ed scripts require newline-terminated text");
++        if (substitutions && first == '.' && length == 2)
++            printf("%lds/.././\n", row);
++        row++;
++    }
++}
++
++static void edscript(int n)
++{
++    int i;
++    /* Check representability before emitting any commands. */
++    for (i = 1; i <= n; i++) {
++        if (de[i].new.to > de[i].new.from) {
++            seek_file(fp[2], de[i].new.to - 1);
++            if (getc(fp[2]) != '\n') fail("ed scripts require newline-terminated text");
++        }
++    }
++    for (; n > 0; n--) {
++        if (de[n].new.from == de[n].new.to && de[n].old.to > de[n].old.from) {
++            printf("%ld", de[n].old.from);
++            if (de[n].old.to > de[n].old.from + 1) printf(",%ld", de[n].old.to - 1);
++            puts("d");
++            continue;
++        }
++        prange(&de[n].old);
++        script_text(de + n, 0);
++        puts(".");
++        script_text(de + n, 1);
++    }
++}
+@@ -307,7 +277,0 @@
+-		if (debug) {
+-			printf("%d,%d=%d,%d %d,%d=%d,%d\n",
+-			       d1->old.from, d1->old.to,
+-			       d1->new.from, d1->new.to,
+-			       d2->old.from, d2->old.to,
+-			       d2->new.from, d2->new.to);
+-		}
+@@ -315 +279 @@
+-		if (!t2 || t1 && d1->new.to < d2->new.from) {
++		if (!t2 || (t1 && d1->new.to < d2->new.from)) {
+@@ -327 +291 @@
+-		if (!t1 || t2 && d2->new.to < d1->new.from) {
++		if (!t1 || (t2 && d2->new.to < d1->new.from)) {
+@@ -392,30 +356,94 @@
+-int main(int argc, char *argv[])
+-{
+-	register int i, m, n;
+-	if (*argv[1] == '-') {
+-		switch (argv[1][1]) {
+-		default:
+-			eflag = 3;
+-			break;
+-		case '3':
+-			eflag = 2;
+-			break;
+-		case 'x':
+-			eflag = 1;
+-		}
+-		argv++;
+-		argc--;
+-	}
+-	if (argc < 6) {
+-		fprintf(stderr, "diff3: arg count\n");
+-		exit(1);
+-	}
+-	m = readin(argv[1], d13);
+-	n = readin(argv[2], d23);
+-	for (i = 0; i <= 2; i++)
+-		if ((fp[i] = fopen(argv[i + 3], "r")) == NULL) {
+-			printf("diff3: can't open %s\n", argv[i + 3]);
+-			exit(1);
+-		}
+-	merge(m, n);
+-}
++
++static void compare(const char *left, const char *right, int output)
++{
++    pid_t pid, waited;
++    int status;
++    char *args[5];
++    args[0] = "diff"; args[1] = "--";
++    args[2] = (char *)left; args[3] = (char *)right; args[4] = NULL;
++    pid = fork();
++    if (pid < 0) fail("cannot fork diff");
++    if (pid == 0) {
++        if (dup2(output, 1) < 0) _exit(2);
++        if (output != 1) close(output);
++        execv("/bin/diff", args);
++        perror("diff3: /bin/diff");
++        _exit(2);
++    }
++    do { waited = waitpid(pid, &status, 0); } while (waited < 0 && errno == EINTR);
++    if (waited != pid || !WIFEXITED(status) || WEXITSTATUS(status) > 1)
++        fail("diff failed");
++    if (close(output)) fail("cannot close diff report");
++}
++
++static void usage(void)
++{
++    fputs("usage: diff3 [-e|-x|-3] [--] file1 file2 file3\n", stderr);
++    exit(2);
++}
++
++int main(int argc, char **argv)
++{
++    int i = 1, j, mode, stdin_used = 0, fd, n, off, m1, m2;
++    char *names[3], *reports[2], buffer[512];
++    struct stat st;
++    atexit(cleanup);
++    signal(SIGHUP, interrupted); signal(SIGINT, interrupted);
++    signal(SIGTERM, interrupted); signal(SIGPIPE, interrupted);
++    while (i < argc && argv[i][0] == '-' && argv[i][1]) {
++        if (!strcmp(argv[i], "--")) { i++; break; }
++        for (j = 1; argv[i][j]; j++) {
++            switch (argv[i][j]) {
++            case 'e': mode = 3; break;
++            case 'x': mode = 1; break;
++            case '3': mode = 2; break;
++            default: usage(); return 2;
++            }
++            if (eflag && eflag != mode) usage();
++            eflag = mode;
++        }
++        i++;
++    }
++    if (argc - i != 3) usage();
++    /* Reject repeated stdin before reading it: a terminal would otherwise
++     * block forever before we even discover the second '-' operand. */
++    for (j = 0; j < 3; j++)
++        if (!strcmp(argv[i + j], "-") && stdin_used++)
++            fail("stdin may appear only once");
++    for (j = 0; j < 3; j++) {
++        names[j] = argv[i + j];
++        if (!strcmp(names[j], "-")) {
++            fd = make_temp(&names[j]);
++            while ((n = read(0, buffer, sizeof(buffer))) > 0) {
++                off = 0;
++                while (off < n) {
++                    int written = write(fd, buffer + off, n - off);
++                    if (written <= 0) fail("cannot spool stdin");
++                    off += written;
++                }
++            }
++            if (n < 0 || close(fd)) fail("cannot spool stdin");
++        }
++        if (stat(names[j], &st) || !S_ISREG(st.st_mode))
++            fail("inputs must be readable regular files (or one stdin)");
++        fp[j] = fopen(names[j], "r");
++        if (!fp[j]) { perror(names[j]); return 2; }
++    }
++    /* The helper inherits no buffered input streams. Reopen for the merge. */
++    for (j = 0; j < 3; j++) {
++        if (fclose(fp[j])) fail("cannot close input");
++    }
++    fd = make_temp(&reports[0]); compare(names[0], names[2], fd);
++    fd = make_temp(&reports[1]); compare(names[1], names[2], fd);
++    d13 = readin(reports[0], &m1); d23 = readin(reports[1], &m2);
++    de = calloc((size_t)(m1 < m2 ? m1 : m2) + 1, sizeof(*de));
++    if (!de) fail("out of memory");
++    for (j = 0; j < 3; j++) {
++        fp[j] = fopen(names[j], "r");
++        if (!fp[j]) fail("cannot reopen input");
++    }
++    merge(m1, m2);
++    for (j = 0; j < 3; j++) if (fclose(fp[j])) fail("cannot close input");
++    if (fflush(stdout) || ferror(stdout)) fail("cannot write output");
++    return 0;
++}
 --- a/Applications/V7/cmd/diffh.c
 +++ b/Applications/V7/cmd/diffh.c
 @@ -23,0 +24 @@
@@ -1612,6 +2572,40 @@
 +++ b/Applications/V7/cmd/sh/ctype.h
 @@ -3 +2,0 @@
 -#
+@@ -74,7 +73,7 @@
+-#define	space(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_SPC))
+-#define eofmeta(c)	(((c)&QUOTE)==0 && _ctype1[c]&(_META|T_EOF))
+-#define qotchar(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_QOT))
+-#define eolchar(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_EOR|T_EOF))
+-#define dipchar(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_DIP))
+-#define subchar(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_SUB|T_QOT))
+-#define escchar(c)	(((c)&QUOTE)==0 && _ctype1[c]&(T_ESC))
++#define	space(c)	((unsigned)(c)<128 && _ctype1[c]&(T_SPC))
++#define eofmeta(c)	((unsigned)(c)<128 && _ctype1[c]&(_META|T_EOF))
++#define qotchar(c)	((unsigned)(c)<128 && _ctype1[c]&(T_QOT))
++#define eolchar(c)	((unsigned)(c)<128 && _ctype1[c]&(T_EOR|T_EOF))
++#define dipchar(c)	((unsigned)(c)<128 && _ctype1[c]&(T_DIP))
++#define subchar(c)	((unsigned)(c)<128 && _ctype1[c]&(T_SUB|T_QOT))
++#define escchar(c)	((unsigned)(c)<128 && _ctype1[c]&(T_ESC))
+@@ -84,9 +83,9 @@
+-#define	digit(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_DIG))
+-#define fngchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_FNG))
+-#define dolchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_AST|T_BRC|T_DIG|T_IDC|T_SHN))
+-#define defchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_DEF))
+-#define setchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_SET))
+-#define digchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_AST|T_DIG))
+-#define	letter(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_IDC))
+-#define alphanum(c)	(((c)&QUOTE)==0 && _ctype2[c]&(_IDCH))
+-#define astchar(c)	(((c)&QUOTE)==0 && _ctype2[c]&(T_AST))
++#define	digit(c)	((unsigned)(c)<128 && _ctype2[c]&(T_DIG))
++#define fngchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_FNG))
++#define dolchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_AST|T_BRC|T_DIG|T_IDC|T_SHN))
++#define defchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_DEF))
++#define setchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_SET))
++#define digchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_AST|T_DIG))
++#define	letter(c)	((unsigned)(c)<128 && _ctype2[c]&(T_IDC))
++#define alphanum(c)	((unsigned)(c)<128 && _ctype2[c]&(_IDCH))
++#define astchar(c)	((unsigned)(c)<128 && _ctype2[c]&(T_AST))
 --- a/Applications/V7/cmd/sh/defs.h
 +++ b/Applications/V7/cmd/sh/defs.h
 @@ -110 +110 @@
@@ -1658,6 +2652,12 @@
 +++ b/Applications/V7/cmd/sh/expand.c
 @@ -4 +3,0 @@
 -#
+@@ -111 +110 @@
+-		*cs++ = 0200;
++		*cs++ = QUOTE;
+@@ -183 +182 @@
+-			scc = 0200;
++			scc = QUOTE;
 --- a/Applications/V7/cmd/sh/fault.c
 +++ b/Applications/V7/cmd/sh/fault.c
 @@ -3 +2,0 @@
@@ -1670,6 +2670,17 @@
 +++ b/Applications/V7/cmd/sh/mac.h
 @@ -3 +2,0 @@
 -#
+@@ -15,2 +14,8 @@
+-#define STRIP	0177
+-#define QUOTE	0200
++/* C16 has a spare ninth bit; keep UTF-8 octets separate from quoting. */
++#ifdef RIPPLE_MMU
++#define STRIP 0377
++#define QUOTE 0400
++#else
++#define STRIP 0177
++#define QUOTE 0200
++#endif
 --- a/Applications/V7/cmd/sh/macro.c
 +++ b/Applications/V7/cmd/sh/macro.c
 @@ -4 +3,0 @@
@@ -4453,7 +5464,7 @@
 -#include <netinet/in.h>
 +#include <signal.h>
 +#include <ctype.h>
-@@ -11,12 +11,18 @@
+@@ -11,176 +11,196 @@
 -#include "netdb.h"
 -
 -
@@ -4466,42 +5477,16 @@
 -void writes(int fd, const char *p)
 -{
 -    write(fd, p, strlen(p));
-+#define LINE 1024
-+static int sock=-1,out=-1;
-+static volatile int interrupted;
-+static char temporary[512];
-+static unsigned char input[512],output[512];
-+static unsigned head,used,buffered;
-+static unsigned long saved;
-+static void caught(int sig){interrupted=sig;signal(sig,caught);}
-+static void cleanup(void){if(out>=0)close(out);if(sock>=0)close(sock);if(*temporary)unlink(temporary);}
-+static int byte(void) {
-+    ssize_t n;
-+    if(interrupted){errno=EINTR;return -1;}
-+    if(head==used) {
-+        n=nu_read(sock,input,sizeof(input),30000UL);
-+        if(n<=0)return n<0?-1:-2;
-+        head=0;used=n;
-+    }
-+    return input[head++];
-@@ -24,6 +30,8 @@
+-}
 -
 -void xflush(void)
 -{
 -    if (write(sock, buf, buflen) != buflen) {
 -        perror("write");
 -        exit(1);
-+static int line(char *s,unsigned long *budget) {
-+    unsigned n=0;int c;
-+    for(;;) {
-+        c=byte();if(c<0)return -1;
-+        if(!*budget){errno=EMSGSIZE;return -1;}--*budget;
-+        if(c=='\r') {if(byte()!='\n'){errno=EINVAL;return -1;}s[n]=0;return 0;}
-+        if(c=='\n'||(c<32&&c!='\t')||c>126||n==LINE){errno=EINVAL;return -1;}
-+        s[n++]=c;
-@@ -31 +38,0 @@
+-    }
 -    buflen = 0;
-@@ -33,21 +40,5 @@
+-}
 -
 -void xwrites(const char *p)
 -{
@@ -4523,12 +5508,7 @@
 -        bufend = buf;
 -        readp = buf;
 -        return len;
-+static int decimal(const char *s,unsigned long *v) {
-+    unsigned c;*v=0;if(!*s)return -1;
-+    while((c=*s++)!=0) {
-+        if(c<'0'||c>'9'||*v>(2147483647UL-(c-'0'))/10)return -1;
-+        *v=*v*10+c-'0';
-@@ -55,163 +45,0 @@
+-    }
 -    len = read(sock, buf, 512);
 -    if (len < 0) {
 -        perror("read");
@@ -4661,42 +5641,80 @@
 -
 -        if (code  != 200)
 -            writes(2, buf);
--        do {
--            xreadline();
--            if (code != 200)
--                writes(2, buf);
--        } while(*buf != '\n');
--
--        /* A 100 code means "I'm thinking please wait then a header cycle then
--           a real header and has a blank line following */
--        if (code == 100)
--            xreadline();
--    } while (code == 100 && !looped++);
--
--    of = open(argv[2], O_WRONLY|O_CREAT, 0666);
--    if (of == -1) {
--        perror(argv[2]);
--        exit(1);
--    }
--    /* FIXME: if we saw a Transfer-Encoding: chunked" we need to do this
--       bit differently */
--    if (code == 200) {
--        while((len = xread()) > 0) {
--            if (write(of, buf, len) != len) {
--                perror("write");
--                exit(1);
--            }
--            write(1,".",1);
--        }
--    }
--    write(1,"\n",1);
--    close(of);
--    close(sock);
-@@ -219,0 +48,144 @@
-+static int parse_url(const char *url,char *host,char *path,unsigned *port) {
++#include <ripple_tls.h>
++#define LINE 1024
++static int sock=-1,out=-1;
++static RippleTLS *tls;
++static volatile int interrupted;
++static char temporary[512];
++static unsigned char input[512],output[512];
++static unsigned head,used,buffered;
++static unsigned long saved;
++/* --response is a generic streaming IPC/CLI mode: one response, final headers,
++ * dechunked entity, exit status on stderr/errors. No TLS state crosses it. */
++static unsigned response_mode, header_count;
++static const char *extra_headers[4];
++static char *response_headers;
++static unsigned response_used;
++static int append_header(const char *s) {
++    unsigned n=strlen(s);
++    if(response_used>16382||n>16382-response_used){errno=EMSGSIZE;return -1;}
++    memcpy(response_headers+response_used,s,n);response_used+=n;
++    response_headers[response_used++]='\r';response_headers[response_used++]='\n';return 0;
++}
++static int allowed_header(const char *s) {
++    const char *p=strchr(s,':');unsigned n;
++    if(!p||p==s||strlen(s)>LINE)return 0;
++    n=p-s;
++    if((n==4&&!strncasecmp(s,"Host",n)) || (n==14&&!strncasecmp(s,"Content-Length",n)) ||
++       (n==17&&!strncasecmp(s,"Transfer-Encoding",n)) || (n==10&&!strncasecmp(s,"Connection",n)) ||
++       (n==15&&!strncasecmp(s,"Accept-Encoding",n)))return 0;
++    { const char *at;for(at=s;at<p;at++)if(!isalnum(*at)&&!strchr("!#$%&'*+-.^_`|~",*at))return 0; }
++    for(;*s;s++)if((*s<32&&*s!='\t')||*s>126)return 0;
++    return 1;
++}
++static void caught(int sig){interrupted=sig;signal(sig,caught);}
++static void disconnect(void){if(tls){ripple_tls_close(tls);tls=NULL;}if(sock>=0){close(sock);sock=-1;}}
++static void cleanup(void){if(out>=0)close(out);disconnect();if(*temporary)unlink(temporary);free(response_headers);}
++static int request_write(const void *p,size_t n){return tls?ripple_tls_write(tls,p,n,30000UL):nu_write(sock,p,n,30000UL);}
++static int flush_body(void);
++static int byte(void) {
++    ssize_t n;
++    if(interrupted){errno=EINTR;return -1;}
++    if(head==used) {
++        /* Deliver available entity bytes before waiting for another packet.
++         * Interactive consumers must not wait for a full output buffer. */
++        if(response_mode&&buffered&&flush_body())return -1;
++        n=tls?ripple_tls_read(tls,input,sizeof(input),30000UL):nu_read(sock,input,sizeof(input),30000UL);
++        if(n<=0)return n<0?-1:-2;
++        head=0;used=n;
++    }
++    return input[head++];
++}
++static int line(char *s,unsigned long *budget) {
++    unsigned n=0;int c;
++    for(;;) {
++        c=byte();if(c<0)return -1;
++        if(!*budget){errno=EMSGSIZE;return -1;}--*budget;
++        if(c=='\r') {if(byte()!='\n'){errno=EINVAL;return -1;}s[n]=0;return 0;}
++        if(c=='\n'||(c<32&&c!='\t')||c>126||n==LINE){errno=EINVAL;return -1;}
++        s[n++]=c;
++    }
++}
++static int decimal(const char *s,unsigned long *v) {
++    unsigned c;*v=0;if(!*s)return -1;
++    while((c=*s++)!=0) {
++        if(c<'0'||c>'9'||*v>(2147483647UL-(c-'0'))/10)return -1;
++        *v=*v*10+c-'0';
++    }
++    return 0;
++}
++static int parse_url(const char *url,char *host,char *path,unsigned *port,unsigned *secure) {
 +    const char *p,*start;unsigned n=0;char number[8];unsigned long v;
-+    if(strncmp(url,"http://",7))return -1;
-+    p=url+7;start=p;*port=80;
++    if(!strncmp(url,"https://",8)){*secure=1;p=url+8;*port=443;}
++    else if(!strncmp(url,"http://",7)){*secure=0;p=url+7;*port=80;}
++    else return -1;
++    start=p;
 +    while(*p&&*p!='/'&&*p!='?'&&*p!='#'&&*p!=':') {
 +        if(n==253||*p<=32||*p>126||*p=='@'||*p=='['||*p==']')return -1;
 +        host[n++]=*p++;
@@ -4711,13 +5729,16 @@
 +    path[n]=0;return 0;
 +}
 +static int redirected(const char *url,const char *location,char *next) {
-+    const char *p,*last;unsigned n;
-+    if(!strncmp(location,"http://",7)) {if(strlen(location)>1279)return -1;strcpy(next,location);return 0;}
++    const char *p,*last;unsigned n,secure=!strncmp(url,"https://",8);
++    if(!strncmp(location,"https://",8)||!strncmp(location,"http://",7)) {
++        if(secure&&!strncmp(location,"http://",7))return -1;
++        if(strlen(location)>1279)return -1;strcpy(next,location);return 0;
++    }
 +    if(strstr(location,"://"))return -1;
 +    if(location[0]=='/'&&location[1]=='/') {
-+        if(strlen(location)>1274)return -1;strcpy(next,"http:");strcat(next,location);return 0;
++        if(strlen(location)>1273)return -1;strcpy(next,secure?"https:":"http:");strcat(next,location);return 0;
 +    }
-+    p=url+7;while(*p&&*p!='/'&&*p!='?'&&*p!='#')++p;
++    p=url+(secure?8:7);while(*p&&*p!='/'&&*p!='?'&&*p!='#')++p;
 +    if(*location=='/')n=p-url;
 +    else if(*location=='?') {p=url;while(*p&&*p!='?'&&*p!='#')++p;n=p-url;}
 +    else {
@@ -4736,6 +5757,7 @@
 +static int body_byte(int c) {
 +    if(c==-1)return -1;
 +    if(c==-2){errno=EIO;return -1;}
++    if(response_mode&&saved+buffered>=262144UL){errno=EFBIG;return -1;}
 +    if(saved+buffered>=2147483647UL){errno=EFBIG;return -1;}
 +    output[buffered++]=c;return buffered==sizeof(output)?flush_body():0;
 +}
@@ -4774,28 +5796,74 @@
 +}
 +int main(int argc,char **argv) {
 +    char url[1280],next[1280],host[254],path[LINE+1],text[LINE+1],location[LINE+1],*value,*end;
-+    unsigned port,redirects=0,status,info,has_length,chunked,fields;
++    unsigned port,secure,redirects=0,status,info,has_length,chunked,fields;
++    int arg=1;
++    const char *ca_file=NULL,*destination;
 +    unsigned long length,budget;struct hostent *h;struct sockaddr_in peer;
-+    if(argc!=3||!strcmp(argv[1],"--help")) {
-+        fputs("usage: htget http://HOST[:PORT]/PATH FILE|-\n",stderr);
++    while(arg<argc&&argv[arg][0]=='-'&&strcmp(argv[arg],"-")) {
++        if(!strcmp(argv[arg],"--response")){response_mode=1;arg++;}
++        else if(!strcmp(argv[arg],"--cacert")&&arg+1<argc){ca_file=argv[arg+1];arg+=2;}
++        else if(!strcmp(argv[arg],"--header")&&arg+1<argc&&header_count<4&&allowed_header(argv[arg+1])) {
++            extra_headers[header_count++]=argv[arg+1];arg+=2;
++        } else break;
++    }
++    if(argc-arg!=2 || (header_count&&!response_mode) ||
++       (response_mode&&strcmp(argv[arg+1],"-"))) {
++        fputs("usage: htget [--cacert FILE] [--response [--header LINE]...] http[s]://HOST[:PORT]/PATH FILE|-\n"
++              "--response: stdout only, no redirects, headers plus dechunked body (256 KiB maximum)\n",stderr);
 +        return argc==2&&!strcmp(argv[1],"--help")?0:1;
 +    }
-+    if(strlen(argv[1])>=sizeof(url))goto invalid;
-+    strcpy(url,argv[1]);atexit(cleanup);signal(SIGINT,caught);signal(SIGTERM,caught);signal(SIGPIPE,SIG_IGN);
++    destination=argv[arg+1];
++    if(strlen(argv[arg])>=sizeof(url))goto invalid;
++    strcpy(url,argv[arg]);atexit(cleanup);signal(SIGINT,caught);signal(SIGTERM,caught);signal(SIGPIPE,SIG_IGN);
++    if(response_mode) { response_headers=malloc(16385);if(!response_headers)goto failed; }
 +    for(;;) {
-+        if(parse_url(url,host,path,&port))goto invalid;
++        if(parse_url(url,host,path,&port,&secure))goto invalid;
 +        h=gethostbyname(host);if(!h){herror(host);return interrupted?128+interrupted:1;}
 +        memset(&peer,0,sizeof(peer));peer.sin_family=AF_INET;peer.sin_port=htons(port);
 +        memcpy(&peer.sin_addr,h->h_addr_list[0],sizeof(peer.sin_addr));
 +        sock=socket(AF_INET,SOCK_STREAM,0);if(sock<0||nu_connect(sock,(void *)&peer,sizeof(peer),30000UL))goto failed;
-+        if(nu_write(sock,"GET ",4,30000UL)||nu_write(sock,path,strlen(path),30000UL)||
-+           nu_write(sock," HTTP/1.1\r\nHost: ",17,30000UL)||nu_write(sock,host,strlen(host),30000UL))goto failed;
-+        if(port!=80){sprintf(text,":%u",port);if(nu_write(sock,text,strlen(text),30000UL))goto failed;}
-+        strcpy(text,"\r\nUser-Agent: Fuzix-htget/0.2\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
-+        if(nu_write(sock,text,strlen(text),30000UL))goto failed;
++        if(secure) {
++            /* Cold JIT compilation and guest public-key arithmetic count too. */
++            tls=ripple_tls_open(sock,host,ca_file,120000UL,&interrupted);
++            if(!tls)goto failed;
++        }
++        if(request_write("GET ",4)||request_write(path,strlen(path))||
++           request_write(" HTTP/1.1\r\nHost: ",17)||request_write(host,strlen(host)))goto failed;
++        if(port!=(secure?443:80)){sprintf(text,":%u",port);if(request_write(text,strlen(text)))goto failed;}
++        strcpy(text,"\r\nUser-Agent: Fuzix-htget/0.3\r\nAccept-Encoding: identity\r\nConnection: close\r\n");
++        if(request_write(text,strlen(text)))goto failed;
++        for(fields=0;fields<header_count;fields++)
++            if(request_write(extra_headers[fields],strlen(extra_headers[fields]))||request_write("\r\n",2))goto failed;
++        if(request_write("\r\n",2))goto failed;
 +        head=used=0;budget=16384;info=0;
-+        do {
+@@ -188,23 +208,22 @@
+-            xreadline();
+-            if (code != 200)
+-                writes(2, buf);
+-        } while(*buf != '\n');
+-
+-        /* A 100 code means "I'm thinking please wait then a header cycle then
+-           a real header and has a blank line following */
+-        if (code == 100)
+-            xreadline();
+-    } while (code == 100 && !looped++);
+-
+-    of = open(argv[2], O_WRONLY|O_CREAT, 0666);
+-    if (of == -1) {
+-        perror(argv[2]);
+-        exit(1);
+-    }
+-    /* FIXME: if we saw a Transfer-Encoding: chunked" we need to do this
+-       bit differently */
+-    if (code == 200) {
+-        while((len = xread()) > 0) {
+-            if (write(of, buf, len) != len) {
+-                perror("write");
+-                exit(1);
++            response_used=0;
 +            if(line(text,&budget))goto failed;
++            if(response_mode&&append_header(text))goto failed;
 +            if((strncmp(text,"HTTP/1.0 ",9)&&strncmp(text,"HTTP/1.1 ",9))||strlen(text)<12||
 +               !isdigit(text[9])||!isdigit(text[10])||!isdigit(text[11])||(text[12]&&text[12]!=' '))goto malformed;
 +            status=(text[9]-'0')*100+(text[10]-'0')*10+text[11]-'0';
@@ -4804,6 +5872,9 @@
 +            for(;;) {
 +                if(line(text,&budget))goto failed;
 +                if(!*text)break;if(++fields>128)goto malformed;
++                /* Entity output is already dechunked. A standard reader can
++                 * consume it to EOF; do not advertise chunk framing on stdout. */
++                if(response_mode&&strncasecmp(text,"Transfer-Encoding:",18)&&append_header(text))goto failed;
 +                value=strchr(text,':');if(!value||value==text)goto malformed;*value++=0;
 +                for(end=text;*end;end++)if(!isalnum(*end)&&!strchr("!#$%&'*+-.^_`|~",*end))goto malformed;
 +                while(*value==' '||*value=='\t')++value;
@@ -4812,30 +5883,45 @@
 +                else if(!strcasecmp(text,"Transfer-Encoding")){if(chunked||strcasecmp(value,"chunked"))goto malformed;chunked=1;}
 +                else if(!strcasecmp(text,"Content-Encoding")&&strcasecmp(value,"identity"))goto malformed;
 +                else if(!strcasecmp(text,"Location")){if(*location)goto malformed;strcpy(location,value);}
-+            }
+@@ -212,8 +231,31 @@
+-            write(1,".",1);
+-        }
+-    }
+-    write(1,"\n",1);
+-    close(of);
+-    close(sock);
+-    return 0;
+-}
 +            if((has_length&&chunked)||(status==204&&(has_length||chunked)))goto malformed;
 +            if(status<200&&++info>4)goto malformed;
 +        }while(status<200);
++        if(response_mode) {
++            if(append_header("")||nu_write(1,response_headers,response_used,30000UL))goto failed;
++            out=1;
++            if(status!=204&&status!=304&&status!=301&&status!=302&&status!=303&&status!=307&&status!=308&&
++               body(chunked,has_length,length))goto failed;
++            out=-1;return 0;
++        }
 +        if(status==301||status==302||status==303||status==307||status==308) {
 +            if(!*location||redirects++==5||redirected(url,location,next)) {
-+                fputs("htget: invalid, unsupported or excessive redirect\n",stderr);return 1;
++                fputs("htget: invalid, insecure or excessive redirect\n",stderr);return 1;
 +            }
-+            close(sock);sock=-1;strcpy(url,next);continue;
++            disconnect();strcpy(url,next);continue;
 +        }
 +        if(status<200||status>=300){fprintf(stderr,"htget: HTTP status %u\n",status);return 1;}
-+        if(output_file(argv[2]))goto failed;
++        if(output_file(destination))goto failed;
 +        if(status!=204&&body(chunked,has_length,length))goto failed;
 +        if(interrupted){errno=EINTR;goto failed;}
 +        if(out!=1) {
 +            if(close(out)<0){out=-1;goto failed;}out=-1;
-+            if(rename(temporary,argv[2]))goto failed;temporary[0]=0;
++            if(rename(temporary,destination))goto failed;temporary[0]=0;
 +        }
-+        if(strcmp(argv[2],"-"))fprintf(stderr,"htget: %lu octets saved to %s\n",saved,argv[2]);
++        if(strcmp(destination,"-"))fprintf(stderr,"htget: %lu octets saved to %s\n",saved,destination);
 +        out=-1;return 0;
 +    }
-+invalid:fputs("htget: expected a valid http:// URL (HTTPS is not supported)\n",stderr);return 1;
++invalid:fputs("htget: expected a valid http:// or https:// URL\n",stderr);return 1;
 +malformed:fputs("htget: invalid or unsupported HTTP response\n",stderr);return 1;
-+failed:perror("htget");return interrupted?128+interrupted:1;
++failed:if(*ripple_tls_error())fprintf(stderr,"htget: %s\n",ripple_tls_error());perror("htget");return interrupted?128+interrupted:1;
 +}
 --- a/Applications/netd/netdb.h
 +++ b/Applications/netd/netdb.h
@@ -5160,6 +6246,99 @@
 +            p = buf + strlen(buf);
 @@ -326,0 +342 @@
 +    if (ferror(fp)) { warn("read"); eval = 1; }
+--- a/Applications/util/cp.c
++++ b/Applications/util/cp.c
+@@ -7,2 +7,2 @@
+- * all the support for symlinks that made the stat handling so horrible has
+- * been removed along with handling for weirdnesses like AF_UNIX sockets.
++ * symlink support was removed upstream. Ripple restores guest symbolic links,
++ * including preserving them for recursive copies and cross-device moves.
+@@ -77,0 +78 @@
++static int sflag;             /* ln: symbolic link */
+@@ -158,3 +159,3 @@
+-Usage: %s [-f] %s f1 f2\n\
+-       %s [-f] %s f1 ... fn d1\n\
+-       %s [-f] %s d1 d2\n", progname, nstr, progname, nstr, progname, nstr);
++Usage: %s [-fs] %s f1 f2\n\
++       %s [-fs] %s f1 ... fn d1\n\
++       %s [-fs] %s d1 d2\n", progname, nstr, progname, nstr, progname, nstr);
+@@ -458,0 +460,16 @@
++    case S_IFLNK: {
++        char target[512];
++        int len = readlink(src, target, sizeof(target) - 1);
++        if (len < 0) {
++            fprintf(stderr, "%s: %s: %s\n", progname, src, strerror(errno));
++            errcnt |= 01;
++            break;
++        }
++        target[len] = 0;
++        if (do_unlink(tgt, dsp) != OKAY) break;
++        if (symlink(target, tgt) < 0) {
++            fprintf(stderr, "%s: %s: %s\n", progname, tgt, strerror(errno));
++            errcnt |= 01;
++        }
++        break;
++    }
+@@ -614,3 +631,7 @@
+-	    struct stat *ssp)
+-{
+-	if (stat(src, ssp) < 0) {
++	    struct stat *ssp, int level)
++{
++    struct stat followed;
++    int follow = pers == PERS_CP &&
++        (HLPflag == 'L' || (HLPflag == 'H' && level == 0) ||
++         (!rflag && HLPflag != 'P'));
++	if ((follow ? stat(src, ssp) : lstat(src, ssp)) < 0) {
+@@ -620,0 +642,2 @@
++    if (pers == PERS_CP && !S_ISLNK(ssp->st_mode) && dsp &&
++        S_ISLNK(dsp->st_mode) && stat(tgt, &followed) == 0) dsp = &followed;
+@@ -636,2 +659,7 @@
+-
+-	if (commoncheck(src, tgt, dsp, &sst) != OKAY)
++    if (level >= 128) {
++        fprintf(stderr, "%s: directory nesting too deep: %s\n", progname, src);
++        errcnt |= 01;
++        return;
++    }
++
++	if (commoncheck(src, tgt, dsp, &sst, level) != OKAY)
+@@ -699 +727 @@
+-			go(scp, dcp, stat(dcp, &xst) < 0 ? NULL : &xst,
++			go(scp, dcp, lstat(dcp, &xst) < 0 ? NULL : &xst,
+@@ -718 +746,3 @@
+-		if ((sst.st_mode & S_IFMT) == S_IFREG || Rflag == 0)
++		if (S_ISLNK(sst.st_mode))
++            specialcopy(src, &sst, tgt, dsp);
++        else if ((sst.st_mode & S_IFMT) == S_IFREG || Rflag == 0)
+@@ -734,3 +764,3 @@
+-	int (*how) (const char *, const char *) = link;
+-
+-	if (commoncheck(src, tgt, dsp, &sst) != OKAY)
++	int (*how) (const char *, const char *) = sflag ? symlink : link;
++
++	if (!sflag && commoncheck(src, tgt, dsp, &sst, level) != OKAY)
+@@ -738 +768 @@
+-	if ((sst.st_mode & S_IFMT) == S_IFDIR) {
++	if (!sflag && (sst.st_mode & S_IFMT) == S_IFDIR) {
+@@ -787 +817,2 @@
+-		optstring = "fn";
++		optstring = "fns";
++        nflag = 1;
+@@ -837,0 +869,4 @@
++		case 's':
++            if (pers != PERS_LN) { illegal = 1; break; }
++            sflag = 1;
++            break;
+@@ -884 +919 @@
+-	if (stat(argv[argc - 1], &dst) == 0) {
++	if (lstat(argv[argc - 1], &dst) == 0) {
+@@ -898 +933 @@
+-				go(argv[i], copy, stat(copy, &dst) < 0 ?
++				go(argv[i], copy, lstat(copy, &dst) < 0 ?
+@@ -908 +943 @@
+-			go(argv[0], argv[1], pers == PERS_CP ? &ust : &dst,
++			go(argv[0], argv[1], &dst,
 --- a/Applications/util/cut.c
 +++ b/Applications/util/cut.c
 @@ -82 +82,2 @@
@@ -5650,6 +6829,23 @@
 +++ b/Applications/util/logname.c
 @@ -3,0 +4 @@
 +#include <stdlib.h>
+--- a/Applications/util/ls.c
++++ b/Applications/util/ls.c
+@@ -57 +57 @@
+-static void lsfile(char *, struct stat *, int);
++static void lsfile(char *, struct stat *, int, char *);
+@@ -174 +174 @@
+-static void lsfile(char *name, struct stat *statbuf, int flags)
++static void lsfile(char *name, struct stat *statbuf, int flags, char *path)
+@@ -233 +233 @@
+-		if ((len = readlink(name, buf, PATHLEN - 1)) >= 0) {
++		if ((len = readlink(path, buf, PATHLEN - 1)) >= 0) {
+@@ -268 +268 @@
+-			lsfile(name, &statbuf, flags);
++			lsfile(name, &statbuf, flags, name);
+@@ -341 +341 @@
+-			lsfile(cp, &statbuf, flags);
++			lsfile(cp, &statbuf, flags, n);
 --- a/Applications/util/man.c
 +++ b/Applications/util/man.c
 @@ -25,0 +26 @@
@@ -6616,19 +7812,21 @@
 +                setting_error( "stty: illegal option value: '%s'\n", value);
 --- a/Applications/util/tar.c
 +++ b/Applications/util/tar.c
-@@ -26,0 +27,2 @@
+@@ -20 +19,0 @@
+-    * cannot extract symbolic links
+@@ -26,0 +26,2 @@
 +/* Ripple adaptation: native-character records, bounded USTAR paths, streaming
 + * input, checked I/O and numeric fields, and preservation of file metadata. */
-@@ -32 +33,0 @@
+@@ -32 +32,0 @@
 -#include <fcntl.h>
-@@ -36 +36,0 @@
+@@ -36 +35,0 @@
 -/* #include <time.h> */
-@@ -39,2 +39,2 @@
+@@ -39,2 +38,2 @@
 -
 -/* tar header format, with ustar extension */
 +#include <utime.h>
 +
-@@ -42,709 +42,408 @@
+@@ -42,709 +41,433 @@
 -	char name[100];
 -	char mode[8];
 -	char uid[8];
@@ -7449,8 +8647,8 @@
 +        sum += i >= 148 && i < 156 ? 32 : p[i];
 +    return sum;
 +}
-+/* The filesystem has no symbolic links. Reject parent traversal and absolute
-+ * extraction paths before creating any directory or file. */
++/* Reject parent traversal and absolute extraction member names. Parent
++ * components are checked separately so extraction never follows a symlink. */
 +static int safe_path(const char *p) {
 +    const char *start;
 +    if (!*p || *p == '/')
@@ -7545,7 +8743,7 @@
 +    int fd=-1;
 +    const char *aname=name;
 +    if (depth>128) fatal("directory nesting too deep");
-+    if (stat(name,&s)<0) { problem(name); return; }
++    if (lstat(name,&s)<0) { problem(name); return; }
 +    if (s.st_dev==astat.st_dev && s.st_ino==astat.st_ino) return;
 +    while (*aname=='/') aname++;
 +    if (!*aname) aname=".";
@@ -7556,6 +8754,14 @@
 +        fd=open(name,O_RDONLY);
 +        if (fd<0) { problem(name); return; }
 +        h.type='0';
++    } else if (S_ISLNK(s.st_mode)) {
++        int n;
++        if (s.st_size > sizeof(h.lname)) {
++            fprintf(stderr,"tar: link target too long for USTAR: %s\n",name);failed=1;return;
++        }
++        n=readlink(name,h.lname,sizeof(h.lname));
++        if (n<0) { problem(name);return; }
++        h.type='2';
 +    } else if (S_ISDIR(s.st_mode)) h.type='5';
 +    else if (S_ISCHR(s.st_mode)) h.type='3';
 +    else if (S_ISBLK(s.st_mode)) h.type='4';
@@ -7621,15 +8827,15 @@
 +    }
 +    return 0;
 +}
-+static int parents(void) {
++static int parents(const char *name) {
 +    char path[257];
 +    unsigned i;
-+    strcpy(path,member);
++    strcpy(path,name);
 +    for (i=1; path[i]; i++)
 +        if (path[i]=='/') {
 +            struct stat s;
 +            path[i]=0;
-+            if (mkdir(path,0755)<0 && (errno!=EEXIST || stat(path,&s)<0 || !S_ISDIR(s.st_mode))) {
++            if (mkdir(path,0755)<0 && (errno!=EEXIST || lstat(path,&s)<0 || !S_ISDIR(s.st_mode))) {
 +                problem(path); return 0;
 +            }
 +            path[i]='/';
@@ -7657,8 +8863,16 @@
 +        if (!safe_path(member)) {
 +            fprintf(stderr,"tar: unsafe name: %s\n",member); failed=1; skipdata(size); continue;
 +        }
-+        if (!parents()) { skipdata(size); continue; }
++        if (!parents(member)) { skipdata(size); continue; }
 +        if (h.type=='0' || !h.type) {
++            struct stat existing;
++            /* Never truncate the referent of an existing symbolic link. */
++            if (lstat(member,&existing)==0 && S_ISLNK(existing.st_mode)) {
++                if (noreplace || unlink(member)<0) {
++                    if(noreplace)errno=EEXIST;
++                    problem(member);skipdata(size);continue;
++                }
++            }
 +            int flags=O_CREAT|O_WRONLY|(noreplace?O_EXCL:O_TRUNC);
 +            fd=open(member,flags,0600);
 +            if (fd<0) { problem(member); skipdata(size); continue; }
@@ -7674,13 +8888,22 @@
 +        }
 +        if (h.type=='5') {
 +            struct stat s;
-+            if (mkdir(member,0700)<0 && (errno!=EEXIST || stat(member,&s)<0 || !S_ISDIR(s.st_mode)))
++            if (mkdir(member,0700)<0 && (errno!=EEXIST || lstat(member,&s)<0 || !S_ISDIR(s.st_mode)))
 +                problem(member);
 +            else defer_directory();
++        } else if (h.type=='2') {
++            char target[101];
++            memcpy(target,h.lname,100); target[100]=0;
++            if (symlink(target,member)<0) problem(member);
++            /* chmod/chown/utime follow links; leave link metadata alone. */
 +        } else if (h.type=='1') {
 +            char target[101];
 +            memcpy(target,h.lname,100); target[100]=0;
 +            if (!safe_path(target)) { failed=1; fprintf(stderr,"tar: unsafe link target\n"); }
++            else if (!parents(target)) failed=1;
++            else if (lstat(target,&astat)<0 || !S_ISREG(astat.st_mode)) {
++                fprintf(stderr,"tar: hard link target must be a regular file: %s\n",target);failed=1;
++            }
 +            else if (link(target,member)<0) problem(member);
 +            else metadata();
 +        } else if (h.type=='3' || h.type=='4' || h.type=='6') {
@@ -8089,60 +9312,387 @@
 +    }
 --- a/Kernel/devio.c
 +++ b/Kernel/devio.c
-@@ -118,2 +118,2 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -52,0 +54,4 @@
++#ifdef CONFIG_RIPPLE_IO
++#include "bufindex.inc"
++#endif
++
+@@ -68,0 +74,3 @@
++#ifdef CONFIG_RIPPLE_IO
++        buffer_insert(bp);
++#endif
+@@ -75,0 +84,3 @@
++#ifdef CONFIG_RIPPLE_IO
++                buffer_remove(bp);
++#endif
+@@ -118,2 +129,2 @@
 -		}
 -		bp->bf_dirty = false;
 +		} else
 +			bp->bf_dirty = false;
-@@ -182 +182,4 @@
+@@ -182 +193,4 @@
 -		bp->bf_dirty = false;
 +		if (res == BLKSIZE && d_flush(bp->bf_dev) == 0)
 +			bp->bf_dirty = false;
 +		else
 +			udata.u_error = EIO;
-@@ -184,3 +186,0 @@
+@@ -184,3 +197,0 @@
 -		d_flush(bp->bf_dev);
 -		if (res != BLKSIZE)
 -			udata.u_error = EIO;
-@@ -280 +280 @@
+@@ -197,8 +208,7 @@
+-	register bufptr bp;
+-
+-	/* FIXME: this can generate a lot of d_flush calls when you have
+-	   plenty of buffers */
+-	for (bp = bufpool; bp < bufpool_end; ++bp) {
+-		if (bp->bf_dev != NO_DEVICE)
+-		        bdput(bp);
+-	}
++#ifdef CONFIG_RIPPLE_IO
++    ripple_bufsync();
++#else
++    bufptr bp;
++    for (bp=bufpool; bp<bufpool_end; ++bp)
++        if (bp->bf_dev!=NO_DEVICE) bdput(bp);
++#endif
+@@ -216,0 +227,5 @@
++#ifdef CONFIG_RIPPLE_IO
++    unsigned link=buffer_head[buffer_bucket(dev,blk)];
++    for (; link; link=buffer_next[link-1]) {
++        bp=bufpool+link-1;
++#else
+@@ -217,0 +233 @@
++#endif
+@@ -239,0 +256,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    ripple_namecache_drop(dev);
++#endif
+@@ -244,0 +264,3 @@
++#ifdef CONFIG_RIPPLE_IO
++            buffer_remove(bp);
++#endif
+@@ -280 +302 @@
 -		if (bdwrite(oldest) != BLKSIZE)
 +		if (bdwrite(oldest) != BLKSIZE) {
-@@ -281,0 +282,2 @@
+@@ -281,0 +304,2 @@
 +			panic(PANIC_BDW); /* Never recycle a buffer after a failed write. */
 +		}
-@@ -575 +577 @@
+@@ -283,0 +308,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    buffer_remove(oldest);
++#endif
+@@ -575 +602 @@
 -#ifdef CONFIG_32BIT
 +#if defined(CONFIG_32BIT) && !defined(CONFIG_RIPPLE)
 --- a/Kernel/filesys.c
 +++ b/Kernel/filesys.c
-@@ -324,0 +325,4 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -35 +36,30 @@
+-    return (uint8_t)_ugetc(name);
++    return *name;
++}
++
++/* Link contents use ordinary file blocks, without a terminating NUL on disk.
++ * Keep this separate from readi: pathname lookup must not alter syscall I/O. */
++int readlinki(inoptr ino, uint8_t *target)
++{
++    struct blkbuf *bp;
++    blkno_t block;
++    unsigned len = ino->c_node.i_size, j;
++    if (getmode(ino) != MODE_R(F_LNK)) {
++        udata.u_error = EINVAL;
++        return -1;
++    }
++    if (!len || ino->c_node.i_size >= 512) {
++        udata.u_error = EIO;
++        return -1;
++    }
++    block = bmap(ino, 0, 1);
++    if (!block || block == NULLBLK || !(bp = bread(ino->c_dev, block, 0))) {
++        udata.u_error = EIO;
++        return -1;
++    }
++    blktok(target, bp, 0, len);
++    brelse(bp);
++    for (j = 0; j < len; j++) {
++        if (!target[j]) { udata.u_error = EIO; return -1; }
++    }
++    target[len] = 0;
++    return len;
+@@ -40 +70,6 @@
+-    register inoptr wd;     /* the directory we are currently searching. */
++    return n_open_flags(namep, parent, 0);
++}
++
++inoptr n_open_flags(uint8_t *namep, inoptr *parent, unsigned flags)
++{
++    register inoptr wd;
+@@ -45 +80,4 @@
+-    usize_t len;
++    usize_t len, j, suffix;
++    unsigned links = 0;
++    int target_len;
++    uint8_t pathbuf[512], expanded[512];
+@@ -49,4 +86,0 @@
+-
+-    /* Check the user address and length. If it's shorter than 512 bytes this
+-       is fine, but set nameeend accordingly. This allows us to use _ugetc
+-       in the hot path which saves us a ton of cycles */
+@@ -54 +88 @@
+-    if (len == 0)
++    if (!len)
+@@ -56,3 +90,10 @@
+-
+-    name = namep;
+-    nameend = namep + len;
++    if (_uget(namep, pathbuf, len))
++        return NULLINODE;
++    for (j = 0; j < len && pathbuf[j]; j++);
++    if (j == len) {
++        udata.u_error = len == 512 ? ENAMETOOLONG : EFAULT;
++        return NULLINODE;
++    }
++    if (!j) { udata.u_error = ENOENT; return NULLINODE; }
++    name = pathbuf;
++    nameend = pathbuf + 512;
+@@ -60,7 +101 @@
+-
+-    /* What error do we return if we hit nameend - are we overlong, or out
+-       of memory space */
+-    if (len == 512)
+-        n_fault_type = ENAMETOOLONG;
+-    else
+-        n_fault_type = EACCES;
++    n_fault_type = ENAMETOOLONG;
+@@ -93,0 +129,46 @@
++
++        /* Resolve relative targets from the link's parent, absolute targets
++           from the guest root. Expansion is iterative, with a shared limit
++           for intermediate and final links (including cycles). */
++        if (ninode && getmode(ninode) == MODE_R(F_LNK)) {
++            fp = name;
++            while (*fp == '/') fp++;
++            if ((flags & N_NODEREF) && *name && !*fp) {
++                udata.u_error = ENOTDIR;
++                goto node_error;
++            }
++            if (!(flags & N_NOFOLLOW) || *name) {
++                if (++links > 40) { udata.u_error = ELOOP; goto node_error; }
++                target_len = readlinki(ninode, expanded);
++                if (target_len < 0) goto node_error;
++                suffix = strlen((char *)name);
++                if (target_len + suffix >= 512) {
++                    udata.u_error = ENAMETOOLONG;
++                    goto node_error;
++                }
++                memcpy(expanded + target_len, name, suffix + 1);
++                memcpy(pathbuf, expanded, target_len + suffix + 1);
++                name = pathbuf;
++                i_deref(ninode);
++                if (*name == '/') {
++                    i_deref(wd);
++                    wd = i_ref(udata.u_root);
++                }
++                ninode = i_ref(wd);
++                continue;
++            }
++        }
++        /* A trailing slash requires a directory; callers creating a new
++           directory may retain the missing terminal component. */
++        if (*name == '/') {
++            fp = name;
++            while (*fp == '/') fp++;
++            if (!*fp && ninode && getmode(ninode) != MODE_R(F_DIR)) {
++                udata.u_error = ENOTDIR;
++                goto node_error;
++            }
++            if (!*fp && !ninode && !(flags & N_MKDIR)) {
++                udata.u_error = ENOENT;
++                goto nodir;
++            }
++        }
+@@ -150 +231 @@
+-                i_ref(wd);
++                ninode = i_ref(wd);
+@@ -169 +250 @@
+-        goto nodir;
++        goto node_error;
+@@ -184,0 +266,2 @@
++node_error:
++    if (ninode) i_deref(ninode);
+@@ -190,0 +274,7 @@
++
++#ifdef CONFIG_RIPPLE_IO
++#include "namecache.inc"
++/* Small direct-mapped inode index. Validate the complete identity on every
++ * hit: host/socket/anonymous inode allocation can recycle cache slots. */
++static uint8_t inode_index[256];
++#endif
+@@ -201,0 +292,9 @@
++#ifdef CONFIG_RIPPLE_IO
++    struct name_entry *e=name_lookup(wd,compname);
++    unsigned number;
++    off_t at=0;
++    if (e) return e->number ? i_open(wd->c_dev,e->number) : NULLINODE;
++    number=directory_find(wd,compname,&at);
++    if (!udata.u_error) name_remember(wd,compname,number,at);
++    return number ? i_open(wd->c_dev,number) : NULLINODE;
++#else
+@@ -225,0 +325 @@
++#endif
+@@ -295,0 +396,9 @@
++#ifdef CONFIG_RIPPLE_IO
++    {
++        unsigned index=inode_index[(dev*31U+ino)&255U];
++        if (index) {
++            j=&i_tab[index-1];
++            if (j->c_dev==dev && j->c_num==ino) { nindex=j; goto found; }
++        }
++    }
++#endif
+@@ -321,0 +431,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    inode_index[(dev*31U+ino)&255U]=nindex-i_tab+1;
++#endif
+@@ -324,0 +437,4 @@
 +        /* A deleted device retains its device number in i_addr[0].
 +           Anonymous pipes also allocate here, without going through
 +           newfile(), so clear the complete recycled on-disk inode. */
 +        memset(&nindex->c_node, 0, sizeof(nindex->c_node));
-@@ -329 +333 @@
+@@ -329 +445 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
-@@ -432,0 +437,3 @@
+@@ -386 +502 @@
+-bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex)
++static bool ch_link_mode(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex, bool checkperm)
+@@ -396 +512 @@
+-    if(!(getperm(wd) & OTH_WR))
++    if(checkperm && !(getperm(wd) & OTH_WR))
+@@ -406,0 +523,22 @@
++#ifdef CONFIG_RIPPLE_IO
++    {
++        struct name_entry *e=name_lookup(wd,*oldname?oldname:newname);
++        off_t at;
++        if (e && ((*oldname && e->number) || (!*oldname && !e->number))) {
++            at=e->offset;
++            udata.u_offset=at; udata.u_count=DIR_LEN;
++            udata.u_base=(uint8_t *)&curentry; udata.u_sysio=true;
++            readi(wd,0);
++            if (udata.u_error) return false;
++            if (!udata.u_done || !namecomp(oldname,curentry.d_name)) e=NULL;
++        } else e=NULL;
++        if (!e) {
++            directory_find(wd,oldname,&at);
++            if (udata.u_error) return false;
++            udata.u_offset=at; udata.u_count=DIR_LEN;
++            udata.u_base=(uint8_t *)&curentry; udata.u_sysio=true;
++            readi(wd,0);
++        }
++        name_forget(wd);
++    }
++#else
+@@ -408 +545,0 @@
+-
+@@ -410,3 +547 @@
+-
+-    for(;;)
+-    {
++    for(;;) {
+@@ -414 +549 @@
+-        udata.u_base  =(uint8_t *)&curentry;
++        udata.u_base = (uint8_t *)&curentry;
+@@ -417,14 +552,5 @@
+-
+-        /* Read until EOF or name is found.  readi() advances udata.u_offset */
+-        if (udata.u_error || udata.u_done == 0 || namecomp(oldname, curentry.d_name))
+-            break;
+-    }
+-
+-    /* Drop out and hand back the media error */
+-    if (udata.u_error)
+-        return false;
+-
+-    if (udata.u_done == 0 && *oldname) {
+-        udata.u_error = ENOENT;
+-        return false;                  /* Entry not found */
+-    }
++        if (udata.u_error || !udata.u_done || namecomp(oldname,curentry.d_name)) break;
++    }
++#endif
++    if (udata.u_error) return false;
++    if (!udata.u_done && *oldname) { udata.u_error=ENOENT; return false; }
+@@ -432,0 +559,3 @@
 +#ifdef CONFIG_RIPPLE
 +    curentry.d_padding = 0;
 +#endif
-@@ -610 +617 @@
+@@ -457,0 +587,12 @@
++}
++
++bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex)
++{
++    return ch_link_mode(wd, oldname, newname, nindex, true);
++}
++
++/* rename has already checked both parents. Updating a directory's own .. is
++   a kernel metadata operation, even when the directory is not writable. */
++bool ch_link_parent(inoptr directory, inoptr parent)
++{
++    return ch_link_mode(directory, (uint8_t *)"..", (uint8_t *)"..", parent, false);
+@@ -600,0 +742,4 @@
++#ifdef CONFIG_RIPPLE_IO
++    static blkno_t inode_cursor[NMOUNTS];
++    blkno_t walked, first;
++#endif
+@@ -610 +755 @@
 -        if(ino < 2 || ino >=(dev->s_isize-2)*8)
 +        if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
-@@ -668 +675 @@
+@@ -616,0 +762,7 @@
++#ifdef CONFIG_RIPPLE_IO
++    {
++        inoptr cached;
++        for (cached=i_tab; cached<i_tab+ITABSIZE; ++cached)
++            if (cached->c_dev==devno && (cached->c_flags&CDIRTY)) wr_inode(cached);
++    }
++#else
+@@ -617,0 +770 @@
++#endif
+@@ -618,0 +772,5 @@
++#ifdef CONFIG_RIPPLE_IO
++    first=inode_cursor[fs_tab_get(devno)-fs_tab];
++    if (first<2 || first>=dev->s_isize) first=2;
++    for(walked=0,blk=first; walked<dev->s_isize-2; ++walked) {
++#else
+@@ -619,0 +778 @@
++#endif
+@@ -633,0 +793,3 @@
++#ifdef CONFIG_RIPPLE_IO
++        if (++blk>=dev->s_isize) blk=2;
++#endif
+@@ -636,0 +799,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    inode_cursor[fs_tab_get(devno)-fs_tab]=blk;
++#endif
+@@ -668 +833 @@
 -    if(ino < 2 || ino >=(dev->s_isize-2)*8)
 +    if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
-@@ -770 +777 @@
+@@ -670,0 +836,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    ripple_namecache_drop(devno);
++#endif
+@@ -770 +938 @@
 -            blkfromk(&dev->s_nfree, buf, 0, sizeof(int) + 50 * sizeof(blkno_t));
 +            blkfromk(&dev->s_nfree, buf, 0, sizeof(dev->s_nfree) + FILESYS_TABSIZE * sizeof(blkno_t));
-@@ -872,2 +879,2 @@
+@@ -872,2 +1040,2 @@
 -    if (udata.u_cloexec & (1U << oldd))
 -	    udata.u_cloexec |= 1U << newd;
 +    if (udata.u_cloexec & (1UL << oldd))
 +	    udata.u_cloexec |= 1UL << newd;
-@@ -896,0 +904,9 @@
-+
+@@ -898 +1066,10 @@
+-    if (mode == MODE_R(F_PIPE))
 +#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
 +    /* Ripple sockets use only the inode cache, without a disk allocation. */
 +    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
@@ -8151,7 +9701,21 @@
 +        return;
 +    }
 +#endif
-@@ -939,0 +956,7 @@
++
++    if (mode == MODE_R(F_PIPE)) {
+@@ -899,0 +1077,8 @@
++#ifdef CONFIG_RIPPLE_IO
++        if (ino->c_dev == NO_DEVICE) {
++            if (ino->c_refs == 1) ripple_pipe_release(ino);
++            if (!--ino->c_refs) memset(ino,0,sizeof(*ino));
++            return;
++        }
++#endif
++    }
+@@ -908 +1093 @@
+-        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE))
++        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE) || mode == MODE_R(F_LNK))
+@@ -939,0 +1125,13 @@
 +#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
 +    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
 +        ino->c_flags &= ~CDIRTY;
@@ -8159,7 +9723,16 @@
 +    }
 +#endif
 +
-@@ -967,38 +990,23 @@
++#ifdef CONFIG_RIPPLE_IO
++    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) {
++        ino->c_flags &= ~CDIRTY;
++        return;
++    }
++#endif
+@@ -950 +1148 @@
+-    return !!(ino->c_node.i_mode & F_CDEV);
++    return getmode(ino) == MODE_R(F_CDEV) || getmode(ino) == MODE_R(F_BDEV);
+@@ -967,38 +1165,26 @@
 -int f_trunc_blocks(register inoptr ino, uint16_t nblock)
 -{
 -    register uint16_t dev;
@@ -8200,6 +9773,9 @@
 -        }
 +int f_trunc_blocks(register inoptr ino, blkno_t nblock)
 +{
++#ifdef CONFIG_RIPPLE_IO
++    if (getmode(ino)==MODE_R(F_DIR)) name_forget(ino);
++#endif
 +    unsigned level, j;
 +    uint32_t indirect = BLKSIZE / sizeof(blkno_t), span = 1;
 +    uint32_t start = FS_DIRECT, keep;
@@ -8221,33 +9797,79 @@
 +        --j;
 +        freeblk(dev, ino->c_node.i_addr[j], 0, 0);
 +        ino->c_node.i_addr[j] = 0;
-@@ -1037 +1045 @@
+@@ -1037 +1223 @@
 -void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
 +void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock)
-@@ -1041 +1049,2 @@
+@@ -1041 +1227,2 @@
 -    uint16_t span, first, keep;
 +    uint32_t span = 1, first, keep;
 +    unsigned depth;
-@@ -1055 +1064 @@
+@@ -1055 +1242 @@
 -        span = level == 1 ? 1 : BLKSIZE / sizeof(blkno_t);
 +        for (depth = 1; depth < level; depth++) span *= BLKSIZE / sizeof(blkno_t);
-@@ -1255,0 +1265,4 @@
+@@ -1160,0 +1348,4 @@
++    mode = ino->c_node.i_mode;
++    /* Root bypasses read/write and directory search permissions, but a
++       nondirectory still needs at least one execute bit. Keep access(X_OK)
++       and both executable loaders consistent, before script fallback. */
+@@ -1162,3 +1353,2 @@
+-        return(07);
+-
+-    mode = ino->c_node.i_mode;
++        return getmode(ino) == MODE_R(F_DIR) || (mode & 0111) ? 07 : 06;
++
+@@ -1182,8 +1372,13 @@
+-    if (ino->c_flags & CRDONLY)
+-        return;
+-
+-    /* If only ATIME is due an update then skip it for a noatime fs */
+-    if (flag == A_TIME && fs_tab[ino->c_super].m_flags & MS_NOATIME)
+-        return;
+-
+-    ino->c_flags |= CDIRTY;
++    if (ino->c_flags & CRDONLY) return;
++
++    /* Anonymous resources still have observable in-core timestamps, but no
++     * disk metadata or mount policy. Keep socket/pipe fstat behavior intact. */
++#ifdef CONFIG_RIPPLE_IO
++    if (ino->c_dev != NO_DEVICE) {
++#endif
++        if (flag == A_TIME && fs_tab[ino->c_super].m_flags & MS_NOATIME)
++            return;
++        ino->c_flags |= CDIRTY;
++#ifdef CONFIG_RIPPLE_IO
++    }
++#endif
+@@ -1255,0 +1451,4 @@
 +#ifdef CONFIG_RIPPLE
 +    kprintf("fp->s_mounted=0x%x, fp->s_isize=0x%x, fp->s_fsize=0x%lx\n",
 +    fp->s_mounted, fp->s_isize, (unsigned long)fp->s_fsize);
 +#else
-@@ -1257,0 +1271 @@
+@@ -1257,0 +1457 @@
 +#endif
 --- a/Kernel/include/kdata.h
 +++ b/Kernel/include/kdata.h
-@@ -88 +88 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -25,0 +27 @@
++#ifndef CONFIG_DYNAMIC_BUFPOOL
+@@ -27 +28,0 @@
+-#ifndef CONFIG_DYNAMIC_BUFPOOL
+@@ -29,0 +31 @@
++extern struct blkbuf *bufpool;
+@@ -88 +90 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
+@@ -91 +93 @@
+-#define FUZIX_SYSCALL_COUNT 68
++#define FUZIX_SYSCALL_COUNT 71
 --- a/Kernel/include/kernel.h
 +++ b/Kernel/include/kernel.h
-@@ -64,0 +65 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -64,0 +66 @@
 +#ifndef CONFIG_JOB_CONTROL
-@@ -67,0 +69,8 @@
+@@ -67,0 +70,8 @@
 +#else
 +struct tty;
 +extern uint8_t jobcontrol_in(uint8_t, struct tty *);
@@ -8256,35 +9878,35 @@
 +extern int tcsetpgrp(struct tty *, char *);
 +extern arg_t _setpgid(void), _setsid(void), _getsid(void);
 +#endif
-@@ -69,0 +79,5 @@
+@@ -69,0 +80,5 @@
 +#ifdef CONFIG_JOB_CONTROL
 +#define can_signal(p, sig) \
 +    ((sig == SIGCONT && udata.u_ptab->p_session == (p)->p_session) || \
 +     udata.u_ptab->p_uid == (p)->p_uid || super())
 +#else
-@@ -71,0 +86 @@
+@@ -71,0 +87 @@
 +#endif
-@@ -163 +178 @@
+@@ -163 +179 @@
 -typedef int32_t off_t;	/* 32MB file and fs size limit */
 +typedef int32_t off_t;	/* Signed file positions, measured in platform C characters. */
-@@ -165,0 +181,3 @@
+@@ -165,0 +182,3 @@
 +#ifdef CONFIG_RIPPLE
 +typedef uint32_t blkno_t;
 +#else
-@@ -166,0 +185,5 @@
+@@ -166,0 +186,5 @@
 +#endif
 +#ifndef FS_DIRECT
 +#define FS_DIRECT 18
 +#define FS_LEVELS 2
 +#endif
-@@ -177 +200,5 @@
+@@ -177 +201,5 @@
 -#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
 +#ifdef CONFIG_RIPPLE
 +#define BLKOVERSIZE32 0x80 /* Signed 32-bit C-character offsets. */
 +#else
 +#define BLKOVERSIZE32 0xFE
 +#endif
-@@ -200,0 +228,7 @@
+@@ -200,0 +229,7 @@
 +#if defined(CONFIG_RIPPLE) && RIPPLE_BULK_IO
 +#define blktok(kaddr,buf,off,len) \
 +    ripple_buffer_copy((kaddr), (buf)->__bf_data + (off), (len))
@@ -8292,62 +9914,92 @@
 +    ripple_buffer_copy((buf)->__bf_data + (off), (kaddr), (len))
 +#define blkzero(buf) ripple_buffer_zero((buf)->__bf_data)
 +#else
-@@ -204,0 +239,2 @@
+@@ -204,0 +240,2 @@
 +#define blkzero(buf)             memset(buf->__bf_data, 0, BLKSIZE)
 +#endif
-@@ -210 +245,0 @@
+@@ -210 +246,0 @@
 -#define blkzero(buf)		memset(buf->__bf_data, 0, BLKSIZE)
-@@ -237 +272,4 @@
+@@ -237 +273,4 @@
 -} dinode;               /* Exactly 64 bytes long! */
 +#ifdef CONFIG_RIPPLE
 +    uint16_t i_reserved[12]; /* 64 C16 cells / 128 physical octets. */
 +#endif
 +} dinode; /* Ripple V3: 64 C16 cells; conventional platforms: 64 octets. */
-@@ -310 +348 @@
+@@ -266,0 +306 @@
++#define F_LNK   0120000
+@@ -310 +350 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
-@@ -320,0 +359,3 @@
+@@ -320,0 +361,3 @@
 +#ifdef CONFIG_RIPPLE
 +    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
 +#endif
-@@ -331 +372 @@
+@@ -331 +374 @@
 -    uint16_t      s_fsize;
 +    blkno_t       s_fsize;
-@@ -347,0 +389 @@
+@@ -347,0 +391 @@
 +
-@@ -484,0 +527 @@
+@@ -484,0 +529 @@
 +#define PFL_EXECED 32
-@@ -517 +560 @@
+@@ -517 +562 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -562,0 +606,3 @@
+@@ -562,0 +608,3 @@
 +#ifdef CONFIG_RIPPLE
 +    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
 +#endif
-@@ -582,0 +629,3 @@
+@@ -582,0 +631,3 @@
 +#if UFTSIZE > 16
 +    uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
 +#else
-@@ -583,0 +633 @@
+@@ -583,0 +635 @@
 +#endif
-@@ -652 +702 @@
+@@ -638,0 +691,4 @@
++#ifdef CONFIG_RIPPLE
++    /* Ripple exec keeps these on its private kernel stack, not in disk buffers. */
++    uint8_t a_buf[RIPPLE_ARG_MAX];
++#else
+@@ -639,0 +696 @@
++#endif
+@@ -652 +709 @@
 -#define _WSTOPPED	0xFF
 +#define _WSTOPPED	0x7F
-@@ -757,0 +808 @@
+@@ -757,0 +815,2 @@
++#define ELOOP           61              /* Too many symbolic links */
 +#define EOVERFLOW       60              /* Result does not fit caller ABI */
-@@ -1026 +1077 @@
+@@ -993,0 +1053,5 @@
++#define N_NOFOLLOW 1 /* Do not follow a terminal symbolic link. */
++#define N_NODEREF  2 /* Also reject terminal link/ for directory mutation. */
++#define N_MKDIR    4 /* Allow a missing terminal directory with trailing /. */
++extern inoptr n_open_flags(uint8_t *uname, inoptr *parent, unsigned flags);
++extern int readlinki(inoptr ino, uint8_t *target);
+@@ -999,0 +1064 @@
++extern bool ch_link_parent(inoptr directory, inoptr parent);
+@@ -1026 +1091 @@
 -extern int f_trunc_blocks(inoptr ino, uint16_t nblock);
 +extern int f_trunc_blocks(inoptr ino, blkno_t nblock);
-@@ -1028 +1079 @@
+@@ -1028 +1093 @@
 -extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock);
 +extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock);
-@@ -1081 +1132 @@
+@@ -1042,0 +1108,9 @@
++#ifdef CONFIG_RIPPLE_IO
++extern void *ripple_kernel_alloc(unsigned);
++extern int ripple_queue_read(struct s_queue *, uint8_t *, unsigned, unsigned);
++extern int ripple_queue_write(struct s_queue *, const uint8_t *, unsigned, unsigned);
++extern void ripple_namecache_drop(uint16_t);
++extern inoptr ripple_pipe_new(void);
++extern void ripple_pipe_release(inoptr);
++extern void ripple_pipe_io(inoptr, unsigned, unsigned);
++#endif
+@@ -1081 +1155 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
-@@ -1089,0 +1141,3 @@
+@@ -1089,0 +1164,3 @@
 +#ifdef CONFIG_SELECT
 +extern void ripple_select_exit(ptptr p);
 +#endif
+@@ -1313,0 +1391 @@
++extern arg_t _symlink(void), _readlink(void), _lstat(void);
 --- a/Kernel/include/netdev.h
 +++ b/Kernel/include/netdev.h
 @@ -130,9 +130,9 @@
@@ -8388,6 +10040,44 @@
 +#define ifr_flags	ifr_ifru.u_flags
 +#define ifr_ifindex	ifr_ifru.u_ifindex
 +#define ifr_mtu		ifr_ifru.u_mtu
+--- a/Kernel/include/process-state.h
++++ b/Kernel/include/process-state.h
+@@ -0,0 +1,19 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef FUZIX_PROCESS_STATE_H
++#define FUZIX_PROCESS_STATE_H
++/* Include after kernel.h. Other ports keep their existing accounting. */
++#ifdef CONFIG_RIPPLE_SCHED
++void proc_setstate(ptptr, unsigned);
++void proc_wait_event(ptptr, void *);
++void proc_wake_event(void *);
++ptptr proc_pick(void);
++void proc_sched_sample(uint32_t, unsigned);
++void proc_sched_switch(void);
++#define proc_ready_add() ((void)0)
++#define proc_ready_remove() ((void)0)
++#else
++#define proc_setstate(p,state) ((p)->p_status=(state))
++#define proc_ready_add() (++nready)
++#define proc_ready_remove() (--nready)
++#endif
++#endif
+--- a/Kernel/include/syscall_name.h
++++ b/Kernel/include/syscall_name.h
+@@ -74,3 +74,3 @@
+-	"_nosys68",
+-	"_nosys69",
+-	"_nosys70",
++	"symlink",
++	"readlink",
++	"_lstat",
+@@ -157,3 +157,3 @@
+-	0, //nosys 68
+-	0, //nosys 69
+-	0, //nosys 70
++	2, //symlink
++	3, //readlink
++	2, //_lstat
 --- a/Kernel/include/timer.h
 +++ b/Kernel/include/timer.h
 @@ -16 +16,6 @@
@@ -8406,7 +10096,9 @@
 +#endif
 --- a/Kernel/inode.c
 +++ b/Kernel/inode.c
-@@ -33,12 +33,11 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -33,12 +34,11 @@
 -	while (LOWORD(ino->c_node.i_size) > 8 * BLKSIZE) {
 -		if (ino->c_readers == 0) {	/* No readers */
 -			udata.u_done = (usize_t)-1;
@@ -8430,20 +10122,28 @@
 +        if (udata.u_done) return 1;
 +        if (psleep_flags(ino, flag)) return 1;
 +    }
-@@ -61 +60 @@
+@@ -61 +61 @@
 -static uint16_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
 +static blkno_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
-@@ -148 +147 @@
+@@ -71,0 +72,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) { ripple_pipe_io(ino,0,flag); return; }
++#endif
+@@ -148 +151 @@
 -			if (ispipe && LOWORD(udata.u_offset) >= 18 * BLKSIZE)
 +			if (ispipe && LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
-@@ -152,0 +152 @@
+@@ -152,0 +156 @@
 +                selwake_inode(ino, SELECT_OUT);
-@@ -173,0 +174 @@
+@@ -170,0 +175,3 @@
++#ifdef CONFIG_RIPPLE_IO
++    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) { ripple_pipe_io(ino,1,flag); return; }
++#endif
+@@ -173,0 +181 @@
 +    unsigned syncflag;
-@@ -197 +198 @@
+@@ -197 +205 @@
 -	      	flag = flag & O_SYNC ? 2 : 1;
 +        syncflag = flag & O_SYNC ? 2 : 1;
-@@ -203,5 +204,7 @@
+@@ -203,5 +211,7 @@
 -					return;
 -			}
 -			pblk = mapcalc(ino, &amount, 0);
@@ -8456,26 +10156,26 @@
 +                            || udata.u_count > 0x7fffffffUL - (uint32_t)udata.u_offset
 +#endif
 +                           ) {
-@@ -212,0 +216,3 @@
+@@ -212,0 +223,3 @@
 +            pblk = mapcalc(ino, &amount, 0);
 +            if (ispipe && amount > 8UL * BLKSIZE - ino->c_node.i_size)
 +                amount = 8UL * BLKSIZE - ino->c_node.i_size;
-@@ -226 +232 @@
+@@ -226 +239 @@
 -			if (bfree(bp, flag))
 +			if (bfree(bp, syncflag))
-@@ -231 +237 @@
+@@ -231 +244 @@
 -				if (LOWORD(udata.u_offset) >= 18 * BLKSIZE)
 +				if (LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
-@@ -235,0 +242 @@
+@@ -235,0 +249 @@
 +                selwake_inode(ino, SELECT_IN);
-@@ -287,0 +295,3 @@
+@@ -287,0 +302,3 @@
 +    if (getmode(ino) == MODE_R(F_PIPE)) {
 +        wakeup(ino);selwake_inode(ino, SELECT_IN|SELECT_OUT);
 +    }
-@@ -289 +299 @@
+@@ -289 +306 @@
 -	udata.u_cloexec &= ~(1 << uindex);
 +	udata.u_cloexec &= ~(1UL << uindex);
-@@ -400 +410,11 @@
+@@ -400 +417,11 @@
 -}
 +#ifdef CONFIG_RIPPLE
 +	/* Immediate metadata writes may leave no dirty guest buffers. The VM
@@ -8490,9 +10190,24 @@
 +}
 --- a/Kernel/kdata.c
 +++ b/Kernel/kdata.c
-@@ -124,0 +125,9 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -28,0 +30,2 @@
++#elif defined(CONFIG_RIPPLE_IO)
++struct blkbuf *bufpool, *bufpool_end;
+@@ -111,0 +115,3 @@
++    _symlink,       /* 68: guest symbolic link creation */
++    _readlink,      /* 69: read link contents without following */
++    _lstat,         /* 70: stat the link itself */
+@@ -113,4 +119 @@
+-	_nosys,			/* 68-71 reserved */
+-	_nosys,
+-	_nosys,
+-	_nosys,
++    _nosys,         /* 71 reserved */
+@@ -124,0 +128,9 @@
 +#elif defined(CONFIG_JOB_CONTROL)
-+    _nosys, _nosys, _nosys, _nosys,
++    _nosys,
 +#ifdef CONFIG_SELECT
 +    _select,
 +#else
@@ -8502,13 +10217,83 @@
 +    _setpgid, _setsid, _getsid,
 --- a/Kernel/process.c
 +++ b/Kernel/process.c
-@@ -326 +326 @@
+@@ -8,0 +9 @@
++#include <process-state.h>
+@@ -32 +33 @@
+-		nready++;	/* We will fix this back up below */
++		proc_ready_add();	/* We will fix this back up below */
+@@ -42,2 +43,6 @@
+-	udata.u_ptab->p_status = state;
+-	udata.u_ptab->p_wait = event;
++	proc_setstate(udata.u_ptab,state);
++	#ifdef CONFIG_RIPPLE_SCHED
++    proc_wait_event(udata.u_ptab,event);
++#else
++    udata.u_ptab->p_wait = event;
++#endif
+@@ -72,0 +78,4 @@
++
++#ifdef CONFIG_RIPPLE_SCHED
++    proc_wake_event(event);
++#else
+@@ -81,0 +91 @@
++#endif
+@@ -95,2 +105,2 @@
+-			nready++;
+-			p->p_status = P_READY;
++			proc_ready_add();
++			proc_setstate(p,P_READY);
+@@ -122 +132 @@
+-		nready--;
++		proc_ready_remove();
+@@ -141,2 +151,2 @@
+-			nready++;
+-		udata.u_ptab->p_status = P_RUNNING;
++			proc_ready_add();
++		proc_setstate(udata.u_ptab,P_RUNNING);
+@@ -160 +170,4 @@
+-			udata.u_ptab->p_status = P_RUNNING;
++			proc_setstate(udata.u_ptab,P_RUNNING);
++#ifdef CONFIG_RIPPLE_SCHED
++            proc_sched_switch();
++#endif
+@@ -164 +177 @@
+-		udata.u_ptab->p_status = P_READY;
++		proc_setstate(udata.u_ptab,P_READY);
+@@ -180,0 +194,8 @@
++#ifdef CONFIG_RIPPLE_SCHED
++    ptptr next;
++    for(;;) {
++        next=proc_pick();if(next)return next;
++        if(udata.u_ininterrupt)panic(PANIC_EI);
++        ei();plt_idle();di();
++    }
++#else
+@@ -238,0 +260 @@
++#endif
+@@ -269 +291 @@
+-			p->p_status = P_RUNNING;
++			proc_setstate(p,P_RUNNING);
+@@ -311 +333 @@
+-	p->p_status = P_READY;
++	proc_setstate(p,P_READY);
+@@ -313,3 +335,3 @@
+-	p->p_status = P_RUNNING;
+-#endif
+-	nready++;		/* runnable process count */
++	proc_setstate(p,P_RUNNING);
++#endif
++	proc_ready_add();		/* runnable process count */
+@@ -326 +348 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -420 +420 @@
+@@ -401 +423 @@
+-				newp->p_status = P_FORKING;
++				proc_setstate(newp,P_FORKING);
+@@ -420 +442 @@
 -static void load_average(void)
 +static void load_average(uint32_t elapsed)
-@@ -427,5 +427,8 @@
+@@ -427,5 +449,8 @@
 -	utick++;
 -	if (utick < 50)
 -		return;
@@ -8522,9 +10307,9 @@
 +           Bound catch-up work; 100 minutes already converges all averages. */
 +        if (samples > 1200) samples = 1200;
 +        while (samples--) {
-@@ -442,0 +446 @@
+@@ -442,0 +468 @@
 +        }
-@@ -467,0 +472,32 @@
+@@ -467,0 +494,32 @@
 +#ifdef CONFIG_PLATFORM_CLOCK
 +/* Called under di by the platform clock. Expire each queued timer once even
 +   after a long pause, without manufacturing CPU interrupts or CPU time. */
@@ -8557,41 +10342,93 @@
 +}
 +#endif
 +
-@@ -469,0 +506 @@
+@@ -469,0 +528 @@
 +#ifndef CONFIG_PLATFORM_CLOCK
-@@ -508 +545 @@
+@@ -508 +567 @@
 -                load_average();
 +                load_average(1);
-@@ -512,0 +550 @@
+@@ -512,0 +572 @@
 +#endif
-@@ -712,2 +750,6 @@
+@@ -517,0 +578,2 @@
++
++/* Retain an instruction-count ceiling as a host-clock failure fallback. */
+@@ -598 +660,6 @@
+-		runticks >= udata.u_ptab->p_priority && nready > 1) {
++#ifdef CONFIG_RIPPLE_SCHED
++        need_resched && nready > 1)
++#else
++        runticks >= udata.u_ptab->p_priority && nready > 1)
++#endif
++    {
+@@ -604 +671 @@
+-		udata.u_ptab->p_status = P_READY;
++		proc_setstate(udata.u_ptab,P_READY);
+@@ -712,2 +779,6 @@
 -				udata.u_ptab->p_status = P_STOPPED;
 -				udata.u_ptab->p_event = j + (b << 4);
 +                /* switchout has already uncharged a sleeping task. */
-+                if (udata.u_ptab->p_status > P_READY) nready++;
-+                udata.u_ptab->p_status = P_STOPPED;
++                if (udata.u_ptab->p_status > P_READY) proc_ready_add();
++                proc_setstate(udata.u_ptab,P_STOPPED);
 +                udata.u_ptab->p_event = j + (b << 4);
 +                ssig(udata.u_ptab->p_pptr, SIGCHLD);
 +                wakeup(udata.u_ptab->p_pptr);
-@@ -778,0 +821,2 @@
+@@ -744,2 +815,2 @@
+-				udata.u_ptab->p_status = P_RUNNING;
+-				nready++;
++				proc_setstate(udata.u_ptab,P_RUNNING);
++				proc_ready_add();
+@@ -778,0 +850,2 @@
 +    /* A stop in the upper signal set may resume here after SIGCONT. */
 +    sb = udata.u_ptab->p_sig;
-@@ -819 +863 @@
+@@ -819 +892 @@
 -		if (sig == SIGCONT) {
 +		if (sig == SIGCONT || sig == SIGKILL) {
-@@ -916,0 +961,4 @@
+@@ -822 +895 @@
+-			        proc->p_status = P_READY;
++			        proc_setstate(proc,P_READY);
+@@ -824 +897 @@
+-			        nready++;
++			        proc_ready_add();
+@@ -840,2 +913,2 @@
+-					proc->p_status = P_READY;
+-					nready++;
++					proc_setstate(proc,P_READY);
++					proc_ready_add();
+@@ -844 +917,3 @@
+-				proc->p_wait = NULL;
++#ifndef CONFIG_RIPPLE_SCHED
++                proc->p_wait = NULL;
++#endif
+@@ -856 +931 @@
+-				proc->p_status = P_RUNNING;
++				proc_setstate(proc,P_RUNNING);
+@@ -905 +980 @@
+-		c->p_status = P_EMPTY;
++		proc_setstate(c,P_EMPTY);
+@@ -911 +986 @@
+-	c->p_status = P_ZOMBIE;
++	proc_setstate(c,P_ZOMBIE);
+@@ -916,0 +992,4 @@
 +#ifdef CONFIG_SELECT
 +    ripple_select_exit(udata.u_ptab);
 +#endif
 +
-@@ -979,0 +1028,4 @@
+@@ -931 +1010,3 @@
+-	sync();		/* Not necessary, but a good idea. */
++#ifndef CONFIG_RIPPLE_SCHED
++    sync(); /* Legacy ports retain their exit-time barrier. */
++#endif
+@@ -979,0 +1061,4 @@
 +#ifdef CONFIG_JOB_CONTROL
 +                if (udata.u_ptab->p_session == udata.u_ptab->p_pid &&
 +                    p->p_session == udata.u_ptab->p_session) {
 +#else
-@@ -980,0 +1033 @@
+@@ -980,0 +1066 @@
 +#endif
-@@ -1014,0 +1068,7 @@
+@@ -1005 +1091 @@
+-	nready--;
++	proc_ready_remove();
+@@ -1014,0 +1101,7 @@
 +#ifdef CONFIG_RIPPLE
 +	/* A panic must never certify an inconsistent filesystem as clean. */
 +	{
@@ -8599,7 +10436,7 @@
 +		ripple_panic_stop();
 +	}
 +#else
-@@ -1015,0 +1076 @@
+@@ -1015,0 +1109 @@
 +#endif
 --- a/Kernel/select.c
 +++ b/Kernel/select.c
@@ -8610,41 +10447,179 @@
 +#ifdef CONFIG_SELECT
 +extern unsigned ripple_select_active;
 +#endif
-@@ -73,0 +77,3 @@
+@@ -27,8 +30,6 @@
+-	ptptr p = ptab;
+-	uint16_t i;
+-
+-	for (i = 0; i < maxproc; i++) {
+-		if (s->map[i >> 3] & (1 << (i & 7)))
+-			pwake(p);
+-		p++;
+-	}
++    unsigned base, bit, pending;
++    for (base=0; base<maxproc; base+=8) {
++        pending=s->map[base>>3];
++        for (bit=0; pending && base+bit<maxproc; ++bit,pending>>=1)
++            if (pending&1) pwake(&ptab[base+bit]);
++    }
+@@ -58,0 +60,3 @@
++#ifdef CONFIG_SELECT
++    if (!ripple_select_active) return;
++#endif
+@@ -73,0 +78,3 @@
 +#ifdef CONFIG_SELECT
 +    if(!ripple_select_active)return;
 +#endif
-@@ -117,0 +124 @@
+@@ -117,0 +125 @@
 +#ifndef CONFIG_RIPPLE
-@@ -248,0 +256 @@
+@@ -249,2 +257,3 @@
+-
+-#endif
 +#endif /* !CONFIG_RIPPLE: see ripple/selectwait.c */
++
++#endif
 --- a/Kernel/start.c
 +++ b/Kernel/start.c
-@@ -1,0 +2 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -1,0 +3,2 @@
++#include <process-state.h>
 +#include <timer.h>
-@@ -119 +120 @@
+@@ -43,0 +47,6 @@
++#if defined(CONFIG_RIPPLE_IO) && defined(CONFIG_DYNAMIC_BUFPOOL)
++    bufpool=ripple_kernel_alloc(NBUFS*sizeof(struct blkbuf));
++    if (!bufpool) panic("block buffers");
++    memset(bufpool,0,NBUFS*sizeof(struct blkbuf));
++    bufpool_end=bufpool+NBUFS;
++#endif
+@@ -98 +107 @@
+-	init_process->p_status = P_RUNNING;
++	proc_setstate(init_process,P_RUNNING);
+@@ -119 +128 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -360 +361 @@
+@@ -360 +369 @@
 -			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\nDevboot\n",
 +			"Copyright (c) 2014-2026 Alan Cox <alan@etchedpixels.co.uk>\n",
-@@ -431,0 +433,3 @@
+@@ -385,0 +395,5 @@
++#ifdef CONFIG_RIPPLE_IO
++    /* Supervisor cache storage must be reserved after the page allocator is
++     * initialized, before creating any process mappings. */
++    pagemap_init();
++#endif
+@@ -387,0 +402 @@
++#ifndef CONFIG_RIPPLE_IO
+@@ -388,0 +404 @@
++#endif
+@@ -431,0 +448,3 @@
 +#ifdef CONFIG_PLATFORM_CLOCK
 +        plt_clock_init();
 +#endif
 --- a/Kernel/syscall_exec.c
 +++ b/Kernel/syscall_exec.c
-@@ -12,0 +13,5 @@
+@@ -11,3 +11,7 @@
+-/* This is hardcoded as we use disk buffers as scratch for the arguments
+-   on most platforms */
+-#define ARGBUF_SIZE	BLKSIZE
++/* Most platforms use disk buffers for scratch; Ripple uses private kernel
++   stack storage and a larger, shared argument/environment budget. */
 +#ifdef CONFIG_RIPPLE
-+/* Larger filesystem buffers must not expand argv into the single user bank.
-+   Retain the port's existing argument limit independently of disk geometry. */
-+#define ARGBUF_SIZE 256
++#define ARGCHARS RIPPLE_ARG_MAX
 +#else
-@@ -13,0 +19 @@
++#define ARGCHARS (BLKSIZE - 12)
++#endif
+@@ -21 +25 @@
+-	uint8_t *ep = argbuf->a_buf + ARGBUF_SIZE - 12;
++	uint8_t *ep = argbuf->a_buf + ARGCHARS;
+@@ -26 +30,4 @@
+-	while ((ptr = (uint8_t *) ugetp(up)) != NULL) {
++	for (;;) {
++        ptr = (uint8_t *) ugetp(up);
++        if (udata.u_error) return true;
++        if (!ptr) break;
+@@ -30,2 +37 @@
+-			*bufp++ = c = ugetc(ptr++);
+-			if (bufp > ep) {
++			if (bufp == ep) {
+@@ -34,0 +41,3 @@
++            c = ugetc(ptr++);
++            if (udata.u_error) return true;
++            *bufp++ = c;
+--- a/Kernel/syscall_fs.c
++++ b/Kernel/syscall_fs.c
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -112,0 +114,28 @@
++arg_t _lstat(void)
++{
++    inoptr ino = n_open_flags(path, NULL, N_NOFOLLOW);
++    int err;
++    if (!ino) return -1;
++    err = stcpy(ino, buf);
++    i_deref(ino);
++    return err;
++}
++
++/* readlink deliberately does not append a NUL, and permits truncation. */
++arg_t _readlink(void)
++{
++    uint8_t target[512];
++    inoptr ino;
++    int len;
++    usize_t count = (usize_t)udata.u_argn2;
++    if (!count || (susize_t)count < 0) { udata.u_error = EINVAL; return -1; }
++    ino = n_open_flags(path, NULL, N_NOFOLLOW);
++    if (!ino) return -1;
++    len = readlinki(ino, target);
++    i_deref(ino);
++    if (len < 0) return -1;
++    if (count > (usize_t)len) count = len;
++    if (uput(target, buf, count)) return -1;
++    return count;
++}
++
+@@ -294,0 +324 @@
++    if (!valaddr_w((void *)fildes, 2*sizeof(int), 2*sizeof(int))) return -1;
+@@ -306 +336,6 @@
+-	if (!(ino = i_open(root_dev, 0))) {
++#ifdef CONFIG_RIPPLE_IO
++    ino = ripple_pipe_new();
++#else
++    ino = i_open(root_dev, 0);
++#endif
++	if (!ino) {
+@@ -334,2 +369,8 @@
+-	// write results to userspace
+-	return uputi(u1, fildes) | uputi(u2, fildes + 1);
++    /* Validation happened before allocation; still unwind both descriptors if
++     * a platform copy reports a late error. */
++    if (uputi(u1,fildes) || uputi(u2,fildes+1)) {
++        unsigned error=udata.u_error;
++        doclose(u1); doclose(u2); udata.u_error=error;
++        return -1;
++    }
++    return 0;
+@@ -361 +402 @@
+-	ino = n_open(path, &pino);
++	ino = n_open_flags(path, &pino, N_NOFOLLOW | N_NODEREF);
+@@ -446,0 +488,3 @@
++#ifdef CONFIG_RIPPLE_IO
++        nbytes -= nbytes % DIR_LEN;
++#else
+@@ -447,0 +492 @@
 +#endif
 --- a/Kernel/syscall_fs2.c
 +++ b/Kernel/syscall_fs2.c
-@@ -418,0 +419,5 @@
+@@ -93,0 +94,2 @@
++    /* Link target storage can only be initialized through symlink(). */
++    if ((mode & F_MASK) == F_LNK) { udata.u_error = EINVAL; return -1; }
+@@ -99 +101 @@
+-	if ((ino = n_open(name, &parent)) != NULL) {
++	if ((ino = n_open_flags(name, &parent, N_NOFOLLOW | N_NODEREF)) != NULL) {
+@@ -105 +107 @@
+-		udata.u_error = ENOENT;
++		if (!udata.u_error) udata.u_error = ENOENT;
+@@ -418,0 +421,5 @@
 +#ifdef CONFIG_RIPPLE
 +    /* Old statfs callers allocated the smaller V2 record. Reject them before
 +     * copying the V3 structure, rather than overwriting their user stack. */
@@ -8652,31 +10627,43 @@
 +#endif
 --- a/Kernel/syscall_fs3.c
 +++ b/Kernel/syscall_fs3.c
-@@ -143 +143 @@
+@@ -43 +43,2 @@
+-	ino = n_open(name, &parent);
++	ino = n_open_flags(name, &parent,
++            (flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL) ? N_NOFOLLOW : 0);
+@@ -143 +144 @@
 -		udata.u_cloexec |= (1 << uindex);
 +		udata.u_cloexec |= (1UL << uindex);
-@@ -291 +291 @@
+@@ -209 +210 @@
+-	if (!(ino = n_open_argn()))
++	if (!(ino = n_open_flags(name1, NULL, N_NOFOLLOW)))
+@@ -223 +224 @@
+-	if ((ino2 = n_open(name2, &parent2)) != NULL) {
++	if ((ino2 = n_open_flags(name2, &parent2, N_NOFOLLOW | N_NODEREF)) != NULL) {
+@@ -291 +292 @@
 -		return udata.u_cloexec & (1U << fd) ? O_CLOEXEC : 0;
 +		return udata.u_cloexec & (1UL << fd) ? O_CLOEXEC : 0;
-@@ -294 +294 @@
+@@ -294 +295 @@
 -			udata.u_cloexec |= (1U << fd);
 +			udata.u_cloexec |= (1UL << fd);
-@@ -296 +296 @@
+@@ -296 +297 @@
 -			udata.u_cloexec &= ~(1U << fd);
 +			udata.u_cloexec &= ~(1UL << fd);
-@@ -458 +458,3 @@
+@@ -339,0 +341 @@
++#undef len
+@@ -458 +460,3 @@
 -	    (uint32_t)n > 65536UL * BLKSIZE ||
 +#ifndef CONFIG_RIPPLE
 +            (uint32_t)n > 65536UL * BLKSIZE ||
 +#endif
-@@ -474 +476,5 @@
+@@ -474 +478,5 @@
 -		if (keep <= UINT16_MAX && f_trunc_blocks(ino, keep))
 +		if (
 +#ifndef CONFIG_RIPPLE
 +                    keep <= UINT16_MAX &&
 +#endif
 +                    f_trunc_blocks(ino, keep))
-@@ -476,0 +483,10 @@
+@@ -476,0 +485,10 @@
 +    /* Shrinking within a retained block must not expose old bytes on regrowth. */
 +    if (n < ino->c_node.i_size && BLKOFF(n)) {
 +        blkno_t b = bmap(ino, BLOCK((uint32_t)n), 1);
@@ -8687,32 +10674,251 @@
 +            bawrite(bp);
 +        }
 +    }
+@@ -485,0 +504,45 @@
++
++/* symlink(target, pathname), syscall 68. Targets need not exist. */
++arg_t _symlink(void)
++{
++    uint8_t target[512];
++    usize_t available, len;
++    inoptr parent, ino;
++    int error;
++    available = valaddr_r((uint8_t *)udata.u_argn, 512, 1);
++    if (!available || _uget((uint8_t *)udata.u_argn, target, available)) return -1;
++    for (len = 0; len < available && target[len]; len++);
++    if (len == available) { udata.u_error = ENAMETOOLONG; return -1; }
++    if (!len) { udata.u_error = ENOENT; return -1; }
++    ino = n_open_flags((uint8_t *)udata.u_argn1, &parent, N_NOFOLLOW | N_NODEREF);
++    if (ino) {
++        i_deref(ino);
++        i_deref(parent);
++        udata.u_error = EEXIST;
++        return -1;
++    }
++    if (!parent) return -1;
++    i_ref(parent); /* Retain for rollback if writing the target fails. */
++    ino = newfile(parent, lastname);
++    if (!ino) { i_deref(parent); return -1; }
++    udata.u_base = target;
++    udata.u_count = len;
++    udata.u_offset = 0;
++    udata.u_sysio = true;
++    writei(ino, 0); /* newfile initially gives us an ordinary disk file. */
++    if (udata.u_error || udata.u_done != len) {
++        error = udata.u_error ? udata.u_error : EIO;
++        udata.u_error = 0;
++        unlinki(ino, parent, lastname);
++        i_deref(parent);
++        i_deref(ino);
++        udata.u_error = error;
++        return -1;
++    }
++    ino->c_node.i_mode = F_LNK | 0777;
++    setftime(ino, A_TIME | M_TIME | C_TIME);
++    wr_inode(ino);
++    i_deref(parent);
++    i_deref(ino);
++    return 0;
++}
+--- a/Kernel/syscall_other.c
++++ b/Kernel/syscall_other.c
+@@ -26,0 +27,106 @@
++/* Resolve ancestry from the actual destination parent. Checking only whether
++   pathname traversal visited the source misses relative paths from its child,
++   and incorrectly rejects paths which visit the source then leave via .. . */
++static bool rename_outside(inoptr source, inoptr parent)
++{
++	inoptr walk = i_ref(parent), next;
++	uint16_t depth;
++	for (depth = 0; depth < 512; ++depth) {
++		if (walk == source) {
++			udata.u_error = EINVAL;
++			break;
++		}
++		if (walk->c_num == ROOTINODE) {
++			i_deref(walk);
++			return true;
++		}
++		next = srch_dir(walk, (uint8_t *)"..");
++		if (!next || next == walk) {
++			if (next) i_deref(next);
++			udata.u_error = EIO;
++			break;
++		}
++		i_deref(walk);
++		walk = next;
++	}
++	i_deref(walk);
++	if (!udata.u_error) udata.u_error = EIO;
++	return false;
++}
++
++/* All four inodes are borrowed from _rename. Stage the destination before
++   unlinking the source, and roll back the staged name/.. on ordinary errors.
++   As with the rest of this filesystem, this is not a journal transaction. */
++static arg_t rename_directory(inoptr source, inoptr from, inoptr target,
++			     inoptr to, uint8_t *oldname, uint8_t *newname)
++{
++	uint16_t error;
++	bool reparent = from != to;
++	if (source->c_num == ROOTINODE || (target && target->c_num == ROOTINODE)) {
++		udata.u_error = EBUSY;
++		return -1;
++	}
++	if (target && getmode(target) != MODE_R(F_DIR)) {
++		udata.u_error = ENOTDIR;
++		return -1;
++	}
++	if (!rename_outside(source, to)) return -1;
++	if ((from->c_flags | to->c_flags | source->c_flags) & CRDONLY) {
++		udata.u_error = EROFS;
++		return -1;
++	}
++	if (!(getperm(from) & OTH_WR) || !(getperm(to) & OTH_WR)) {
++		udata.u_error = EACCES;
++		return -1;
++	}
++	if (target && (target->c_node.i_nlink != 2 || !emptydir(target))) {
++		if (!udata.u_error) udata.u_error = ENOTEMPTY;
++		return -1;
++	}
++	if (reparent && !target && to->c_node.i_nlink == 0xffff) {
++		udata.u_error = EMLINK;
++		return -1;
++	}
++	udata.u_error = 0;
++	if (!reparent && !target) {
++		/* A simple rename reuses its directory slot, even on a full disk. */
++		if (!ch_link(from, oldname, newname, source)) return -1;
++	} else {
++		if (!ch_link(to, target ? newname : (uint8_t *)"", newname, source)) return -1;
++		if (reparent && !ch_link_parent(source, to)) goto rollback_name;
++		if (!ch_link(from, oldname, (uint8_t *)"", NULLINODE)) {
++			error = udata.u_error;
++			udata.u_error = 0;
++			if (reparent && !ch_link_parent(source, from))
++				kputs("WARNING: rename: parent rollback failed\n");
++			udata.u_error = error;
++			goto rollback_name;
++		}
++	}
++	if (reparent) {
++		--from->c_node.i_nlink;
++		if (!target) ++to->c_node.i_nlink;
++	} else if (target) {
++		--to->c_node.i_nlink;
++	}
++	if (target) {
++		target->c_node.i_nlink = 0;
++		/* Retained cwd/open references must not expose stale . and .. . */
++		f_trunc(target);
++		setftime(target, C_TIME);
++	}
++	setftime(source, C_TIME);
++	wr_inode(source);
++	wr_inode(from);
++	if (reparent) wr_inode(to);
++	sync();
++	return 0;
++rollback_name:
++	error = udata.u_error;
++	udata.u_error = 0;
++	if (!ch_link(to, newname, target ? newname : (uint8_t *)"", target))
++		kputs("WARNING: rename: name rollback failed\n");
++	udata.u_error = error;
++	return -1;
++}
++
+@@ -33 +139 @@
+-	srci = n_open(src, &srcp);
++	srci = n_open_flags(src, &srcp, N_NOFOLLOW | N_NODEREF);
+@@ -41,0 +148,6 @@
++	if (getmode(srci) == MODE_R(F_DIR) &&
++	    (srci->c_num == ROOTINODE || namecomp(fname, (uint8_t *)".") || namecomp(fname, (uint8_t *)".."))) {
++		udata.u_error = srci->c_num == ROOTINODE ? EBUSY : EINVAL;
++		ret = -1;
++		goto nogood3;
++	}
+@@ -47 +159 @@
+-	dsti = n_open(dst, &dstp);
++	dsti = n_open_flags(dst, &dstp, N_NOFOLLOW | N_NODEREF);
+@@ -48,0 +161,6 @@
++	if (getmode(srci) == MODE_R(F_DIR) &&
++	    (namecomp(lastname, (uint8_t *)".") || namecomp(lastname, (uint8_t *)".."))) {
++		udata.u_error = EINVAL;
++		ret = -1;
++		goto nogood;
++	}
+@@ -50,0 +169,2 @@
++		i_deref(dsti);
++		i_deref(dstp);
+@@ -66,2 +186 @@
+-	/* Can't rename a directory yet.. need to fix this but to do so we
+-	   must update .. in the child. Probably a LEVEL 2 functionality ? */
++	/* Directory moves preserve the inode/tree and update .. and link counts. */
+@@ -69 +188,2 @@
+-		udata.u_error = EISDIR;
++		udata.u_error = 0;
++		ret = rename_directory(srci, srcp, dsti, dstp, fname, lastname);
+@@ -110 +230 @@
+-	i_deref(dstp);
++	if (dstp) i_deref(dstp);
+@@ -111,0 +232 @@
++	udata.u_rename = NULLINODE;
+@@ -113 +234 @@
+-	i_deref(srcp);
++	if (srcp) i_deref(srcp);
+@@ -138 +259 @@
+-	if ((ino = n_open(name, &parent)) != NULL) {
++	if ((ino = n_open_flags(name, &parent, N_NOFOLLOW | N_MKDIR)) != NULL) {
+@@ -144 +265 @@
+-		udata.u_error = ENOENT;
++		if (!udata.u_error) udata.u_error = ENOENT;
+@@ -210 +331 @@
+-	ino = n_open(path, &parent);
++	ino = n_open_flags(path, &parent, N_NOFOLLOW | N_NODEREF);
 --- a/Kernel/syscall_proc.c
 +++ b/Kernel/syscall_proc.c
-@@ -1,0 +2 @@
+@@ -1,0 +2,2 @@
++#include <process-state.h>
 +#include <timer.h>
-@@ -156,0 +158,3 @@
+@@ -156,0 +159,3 @@
 +		{
 +                        irqflags_t irq = di();
 +                        sync_clock();
-@@ -158,0 +163 @@
+@@ -158,0 +164 @@
 +                        irqrestore(irq);
-@@ -159,0 +165 @@
+@@ -159,0 +166 @@
 +		}
-@@ -211,0 +218 @@
+@@ -211,0 +219 @@
 +	sync_clock();
-@@ -297,0 +305,4 @@
+@@ -297,0 +306,4 @@
 +	/* Ripple syscall values carry the complete banked pointer. */
 +#ifdef CONFIG_RIPPLE
 +	return (arg_t)oldbrk;
 +#else
-@@ -298,0 +310 @@
+@@ -298,0 +311 @@
 +#endif
-@@ -334 +346,2 @@
+@@ -334 +347,2 @@
 -			if (p->p_status && p->p_pptr == udata.u_ptab) {
 +			/* PID 1's bootstrap parent is itself, not a waitable child. */
 +			if (p != udata.u_ptab && p->p_status && p->p_pptr == udata.u_ptab) {
-@@ -529,0 +543,7 @@
+@@ -342 +356 @@
+-						p->p_status = P_EMPTY;
++						proc_setstate(p,P_EMPTY);
+@@ -419 +433 @@
+-	udata.u_ptab->p_status = P_READY;
++	proc_setstate(udata.u_ptab,P_READY);
+@@ -440 +454 @@
+-		udata.u_ptab->p_status = P_RUNNING;
++		proc_setstate(udata.u_ptab,P_RUNNING);
+@@ -442 +456 @@
+-		new_process->p_status = P_EMPTY;
++		proc_setstate(new_process,P_EMPTY);
+@@ -447 +461 @@
+-		nready--;
++		proc_ready_remove();
+@@ -529,0 +544,7 @@
 +#ifdef CONFIG_RIPPLE
 +		extern int ripple_valid_code(unsigned long);
 +		if (func != SIG_DFL &&
@@ -8720,14 +10926,14 @@
 +		     !ripple_valid_code((unsigned long)udata.u_argn2))) {
 +			udata.u_error = EFAULT;
 +#else
-@@ -530,0 +551 @@
+@@ -530,0 +552 @@
 +#endif
-@@ -536,0 +558,4 @@
+@@ -536,0 +559,4 @@
 +#ifdef CONFIG_RIPPLE
 +	if (func != SIG_DFL && func != SIG_IGN)
 +		udata.u_sigtramp = udata.u_argn2;
 +#endif
-@@ -652 +677 @@
+@@ -652 +678 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
 --- a/Kernel/timer.c
@@ -8748,10 +10954,18 @@
 +#endif
 --- a/Kernel/tty.c
 +++ b/Kernel/tty.c
-@@ -30,0 +31,2 @@
+@@ -0,0 +1 @@
++/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
+@@ -19,0 +21,5 @@
++#ifdef RIPPLE_MMU
++/* Physical-console batching; PTYs retain their blocking queue path. */
++extern int ripple_tty_write_run(uint_fast8_t minor);
++#endif
++
+@@ -30,0 +37,2 @@
 +#elif defined(CONFIG_SELECT)
 +#define tty_selwake(m,e) selwake_dev(2,m,e)
-@@ -34,0 +37,34 @@
+@@ -34,0 +43,34 @@
 +/* Canonical input remains queued until a complete line (or EOF) exists. */
 +static int input_ready(uint_fast8_t minor) {
 +    struct s_queue *q = &ttyinq[minor];
@@ -8786,36 +11000,60 @@
 +    return ready;
 +}
 +#endif
-@@ -47 +83 @@
+@@ -47 +89 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -53 +89 @@
+@@ -53 +95,15 @@
 -			if (remq(q, &c)) {
++#ifdef CONFIG_RIPPLE_IO
++            if (!(t->termios.c_lflag&ICANON) && q->q_count) {
++                irqflags_t irq=di();
++                usize_t remaining=udata.u_count-udata.u_done;
++                unsigned limit=remaining>(usize_t)q->q_count?q->q_count:(unsigned)remaining;
++                int n=ripple_queue_read(q,udata.u_base,limit,udata.u_sysio);
++                irqrestore(irq);
++                if (n<0) goto out;
++                udata.u_base+=n; udata.u_done+=n;
++                tty_data_consumed(minor); wakeup(&q->q_count);
++                if (udata.u_done==udata.u_count) goto out;
++                continue;
++            }
++#endif
 +			if ((udata.u_done || input_ready(minor) || (t->flag & TTYF_DEAD)) && remq(q, &c)) {
-@@ -97,0 +134 @@
+@@ -97,0 +154 @@
 +    if (udata.u_done) goto out;
-@@ -115 +152 @@
+@@ -115 +172 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -172 +209 @@
+@@ -137,0 +195,9 @@
++#ifdef RIPPLE_MMU
++            int run = ripple_tty_write_run(minor);
++            if (run < 0) break;
++            if (run) {
++                udata.u_base += run;
++                udata.u_done += run;
++                continue;
++            }
++#endif
+@@ -172 +238 @@
 -	if (minor > NUM_DEV_TTY) {
 +	if (!minor || minor > NUM_DEV_TTY) {
-@@ -235 +272,5 @@
+@@ -235 +301,5 @@
 -	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp && !(flag & O_NOCTTY)) {
 +	if (!(t->flag & TTYF_DEAD) && !udata.u_ptab->p_tty && !t->pgrp &&
 +#ifdef CONFIG_JOB_CONTROL
 +        udata.u_ptab->p_session == udata.u_ptab->p_pid &&
 +#endif
 +        !(flag & O_NOCTTY)) {
-@@ -238,0 +280,3 @@
+@@ -238,0 +309,3 @@
 +#ifdef CONFIG_JOB_CONTROL
 +        t->session = udata.u_ptab->p_session;
 +#endif
-@@ -254,0 +299,3 @@
+@@ -254,0 +328,3 @@
 +#ifdef CONFIG_JOB_CONTROL
 +    t->session = 0;
 +#endif
-@@ -264,4 +311,17 @@
+@@ -264,4 +340,17 @@
 -        uint_fast8_t t = udata.u_ptab->p_tty;
 -        uint16_t *pgrp = &ttydata[t].pgrp;
 -        if (t && *pgrp == udata.u_ptab->p_pgrp && *pgrp == udata.u_ptab->p_pid)
@@ -8837,46 +11075,46 @@
 +    if (minor && ttydata[minor].pgrp == udata.u_ptab->p_pgrp &&
 +        ttydata[minor].pgrp == udata.u_ptab->p_pid) ttydata[minor].pgrp = 0;
 +#endif
-@@ -283,0 +344,2 @@
+@@ -283,0 +373,2 @@
 +#endif
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -296,0 +359,2 @@
+@@ -296,0 +388,2 @@
 +        tty_data_consumed(minor);
 +        wakeup(&ttyinq[minor].q_count);
-@@ -317 +381 @@
+@@ -317 +410 @@
 -		return uput(&ttyinq[minor].q_count, data, 2);
 +		return uput(&ttyinq[minor].q_count, data, sizeof(ttyinq[minor].q_count));
-@@ -319,0 +384,2 @@
+@@ -319,0 +413,2 @@
 +        tty_data_consumed(minor);
 +        wakeup(&ttyinq[minor].q_count);
-@@ -341 +407 @@
+@@ -341 +436 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -348,0 +415,2 @@
+@@ -348,0 +444,2 @@
 +#endif
 +#ifdef CONFIG_LEVEL_2
-@@ -429,0 +498,3 @@
+@@ -429,0 +527,3 @@
 +        } else if (c && c == t->termios.c_cc[VSUSP]) {
 +            wr = SIGTSTP;
 +            goto sigout;
-@@ -434,0 +506 @@
+@@ -434,0 +535 @@
 +            tty_data_consumed(minor);wakeup(&q->q_count);
-@@ -470,0 +543,5 @@
+@@ -470,0 +572,5 @@
 +    /* Reserve the final slot for a line terminator. An overlong unfinished
 +     * canonical line must not deadlock both sides of a PTY. */
 +    if (canon && q->q_count >= q->q_size - 1 && !input_ready(minor) &&
 +        c != '\n' && c != t->termios.c_cc[VEOF] &&
 +        (!t->termios.c_cc[VEOL] || c != t->termios.c_cc[VEOL])) return 1;
-@@ -472,3 +549,3 @@
+@@ -472,3 +578,3 @@
 -	if (wr && (!canon || c != t->termios.c_cc[VEOF]))
 -		tty_echo(minor, c);
 -	else
 +	if (wr) {
 +        if (!canon || c != t->termios.c_cc[VEOF]) tty_echo(minor, c);
 +    } else
-@@ -496,0 +574 @@
+@@ -496,0 +603 @@
 +	tty_data_consumed(minor);wakeup(&q->q_count);
-@@ -509,2 +587,6 @@
+@@ -509,2 +616,6 @@
 -	if (ttydata[minor].termios.c_lflag & ECHO)
 -		tty_putc_wait(minor, c);
 +    if (ttydata[minor].termios.c_lflag & ECHO) {
@@ -8885,7 +11123,7 @@
 +#endif
 +        tty_putc_wait(minor, c);
 +    }
-@@ -514,0 +597,8 @@
+@@ -514,0 +626,8 @@
 +#ifdef CONFIG_RIPPLE
 +    if (minor > 1) {
 +        if (tty_writeready(minor) == TTY_READY_NOW) tty_putc(minor, '\b');
@@ -8908,12 +11146,19 @@
 @@ -125 +125 @@
 -	if (!valaddr_w(uaddr, 4, 4))
 +	if (!valaddr_w(uaddr, sizeof(uint32_t), sizeof(uint32_t)))
+--- a/Library/include/arpa/inet.h
++++ b/Library/include/arpa/inet.h
+@@ -2,0 +3,3 @@
++
++/* Public address typedefs must be available regardless of include order. */
++#include <netinet/in.h>
 --- a/Library/include/errno.h
 +++ b/Library/include/errno.h
-@@ -74 +74,2 @@
+@@ -74 +74,3 @@
 -#define __ERRORS	56
 +#define EOVERFLOW       60              /* Result does not fit caller ABI */
-+#define __ERRORS	61
++#define ELOOP           61              /* Too many symbolic links */
++#define __ERRORS	62
 --- a/Library/include/net/if.h
 +++ b/Library/include/net/if.h
 @@ -1,0 +2 @@
@@ -8974,6 +11219,18 @@
 @@ -37 +46 @@
 -#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__)
 +#if defined(__mc68000__) || defined(__XTENSA_CALL0_ABI__) || defined(__ARM_EABI__) || defined(__ns32k__) || defined(__riscv) || defined(__XTENSA_WINDOWED_ABI__) || defined(RIPPLE_MMU)
+--- a/Library/include/sys/stat.h
++++ b/Library/include/sys/stat.h
+@@ -10 +10 @@
+-#define S_IFLNK		0120000		/* Reserved, not used */
++#define S_IFLNK		0120000		/* Guest symbolic link */
+@@ -41 +41 @@
+-#define S_ISDEV(m)	(((m) & S_IFCHR) == S_IFCHR)
++#define S_ISDEV(m)	(S_ISCHR(m) || S_ISBLK(m))
+--- a/Library/include/unistd.h
++++ b/Library/include/unistd.h
+@@ -22,0 +23 @@
++extern int symlink(const char *__target, const char *__pathname);
 --- a/Library/libs/clock_gettime.c
 +++ b/Library/libs/clock_gettime.c
 @@ -31 +31 @@
@@ -9205,6 +11462,10 @@
 @@ -16 +16 @@
 -      return 512;
 +      return 256;
+@@ -40,2 +40 @@
+-      /* Not supported yet */
+-      return 1;
++      return 40; /* Shared guest pathname expansion limit. */
 --- a/Library/libs/tgetent.c
 +++ b/Library/libs/tgetent.c
 @@ -60,0 +61 @@

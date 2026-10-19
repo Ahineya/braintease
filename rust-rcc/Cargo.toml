@@ -1,0 +1,12 @@
+[package]
+name = "rust-rcc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Keep the experimental rustc-private toolchain out of the main workspace.
+[workspace]
+
+[dependencies]
+rcc-ir = { path = "../rcc-ir" }
+

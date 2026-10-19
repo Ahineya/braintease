@@ -14,6 +14,7 @@ extern "C" {
     fn text_saved(buffer: *mut u16);
     fn text_revision(buffer: *mut u16) -> u32;
     fn text_generation(buffer: *mut u16) -> u32;
+    fn text_damage(buffer: *mut u16, bounds: *mut u32);
     fn text_modified(buffer: *mut u16) -> i16;
     fn text_undo(buffer: *mut u16) -> i32;
     fn text_redo(buffer: *mut u16) -> i32;
@@ -21,11 +22,19 @@ extern "C" {
     fn text_row(buffer: *mut u16, at: u32) -> u32;
     fn text_start(buffer: *mut u16, row: u32) -> u32;
     fn text_endline(buffer: *mut u16, row: u32) -> u32;
+    fn text_boundary(buffer: *mut u16, at: u32) -> u32;
+    fn text_next(buffer: *mut u16, at: u32) -> u32;
+    fn text_previous(buffer: *mut u16, at: u32) -> u32;
+    fn text_step(buffer: *mut u16, at: u32, count: i16) -> u32;
     fn text_visual(buffer: *mut u16, at: u32, tabstop: u16) -> u32;
     fn text_column(buffer: *mut u16, row: u32, column: u32, tabstop: u16) -> u32;
+    fn text_wrap_at(buffer: *mut u16, at: u32, width: u16, tabstop: u16) -> i32;
+    fn text_wrap_info(buffer: *mut u16, index: u32, width: u16, tabstop: u16, info: *mut u32) -> i16;
+    fn text_wrap_column(buffer: *mut u16, index: u32, column: u32, width: u16, tabstop: u16) -> i32;
+    fn text_format(buffer: *mut u16, cursor: u32, width: u16, tabstop: u16) -> i32;
     fn text_word(buffer: *mut u16, at: u32, motion: i16, count: u16) -> u32;
     fn text_find(buffer: *mut u16, at: u32, bytes: *const u8, n: u32, backward: i16) -> i32;
-    fn text_find_char(buffer: *mut u16, at: u32, ch: i16, backward: i16, till: i16, count: u16) -> i32;
+    fn text_find_char(buffer: *mut u16, at: u32, ch: u32, backward: i16, till: i16, count: u16) -> i32;
     fn text_newline(buffer: *mut u16, at: u32, indent: i16) -> i32;
     fn text_open_line(buffer: *mut u16, at: u32, above: i16, indent: i16) -> i32;
     fn text_indent(buffer: *mut u16, first: u32, last: u32, width: u16, remove: i16, tabs: i16) -> i16;
@@ -42,6 +51,15 @@ export struct Bounds {
     start: usize,
     /// First excluded octet.
     end: usize
+}
+
+/// One visual row; offsets and logical line numbers still refer to the file.
+export struct WrappedRow {
+    row: usize,
+    left: usize,
+    columns: u16,
+    start: usize,
+    present: bool
 }
 
 /// A bounded, mutable gap buffer with indexed lines and grouped undo/redo.
@@ -102,7 +120,45 @@ export fn hash(bytes: Vec<u8>, seed: u32) -> u32 {
     }
 }
 
+/// Hashes a validated prefix of reusable storage without a slice allocation.
+export fn hash_prefix(bytes: &Vec<u8>, count: usize, seed: u32) -> Result<u32, String> {
+    if (count > bytes.len()) {
+        return Err("Invalid text range");
+    }
+    if (count == 0) {
+        return Ok(seed);
+    }
+    Ok(unsafe {
+        text_hash(&bytes[0], count as u32, seed)
+    })
+}
+
 impl Buffer {
+    /// Finds a cursor's cached visual row, without changing the document.
+    export fn wrap_at(&self, at: usize, width: u16, tabstop: u16) -> usize {
+        let index = text_wrap_at(self.raw(), at as u32, width, tabstop);
+        if (index < 0) {
+            0 as usize
+        } else {
+            index as usize
+        }
+    }
+    /// Reads the lazily computed word-wrapped layout.
+    export fn wrapped(&self, index: usize, width: u16, tabstop: u16) -> WrappedRow {
+        let mut info: [u32; 4] = [0, 0, 0, 0];
+        let found = unsafe {
+            text_wrap_info(self.raw(), index as u32, width, tabstop, &mut info[0])
+        };
+        WrappedRow { row: info[0] as usize, left: info[1] as usize, columns: info[2] as u16, start: info[3] as usize, present: found > 0 }
+    }
+    /// Applies optional whitespace-based hard wrapping within the active undo group.
+    export fn format(&self, cursor: usize, width: u16, tabstop: u16) -> Result<usize, String> {
+        self.offset(text_format(self.raw(), cursor as u32, width, tabstop))
+    }
+    /// Resolves a visual-row column without rescanning the paragraph prefix.
+    export fn wrap_column(&self, index: usize, column: usize, width: u16, tabstop: u16) -> Result<usize, String> {
+        self.offset(text_wrap_column(self.raw(), index as u32, column as u32, width, tabstop))
+    }
     fn raw(&self) -> *mut u16 {
         let p = self.state.borrow();
         *p
@@ -154,6 +210,33 @@ impl Buffer {
             text_append(self.raw(), &bytes[0], bytes.len() as u32)
         })
     }
+    /// Appends a validated prefix from reusable read storage.
+    export fn append_prefix(&self, bytes: &Vec<u8>, count: usize) -> Result<unit, String> {
+        if (count > bytes.len()) {
+            return Err("Invalid text range");
+        }
+        if (count == 0) {
+            return Ok({});
+        }
+        self.checked(unsafe {
+            text_append(self.raw(), &bytes[0], count as u32)
+        })
+    }
+    /// Copies a validated range into reusable initialized storage.
+    export fn copy_into(&self, at: usize, count: usize, bytes: &mut Vec<u8>) -> Result<unit, String> {
+        if (count > bytes.len()) {
+            return Err("Invalid text range");
+        }
+        if (count == 0) {
+            if (at > self.len()) {
+                return Err("Invalid text range");
+            }
+            return Ok({});
+        }
+        self.checked(unsafe {
+            text_copy(self.raw(), at as u32, count as u32, &mut bytes[0])
+        })
+    }
     /// Replaces a half-open range as one undoable edit. Failure leaves text intact.
     export fn replace(&self, at: usize, count: usize, bytes: Vec<u8>) -> Result<unit, String> {
         let mut source = bytes;
@@ -183,6 +266,15 @@ impl Buffer {
     /// group also change this token. Compare for equality, not ordering.
     export fn generation(&self) -> u32 {
         text_generation(self.raw())
+    }
+    /// Consumes accumulated display damage before painting. Includes all edits
+    /// since the previous call and syntax propagation. One renderer per buffer.
+    export fn damage(&self) -> Bounds {
+        let mut bounds: Vec<u32> = [0, 0];
+        unsafe {
+            text_damage(self.raw(), &mut bounds[0]);
+        }
+        Bounds { start: bounds[0] as usize, end: bounds[1] as usize }
     }
     /// True when the current revision differs from the saved revision.
     export fn modified(&self) -> bool {
@@ -222,7 +314,23 @@ impl Buffer {
     export fn endline(&self, row: usize) -> usize {
         text_endline(self.raw(), row as u32) as usize
     }
-    /// Visual column after expanding tabs.
+    /// Start of the grapheme containing an octet offset, or EOF.
+    export fn boundary(&self, at: usize) -> usize {
+        text_boundary(self.raw(), at as u32) as usize
+    }
+    /// Boundary after a complete grapheme, treating CRLF as one unit.
+    export fn next(&self, at: usize) -> usize {
+        text_next(self.raw(), at as u32) as usize
+    }
+    /// Boundary before an offset. Combining/emoji sequences stay together.
+    export fn previous(&self, at: usize) -> usize {
+        text_previous(self.raw(), at as u32) as usize
+    }
+    /// Moves by a signed number of graphemes, stopping at the file bounds.
+    export fn step(&self, at: usize, count: i16) -> usize {
+        text_step(self.raw(), at as u32, count) as usize
+    }
+    /// Terminal column, expanding tabs and measuring Unicode grapheme widths.
     export fn visual(&self, at: usize, tabstop: u16) -> usize {
         text_visual(self.raw(), at as u32, tabstop) as usize
     }
@@ -253,7 +361,7 @@ impl Buffer {
         })
     }
     /// Vi f/F/t/T search within one line.
-    export fn find_char(&self, at: usize, ch: i16, backward: bool, till: bool, count: u16) -> Option<usize> {
+    export fn find_char(&self, at: usize, ch: u32, backward: bool, till: bool, count: u16) -> Option<usize> {
         let result = text_find_char(self.raw(), at as u32, ch, if (backward) {
             1
         } else {
@@ -326,7 +434,7 @@ impl Buffer {
     export fn language(&self, language: u16) {
         text_language(self.raw(), language);
     }
-    /// Renders up to 512 cells with tab expansion, clipping and selection. styles
+    /// Renders up to 512 Unicode cells with tab expansion, clipping and selection. styles
     /// contains seven curses styles: plain/comment/keyword/string/number/operator/type.
     export fn cells(&self, row: usize, left: usize, width: u16, tabstop: u16, styles: Vec<u32>, selected: u32, from: usize, to: usize) -> Result<Vec<u32>, String> {
         if (width > 512 || styles.len() != 7) {

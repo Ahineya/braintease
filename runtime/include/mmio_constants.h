@@ -13,7 +13,10 @@
 #define MMIO_DISP_CTL      8
 #define MMIO_DISP_FLUSH    9
 
-/* 10..15 reserved: read zero, writes ignored. Input uses DEVICE_*. */
+/* Atomic math packet at current SB + written offset; read returns ABI 1.
+ * The CPU applies current MMU permissions. Other MMIO stays privileged. */
+#define MMIO_MATH_STACK 10
+/* 11..15 reserved: read zero, writes ignored. Input uses DEVICE_*. */
 
 // Display resolution for RGB565 mode
 #define MMIO_DISP_RESOLUTION 16

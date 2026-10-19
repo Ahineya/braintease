@@ -1,0 +1,269 @@
+import { Environment, own_environment, own_environment_with_cleanup, with_environment } from "std/effect_env";
+import { Future, yield_now } from "std/future";
+import { FunctorOnce, MonadOnce, FromFactory } from "std/fp";
+import { Apply, ApplyOnce } from "std/applicative";
+import { TraverseVec, TraverseVecOnce } from "std/traverse";
+import { take } from "std/mem";
+
+/// A lazy, consuming program requiring R and producing either E or A. Constructing
+/// or composing it runs no callbacks. Execute with run, then poll/await its future.
+export type OwnedEffect<R, E, A> = OwnedEffect(once fn(Environment<R>) -> Async<Result<A, E>>);
+
+/// Runs a program with an owned environment. Nothing executes before first poll.
+/// Dropping/cancelling its future cancels children before releasing the environment.
+export async fn run<R, E, A>(program: OwnedEffect<R, E, A>, value: R) -> Result<A, E> {
+    let (owner, environment) = own_environment(move(value));
+    start_in(move(program), environment).await
+}
+
+/// Starts a consuming child with an existing live environment capability.
+/// Library factories construct lazy frames; the caller must retain the owner.
+export fn start_in<R, E, A>(program: OwnedEffect<R, E, A>, environment: Environment<R>) -> Async<Result<A, E>> {
+    match move(program) {
+        OwnedEffect(make) => make(environment)
+    }
+}
+
+/// Defers an environment-aware synchronous operation until the first poll.
+export fn attempt<R, E, A>(work: once fn(Environment<R>) -> Result<A, E>) -> OwnedEffect<R, E, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => attempt_async(move(work), environment))
+}
+
+async fn attempt_async<R, E, A>(work: once fn(Environment<R>) -> Result<A, E>, environment: Environment<R>) -> Result<A, E> {
+    work(environment)
+}
+
+/// Defers an async Result factory until first poll, then awaits it with cancellation.
+export fn from_async<R, E, A>(work: once fn(Environment<R>) -> Async<Result<A, E>>) -> OwnedEffect<R, E, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => async_work(move(work), environment))
+}
+
+async fn async_work<R, E, A>(work: once fn(Environment<R>) -> Async<Result<A, E>>, environment: Environment<R>) -> Result<A, E> {
+    work(environment).await
+}
+
+/// Defers any Future factory and lifts its output into success. For an async
+/// Result-producing function use from_async to preserve its typed failure channel.
+export fn from_future<R, E, F: Future>(work: once fn(Environment<R>) -> F) -> OwnedEffect<R, E, F::Output> {
+    OwnedEffect(once fn(environment: Environment<R>) => future_async<R, E, F>(move(work), environment))
+}
+
+async fn future_async<R, E, F: Future>(work: once fn(Environment<R>) -> F, environment: Environment<R>) -> Result<F::Output, E> {
+    Ok(work(environment).await)
+}
+
+/// Captures an already evaluated success value without running user callbacks.
+export fn succeed<R, E, A>(value: A) -> OwnedEffect<R, E, A> {
+    attempt(once fn(environment: Environment<R>) => Ok(move(value)))
+}
+
+/// Captures an already evaluated typed failure. Its continuation is skipped.
+export fn fail<R, E, A>(error: E) -> OwnedEffect<R, E, A> {
+    attempt(once fn(environment: Environment<R>) => Err(move(error)))
+}
+
+/// Reads or updates the environment synchronously when this effect executes.
+export fn access<R, E, A>(work: once fn(&mut R) -> A) -> OwnedEffect<R, E, A> {
+    attempt(once fn(environment: Environment<R>) => Ok(with_environment(environment, move(work))))
+}
+
+/// Maps a successful result lazily. Failure releases f without invoking it.
+export fn map<R, E, A, B>(program: OwnedEffect<R, E, A>, f: once fn(A) -> B) -> OwnedEffect<R, E, B> {
+    OwnedEffect(once fn(environment: Environment<R>) => map_async(move(program), move(f), environment))
+}
+
+async fn map_async<R, E, A, B>(program: OwnedEffect<R, E, A>, f: once fn(A) -> B, environment: Environment<R>) -> Result<B, E> {
+    match start_in(move(program), environment).await {
+        Ok(value) => Ok(f(move(value))),
+        Err(error) => Err(move(error))
+    }
+}
+
+/// Sequences two programs, passing the successful value to an owned continuation.
+export fn flat_map<R, E, A, B>(program: OwnedEffect<R, E, A>, f: once fn(A) -> OwnedEffect<R, E, B>) -> OwnedEffect<R, E, B> {
+    OwnedEffect(once fn(environment: Environment<R>) => bind_async(move(program), move(f), environment))
+}
+
+async fn bind_async<R, E, A, B>(program: OwnedEffect<R, E, A>, f: once fn(A) -> OwnedEffect<R, E, B>, environment: Environment<R>) -> Result<B, E> {
+    match start_in(move(program), environment).await {
+        Ok(value) => start_in(f(move(value)), environment).await,
+        Err(error) => Err(move(error))
+    }
+}
+
+/// Lazily changes only the typed failure value.
+export fn map_error<R, E, A, F>(program: OwnedEffect<R, E, A>, f: once fn(E) -> F) -> OwnedEffect<R, F, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => error_async(move(program), move(f), environment))
+}
+
+async fn error_async<R, E, A, F>(program: OwnedEffect<R, E, A>, f: once fn(E) -> F, environment: Environment<R>) -> Result<A, F> {
+    match start_in(move(program), environment).await {
+        Ok(value) => Ok(move(value)),
+        Err(error) => Err(f(move(error)))
+    }
+}
+
+/// Recovers typed failures with another program. Cancellation and runtime faults
+/// are outside E and are never passed to this callback.
+export fn catch_all<R, E, A, F>(program: OwnedEffect<R, E, A>, f: once fn(E) -> OwnedEffect<R, F, A>) -> OwnedEffect<R, F, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => recover_async(move(program), move(f), environment))
+}
+
+async fn recover_async<R, E, A, F>(program: OwnedEffect<R, E, A>, f: once fn(E) -> OwnedEffect<R, F, A>, environment: Environment<R>) -> Result<A, F> {
+    match start_in(move(program), environment).await {
+        Ok(value) => Ok(move(value)),
+        Err(error) => start_in(f(move(error)), environment).await
+    }
+}
+
+/// Supplies an owned environment for this subprogram, independent of its caller.
+export fn provide<R, E, A, S>(program: OwnedEffect<R, E, A>, value: R) -> OwnedEffect<S, E, A> {
+    OwnedEffect(once fn(environment: Environment<S>) => run(move(program), move(value)))
+}
+
+impl<R, E> FunctorOnce for OwnedEffect<R, E, _> {
+    fn map_once<A, B>(value: Self<A>, f: once fn(A) -> B) -> Self<B> {
+        map(move(value), move(f))
+    }
+}
+
+impl<R, E> MonadOnce for OwnedEffect<R, E, _> {
+    fn pure_once<A>(value: A) -> Self<A> {
+        succeed(move(value))
+    }
+    fn flat_map_once<A, B>(value: Self<A>, f: once fn(A) -> Self<B>) -> Self<B> {
+        flat_map(move(value), move(f))
+    }
+}
+
+/// Registers a synchronous finalizer on first poll. It runs once after success,
+/// typed failure or cancellation; unstarted programs never register it.
+export fn ensuring<R, E, A>(program: OwnedEffect<R, E, A>, finalizer: once fn() -> unit) -> OwnedEffect<R, E, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => ensure_async(move(program), move(finalizer), environment))
+}
+
+fn finish(finalizer: &mut Option<once fn() -> unit>) -> unit {
+    match take(finalizer) {
+        Some(f) => f(),
+        None => {}
+    }
+}
+
+async fn ensure_async<R, E, A>(program: OwnedEffect<R, E, A>, finalizer: once fn() -> unit, environment: Environment<R>) -> Result<A, E> {
+    let guard = owned(Some(move(finalizer)), finish);
+    start_in(move(program), environment).await
+}
+
+/// Acquires a resource lazily and exposes a checked capability to use's program.
+/// After successful acquisition, release runs once on all exits, after cancelling
+/// unfinished child work. Acquisition failure never calls use or release.
+export fn scoped<R, E, T, A>(acquire: OwnedEffect<R, E, T>, use: once fn(Environment<T>) -> OwnedEffect<R, E, A>, release: fn(&mut T) -> unit) -> OwnedEffect<R, E, A> {
+    OwnedEffect(once fn(environment: Environment<R>) => scope_async(move(acquire), move(use), release, environment))
+}
+
+async fn scope_async<R, E, T, A>(acquire: OwnedEffect<R, E, T>, use: once fn(Environment<T>) -> OwnedEffect<R, E, A>, release: fn(&mut T) -> unit, environment: Environment<R>) -> Result<A, E> {
+    let value = start_in(move(acquire), environment).await?;
+    let (owner, resource) = own_environment_with_cleanup(move(value), release);
+    start_in(use(resource), environment).await
+}
+
+/// Sequentially combines two consuming programs with an owned callback.
+/// The right is never started if the left fails; unused captures still release.
+export fn map2<R, E, A, B, C>(left: OwnedEffect<R, E, A>, right: OwnedEffect<R, E, B>, f: once fn(A, B) -> C) -> OwnedEffect<R, E, C> {
+    OwnedEffect(once fn(env: Environment<R>) => pair_async(move(left), move(right), move(f), env))
+}
+
+async fn pair_async<R, E, A, B, C>(left: OwnedEffect<R, E, A>, right: OwnedEffect<R, E, B>, f: once fn(A, B) -> C, env: Environment<R>) -> Result<C, E> {
+    let a = start_in(move(left), env).await?;
+    let b = start_in(move(right), env).await?;
+    Ok(f(move(a), move(b)))
+}
+
+/// Sequentially collects two owned successes into a tuple.
+export fn zip<R, E, A, B>(left: OwnedEffect<R, E, A>, right: OwnedEffect<R, E, B>) -> OwnedEffect<R, E, (A, B)> {
+    map2(move(left), move(right), once fn(a: A, b: B) => (move(a), move(b)))
+}
+
+/// Traverses an already-owned vector on execution, transferring each element
+/// into f. Failure/cancellation releases partial outputs and unvisited inputs.
+export fn traverse<R, E, A, B>(values: Vec<A>, f: fn(A) -> OwnedEffect<R, E, B>) -> OwnedEffect<R, E, Vec<B>> {
+    OwnedEffect(once fn(env: Environment<R>) => traverse_async(move(values), f, env))
+}
+
+async fn traverse_async<R, E, A, B>(values: Vec<A>, f: fn(A) -> OwnedEffect<R, E, B>, env: Environment<R>) -> Result<Vec<B>, E> {
+    let mut values = move(values);
+    let mut input: Vec<A> = [];
+    let mut batch: u16 = 0;
+    while (!values.is_empty()) {
+        match values.pop() {
+            Some(a) => input.push(move(a)),
+            None => {}
+        };
+        batch += 1;
+        if (batch == 64 && !values.is_empty()) {
+            batch = 0;
+            yield_now().await;
+        }
+    }
+    let mut out: Vec<B> = [];
+    batch = 0;
+    while (!input.is_empty()) {
+        match input.pop() {
+            Some(a) => {
+                let b = start_in(f(move(a)), env).await?;
+                out.push(move(b));
+            },
+            None => {}
+        };
+        batch += 1;
+        if (batch == 64 && !input.is_empty()) {
+            batch = 0;
+            yield_now().await;
+        }
+    }
+    Ok(move(out))
+}
+
+/// Lazily obtains exclusive inputs from a factory for one consuming traversal.
+export fn traverse_with<R, E, A, B>(make: fn() -> Vec<A>, f: fn(A) -> OwnedEffect<R, E, B>) -> OwnedEffect<R, E, Vec<B>> {
+    OwnedEffect(once fn(env: Environment<R>) => traverse_factory_async(make, f, env))
+}
+
+async fn traverse_factory_async<R, E, A, B>(make: fn() -> Vec<A>, f: fn(A) -> OwnedEffect<R, E, B>, env: Environment<R>) -> Result<Vec<B>, E> {
+    traverse_async(make(), f, env).await
+}
+
+/// Executes already-constructed consuming programs in source order.
+export fn sequence<R, E, A>(programs: Vec<OwnedEffect<R, E, A>>) -> OwnedEffect<R, E, Vec<A>> {
+    traverse(move(programs), fn(p: OwnedEffect<R, E, A>) => move(p))
+}
+
+impl<R, E> Apply for OwnedEffect<R, E, _> {
+    fn map2<A, B, C>(left: Self<A>, right: Self<B>, f: fn(A, B) -> C) -> Self<C> {
+        map2(move(left), move(right), once fn(a: A, b: B) => f(move(a), move(b)))
+    }
+}
+
+impl<R, E> ApplyOnce for OwnedEffect<R, E, _> {
+    fn map2_once<A, B, C>(left: Self<A>, right: Self<B>, f: once fn(A, B) -> C) -> Self<C> {
+        map2(move(left), move(right), move(f))
+    }
+}
+
+impl<R, E> FromFactory for OwnedEffect<R, E, _> {
+    fn pure_with<A>(make: fn() -> A) -> Self<A> {
+        attempt(once fn(env: Environment<R>) => Ok(make()))
+    }
+}
+
+impl<R, E> TraverseVec for OwnedEffect<R, E, _> {
+    fn traverse_with<A, B>(make: fn() -> Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        traverse_with(make, f)
+    }
+}
+
+impl<R, E> TraverseVecOnce for OwnedEffect<R, E, _> {
+    fn traverse_once<A, B>(values: Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        traverse(move(values), f)
+    }
+}

@@ -52,7 +52,9 @@ guest descriptors and supports native executables in the export. Additional
 mount policies and broader metadata compatibility remain open. See [Storage](storage.md).
 
 Native window switching, New Terminal, per-window close handling and GUI
-terminal-detachment policy are implemented. Clipboard integration, host settings
+terminal-detachment policy are implemented. The shared macOS text clipboard
+now connects NetSurf and both graphical terminals through the native Edit menu;
+see [clipboard bindings and limits](desktop.md#text-clipboard). Host settings
 menus and the Dock-click reopen policy remain open.
 
 A dark visual theme, consistent widgets, optional accelerated drawing, and a
@@ -71,7 +73,7 @@ Bourne shell, with scripts, pipes, redirection, traps and terminal job control. 
 provide fork, context switching and exec. Kernel globals are shared, while user
 memory uses copy-on-write pages. The native loader runs independently compiled
 application packages, alongside bootstrap programs selected through manifests.
-The integration has 16 process slots and compiler-assisted scheduling checkpoints
+The integration has 64 process slots and compiler-assisted scheduling checkpoints
 in newly compiled applications. A persistent init supervisor reaps children and
 keeps the kernel alive across shell exits; the launcher supports console
 detach/reconnect and headless startup. Its

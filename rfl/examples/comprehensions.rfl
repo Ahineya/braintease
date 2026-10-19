@@ -1,0 +1,35 @@
+import { Console, ConsoleError, read_line, println as line } from "std/console";
+import { Effect, run } from "std/effect";
+import { RecordingConsole, recording_console } from "std/console_test";
+import { host_reactor } from "std/host";
+import { block_on } from "std/executor";
+import { write_text } from "std/io";
+import { Result } from "std/result";
+
+fn greeting<R: Console>() -> Effect<R, ConsoleError, unit> {
+    for<Effect<R, ConsoleError, _>> {
+        name <- read_line<R>();
+        let message = match name {
+            Some(name) => "Hello, " + name + "!",
+            None => "Hello, stranger!"
+        };
+        _ <- line<R>(message);
+        yield {}
+    }
+}
+
+fn main() -> i16 {
+    let program = greeting<RecordingConsole>();
+    // Supply recorded input so the same recipe can run twice without typing.
+    let console = recording_console(["Ada", "Ripple"]);
+    let mut reactor = host_reactor().unwrap();
+    for (i in 0..2) {
+        let mut future = run(program, console);
+        block_on(&mut future, &mut reactor).unwrap().unwrap();
+    }
+    let log = console.output();
+    for (i in 0..log.len()) {
+        write_text(log[i]);
+    }
+    0
+}

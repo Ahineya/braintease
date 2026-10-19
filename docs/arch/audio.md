@@ -24,6 +24,7 @@ buffers may cross banks; they must occupy ordinary RAM and must not overlap.
 | STATE | 0x0202 | 16 | flags, channels, rate u32, capacity u32, queued frames u32, rendered position u64, missing frames u32 |
 | CONTROL | 0x0203 | 4 | action, value |
 | RENDER | 0x0204 | 6 | frames u32, reserved=0, reserved=0 |
+| OUTPUT_STATE | 0x0205 | 6 | pending speaker frames u32 (out), live speaker u16 (out), reserved=0 |
 
 Rates are 8,000–96,000 Hz, with one or two channels. Queue capacity is 1–192,000
 frames and at most two seconds at the configured rate. CONFIGURE starts paused
@@ -37,6 +38,13 @@ STATE flags: configured=1, running=2, underrun seen=4, output error=8. Missing
 frames saturate at UINT32_MAX. Reading STATE does not clear counters or advance
 playback. The position counts logical rendered frames, not hardware callback
 progress.
+
+OUTPUT_STATE is an ephemeral host-output query: it includes the software sink
+queue and the estimated hardware tail, in frames at the configured guest rate.
+`live` indicates an open speaker stream. It does not advance logical playback,
+change the deterministic capture, or become part of checkpoint state. A muted
+or unavailable speaker has no pending frames. Unix guests use this query to
+avoid closing a stream before its final speaker buffer plays.
 
 CONTROL actions:
 
@@ -73,19 +81,54 @@ change guest state or deterministic captures. Missing hardware produces a
 warning and muted live output; the logical device and WAV capture still work.
 On Linux, building CPAL's default backend requires ALSA development libraries.
 
-RVM defaults to speaker output for paced, non-headless runs.
-`--audio off` mutes speakers while preserving PCM processing. `--audio-wav FILE`
+RVM's `--audio auto` defaults to speaker output for paced, non-headless runs.
+`--audio on` also enables speakers for headless/unthrottled runs; `--audio off`
+mutes speakers while preserving PCM processing. `--audio-wav FILE`
 writes a standard signed 16-bit WAV, including in headless/unthrottled/stepped
 runs. Headers are updated incrementally, so stopped runs retain valid captures.
 One capture has one rate/channel format; changing it after writing samples is
 an explicit error. RESET can start another logical segment of the same format.
 
-The RCC native runtime uses `RCC_NATIVE_AUDIO=off` and
+The RCC native runtime uses `RCC_NATIVE_AUDIO=auto|on|off` and
 `RCC_NATIVE_AUDIO_WAV=FILE`; its existing headless/capture and unthrottled modes
-suppress automatic speaker playback. Console programs which never configure
+suppress automatic speaker playback, while `on` explicitly enables it. Console programs which never configure
 PCM never initialize audio hardware. Checkpoints serialize the bounded guest
 queue, logical cursor, remainder, gain and counters; speaker/file handles are
 not copied into checkpoints.
+
+## Unix PCM and WAV player
+
+Fuse-X and FUZIX/Ripple expose `/dev/pcm` through the shared driver in
+`ports/fuzix/ripple/pcm.c`; the userspace contract is
+`ports/fuzix/ripple/include/sys/pcm.h`. Major 5, minor 0 provides an exclusive
+process-owned output lease with exit/exec cleanup. Inherited descriptors cannot
+control a parent's lease. The kernel validates user ranges and stages at most
+1,024 frames in kernel memory per write before invoking the host device.
+
+Writes count signed 16-bit sample cells, in whole mono/stereo frames. Partial
+writes, blocking/nonblocking operation and select readiness are supported.
+Ioctls configure the version/rate/channels/capacity, query frame counts and
+flags, start/pause/stop playback, set gain, mark end of input, and wait for drain.
+`PCM_END` requests drain without blocking, including before a short stream is
+started. `PCM_DRAIN` waits for a running stream. On end of input, render calls
+stop at the final queued sample; completion also waits for OUTPUT_STATE's
+speaker backlog to reach zero.
+
+These kernels use Unix monotonic clock updates to issue explicit RENDER calls;
+they do not grant NEXT_TICK. The driver carries fractional frames, bounds a
+single catch-up update to 250 ms, and exposes skipped time as `late_ms`. Empty
+queues during normal running render silence and increment missing-frame counts.
+Interactive Unix launchers enable speakers even for unthrottled RVM; headless
+launches retain automatic mute unless explicitly given `--audio on`.
+
+`music` is an RFL curses browser around a C streaming WAV engine. `wavplay` uses
+the same engine from the shell. Both support PCM 8/16/24-bit mono/stereo WAVs at
+8–96 kHz; 24-bit samples retain their upper 16 bits for the audio device.
+The engine queues one second of audio, prefills three quarters of a
+second (or all of a shorter file), and converts bounded 1,024-frame blocks.
+See [the music player](../../ports/music/README.md) for usage, importing C16
+files, sample-exact guest tests and the exploratory Tremor benchmark. Ogg/Vorbis
+is not yet part of the player.
 
 ## OPL3 music
 
@@ -181,3 +224,22 @@ Validation:
 - `node ports/doom/tools/test-pcm.mjs`: actual menu and E1M1 gunfire sound and
   pixels compared with the independent host C engine on interpreter, JIT and
   RCC native.
+
+## Physical speaker diagnostics
+
+`DEVICE_*` audio operation `0x0206` (`OUTPUT_STATS`) uses a version-1, 12-cell
+descriptor. Cells 2/3 return speaker-active/reserved-zero, 4–5 return recovered
+starvation events (u32), 6–9 return missing host output frames (u64), and 10–11
+return the longest recovered gap in milliseconds (u32). `vm_audio_output_stats`
+wraps it. FUZIX and Fuse-X expose the same data to the PCM owner through
+`PCM_OUTPUT_STATS` and `struct pcm_output_stats`; the existing `PCM_STATE` ABI
+is unchanged.
+
+These counters observe the physical output callback, separately from logical
+PCM queue underruns and the kernel's `late_ms` clock catch-up counter. An empty
+interval is committed when PCM resumes. Silence before first playback, after a
+final drain, or discarded by deliberate pause/stop is excluded. Configure starts
+new counters. Statistics are ephemeral, absent from serialized checkpoints, and
+queries do not advance the logical audio timeline. Muted output reports zeros.
+The native scheduling regression has an opt-in silent real-speaker test; unit
+tests drive the same sink consumer without audio hardware.

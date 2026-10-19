@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 /****************************************************
 FUZIX (Unix clone implementation) Kernel:  unix.h
 From UZI by Doug Braun and UZI280 by Stefan Nitschke.
@@ -302,6 +303,7 @@ struct hd_geometry {
 
 #define MODE_MASK 07777
 
+#define F_LNK   0120000
 #define F_REG   0100000
 #define F_DIR   040000
 #define F_PIPE  010000
@@ -686,7 +688,12 @@ struct s_argblk {
     int a_argc;
     int a_arglen;
     int a_envc;
+#ifdef CONFIG_RIPPLE
+    /* Ripple exec keeps these on its private kernel stack, not in disk buffers. */
+    uint8_t a_buf[RIPPLE_ARG_MAX];
+#else
     uint8_t a_buf[BLKSIZE-3*sizeof(int)];
+#endif
 };
 
 /* Time is passed as 2 x 32bit values for cleanness and portability */
@@ -805,6 +812,7 @@ typedef struct {
 #define EDESTADDRREQ    57              /* No destination address specified */
 #define ENOBUFS		58		/* No buffer space available */
 #define EPROTONOSUPPORT	59		/* Protocol not supported */
+#define ELOOP           61              /* Too many symbolic links */
 #define EOVERFLOW       60              /* Result does not fit caller ABI */
 
 /*
@@ -1042,12 +1050,18 @@ extern int no_ioctl(uint_fast8_t minor, uarg_t a, char *b);
 /* open file, "name" in user address space */
 extern uint8_t lastname[31];
 extern inoptr n_open(uint8_t *uname, inoptr *parent);
+#define N_NOFOLLOW 1 /* Do not follow a terminal symbolic link. */
+#define N_NODEREF  2 /* Also reject terminal link/ for directory mutation. */
+#define N_MKDIR    4 /* Allow a missing terminal directory with trailing /. */
+extern inoptr n_open_flags(uint8_t *uname, inoptr *parent, unsigned flags);
+extern int readlinki(inoptr ino, uint8_t *target);
 extern inoptr n_open_argn(void);
 extern inoptr i_open(uint16_t dev, uint16_t ino);
 extern inoptr srch_dir(inoptr wd, uint8_t *compname);
 extern inoptr srch_mt(inoptr ino);
 extern bool emptydir(inoptr ino);
 extern bool ch_link(inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex);
+extern bool ch_link_parent(inoptr directory, inoptr parent);
 /* return true if n1 == n2 */
 extern bool namecomp(uint8_t *n1, uint8_t *n2);
 extern inoptr newfile(inoptr pino, uint8_t *name);
@@ -1091,6 +1105,15 @@ extern void magic(inoptr ino);
 extern arg_t unlinki(inoptr ino, inoptr pino, uint8_t *fname);
 
 /* inode.c */
+#ifdef CONFIG_RIPPLE_IO
+extern void *ripple_kernel_alloc(unsigned);
+extern int ripple_queue_read(struct s_queue *, uint8_t *, unsigned, unsigned);
+extern int ripple_queue_write(struct s_queue *, const uint8_t *, unsigned, unsigned);
+extern void ripple_namecache_drop(uint16_t);
+extern inoptr ripple_pipe_new(void);
+extern void ripple_pipe_release(inoptr);
+extern void ripple_pipe_io(inoptr, unsigned, unsigned);
+#endif
 extern void readi(inoptr ino, uint_fast8_t flag);
 extern uint16_t umove(uint16_t n);	/* Probably wants to move ? */
 extern void writei(inoptr ino, uint_fast8_t flag);
@@ -1365,6 +1388,7 @@ extern arg_t _sched_yield(void);  /* FUZIX system call 62 */
 extern arg_t _acct(void);	  /* FUZIX system call 63 */
 extern arg_t _memalloc(void);	  /* FUZIX system call 64 */
 extern arg_t _memfree(void);	  /* FUZIX system call 65 */
+extern arg_t _symlink(void), _readlink(void), _lstat(void);
 extern arg_t _ftruncate(void);    /* FUZIX system call 67 */
 
 #if defined(CONFIG_32BIT)

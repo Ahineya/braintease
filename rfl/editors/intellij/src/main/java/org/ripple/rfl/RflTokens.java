@@ -6,6 +6,10 @@ import com.intellij.psi.tree.TokenSet;
 
 final class RflTokens {
     static final IFileElementType FILE = new IFileElementType(RflLanguage.INSTANCE);
+    static final IElementType HTML_TAG = token("HTML_TAG"), HTML_ATTRIBUTE = token("HTML_ATTRIBUTE");
+    static final IElementType HTML_DELIMITER = token("HTML_DELIMITER"), HTML_TEXT = token("HTML_TEXT");
+    static final IElementType HTML_ENTITY = token("HTML_ENTITY"), HTML_COMMENT = token("HTML_COMMENT");
+    static final IElementType MACRO_BODY = token("MACRO_BODY");
     static final IElementType IDENTIFIER = token("IDENTIFIER");
     static final IElementType KEYWORD = token("KEYWORD");
     static final IElementType TYPE = token("TYPE");

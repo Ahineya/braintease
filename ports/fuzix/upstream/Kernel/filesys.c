@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #undef DEBUG
 #include <kernel.h>
 #include <kdata.h>
@@ -32,38 +33,72 @@ static uint8_t getcf(void)
         n_open_fault = 1;
         return 0;
     }
-    return (uint8_t)_ugetc(name);
+    return *name;
+}
+
+/* Link contents use ordinary file blocks, without a terminating NUL on disk.
+ * Keep this separate from readi: pathname lookup must not alter syscall I/O. */
+int readlinki(inoptr ino, uint8_t *target)
+{
+    struct blkbuf *bp;
+    blkno_t block;
+    unsigned len = ino->c_node.i_size, j;
+    if (getmode(ino) != MODE_R(F_LNK)) {
+        udata.u_error = EINVAL;
+        return -1;
+    }
+    if (!len || ino->c_node.i_size >= 512) {
+        udata.u_error = EIO;
+        return -1;
+    }
+    block = bmap(ino, 0, 1);
+    if (!block || block == NULLBLK || !(bp = bread(ino->c_dev, block, 0))) {
+        udata.u_error = EIO;
+        return -1;
+    }
+    blktok(target, bp, 0, len);
+    brelse(bp);
+    for (j = 0; j < len; j++) {
+        if (!target[j]) { udata.u_error = EIO; return -1; }
+    }
+    target[len] = 0;
+    return len;
 }
 
 inoptr n_open(uint8_t *namep, inoptr *parent)
 {
-    register inoptr wd;     /* the directory we are currently searching. */
+    return n_open_flags(namep, parent, 0);
+}
+
+inoptr n_open_flags(uint8_t *namep, inoptr *parent, unsigned flags)
+{
+    register inoptr wd;
     register inoptr ninode;
     register uint8_t *fp;
     register inoptr temp;
     uint8_t c;
-    usize_t len;
+    usize_t len, j, suffix;
+    unsigned links = 0;
+    int target_len;
+    uint8_t pathbuf[512], expanded[512];
 
     if (parent)
         *parent = NULLINODE;
-
-    /* Check the user address and length. If it's shorter than 512 bytes this
-       is fine, but set nameeend accordingly. This allows us to use _ugetc
-       in the hot path which saves us a ton of cycles */
     len = valaddr_r(namep, 512, 1);
-    if (len == 0)
+    if (!len)
         return NULLINODE;
-
-    name = namep;
-    nameend = namep + len;
+    if (_uget(namep, pathbuf, len))
+        return NULLINODE;
+    for (j = 0; j < len && pathbuf[j]; j++);
+    if (j == len) {
+        udata.u_error = len == 512 ? ENAMETOOLONG : EFAULT;
+        return NULLINODE;
+    }
+    if (!j) { udata.u_error = ENOENT; return NULLINODE; }
+    name = pathbuf;
+    nameend = pathbuf + 512;
     n_open_fault = 0;
-
-    /* What error do we return if we hit nameend - are we overlong, or out
-       of memory space */
-    if (len == 512)
-        n_fault_type = ENAMETOOLONG;
-    else
-        n_fault_type = EACCES;
+    n_fault_type = ENAMETOOLONG;
 
     if(getcf() == '/')
         wd = udata.u_root;
@@ -91,6 +126,52 @@ inoptr n_open(uint8_t *namep, inoptr *parent)
               this up ? */
         if(ninode)
             ninode = srch_mt(ninode);
+
+        /* Resolve relative targets from the link's parent, absolute targets
+           from the guest root. Expansion is iterative, with a shared limit
+           for intermediate and final links (including cycles). */
+        if (ninode && getmode(ninode) == MODE_R(F_LNK)) {
+            fp = name;
+            while (*fp == '/') fp++;
+            if ((flags & N_NODEREF) && *name && !*fp) {
+                udata.u_error = ENOTDIR;
+                goto node_error;
+            }
+            if (!(flags & N_NOFOLLOW) || *name) {
+                if (++links > 40) { udata.u_error = ELOOP; goto node_error; }
+                target_len = readlinki(ninode, expanded);
+                if (target_len < 0) goto node_error;
+                suffix = strlen((char *)name);
+                if (target_len + suffix >= 512) {
+                    udata.u_error = ENAMETOOLONG;
+                    goto node_error;
+                }
+                memcpy(expanded + target_len, name, suffix + 1);
+                memcpy(pathbuf, expanded, target_len + suffix + 1);
+                name = pathbuf;
+                i_deref(ninode);
+                if (*name == '/') {
+                    i_deref(wd);
+                    wd = i_ref(udata.u_root);
+                }
+                ninode = i_ref(wd);
+                continue;
+            }
+        }
+        /* A trailing slash requires a directory; callers creating a new
+           directory may retain the missing terminal component. */
+        if (*name == '/') {
+            fp = name;
+            while (*fp == '/') fp++;
+            if (!*fp && ninode && getmode(ninode) != MODE_R(F_DIR)) {
+                udata.u_error = ENOTDIR;
+                goto node_error;
+            }
+            if (!*fp && !ninode && !(flags & N_MKDIR)) {
+                udata.u_error = ENOENT;
+                goto nodir;
+            }
+        }
 
         /* Skip any slashes between nodes. The standards say there can be
            multiple slashes */
@@ -147,7 +228,7 @@ inoptr n_open(uint8_t *namep, inoptr *parent)
                 lastname[0] == '.' && lastname[1] == '.' && lastname[2] == '\0') {
             /* We are doing /../ */
             if (wd == udata.u_root) {
-                i_ref(wd);
+                ninode = i_ref(wd);
                 continue;
             }
             /* Find the mount point inode, which is hidden by the mount */
@@ -166,7 +247,7 @@ inoptr n_open(uint8_t *namep, inoptr *parent)
     /* If we faulted then treat it as invalid */
     if (n_open_fault) {
         udata.u_error = n_fault_type;
-        goto nodir;
+        goto node_error;
     }
 
     /* Return the parent node if requested. This is needed by callers that
@@ -182,12 +263,21 @@ inoptr n_open(uint8_t *namep, inoptr *parent)
        possible and indicates the directory exists but the filename is new */
     return ninode;
 
+node_error:
+    if (ninode) i_deref(ninode);
 nodir:
     if(parent)
         *parent = NULLINODE;
     i_deref(wd);
     return NULLINODE;
 }
+
+#ifdef CONFIG_RIPPLE_IO
+#include "namecache.inc"
+/* Small direct-mapped inode index. Validate the complete identity on every
+ * hit: host/socket/anonymous inode allocation can recycle cache slots. */
+static uint8_t inode_index[256];
+#endif
 
 /* Srch_dir is given an inode pointer of an open directory and a string
  * containing a filename, and searches the directory for the file.  If
@@ -199,6 +289,15 @@ nodir:
 
 inoptr srch_dir(register inoptr wd, uint8_t *compname)
 {
+#ifdef CONFIG_RIPPLE_IO
+    struct name_entry *e=name_lookup(wd,compname);
+    unsigned number;
+    off_t at=0;
+    if (e) return e->number ? i_open(wd->c_dev,e->number) : NULLINODE;
+    number=directory_find(wd,compname,&at);
+    if (!udata.u_error) name_remember(wd,compname,number,at);
+    return number ? i_open(wd->c_dev,number) : NULLINODE;
+#else
     register struct direct *d;
     register blkno_t curblock;
     register struct blkbuf *buf;
@@ -223,6 +322,7 @@ inoptr srch_dir(register inoptr wd, uint8_t *compname)
         brelse(buf);
     }
     return NULLINODE;
+#endif
 }
 
 
@@ -293,6 +393,15 @@ inoptr i_open(uint16_t dev, uint16_t ino)
         return NULLINODE;
     }
 
+#ifdef CONFIG_RIPPLE_IO
+    {
+        unsigned index=inode_index[(dev*31U+ino)&255U];
+        if (index) {
+            j=&i_tab[index-1];
+            if (j->c_dev==dev && j->c_num==ino) { nindex=j; goto found; }
+        }
+    }
+#endif
     nindex = NULLINODE;
     for(j = i_tab; j<i_tab + ITABSIZE; j++){
         if(!j->c_refs) // free slot?
@@ -319,6 +428,9 @@ inoptr i_open(uint16_t dev, uint16_t ino)
     nindex->c_magic = CMAGIC;
     nindex->c_flags = (m->m_flags & MS_RDONLY) ? CRDONLY : 0;
 found:
+#ifdef CONFIG_RIPPLE_IO
+    inode_index[(dev*31U+ino)&255U]=nindex-i_tab+1;
+#endif
     if(isnew) {
         if(nindex->c_node.i_nlink || nindex->c_node.i_mode & F_MASK)
             goto badino;
@@ -387,7 +499,7 @@ void namecpy(register uint8_t *to, register uint8_t *from, unsigned len)
 
 /* TODO: we should cache the first free node seen during a directory walk
    so we can speed up insertions after checking for a name ? */
-bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex)
+static bool ch_link_mode(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex, bool checkperm)
 {
     struct direct curentry;
 
@@ -397,7 +509,7 @@ bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nind
     }
     /* FIXME: for modern style permissions we should also check whether
        wd has the sticky bit set and if so require ownership or root */
-    if(!(getperm(wd) & OTH_WR))
+    if(checkperm && !(getperm(wd) & OTH_WR))
     {
         udata.u_error = EACCES;
         return false;
@@ -408,30 +520,40 @@ bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nind
         return false;
     }
 
-    /* Search the directory for the desired slot. */
-
-    udata.u_offset = 0;
-
-    for(;;)
+#ifdef CONFIG_RIPPLE_IO
     {
+        struct name_entry *e=name_lookup(wd,*oldname?oldname:newname);
+        off_t at;
+        if (e && ((*oldname && e->number) || (!*oldname && !e->number))) {
+            at=e->offset;
+            udata.u_offset=at; udata.u_count=DIR_LEN;
+            udata.u_base=(uint8_t *)&curentry; udata.u_sysio=true;
+            readi(wd,0);
+            if (udata.u_error) return false;
+            if (!udata.u_done || !namecomp(oldname,curentry.d_name)) e=NULL;
+        } else e=NULL;
+        if (!e) {
+            directory_find(wd,oldname,&at);
+            if (udata.u_error) return false;
+            udata.u_offset=at; udata.u_count=DIR_LEN;
+            udata.u_base=(uint8_t *)&curentry; udata.u_sysio=true;
+            readi(wd,0);
+        }
+        name_forget(wd);
+    }
+#else
+    /* Search the directory for the desired slot. */
+    udata.u_offset = 0;
+    for(;;) {
         udata.u_count = DIR_LEN;
-        udata.u_base  =(uint8_t *)&curentry;
+        udata.u_base = (uint8_t *)&curentry;
         udata.u_sysio = true;
         readi(wd, 0);
-
-        /* Read until EOF or name is found.  readi() advances udata.u_offset */
-        if (udata.u_error || udata.u_done == 0 || namecomp(oldname, curentry.d_name))
-            break;
+        if (udata.u_error || !udata.u_done || namecomp(oldname,curentry.d_name)) break;
     }
-
-    /* Drop out and hand back the media error */
-    if (udata.u_error)
-        return false;
-
-    if (udata.u_done == 0 && *oldname) {
-        udata.u_error = ENOENT;
-        return false;                  /* Entry not found */
-    }
+#endif
+    if (udata.u_error) return false;
+    if (!udata.u_done && *oldname) { udata.u_error=ENOENT; return false; }
 
     namecpy(curentry.d_name, newname, FILENAME_LEN);
 #ifdef CONFIG_RIPPLE
@@ -462,6 +584,18 @@ bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nind
         wd->c_node.i_size += BLKSIZE - BLKOFF(wd->c_node.i_size);
 
     return true; // success
+}
+
+bool ch_link(register inoptr wd, uint8_t *oldname, uint8_t *newname, inoptr nindex)
+{
+    return ch_link_mode(wd, oldname, newname, nindex, true);
+}
+
+/* rename has already checked both parents. Updating a directory's own .. is
+   a kernel metadata operation, even when the directory is not writable. */
+bool ch_link_parent(inoptr directory, inoptr parent)
+{
+    return ch_link_mode(directory, (uint8_t *)"..", (uint8_t *)"..", parent, false);
 }
 
 /* Namecomp compares two strings to see if they are the same file name.
@@ -605,6 +739,10 @@ uint16_t i_alloc(uint16_t devno)
     register struct blkbuf *buf;
     uint16_t k;
     unsigned ino;
+#ifdef CONFIG_RIPPLE_IO
+    static blkno_t inode_cursor[NMOUNTS];
+    blkno_t walked, first;
+#endif
 
     if(baddev(dev = getdev(devno)))
         goto corrupt;
@@ -621,9 +759,23 @@ tryagain:
     }
     /* We must scan the inodes, and fill up the table */
 
+#ifdef CONFIG_RIPPLE_IO
+    {
+        inoptr cached;
+        for (cached=i_tab; cached<i_tab+ITABSIZE; ++cached)
+            if (cached->c_dev==devno && (cached->c_flags&CDIRTY)) wr_inode(cached);
+    }
+#else
     sync();           /* Make on-disk inodes consistent */
+#endif
     k = 0;
+#ifdef CONFIG_RIPPLE_IO
+    first=inode_cursor[fs_tab_get(devno)-fs_tab];
+    if (first<2 || first>=dev->s_isize) first=2;
+    for(walked=0,blk=first; walked<dev->s_isize-2; ++walked) {
+#else
     for(blk = 2; blk < dev->s_isize; blk++) {
+#endif
         buf = bread(devno, blk, 0);
         if (buf == NULL)
             goto corrupt;
@@ -638,9 +790,15 @@ tryagain:
             }
         }
         brelse(buf);
+#ifdef CONFIG_RIPPLE_IO
+        if (++blk>=dev->s_isize) blk=2;
+#endif
     }
 
 done:
+#ifdef CONFIG_RIPPLE_IO
+    inode_cursor[fs_tab_get(devno)-fs_tab]=blk;
+#endif
     if(!k) {
         if(dev->s_tinode)
             goto corrupt;
@@ -675,6 +833,9 @@ void i_free(uint16_t devno, uint16_t ino)
     if(ino < 2 || ino >=(dev->s_isize-2)*INO_PER_BLOCK)
         panic(PANIC_IFREE_BADI);
 
+#ifdef CONFIG_RIPPLE_IO
+    ripple_namecache_drop(devno);
+#endif
     ++dev->s_tinode;
     if(dev->s_ninode < FILESYS_TABSIZE)
         dev->s_inode[dev->s_ninode++] = ino;
@@ -911,8 +1072,16 @@ void i_deref(register inoptr ino)
     }
 #endif
 
-    if (mode == MODE_R(F_PIPE))
+    if (mode == MODE_R(F_PIPE)) {
         wakeup((uint8_t *)ino);
+#ifdef CONFIG_RIPPLE_IO
+        if (ino->c_dev == NO_DEVICE) {
+            if (ino->c_refs == 1) ripple_pipe_release(ino);
+            if (!--ino->c_refs) memset(ino,0,sizeof(*ino));
+            return;
+        }
+#endif
+    }
 
     /* If the inode has no links and no refs, it must have
        its blocks freed. */
@@ -921,7 +1090,7 @@ void i_deref(register inoptr ino)
         /*
            SN (mcy)
            */
-        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE))
+        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE) || mode == MODE_R(F_LNK))
             f_trunc(ino);
 
     /* If the inode was modified, we must write it to disk. */
@@ -960,6 +1129,12 @@ void wr_inode(register inoptr ino)
     }
 #endif
 
+#ifdef CONFIG_RIPPLE_IO
+    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) {
+        ino->c_flags &= ~CDIRTY;
+        return;
+    }
+#endif
     if (bwritei(ino))
         corrupt_fs(ino->c_dev);
     else
@@ -970,7 +1145,7 @@ void wr_inode(register inoptr ino)
 /* isdevice(ino) returns true if ino points to a device */
 bool isdevice(inoptr ino)
 {
-    return !!(ino->c_node.i_mode & F_CDEV);
+    return getmode(ino) == MODE_R(F_CDEV) || getmode(ino) == MODE_R(F_BDEV);
 }
 
 
@@ -989,6 +1164,9 @@ uint16_t devnum(inoptr ino)
  */
 int f_trunc_blocks(register inoptr ino, blkno_t nblock)
 {
+#ifdef CONFIG_RIPPLE_IO
+    if (getmode(ino)==MODE_R(F_DIR)) name_forget(ino);
+#endif
     unsigned level, j;
     uint32_t indirect = BLKSIZE / sizeof(blkno_t), span = 1;
     uint32_t start = FS_DIRECT, keep;
@@ -1167,10 +1345,13 @@ uint8_t getperm(register inoptr ino)
 {
     int mode;
 
-    if(super())
-        return(07);
-
     mode = ino->c_node.i_mode;
+    /* Root bypasses read/write and directory search permissions, but a
+       nondirectory still needs at least one execute bit. Keep access(X_OK)
+       and both executable loaders consistent, before script fallback. */
+    if(super())
+        return getmode(ino) == MODE_R(F_DIR) || (mode & 0111) ? 07 : 06;
+
     if(ino->c_node.i_uid == udata.u_euid)
         mode >>= 6;
     else if(ino->c_node.i_gid == udata.u_egid)
@@ -1188,14 +1369,19 @@ uint8_t getperm(register inoptr ino)
 /* This sets the times of the given inode, according to the flags. */
 void setftime(register inoptr ino, register uint_fast8_t flag)
 {
-    if (ino->c_flags & CRDONLY)
-        return;
+    if (ino->c_flags & CRDONLY) return;
 
-    /* If only ATIME is due an update then skip it for a noatime fs */
-    if (flag == A_TIME && fs_tab[ino->c_super].m_flags & MS_NOATIME)
-        return;
-
-    ino->c_flags |= CDIRTY;
+    /* Anonymous resources still have observable in-core timestamps, but no
+     * disk metadata or mount policy. Keep socket/pipe fstat behavior intact. */
+#ifdef CONFIG_RIPPLE_IO
+    if (ino->c_dev != NO_DEVICE) {
+#endif
+        if (flag == A_TIME && fs_tab[ino->c_super].m_flags & MS_NOATIME)
+            return;
+        ino->c_flags |= CDIRTY;
+#ifdef CONFIG_RIPPLE_IO
+    }
+#endif
 
     if(flag & A_TIME)
         rdtime32(&(ino->c_node.i_atime));

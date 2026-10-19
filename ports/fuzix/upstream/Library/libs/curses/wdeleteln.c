@@ -12,6 +12,7 @@ int wdeleteln(WINDOW *win)
   chtype *end, *temp, blank;
   int y;
 
+  win->_last_valid = 0;
   blank = ' ' | (win->_attrs & ATR_MSK);
 
   temp = win->_line[win->_cury];

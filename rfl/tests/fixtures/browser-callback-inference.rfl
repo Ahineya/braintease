@@ -1,0 +1,11 @@
+import {share,with_shared} from "std/shared";
+struct Token { value:i16 }
+fn produce()->Result<Token,i16>{Ok(Token{value:42})}
+fn act(){}
+fn main(){
+ let empty:Option<Token> =None;let slot=share(empty);
+ match produce(){
+  Ok(value)=>with_shared(slot,once fn(view:&mut Option<Token>)=>{*view=Some(value);}),
+  Err(_)=>act(),
+ }
+}

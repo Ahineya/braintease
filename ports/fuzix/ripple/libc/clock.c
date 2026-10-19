@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include <time.h>
+#include <sys/time.h>
 #include <errno.h>
 #include "clock-abi.h"
 extern long call(unsigned, long, long, long, long);
@@ -35,4 +36,16 @@ int clock_getres(clockid_t clock, struct timespec *out) {
         result.tv_nsec=fine.resolution_ns%1000000000UL;
     }
     *out=result;return 0;
+}
+
+/* This obsolete timezone argument is deliberately UTC; local civil-time rules
+ * belong to tzset/localtime, not the epoch clock or gettimeofday. */
+int gettimeofday(struct timeval *out, struct timezone *zone) {
+    struct timespec sample;
+    if (!out) { errno = EFAULT; return -1; }
+    if (clock_gettime(CLOCK_REALTIME, &sample)) return -1;
+    out->tv_sec = sample.tv_sec;
+    out->tv_usec = sample.tv_nsec / 1000L;
+    if (zone) { zone->tz_minuteswest = 0; zone->tz_dsttime = 0; }
+    return 0;
 }

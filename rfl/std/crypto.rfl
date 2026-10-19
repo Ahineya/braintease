@@ -1,0 +1,168 @@
+// Stateless crypto through the guest /dev/crypto driver, on both OS targets.
+extern "C" {
+    fn rfl_crypto_errno() -> i16;
+    fn rfl_crypto_call(op: u16, parameter: u16, a: *const u8, na: usize, b: *const u8, nb: usize, c: *const u8, nc: usize, out: *mut u8, capacity: usize) -> i32;
+    fn rfl_crypto_random(out: *mut u8, count: usize) -> i16;
+}
+
+/// Guest crypto errno, invalid request, or malformed device reply.
+export type CryptoError = CryptoOsError(i16) | InvalidCryptoArgument | InvalidCryptoResponse;
+/// Operation-mask discovery; supports uses the operation numbers below.
+export struct CryptoCapabilities {
+    /// Advertised operation-number bit mask.
+    operations: u16,
+    /// Legacy advertised curve bit mask.
+    curves: u16
+}
+
+/// Operation number for 2048-bit modular exponentiation.
+export const MODEXP_2048: u16 = 5;
+/// Operation number for PBKDF2-HMAC-SHA512.
+export const PBKDF2_SHA512: u16 = 6;
+/// Operation number for AES-256-IGE encryption.
+export const AES256_IGE_ENCRYPT: u16 = 7;
+/// Operation number for AES-256-IGE decryption.
+export const AES256_IGE_DECRYPT: u16 = 8;
+/// Operation number for SHA-256.
+export const SHA256: u16 = 9;
+/// Operation number for SHA-512.
+export const SHA512: u16 = 10;
+/// Operation number for fixed-width modular multiplication.
+export const MODMUL_2048: u16 = 11;
+/// Operation number for bounded public 63-bit semiprime factorization.
+export const FACTOR_63: u16 = 12;
+impl CryptoCapabilities {
+    /// Checks whether the host advertises the given operation number.
+    export fn supports(&self, operation: u16) -> bool {
+        operation < 16 && (self.operations & ((1 as u16) << operation)) != 0
+    }
+}
+
+/// Performs one bounded device operation. Each input/output is at most 512 octets.
+/// An empty vector is valid. Parameters and integers use the public device ABI.
+export fn device_call(operation: u16, parameter: u16, a: Vec<u8>, b: Vec<u8>, c: Vec<u8>, capacity: usize) -> Result<Vec<u8>, CryptoError> {
+    if (a.len() > 512 || b.len() > 512 || c.len() > 512 || capacity > 512) {
+        return Err(InvalidCryptoArgument);
+    }
+    let na = a.len();
+    let nb = b.len();
+    let nc = c.len();
+    let mut aa = a;
+    let mut bb = b;
+    let mut cc = c;
+    // Valid addresses even for zero-length C buffers, without indexing [] at zero.
+    if (aa.is_empty()) {
+        aa.push(0);
+    }
+    if (bb.is_empty()) {
+        bb.push(0);
+    }
+    if (cc.is_empty()) {
+        cc.push(0);
+    }
+    let mut out: Vec<u8> = [];
+    for (i in 0..if (capacity == 0) {
+        1 as usize
+    } else {
+        capacity
+    }) {
+        out.push(0);
+    }
+    let n = unsafe {
+        rfl_crypto_call(operation, parameter, &aa[0], na, &bb[0], nb, &cc[0], nc, &mut out[0], capacity)
+    };
+    if (n < 0) {
+        return Err(CryptoOsError(rfl_crypto_errno()));
+    }
+    if (n as usize > capacity) {
+        return Err(InvalidCryptoResponse);
+    }
+    while (out.len() > n as usize) {
+        out.pop();
+    }
+    Ok(move(out))
+}
+
+/// Queries legacy capabilities first; older hosts keep their original reply.
+/// A failed extended query leaves the successfully discovered legacy operations.
+export fn capabilities() -> Result<CryptoCapabilities, CryptoError> {
+    let legacy = device_call(0, 0, [], [], [], 3)?;
+    if (legacy.len() != 3 || legacy[0] != 1) {
+        return Err(InvalidCryptoResponse);
+    }
+    let mut operations = legacy[2] as u16;
+    match device_call(0, 1, [], [], [], 3) {
+        Ok(reply) => {
+            if (reply.len() != 3 || reply[0] != 1) {
+                return Err(InvalidCryptoResponse);
+            }
+            operations = reply[1] as u16 | ((reply[2] as u16) << 8);
+        },
+        Err(_) => {}
+    }
+    Ok(CryptoCapabilities { operations: operations, curves: legacy[1] as u16 })
+}
+
+/// Entropy through the guest /dev/urandom driver, up to 4096 octets per request.
+export fn random_bytes(count: usize) -> Result<Vec<u8>, CryptoError> {
+    if (count > 4096) {
+        return Err(InvalidCryptoArgument);
+    }
+    let mut out: Vec<u8> = [];
+    if (count == 0) {
+        return Ok(move(out));
+    }
+    for (i in 0..count) {
+        out.push(0);
+    }
+    if (unsafe {
+        rfl_crypto_random(&mut out[0], count)
+    } < 0) {
+        return Err(CryptoOsError(rfl_crypto_errno()));
+    }
+    Ok(move(out))
+}
+
+/// Big-endian base^exponent mod modulus. Modulus is exactly 256 octets, odd,
+/// with its high bit set. Exponent may occupy up to 512 octets; output is 256.
+/// The caller validates protocol-specific group and peer values.
+export fn modexp_2048(base: Vec<u8>, modulus: Vec<u8>, exponent: Vec<u8>) -> Result<Vec<u8>, CryptoError> {
+    if (base.is_empty() || base.len() > 256 || modulus.len() != 256 || exponent.is_empty()) {
+        return Err(InvalidCryptoArgument);
+    }
+    device_call(MODEXP_2048, 0, base, modulus, exponent, 256)
+}
+
+/// Derives exactly 64 octets using PBKDF2-HMAC-SHA512, with 1..100000 rounds.
+/// Strings/passwords must be supplied as their exact octets, without normalization.
+export fn pbkdf2_sha512(password: Vec<u8>, salt: Vec<u8>, iterations: u32) -> Result<Vec<u8>, CryptoError> {
+    if (iterations == 0 || iterations > 100000) {
+        return Err(InvalidCryptoArgument);
+    }
+    let count: Vec<u8> = [(iterations >> 24) as u8, (iterations >> 16) as u8, (iterations >> 8) as u8, iterations as u8];
+    device_call(PBKDF2_SHA512, 0, password, salt, count, 64)
+}
+
+/// SHA-256 of at most 512 octets. Large streaming hashes belong in guest wolfCrypt.
+export fn sha256(bytes: Vec<u8>) -> Result<Vec<u8>, CryptoError> {
+    device_call(SHA256, 0, bytes, [], [], 32)
+}
+
+/// SHA-512 of at most 512 octets; use guest wolfCrypt for streaming hashes.
+export fn sha512(bytes: Vec<u8>) -> Result<Vec<u8>, CryptoError> {
+    device_call(SHA512, 0, bytes, [], [], 64)
+}
+
+/// AES-256-IGE, no padding. IV is previous ciphertext || previous plaintext.
+/// Data is block aligned and at most 512 octets. Carry the last cipher/plain
+/// blocks into the next call's IV; the device retains no chaining state.
+export fn aes256_ige(bytes: Vec<u8>, key: Vec<u8>, iv: Vec<u8>, decrypt: bool) -> Result<Vec<u8>, CryptoError> {
+    if (bytes.len() % 16 != 0 || key.len() != 32 || iv.len() != 32) {
+        return Err(InvalidCryptoArgument);
+    }
+    device_call(if (decrypt) {
+        AES256_IGE_DECRYPT
+    } else {
+        AES256_IGE_ENCRYPT
+    }, 0, bytes, key, iv, 512)
+}

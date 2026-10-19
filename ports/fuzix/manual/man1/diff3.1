@@ -1,0 +1,48 @@
+.TH DIFF3 1
+.SH NAME
+diff3 \- compare three versions of a text file
+.SH SYNOPSIS
+.B diff3
+[\-e|\-x|\-3] [\-\-] file1 file2 file3
+.SH DESCRIPTION
+Compare file1, file2 and file3 using the installed /bin/diff.
+The default report marks differing regions with ==== when all three differ,
+or ====1, ====2 or ====3 when only that file differs.
+A numbered section gives its line range and changed text.
+.PP
+One file operand may be - for standard input. Other inputs must be readable
+regular files. Temporary comparison reports are private and removed on normal
+exit, errors and handled termination signals. Filenames are passed directly
+to diff as arguments.
+.SH OPTIONS
+.TP
+.B \-e
+Write a reverse-order ed script applying changes from file2 to file3 to file1,
+including overlapping changes. Changes unique to file1 are retained.
+Overlaps take the text from file3; conflict markers are not inserted.
+.TP
+.B \-x
+Write an ed script selecting only overlapping changes where all three differ.
+.TP
+.B \-3
+Write an ed script selecting changes unique to file3.
+.TP
+.B \-\-
+End option processing, allowing filenames beginning with a hyphen.
+.SH EXAMPLE
+(diff3 -e mine base theirs; echo 'w merged'; echo Q) | ed mine
+.PP
+Check the diff3 exit status before applying a saved script in an automated job.
+.SH EXIT STATUS
+0 means comparison or script generation succeeded, including when files differ.
+2 means invalid arguments, input/subprocess failure, exhausted resources or
+an output error.
+.SH LIMITS
+The V7 diff backend supports at most 30000 lines per file; memory or candidate
+limits may be reached earlier. Offsets are 32-bit native-character positions,
+and comparison/report lines are streamed rather than truncated to 255 characters.
+Script text must end in a newline; unrepresentable replacement text is rejected.
+Literal single-dot lines are escaped for ed. Modern -m merged-file output,
+conflict-marker scripts and binary-file comparison are not implemented.
+.SH SEE ALSO
+diff(1), ed(1)

@@ -2,39 +2,42 @@
 
 use super::*;
 
+/// Dedicated entries are reached only from the function's resume dispatcher.
+/// Ordinary internal branches continue to target the original segment blocks.
+pub(super) type ResumeEntries = std::collections::BTreeMap<usize, u32>;
+
 pub(super) fn emit_proc(
     builder: &mut IrBuilder,
     proc: &Proc,
     built: &Built,
-) -> Result<(), CompileError> {
-    builder.create_function(fn_symbol(&proc.name), ptr_ty());
+) -> Result<ResumeEntries, CompileError> {
+    builder.create_function(
+        if proc.direct {
+            direct::symbol(proc)
+        } else {
+            fn_symbol(&proc.name)
+        },
+        ptr_ty(),
+    );
     builder.add_parameter(0, ptr_ty());
+    if proc.direct {
+        builder.add_parameter(1, ptr_ty());
+    }
     let frame = fat_temp(0, BankTag::Mixed);
     // The backend treats block 0 as the function entry and emits no label for
     // it. The entry has to be the first block created in the module so that
     // id is 0, and every later block keeps an id the backend will label.
     let entry = builder.new_label();
     builder.create_block(entry).ir()?;
+    let scratch = direct::scratch(builder, proc, built)?;
     if proc.segs.len() == 1 {
-        return emit_seg(builder, proc, built, &frame, &[entry], 0);
+        emit_seg(builder, proc, built, &frame, &[entry], 0, scratch.as_ref())?;
+        return Ok(ResumeEntries::from([(0, entry)]));
     }
     let labels: Vec<u32> = (0..proc.segs.len()).map(|_| builder.new_label()).collect();
-    emit_switch(builder, proc, &frame, &labels)?;
-    for index in segment_order(proc) {
-        builder.create_block(labels[index]).ir()?;
-        emit_seg(builder, proc, built, &frame, &labels, index)?;
-    }
-    Ok(())
-}
-
-fn emit_switch(
-    builder: &mut IrBuilder,
-    proc: &Proc,
-    frame: &Value,
-    labels: &[u32],
-) -> Result<(), CompileError> {
+    let order = segment_order(proc);
     let mut resumes = std::collections::BTreeSet::from([0]);
-    for index in segment_order(proc) {
+    for &index in &order {
         if let Some(
             Term::Call { next, .. }
             | Term::Apply { next, .. }
@@ -42,15 +45,46 @@ fn emit_switch(
             | Term::AsyncPoll { next, .. },
         ) = proc.segs[index].term
         {
-            resumes.insert(next);
+            if direct::target(proc, built, index).is_none() {
+                resumes.insert(next);
+            }
         }
     }
+    let entries: ResumeEntries = resumes
+        .into_iter()
+        .map(|index| (index, builder.new_label()))
+        .collect();
+    emit_switch(builder, &frame, &entries)?;
+    for (&index, &label) in &entries {
+        builder.create_block(label).ir()?;
+        builder.build_branch(labels[index]).ir()?;
+    }
+    for index in order {
+        builder.create_block(labels[index]).ir()?;
+        emit_seg(
+            builder,
+            proc,
+            built,
+            &frame,
+            &labels,
+            index,
+            scratch.as_ref(),
+        )?;
+    }
+    Ok(entries)
+}
+
+fn emit_switch(
+    builder: &mut IrBuilder,
+    frame: &Value,
+    resumes: &ResumeEntries,
+) -> Result<(), CompileError> {
     if resumes.len() == 1 {
-        return builder.build_branch(labels[0]).ir();
+        return builder.build_branch(resumes[&0]).ir();
     }
     let entries: Vec<_> = resumes
-        .into_iter()
-        .map(|index| (index as i64, labels[index]))
+        .iter()
+        .map(|(&index, &label)| (index as i64, label))
         .collect();
     let resume = load_cell(builder, frame, RESUME, IrType::I16)?;
     let bad = builder.new_label();
@@ -67,6 +101,7 @@ pub(super) fn emit_seg(
     frame: &Value,
     labels: &[u32],
     index: usize,
+    scratch: Option<&direct::Scratch>,
 ) -> Result<(), CompileError> {
     if index == 0 {
         zero_managed_slots(builder, proc, frame)?;
@@ -143,14 +178,50 @@ pub(super) fn emit_seg(
             args,
             dest,
             next,
-        } => emit_call(builder, proc, built, frame, callee, args, *dest, *next),
+        } => {
+            if let Some(target) = direct::target(proc, built, index) {
+                direct::call(
+                    builder,
+                    proc,
+                    target,
+                    frame,
+                    args,
+                    None,
+                    *dest,
+                    scratch.unwrap(),
+                )?;
+                builder.build_branch(labels[*next]).ir()
+            } else {
+                emit_call(builder, proc, built, frame, callee, args, *dest, *next)
+            }
+        }
         Term::Apply {
             slot,
             args,
             arg_tys,
             dest,
             next,
-        } => emit_apply(builder, proc, frame, *slot, args, arg_tys, *dest, *next),
+        } => {
+            if let Some(target) = direct::target(proc, built, index) {
+                direct::call(
+                    builder,
+                    proc,
+                    target,
+                    frame,
+                    args,
+                    Some(*slot),
+                    *dest,
+                    scratch.unwrap(),
+                )?;
+                return builder.build_branch(labels[*next]).ir();
+            }
+            let known = built.known_calls[proc.func_id]
+                .get(&index)
+                .and_then(|name| built.procs.iter().find(|p| p.name == *name));
+            emit_apply(
+                builder, proc, frame, *slot, args, arg_tys, *dest, *next, known,
+            )
+        }
         Term::Fail => {
             fail(builder, FAIL_MATCH)?;
             builder.build_return(Some(null_ptr())).ir()
@@ -175,7 +246,15 @@ pub(super) fn emit_seg(
                 .build_branch_cond(Value::Temp(same), labels[*then_seg], labels[*else_seg])
                 .ir()
         }
-        Term::Tail { callee, args } => emit_tail_call(builder, proc, built, frame, callee, args),
+        Term::Tail { callee, args } => {
+            if proc.direct {
+                let target = direct::target(proc, built, index)
+                    .ok_or_else(|| CompileError::plain("unproved tail call in direct body"))?;
+                direct::tail(builder, proc, target, frame, args, scratch.unwrap())
+            } else {
+                emit_tail_call(builder, proc, built, frame, callee, args)
+            }
+        }
     }
 }
 
@@ -354,7 +433,7 @@ pub(super) fn emit_insn(
             }
             Ok(())
         }
-        Insn::Closure { dest, func } => {
+        Insn::Closure { dest, func, .. } => {
             let (func_id, frame_cells, captures) = {
                 let callee = built.procs.iter().find(|item| item.name == *func).unwrap();
                 (callee.func_id, callee.frame_cells, callee.captures.clone())

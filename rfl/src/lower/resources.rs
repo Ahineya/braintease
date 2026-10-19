@@ -16,6 +16,16 @@ pub(super) fn transfer_slot(
     if std::ptr::eq(src_proc, dest_proc) && src_frame == dest_frame && src == dest {
         return Ok(());
     }
+    if !src_proc.slots[src].shared && !dest_proc.slots[dest].shared {
+        return moves::transfer_to_offset(
+            builder,
+            src_proc,
+            src_frame,
+            src,
+            dest_frame,
+            dest_proc.slots[dest].offset,
+        );
+    }
     copy_slot(
         builder, src_proc, src_frame, src, dest_proc, dest_frame, dest,
     )?;

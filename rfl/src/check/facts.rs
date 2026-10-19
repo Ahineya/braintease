@@ -63,6 +63,7 @@ impl<'a> Checker<'a> {
             return name.clone();
         }
         match ty {
+            Ty::Constructor(id) => self.constructors[id as usize].name.clone(),
             Ty::Adt(id) => self.adts[id as usize].name.clone(),
             Ty::Owned(id) => format!("Owned<{}>", self.show(self.owner_elems[id as usize])),
             Ty::Vec(id) => format!("Vec<{}>", self.show(self.vec_elems[id as usize])),
@@ -92,7 +93,12 @@ impl<'a> Checker<'a> {
                 let sig = &self.funcs[id as usize];
                 let params: Vec<String> =
                     sig.params.iter().map(|param| self.show(*param)).collect();
-                format!("fn({}) -> {}", params.join(", "), self.show(sig.ret))
+                format!(
+                    "{}fn({}) -> {}",
+                    if sig.once { "once " } else { "" },
+                    params.join(", "),
+                    self.show(sig.ret)
+                )
             }
             Ty::CFn(id) => {
                 let sig = &self.cfns[id as usize];
@@ -108,16 +114,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn vec_elem_of(&self, expr: &Expr) -> Option<Ty> {
-        let ty = self.peek_place(expr)?;
-        self.element_of(ty).or_else(|| {
-            let Ty::Ref(id) = ty else {
-                return None;
-            };
-            self.element_of(self.refs[id as usize].inner)
-        })
-    }
-
     pub(super) fn peek_place(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
             ExprKind::Name(name) => self.binding_ty(name),
@@ -127,7 +123,7 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Index { base, .. } => {
                 let ty = self.peek_place(base)?;
-                self.element_of(self.referent(ty))
+                self.index_hint(ty)
             }
             ExprKind::Deref(base) => match self.peek_place(base)? {
                 Ty::Ref(id) => Some(self.refs[id as usize].inner),
@@ -135,6 +131,15 @@ impl<'a> Checker<'a> {
                 _ => None,
             },
             _ => None,
+        }
+    }
+
+    // Raw indexing is a pointer load, not a collection operation. Preserve its
+    // pointee hint without teaching element_of that pointers support Vec APIs.
+    fn index_hint(&self, ty: Ty) -> Option<Ty> {
+        match self.referent(ty) {
+            Ty::Ptr(id) => Some(self.ptrs[id as usize].inner),
+            other => self.element_of(other),
         }
     }
 
@@ -163,6 +168,7 @@ impl<'a> Checker<'a> {
 
     pub(super) fn peek(&self, expr: &Expr) -> Option<Ty> {
         match &expr.kind {
+            ExprKind::Macro(_) => None,
             ExprKind::Int(_) | ExprKind::Float(_) => None,
             ExprKind::Bool(_) => Some(Ty::Bool),
             ExprKind::Name(name) => self
@@ -177,10 +183,12 @@ impl<'a> Checker<'a> {
                     Some(self.outer_bindings[id as usize].ty)
                 })
                 .or_else(|| self.consts.get(name).map(|(ty, _)| *ty)),
-            ExprKind::Borrow { .. }
-            | ExprKind::Await(_)
-            | ExprKind::Try(_)
-            | ExprKind::Deref(_) => None,
+            ExprKind::Borrow { .. } | ExprKind::Await(_) | ExprKind::Try(_) => None,
+            ExprKind::Deref(base) => match self.peek(base)? {
+                Ty::Ref(id) => Some(self.refs[id as usize].inner),
+                Ty::Ptr(id) => Some(self.ptrs[id as usize].inner),
+                _ => None,
+            },
             // A string slice remains a String. Preserve this hint for overloaded
             // addition and comparison even when neither operand is a literal.
             ExprKind::Slice { base, .. } => self
@@ -229,23 +237,40 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Call { callee, .. } if callee == "owned" => None,
             ExprKind::Call { callee, .. } if is_builtin(callee) => Some(Ty::Unit),
-            ExprKind::Call { callee, .. } => self.sigs.get(callee).and_then(|sig| sig.ret),
+            ExprKind::Call { callee, .. } => {
+                self.sigs.get(callee).and_then(|sig| sig.ret).or_else(|| {
+                    let schema = self.fn_schemas.get(callee)?;
+                    match self.ast_fns[schema.index].ret.as_ref()? {
+                        ParsedTy::Named { name, args, .. } if args.is_empty() => {
+                            Ty::parse_name(name)
+                        }
+                        _ => None,
+                    }
+                })
+            }
             ExprKind::Method {
                 receiver,
                 method,
                 resolved,
+                method_span,
                 ..
             } => {
-                if method == "len" && self.vec_elem_of(receiver).is_some() {
+                // Temporary receivers can have a known type too (for example
+                // log.output().len()). Do not default their numeric result to
+                // i16 simply because the receiver is not an addressable place.
+                let receiver_ty = self.peek_place(receiver).or_else(|| self.peek(receiver));
+                let collection = receiver_ty
+                    .and_then(|ty| self.element_of(self.referent(ty)))
+                    .is_some();
+                let string = receiver_ty.is_some_and(|ty| self.referent(ty) == Ty::String);
+                if method == "len" && (collection || string) {
                     Some(Ty::Usize)
-                } else if method == "is_empty" && self.vec_elem_of(receiver).is_some() {
+                } else if method == "is_empty" && (collection || string) {
                     Some(Ty::Bool)
-                } else if (method == "push" || method == "clear")
-                    && self.vec_elem_of(receiver).is_some()
-                {
+                } else if (method == "push" || method == "clear") && collection {
                     Some(Ty::Unit)
                 } else {
-                    if let Some(ty) = self.peek(receiver) {
+                    if let Some(ty) = receiver_ty {
                         if method == "into_inner" {
                             if let Ty::Owned(id) = ty {
                                 return Some(self.owner_elems[id as usize]);
@@ -260,7 +285,8 @@ impl<'a> Checker<'a> {
                                 return self.sigs.get(&found.func).and_then(|s| s.ret);
                             }
                         }
-                        if let Ok(candidates) = self.trait_candidates(expr.span.start, ty, method) {
+                        if let Ok(candidates) = self.trait_candidates(method_span.start, ty, method)
+                        {
                             if candidates.len() == 1 {
                                 return self.trait_return_hint(&candidates[0], method);
                             }
@@ -271,7 +297,8 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Index { base, .. } => self
                 .peek_place(base)
-                .and_then(|ty| self.element_of(self.referent(ty))),
+                .or_else(|| self.peek(base))
+                .and_then(|ty| self.index_hint(ty)),
             ExprKind::Array(_) => None,
             ExprKind::If {
                 else_body: None, ..

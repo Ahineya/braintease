@@ -1,0 +1,119 @@
+// Run: python3 rcc-wasm/examples/browser/run.py --async
+// Ordinary async/await, managed application state and DOM work stay in Wasm.
+import { mount_app, BrowserApp, BrowserTask } from "std/browser_app";
+import { patch, BrowserEvent, CLICK } from "std/browser";
+import { get } from "std/browser_effects";
+import { Future, sleep } from "std/future";
+import { Shared, share, with_shared } from "std/shared";
+
+fn message(text: String) {
+    let mut dom = patch();
+    let value = dom.string(text);
+    dom.set_text(2, value);
+    move(dom).commit();
+}
+
+// The local fixture is UTF-8. Preserve its octets with bounded concatenations;
+// arbitrary HTTP bodies remain binary and require a separate decoding policy.
+fn text_bytes(bytes: &Vec<u8>, begin: usize, end: usize) -> String {
+    if (end - begin > 32) {
+        let middle = begin + (end - begin) / 2;
+        return text_bytes(bytes, begin, middle) + text_bytes(bytes, middle, end);
+    }
+    let mut text = "";
+    for (i in begin..end) {
+        text = text + from_byte(bytes[i]);
+    }
+    text
+}
+
+async fn load(app: BrowserApp) {
+    message("Fetching a message...");
+    match get(app.effects(), "./message.txt", 1024).unwrap().await {
+        Ok(response) => {
+            message(text_bytes(&response.body, 0, response.body.len()));
+            println("Fetch completed in RFL");
+        },
+        Err(_) => {
+            message("The request failed.");
+        },
+    }
+}
+
+async fn timer() {
+    sleep(750).unwrap().await;
+    let mut dom = patch();
+    let value = dom.string("Clock timer complete");
+    dom.set_text(8, value);
+    move(dom).commit();
+    println("Timer completed in RFL");
+}
+
+fn start(app: BrowserApp, slot: Shared<Option<BrowserTask>>) {
+    with_shared(slot, once fn(current: &mut Option<BrowserTask>) => {
+        match &*current {
+            Some(task) => {
+                task.cancel();
+            },
+            None => {}
+        }
+    });
+    match app.spawn(load(app)) {
+        Ok(task) => with_shared(slot, once fn(current: &mut Option<BrowserTask>) => {
+            *current = Some(task);
+        }),
+        Err(_) => message("The application is busy; try again."),
+    }
+}
+
+fn main() {
+    let current: Option<BrowserTask> = None;
+    let slot = share(current);
+    let app = mount_app(8, fn(events: Vec<BrowserEvent>, app: BrowserApp) => {
+        for (event in events) {
+            if (event.listener == 1) {
+                start(app, slot);
+            }
+            if (event.listener == 2) {
+                with_shared(slot, once fn(current: &mut Option<BrowserTask>) => {
+                    match &*current {
+                        Some(task) => {
+                            task.cancel();
+                        },
+                        None => {}
+                    }
+                });
+                message("Request cancelled.");
+            }
+        }
+    }).unwrap();
+    let mut dom = patch();
+    let paragraph = dom.string("p");
+    let button = dom.string("button");
+    dom.element(1, paragraph);
+    let waiting = dom.string("Starting...");
+    dom.text(2, waiting);
+    dom.insert(0, 1, 0);
+    dom.insert(1, 2, 0);
+    dom.element(3, button);
+    let reload = dom.string("Reload message");
+    dom.text(4, reload);
+    dom.insert(0, 3, 0);
+    dom.insert(3, 4, 0);
+    dom.listen(3, CLICK, 1, 0);
+    dom.element(5, button);
+    let cancel = dom.string("Cancel request");
+    dom.text(6, cancel);
+    dom.insert(0, 5, 0);
+    dom.insert(5, 6, 0);
+    dom.listen(5, CLICK, 2, 0);
+    dom.element(7, paragraph);
+    let ticking = dom.string("Clock timer pending...");
+    dom.text(8, ticking);
+    dom.insert(0, 7, 0);
+    dom.insert(7, 8, 0);
+    move(dom).commit();
+    start(app, slot);
+    app.spawn(timer()).unwrap();
+    println("RFL application mounted");
+}

@@ -4,6 +4,7 @@ members = [
     "rcc-common",
     "rcc-ir",
     "rcc-native",
+    "rcc-wasm",
     "rcc-native-runtime",
     "rcc-backend",
     "rcc-driver",

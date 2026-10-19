@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
 #include <printf.h>
 #include <kdata.h>
@@ -50,6 +51,10 @@ static uint16_t bufclock;		/* Time-stamp counter for LRU */
 #define bunlock_s(x)
 
 
+#ifdef CONFIG_RIPPLE_IO
+#include "bufindex.inc"
+#endif
+
 /*
  *	Make an entry in the buffer cache and fill it. If rewrite is
  *	set then we are not keeping any of the old data but overwriting
@@ -66,6 +71,9 @@ bufptr bread(uint16_t dev, blkno_t blk, bool rewrite)
 		bp = freebuf();
 		bp->bf_dev = dev;
 		bp->bf_blk = blk;
+#ifdef CONFIG_RIPPLE_IO
+        buffer_insert(bp);
+#endif
 
 		/* If rewrite is set, we are about to write over the entire block,
 		   so we don't need the previous contents */
@@ -73,6 +81,9 @@ bufptr bread(uint16_t dev, blkno_t blk, bool rewrite)
 			if (bdread(bp) != BLKSIZE) {
 				udata.u_error = EIO;
 				/* Don't cache the failure */
+#ifdef CONFIG_RIPPLE_IO
+                buffer_remove(bp);
+#endif
 				bp->bf_dev = NO_DEVICE;
 				bp->bf_dirty = false;
 				bunlock(bp);
@@ -194,14 +205,13 @@ static void bdput(register bufptr bp)
  */
 void bufsync(void)
 {
-	register bufptr bp;
-
-	/* FIXME: this can generate a lot of d_flush calls when you have
-	   plenty of buffers */
-	for (bp = bufpool; bp < bufpool_end; ++bp) {
-		if (bp->bf_dev != NO_DEVICE)
-		        bdput(bp);
-	}
+#ifdef CONFIG_RIPPLE_IO
+    ripple_bufsync();
+#else
+    bufptr bp;
+    for (bp=bufpool; bp<bufpool_end; ++bp)
+        if (bp->bf_dev!=NO_DEVICE) bdput(bp);
+#endif
 }
 
 /*
@@ -214,7 +224,13 @@ bufptr bfind(uint16_t dev, blkno_t blk)
 {
 	register bufptr bp;
 
+#ifdef CONFIG_RIPPLE_IO
+    unsigned link=buffer_head[buffer_bucket(dev,blk)];
+    for (; link; link=buffer_next[link-1]) {
+        bp=bufpool+link-1;
+#else
 	for (bp = bufpool; bp < bufpool_end; ++bp) {
+#endif
 		if (bp->bf_dev == dev && bp->bf_blk == blk) {
 			if (bcheck(bp))
 				panic(PANIC_WANTBSYB);
@@ -237,11 +253,17 @@ bufptr bfind(uint16_t dev, blkno_t blk)
  */
 void bdrop(uint16_t dev)
 {
+#ifdef CONFIG_RIPPLE_IO
+    ripple_namecache_drop(dev);
+#endif
 	register bufptr bp;
 
 	for (bp = bufpool; bp < bufpool_end; ++bp) {
 		if (bp->bf_dev == dev) {
 			bdput(bp);
+#ifdef CONFIG_RIPPLE_IO
+            buffer_remove(bp);
+#endif
 		        bp->bf_dev = NO_DEVICE;
                 }
 	}
@@ -283,6 +305,9 @@ bufptr freebuf(void)
 		}
 		oldest->bf_dirty = false;
 	}
+#ifdef CONFIG_RIPPLE_IO
+    buffer_remove(oldest);
+#endif
 	return oldest;
 }
 

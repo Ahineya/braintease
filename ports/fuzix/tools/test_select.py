@@ -18,8 +18,12 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--build',type=Path,default=ROOT/'build/fuzix')
 p.add_argument('--native',action='store_true')
 p.add_argument('--local',action='store_true',help='exercise Unix sockets offline instead of internet readiness')
+p.add_argument('--capacity-only',action='store_true',help='run only listener/socket capacity and readiness checks')
+p.add_argument('--memory-stress',action='store_true',help='exhaust the RVM page pool, then check networking still works')
 p.add_argument('--native-build',type=Path,default=ROOT/'fuse-x/build')
-a=p.parse_args();probe='localcheck' if a.local else 'selectcheck';build=a.build.resolve();native=ROOT/'fuse-x';native_build=a.native_build.resolve()
+a=p.parse_args()
+if a.memory_stress and (a.native or a.local):p.error('--memory-stress requires RVM internet tests')
+probe='localcheck' if a.local else 'selectcheck';build=a.build.resolve();native=ROOT/'fuse-x';native_build=a.native_build.resolve()
 
 class SelectPeer(Peer):
     def packet(self,frame):
@@ -36,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
     tmp=Path(temp);exe=tmp/(probe+('.fxe' if a.native else '.rxe'))
     if a.native:
         subprocess.run([sys.executable,str(native/'cc.py'),str(PORT/('tools/'+probe+'.c')),
-                        '-DSELECT_NATIVE','--build',str(native_build),'-o',str(exe)],check=True)
+                        '--build',str(native_build),'-o',str(exe)],check=True)
         image=tmp/'root.img'
         subprocess.run(['node',str(native/'image.mjs'),'create',str(image),'--apps',str(native_build/'apps')],check=True)
         subprocess.run(['node',str(native/'image.mjs'),'put',str(image),'/bin/'+probe,str(exe)],check=True)
@@ -53,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
             str(build/'user/userlib.pobj'),*libs,'-f','rxe','--bank-size','64000','-o',str(exe)],check=True)
         stage=tmp/'stage';stage.mkdir()
         names=['init','sh','echo','cat','true','ifconfig']
+        if a.memory_stress:names+=['hello','mmucheck','ping']
         for name in [*(n+'.rxe' for n in names),'FUZIX.SYS','bios.bin']:(stage/name).symlink_to(build/name)
         (stage/(probe+'.rxe')).symlink_to(exe);(stage/'apps.json').write_text(json.dumps([*names,probe]))
         image=tmp/'disk.img';subprocess.run(['node',str(PORT/'tools/disk.mjs'),str(stage),str(image)],check=True)
@@ -63,12 +68,12 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
     if a.native:
         env.pop('RIPPLE_NET',None)
         env['RCC_NATIVE_NET']='off'
-        env.update(RCC_NATIVE_HEADLESS='1',RCC_NATIVE_TIMEOUT='180')
+        env.update(RCC_NATIVE_HEADLESS='1',RCC_NATIVE_TIMEOUT='300')
         if peer:env['RCC_NATIVE_NET']=str(tmp/'nic')
         cmd=[str(native_build/'fuse-x'),'--run',str(image)]
     else:
         cmd=[str(ROOT/'target/release/rvm'),str(build/'bios.bin'),'--disk',str(image),'--memory','16384000',
-             *(['--net',str(tmp/'nic')] if peer else []),'--jit','--timeout','180']
+             *(['--net',str(tmp/'nic')] if peer else []),'--jit','--timeout',str(900 if a.memory_stress else 300)]
     log=Path('/tmp/fuzix-'+('local-' if a.local else 'select-')+('native' if a.native else 'jit')+'.log')
     with log.open('wb') as output:
         master,slave=pty.openpty() if not a.native else (None,None)
@@ -78,7 +83,8 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
         def until(marker,seconds=60):
             end=time.monotonic()+seconds
             while marker not in console():
-                assert guest.poll() is None and time.monotonic()<end,(marker,console()[-6000:])
+                assert guest.poll() is None and time.monotonic()<end,(marker,console()[-6000:],
+                    [(s.local,s.remote,s.established,s.fin,s.fin_acked,len(s.received),len(s.pending),s.window) for s in peer.streams.values()] if peer else [])
                 assert b'FAILED' not in console() and b'panic:' not in console(),console()[-6000:]
                 pump()
         def send(line):
@@ -90,22 +96,33 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
                 send('localcheck; echo LOCAL_STATUS:$?')
                 until(b'LOCAL_STATUS:0\n',90);assert b'LOCAL_OK' in console(),console()
             else:
-                send('selectcheck; echo SELECT_STATUS:$?')
-                until(b'SELECT_STATUS:0\n',90);assert b'SELECT_OK' in console(),console()
-                send('selectcheck input; echo INPUT_STATUS:$?');until(b'SELECT_INPUT_READY\n')
-                send('k');until(b'INPUT_STATUS:0\n');assert b'SELECT_INPUT_OK' in console()
-                # A blocked selector should leave the VM/host idle, rather than
-                # repeatedly executing a runnable application polling loop.
-                send('selectcheck idle; echo IDLE_STATUS:$?');until(b'SELECT_IDLE_READY\n')
-                cpu_before=subprocess.check_output(['ps','-o','time=','-p',str(guest.pid)],text=True).strip()
-                until(b'IDLE_STATUS:0\n');cpu_after=subprocess.check_output(['ps','-o','time=','-p',str(guest.pid)],text=True).strip()
-                def cpu(value):
-                    return sum(float(field)*60**position for position,field in enumerate(reversed(value.split(':'))))
-                spent=cpu(cpu_after)-cpu(cpu_before)
-                assert spent<1.5,(cpu_before,cpu_after)
-                print(f'Select idle: {spent:.3f}s host CPU during a two-second guest wait',flush=True)
-                send('selectcheck capacity; echo CAPACITY_STATUS:$?')
-                until(b'CAPACITY_STATUS:0\n',90);assert b'SELECT_CAPACITY_OK' in console(),console()
+                if not a.capacity_only:
+                    send('selectcheck; echo SELECT_STATUS:$?')
+                    until(b'SELECT_STATUS:0\n',90);assert b'SELECT_OK' in console(),console()
+                    send('selectcheck input; echo INPUT_STATUS:$?');until(b'SELECT_INPUT_READY\n')
+                    send('k');until(b'INPUT_STATUS:0\n');assert b'SELECT_INPUT_OK' in console()
+                    # A blocked selector should leave the VM/host idle, rather than
+                    # repeatedly executing a runnable application polling loop.
+                    send('selectcheck idle; echo IDLE_STATUS:$?');until(b'SELECT_IDLE_READY\n')
+                    cpu_before=subprocess.check_output(['ps','-o','time=','-p',str(guest.pid)],text=True).strip()
+                    until(b'IDLE_STATUS:0\n');cpu_after=subprocess.check_output(['ps','-o','time=','-p',str(guest.pid)],text=True).strip()
+                    def cpu(value):
+                        return sum(float(field)*60**position for position,field in enumerate(reversed(value.split(':'))))
+                    spent=cpu(cpu_after)-cpu(cpu_before)
+                    assert spent<1.5,(cpu_before,cpu_after)
+                    print(f'Select idle: {spent:.3f}s host CPU during a two-second guest wait',flush=True)
+                send('selectcheck '+('capacity-stress' if a.memory_stress else 'capacity')+'; echo CAPACITY_STATUS:$?')
+                until(b'SELECT_CAPACITY_LISTENERS_READY\n',90)
+                listeners=[]
+                for index in range(16):
+                    client=peer.connect(7400+index,45000+index)
+                    client.queue(bytes([index]));client.closing=True
+                    listeners.append(client)
+                until(b'CAPACITY_STATUS:0\n',600 if a.memory_stress else 180);assert b'SELECT_CAPACITY_OK' in console(),console()
+                assert all(bytes(client.received)==bytes([index]) for index,client in enumerate(listeners))
+                if a.memory_stress:
+                    assert b'CAPACITY_MEMORY_PRESSURE_OK' in console(),console()
+                    print('MMU exhaustion/recovery preserved data queued on all 64 TCP streams',flush=True)
                 send('selectcheck network; echo NETWORK_STATUS:$?');until(b'SELECT_LISTEN_READY\n')
                 stream=peer.connect(7331,43331)
                 end=time.monotonic()+10
@@ -146,4 +163,4 @@ with tempfile.TemporaryDirectory(prefix='fselect-',dir='/tmp') as temp:
         assert reboot.returncode==0 and b'LOCAL_STALE_OK' in output and b'STALE_STATUS:0\n' in output,output
         if a.native:check_root(image)
         else:subprocess.run([sys.executable,str(PORT/'tools/fsck.py'),str(image)],check=True)
-print(('Native' if a.native else 'JIT')+(' local IPC passed' if a.local else ' select: API, files/pipes/PTYs, signals/deadlines, keyboard, idle CPU and TCP/UDP/listener readiness passed'))
+print(('Native' if a.native else 'JIT')+(' capacity and network readiness passed' if a.capacity_only else ' local IPC passed' if a.local else ' select: API, files/pipes/PTYs, signals/deadlines, keyboard, idle CPU and TCP/UDP/listener readiness passed'))

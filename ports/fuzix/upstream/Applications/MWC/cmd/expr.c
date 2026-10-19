@@ -88,7 +88,7 @@
 
 
 /* Copy the first part of user declarations.  */
-
+#line 10 "upstream/Applications/MWC/cmd/expr.y"
 
 extern void *ripple_absolute_pointer(void *);
 
@@ -201,7 +201,7 @@ typedef int YYSTYPE;
 
 
 /* Line 216 of yacc.c.  */
-
+#line 205 "y.tab.c"
 
 #ifdef short
 # undef short
@@ -1178,57 +1178,6 @@ int yynerrs;
 
 
 
-
-/* Ripple: non-reentrant parser state; see generate_devtools.py. */
-
-  
-  int yystate;
-  int yyn;
-  int yyresult;
-  /* Number of tokens to shift before error messages enabled.  */
-  int yyerrstatus;
-  /* Look-ahead token as an internal (translated) token number.  */
-  int yytoken = 0;
-#if YYERROR_VERBOSE
-  /* Buffer for error messages, and its allocated size.  */
-  char yymsgbuf[128];
-  char *yymsg = yymsgbuf;
-  YYSIZE_T yymsg_alloc = sizeof yymsgbuf;
-#endif
-
-  /* Three stacks and their tools:
-     `yyss': related to states,
-     `yyvs': related to semantic values,
-     `yyls': related to locations.
-
-     Refer to the stacks thru separate pointers, to allow yyoverflow
-     to reallocate them elsewhere.  */
-
-  /* The state stack.  */
-  yytype_int16 yyssa[YYINITDEPTH];
-  yytype_int16 *yyss;
-  yytype_int16 *yyssp;
-
-  /* The semantic value stack.  */
-  YYSTYPE yyvsa[YYINITDEPTH];
-  YYSTYPE *yyvs;
-  YYSTYPE *yyvsp;
-
-
-
-#define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N))
-
-  YYSIZE_T yystacksize = YYINITDEPTH;
-
-  /* The variables used to return semantic value and location from the
-     action routines.  */
-  YYSTYPE yyval;
-
-
-  /* The number of symbols on the RHS of the reduced rule.
-     Keep to zero when no symbol should be popped.  */
-  int yylen = 0;
-
 /*----------.
 | yyparse.  |
 `----------*/
@@ -1255,9 +1204,54 @@ yyparse ()
 #endif
 #endif
 {
-  yyss = ripple_absolute_pointer(yyssa);
-  yyvs = ripple_absolute_pointer(yyvsa);
-  yystacksize = YYINITDEPTH; yylen = 0; yytoken = 0;
+  
+  int yystate;
+  int yyn;
+  int yyresult;
+  /* Number of tokens to shift before error messages enabled.  */
+  int yyerrstatus;
+  /* Look-ahead token as an internal (translated) token number.  */
+  int yytoken = 0;
+#if YYERROR_VERBOSE
+  /* Buffer for error messages, and its allocated size.  */
+  char yymsgbuf[128];
+  char *yymsg = yymsgbuf;
+  YYSIZE_T yymsg_alloc = sizeof yymsgbuf;
+#endif
+
+  /* Three stacks and their tools:
+     `yyss': related to states,
+     `yyvs': related to semantic values,
+     `yyls': related to locations.
+
+     Refer to the stacks thru separate pointers, to allow yyoverflow
+     to reallocate them elsewhere.  */
+
+  /* The state stack.  */
+  yytype_int16 yyssa[YYINITDEPTH];
+  yytype_int16 *yyss = yyssa;
+  yytype_int16 *yyssp;
+
+  /* The semantic value stack.  */
+  YYSTYPE yyvsa[YYINITDEPTH];
+  YYSTYPE *yyvs = yyvsa;
+  YYSTYPE *yyvsp;
+
+
+
+#define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N))
+
+  YYSIZE_T yystacksize = YYINITDEPTH;
+
+  /* The variables used to return semantic value and location from the
+     action routines.  */
+  YYSTYPE yyval;
+
+
+  /* The number of symbols on the RHS of the reduced rule.
+     Keep to zero when no symbol should be popped.  */
+  int yylen = 0;
+
   YYDPRINTF ((stderr, "Starting parse\n"));
 
   yystate = 0;
@@ -1334,7 +1328,7 @@ yyparse ()
 	YYSTACK_RELOCATE (yyvs);
 
 #  undef YYSTACK_RELOCATE
-	if (yyss1 != (yytype_int16 *)ripple_absolute_pointer(yyssa))
+	if (yyss1 != yyssa)
 	  YYSTACK_FREE (yyss1);
       }
 # endif
@@ -1455,27 +1449,27 @@ yyreduce:
   switch (yyn)
     {
         case 2:
-
-    { result = (yyvsp[(1) - (1)]); exstat = true(result) ? 0 : 1; ;}
+#line 113 "upstream/Applications/MWC/cmd/expr.y"
+    { result = (yyvsp[(1) - (1)]); exstat = true(result) ? 0 : 1; }
     break;
 
   case 3:
-
-    { (yyval) = (yyvsp[(2) - (3)]); ;}
+#line 117 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = (yyvsp[(2) - (3)]); }
     break;
 
   case 4:
-
-    { (yyval) = ltoascii((long)strlen((yyvsp[(2) - (2)]))); ;}
+#line 119 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = ltoascii((long)strlen((yyvsp[(2) - (2)]))); }
     break;
 
   case 5:
-
-    { (yyval) = true((yyvsp[(2) - (2)])) ? s0 : s1; ;}
+#line 120 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = true((yyvsp[(2) - (2)])) ? s0 : s1; }
     break;
 
   case 6:
-
+#line 122 "upstream/Applications/MWC/cmd/expr.y"
     { if (isnum((yyvsp[(2) - (2)])))
 				{ long value = expr_number((yyvsp[(2) - (2)]));
 				  if (value == LONG_MIN) yyerror("integer overflow");
@@ -1484,102 +1478,102 @@ yyreduce:
 				--avx;
 				yyerror("");
 			}
-			;}
+			}
     break;
 
   case 7:
-
-    { (yyval) = regexp((yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 132 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = regexp((yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 8:
-
-    { (yyval) = arithop('*', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 134 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = arithop('*', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 9:
-
-    { (yyval) = arithop('/', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 135 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = arithop('/', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 10:
-
-    { (yyval) = arithop('%', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 136 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = arithop('%', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 11:
-
-    { (yyval) = arithop('+', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 137 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = arithop('+', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 12:
-
-    { (yyval) = arithop('-', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 138 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = arithop('-', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 13:
-
-    { (yyval) = relop('<', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 140 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop('<', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 14:
-
-    { (yyval) = relop('>', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 141 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop('>', (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 15:
-
-    { (yyval) = relop(LE, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 142 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop(LE, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 16:
-
-    { (yyval) = relop(GE, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 143 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop(GE, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 17:
-
-    { (yyval) = relop(EQ, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 144 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop(EQ, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 18:
-
-    { (yyval) = relop(NEQ, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); ;}
+#line 145 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = relop(NEQ, (yyvsp[(1) - (3)]), (yyvsp[(3) - (3)])); }
     break;
 
   case 19:
-
-    { (yyval) = true((yyvsp[(3) - (3)])) ? (yyvsp[(1) - (3)]) : s0; ;}
+#line 147 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = true((yyvsp[(3) - (3)])) ? (yyvsp[(1) - (3)]) : s0; }
     break;
 
   case 20:
-
-    { (yyval) = true((yyvsp[(1) - (3)])) ? (yyvsp[(1) - (3)]) : (yyvsp[(3) - (3)]); ;}
+#line 148 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = true((yyvsp[(1) - (3)])) ? (yyvsp[(1) - (3)]) : (yyvsp[(3) - (3)]); }
     break;
 
   case 21:
-
-    { (yyval) = true((yyvsp[(2) - (5)])) ? (yyvsp[(4) - (5)]) : s0; ;}
+#line 150 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = true((yyvsp[(2) - (5)])) ? (yyvsp[(4) - (5)]) : s0; }
     break;
 
   case 22:
-
-    { (yyval) = true((yyvsp[(2) - (7)])) ? (yyvsp[(4) - (7)]) : (yyvsp[(6) - (7)]); ;}
+#line 151 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = true((yyvsp[(2) - (7)])) ? (yyvsp[(4) - (7)]) : (yyvsp[(6) - (7)]); }
     break;
 
   case 23:
-
-    { (yyval) = (yyvsp[(1) - (1)]); ;}
+#line 153 "upstream/Applications/MWC/cmd/expr.y"
+    { (yyval) = (yyvsp[(1) - (1)]); }
     break;
 
   case 24:
-
-    { yyerror(""); ;}
+#line 154 "upstream/Applications/MWC/cmd/expr.y"
+    { yyerror(""); }
     break;
 
 
 /* Line 1267 of yacc.c.  */
-
+#line 1577 "y.tab.c"
       default: break;
     }
   YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
@@ -1781,7 +1775,7 @@ yyreturn:
       YYPOPSTACK (1);
     }
 #ifndef yyoverflow
-  if (yyss != (yytype_int16 *)ripple_absolute_pointer(yyssa))
+  if (yyss != yyssa)
     YYSTACK_FREE (yyss);
 #endif
 #if YYERROR_VERBOSE
@@ -1793,7 +1787,7 @@ yyreturn:
 }
 
 
-
+#line 160 "upstream/Applications/MWC/cmd/expr.y"
 
 
 

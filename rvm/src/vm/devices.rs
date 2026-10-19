@@ -5,6 +5,9 @@ use crate::devices::KeyTransition;
 impl VM {
     /// Access a guest cell with the same routing used by LOAD.
     pub fn read_cell(&mut self, bank: u16, offset: u16) -> Result<u16, String> {
+        if bank == 0 && usize::from(offset) == crate::constants::HDR_MATH_STACK {
+            return Ok(1);
+        }
         if self.mmu.mapped(bank, crate::mmu::Access::Read) {
             let address = self.mmu_translate(bank, offset, crate::mmu::Access::Read)?;
             return self.memory.get(address).copied().ok_or("translated LOAD outside RAM".into());
@@ -32,6 +35,9 @@ impl VM {
 
     /// Access a guest cell with the same routing used by STORE.
     pub fn write_cell(&mut self, bank: u16, offset: u16, value: u16) -> Result<(), String> {
+        if bank == 0 && usize::from(offset) == crate::constants::HDR_MATH_STACK {
+            return self.stack_math(value);
+        }
         if self.mmu.mapped(bank, crate::mmu::Access::Write) {
             let address = self.mmu_translate(bank, offset, crate::mmu::Access::Write)?;
             *self.memory.get_mut(address).ok_or("translated STORE outside RAM")? = value;
@@ -55,6 +61,44 @@ impl VM {
             .get_mut(address)
             .ok_or_else(|| format!("STORE: memory address out of bounds: {address}"))?;
         *cell = value;
+        Ok(())
+    }
+
+    fn stack_math(&mut self, offset: u16) -> Result<(), String> {
+        use crate::{devices::*, mmu::{Access, Fault}};
+        let bank = self.registers[ripple_asm::Register::Sb as usize];
+        if self.bank_size == 0 { return Err("math stack requires nonzero bank size".into()); }
+        let mut addresses = [0usize; crate::float::CELLS];
+        let mut packet = [0u16; crate::float::CELLS];
+        for i in 0..crate::float::CELLS {
+            let index = usize::from(offset) + i;
+            let target_bank = usize::from(bank) + index / usize::from(self.bank_size);
+            let target_offset = (index % usize::from(self.bank_size)) as u16;
+            if offset >= self.bank_size || target_bank > usize::from(u16::MAX) ||
+                (!self.mmu.mapped(bank, Access::Read) && target_bank == 0 && target_offset < 32) {
+                self.mmu_pending = Some(Fault { cause: crate::mmu::CAUSE_READ, bank, offset });
+                return Err("invalid math stack packet".into());
+            }
+            let at = self.mmu_translate(target_bank as u16, target_offset, Access::Read)?;
+            let write = self.mmu_translate(target_bank as u16, target_offset, Access::Write)?;
+            if at != write || at >= self.memory.len() {
+                self.mmu_pending = Some(Fault { cause: crate::mmu::CAUSE_WRITE,
+                    bank: target_bank as u16, offset: target_offset });
+                return Err("math stack packet outside writable RAM".into());
+            }
+            addresses[i] = at;
+            packet[i] = self.memory[at];
+        }
+        let result = if packet[0] != ABI_VERSION { Err(STATUS_VERSION) }
+            else if usize::from(packet[1]) != crate::float::CELLS { Err(STATUS_BAD_DESCRIPTOR) }
+            else { crate::float::execute(&mut packet) };
+        match result {
+            Ok(()) => {
+                for i in 12..16 { self.memory[addresses[i]] = packet[i]; }
+                self.memory[addresses[3]] = STATUS_OK;
+            }
+            Err(status) => self.memory[addresses[3]] = status,
+        }
         Ok(())
     }
 
@@ -119,6 +163,7 @@ pub(super) struct DeviceMemory<'a> {
     pub code: &'a mut Vec<super::Instr>,
     pub changed: Option<std::ops::Range<usize>>,
     pub code_limit: usize,
+    pub output: &'a mut std::collections::VecDeque<u8>,
 }
 impl crate::devices::GuestMemory for DeviceMemory<'_> {
     fn len(&self) -> usize {
@@ -129,6 +174,11 @@ impl crate::devices::GuestMemory for DeviceMemory<'_> {
     }
     fn write(&mut self, i: usize, v: u16) {
         self.ram[i] = v;
+    }
+    #[cfg(target_arch = "wasm32")]
+    fn buffer_console_output(&mut self, _bytes: &[u8]) -> bool { true }
+    fn record_console_output(&mut self, bytes: &[u8]) {
+        self.output.extend(bytes);
     }
     fn code_capacity(&self, size: u16) -> usize {
         self.code_limit.min(usize::from(size) * 65536)

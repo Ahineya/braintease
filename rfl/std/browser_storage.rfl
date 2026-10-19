@@ -1,0 +1,51 @@
+// String persistence is explicit; encoding and application state remain in Wasm.
+import { BrowserEffects, BrowserEffectError, InvalidRequest, platform_request, response_text } from "std/browser_effects";
+import { Future } from "std/future";
+fn valid_key(key: String) -> bool {
+    if (key.len() == 0 || key.len() > 256) {
+        return false;
+    }
+    for (i in 0..key.len()) {
+        if (key[i] == '\0') {
+            return false;
+        }
+    }
+    true
+}
+
+/// Reads a bounded UTF-8 value. None distinguishes a missing key from an empty value.
+/// Unavailable storage, quota failures and body-limit errors remain explicit.
+export async fn load(effects: BrowserEffects, key: String) -> Result<Option<String>, BrowserEffectError> {
+    if (!valid_key(key)) {
+        return Err(InvalidRequest);
+    }
+    let work = platform_request(effects, 6, 16384, key);
+    let response = move(work).await?;
+    Ok(if (response.status == 0) {
+        None
+    } else {
+        Some(response_text(&response))
+    })
+}
+
+/// Writes at most 16384 UTF-8 octets. Writes execute in command order; applications
+/// should serialize dependent saves and await their acknowledgements.
+export async fn store(effects: BrowserEffects, key: String, value: String) -> Result<unit, BrowserEffectError> {
+    if (!valid_key(key) || value.len() > 16384) {
+        return Err(InvalidRequest);
+    }
+    let length = key.len() as u32;
+    let work = platform_request(effects, 7, length, key + value);
+    move(work).await?;
+    Ok({})
+}
+
+/// Removes a key; removing a missing key succeeds.
+export async fn remove(effects: BrowserEffects, key: String) -> Result<unit, BrowserEffectError> {
+    if (!valid_key(key)) {
+        return Err(InvalidRequest);
+    }
+    let work = platform_request(effects, 8, 0, key);
+    move(work).await?;
+    Ok({})
+}

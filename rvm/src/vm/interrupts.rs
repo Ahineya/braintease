@@ -180,7 +180,7 @@ impl VM {
         let frame = self.irq_frame;
         Ok(match csr {
             CSR_MMU_VERSION => 1,
-            CSR_MMU_FEATURES => 3,
+            CSR_MMU_FEATURES => 3 | MMU_FEATURE_STACK_MATH,
             CSR_MMU_CONTROL => u16::from(self.mmu.enabled) | (u16::from(self.mmu.window) << 1),
             CSR_DROOT_BANK => self.mmu.data_root.0,
             CSR_DROOT_OFF => self.mmu.data_root.1,

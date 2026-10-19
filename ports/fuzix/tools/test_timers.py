@@ -40,10 +40,11 @@ with tempfile.TemporaryDirectory(prefix='fuzix-timers-') as directory:
     subprocess.run([str(ROOT / 'src/ripple-asm/target/release/rlink'),
                     str(build / 'user/entry.pobj'), str(obj), str(build / 'user/userlib.pobj'),
                     *libs, '-f', 'rxe', '--bank-size', '64000', '-o', str(exe)], check=True)
-    for file in build.iterdir():
-        if file.suffix == '.rxe' or file.name in ('FUZIX.SYS', 'bios.bin'):
-            (tmp / file.name).symlink_to(file)
-    (tmp / 'apps.json').write_text(json.dumps([*json.loads((build / 'apps.json').read_text()), 'clockcheck']))
+    # Stage only this test's commands, independent of optional desktop assets.
+    names = ['init', 'sh', 'echo', 'preemptcheck', 'uptime']
+    for name in [*(name + '.rxe' for name in names), 'FUZIX.SYS', 'bios.bin']:
+        (tmp / name).symlink_to(build / name)
+    (tmp / 'apps.json').write_text(json.dumps([*names, 'clockcheck']))
     for jit in engines:
         image = tmp / ('jit.img' if jit else 'interpreter.img')
         subprocess.run(['node', str(PORT / 'tools/disk.mjs'), str(tmp), str(image)], check=True)

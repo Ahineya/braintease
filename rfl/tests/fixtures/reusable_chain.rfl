@@ -1,0 +1,59 @@
+import { Result } from "std/result";
+import { Effect, run, succeed, flat_map, from_async } from "std/effect";
+import { Environment } from "std/effect_env";
+import { Future, Poll, Pending, Ready, yield_now } from "std/future";
+import { Context, task_set } from "std/task";
+
+// The regression test and benchmark substitute this one constant.
+const DEPTH: u16 = 64;
+
+fn chain(n: u16, pending: bool) -> Effect<unit, unit, u16> {
+    let mut p: Effect<unit, unit, u16> = if (pending) {
+        from_async(fn(env: Environment<unit>) => later())
+    } else {
+        succeed(0)
+    };
+    for (i in 0..n) {
+        p = flat_map(move(p), fn(x: u16) => succeed<unit, unit, u16>(x + 1));
+    }
+    move(p)
+}
+
+async fn later() -> Result<u16, unit> {
+    yield_now().await;
+    Ok(0)
+}
+
+fn main() -> i16 {
+    let q = task_set(1, 0).unwrap();
+    let w = q.allocate().unwrap();
+    let mut cx = Context { waker: w, now: 0 };
+    let p = chain(DEPTH, false);
+    for (i in 0..2) {
+        let mut f = run(p, {});
+        match f.poll(&mut cx) {
+            Ready(Ok(n)) => {
+                if (n != DEPTH) {
+                    return 1;
+                }
+            },
+            _ => {
+                return 1;
+            }
+        }
+    }
+    let p = chain(DEPTH, true);
+    for (i in 0..2) {
+        let mut f = run(p, {});
+        match f.poll(&mut cx) {
+            Pending => {},
+            _ => {
+                return 2;
+            }
+        }
+        f.cancel();
+        f.cancel();
+    }
+    println("repeat/cancel");
+    0
+}

@@ -8,7 +8,7 @@ pub(super) fn release_helper_name(ty: Ty) -> Option<String> {
         match ty {
             Ty::Func(_) => "function".into(),
             Ty::String => "string".into(),
-            Ty::ErasedOwner => "erased".into(),
+            Ty::ErasedOwner | Ty::SharedOwner => "erased".into(),
             Ty::Owned(id) => format!("owner_{id}"),
             Ty::Adt(id) => format!("adt_{id}"),
             Ty::Vec(id) => format!("vector_{id}"),

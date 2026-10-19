@@ -466,10 +466,12 @@ impl VM {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn guest_halt(&mut self) {
         self.state = VMState::Halted;
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn guest_brk(&mut self) {
         if self.debug_mode {
             self.state = VMState::Breakpoint;

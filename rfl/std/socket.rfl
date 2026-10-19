@@ -1,0 +1,212 @@
+// Guest OS sockets. Build with --os fuzix|fuse-x; std/net is the standalone stack.
+extern "C" {
+    fn rfl_socket_errno() -> i16;
+    fn rfl_socket_tcp() -> *mut u16;
+    fn rfl_socket_retain(p: *mut u16) -> *mut u16;
+    fn rfl_socket_release(p: *mut u16);
+    fn rfl_socket_descriptor(p: *mut u16) -> i16;
+    fn rfl_socket_pair() -> *mut u16;
+    fn rfl_socket_pair_take(p: *mut u16, index: u16) -> *mut u16;
+    fn rfl_socket_pair_drop(p: *mut u16);
+    fn rfl_socket_connect(p: *mut u16, ip: *const u8, port: u16) -> i16;
+    fn rfl_socket_finish(p: *mut u16) -> i16;
+    fn rfl_socket_read(p: *mut u16, data: *mut u8, count: usize) -> i32;
+    fn rfl_socket_write(p: *mut u16, data: *const u8, count: usize) -> i32;
+    fn rfl_socket_shutdown(p: *mut u16, how: u16) -> i16;
+    fn rfl_socket_resolve(name: *const u8, out: *mut u8) -> i16;
+}
+
+/// A guest errno, resolver status, invalid argument, transfer bound or cancellation.
+export type SocketError = SocketOsError(i16) | ResolveError(i16) | InvalidSocketArgument | SocketTransferLimit | SocketCancelled | SocketTimedOut;
+/// Maximum octets in one nonblocking read/write, matching guest socket libc.
+export const MAX_TRANSFER: usize = 32767;
+/// IPv4 octets in network display order, independent of the C integer layout.
+export struct Address {
+    /// First IPv4 octet.
+    a: u8,
+    /// Second IPv4 octet.
+    b: u8,
+    /// Third IPv4 octet.
+    c: u8,
+    /// Fourth IPv4 octet.
+    d: u8
+}
+
+/// Constructs an IPv4 address from its four network-order octets.
+export fn address(a: u8, b: u8, c: u8, d: u8) -> Address {
+    Address { a: a, b: b, c: c, d: d }
+}
+
+/// Shared ownership of one nonblocking socket. Last owner closes its descriptor.
+/// Readiness futures retain it, so descriptor reuse cannot redirect a pending wait.
+export struct Socket {
+    /// Opaque retained adapter handle; access through the socket methods.
+    state: Owned<*mut u16>
+}
+
+/// Captures the guest socket adapter's most recent errno.
+export fn socket_error() -> SocketError {
+    SocketOsError(rfl_socket_errno())
+}
+
+fn owner(p: *mut u16) -> Result<Socket, SocketError> {
+    if (p.is_null()) {
+        return Err(socket_error());
+    }
+    Ok(Socket { state: owned(p, fn(p: &mut *mut u16) => {
+        rfl_socket_release(*p);
+    }) })
+}
+
+/// Internal adapter ownership transfer. The handle must be freshly owned by the caller.
+export fn socket_from_handle(p: *mut u16) -> Result<Socket, SocketError> {
+    owner(p)
+}
+
+/// Creates an unconnected nonblocking IPv4 TCP socket.
+export fn tcp() -> Result<Socket, SocketError> {
+    owner(rfl_socket_tcp())
+}
+
+/// Creates two connected guest Unix-domain streams, usable without networking.
+export fn socket_pair() -> Result<(Socket, Socket), SocketError> {
+    let p = rfl_socket_pair();
+    if (p.is_null()) {
+        return Err(socket_error());
+    }
+    let pair = owned(p, fn(p: &mut *mut u16) => {
+        rfl_socket_pair_drop(*p);
+    });
+    let first = owner(rfl_socket_pair_take(p, 0))?;
+    let second = owner(rfl_socket_pair_take(p, 1))?;
+    Ok((move(first), move(second)))
+}
+
+/// Resolves one IPv4 address through guest hosts/DNS. This libc operation is
+/// synchronous and is intended for setup; it is not a cancellable DNS future.
+export fn resolve(name: String) -> Result<Address, SocketError> {
+    if (name.is_empty() || name.len() > 253) {
+        return Err(InvalidSocketArgument);
+    }
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..name.len()) {
+        let ch = name[i] as u32;
+        if (ch == 0 || ch > 127) {
+            return Err(InvalidSocketArgument);
+        }
+        bytes.push(ch as u8);
+    }
+    bytes.push(0);
+    let mut ip: [u8; 4] = [0, 0, 0, 0];
+    let status = unsafe {
+        rfl_socket_resolve(&bytes[0], &mut ip[0])
+    };
+    if (status != 0) {
+        Err(ResolveError(status))
+    } else {
+        Ok(address(ip[0], ip[1], ip[2], ip[3]))
+    }
+}
+
+impl Socket {
+    /// Internal opaque adapter handle; never dereference or release it yourself.
+    export fn handle(&self) -> *mut u16 {
+        let value = self.state.borrow();
+        *value
+    }
+    /// Borrows the descriptor number without transferring ownership.
+    export fn descriptor(&self) -> i16 {
+        rfl_socket_descriptor(self.handle())
+    }
+    /// Retains the same endpoint without allocating another guest descriptor.
+    export fn try_clone(&self) -> Result<Socket, SocketError> {
+        owner(rfl_socket_retain(self.handle()))
+    }
+    /// Starts connecting. true means connected; false requires a writable wait
+    /// followed by finish_connect, which checks SO_ERROR and peer state.
+    export fn start_connect(&self, ip: Address, port: u16) -> Result<bool, SocketError> {
+        if (port == 0) {
+            return Err(InvalidSocketArgument);
+        }
+        let bytes: [u8; 4] = [ip.a, ip.b, ip.c, ip.d];
+        let status = unsafe {
+            rfl_socket_connect(self.handle(), &bytes[0], port)
+        };
+        if (status < 0) {
+            Err(socket_error())
+        } else {
+            Ok(status != 0)
+        }
+    }
+    /// Checks completion after write readiness; an RPC success is not assumed.
+    export fn finish_connect(&self) -> Result<unit, SocketError> {
+        if (rfl_socket_finish(self.handle()) < 0) {
+            Err(socket_error())
+        } else {
+            Ok({})
+        }
+    }
+    /// None means would block/interrupted. Some([]) means EOF (or limit zero).
+    export fn try_read(&self, limit: usize) -> Result<Option<Vec<u8>>, SocketError> {
+        if (limit > MAX_TRANSFER) {
+            return Err(SocketTransferLimit);
+        }
+        let mut bytes: Vec<u8> = [];
+        if (limit == 0) {
+            return Ok(Some(move(bytes)));
+        }
+        for (i in 0..limit) {
+            bytes.push(0);
+        }
+        let n = unsafe {
+            rfl_socket_read(self.handle(), &mut bytes[0], limit)
+        };
+        if (n == -2) {
+            return Ok(None);
+        }
+        if (n < 0) {
+            return Err(socket_error());
+        }
+        while (bytes.len() > n as usize) {
+            bytes.pop();
+        }
+        Ok(Some(move(bytes)))
+    }
+    /// Attempts one partial write from offset. None means would block/interrupted.
+    /// Keep the original buffer and advance only by the returned count.
+    export fn try_write(&self, bytes: Vec<u8>, offset: usize) -> Result<Option<usize>, SocketError> {
+        if (offset > bytes.len()) {
+            return Err(InvalidSocketArgument);
+        }
+        let remaining = bytes.len() - offset;
+        if (remaining == 0) {
+            return Ok(Some(0));
+        }
+        let count = if (remaining > MAX_TRANSFER) {
+            MAX_TRANSFER
+        } else {
+            remaining
+        };
+        let n = unsafe {
+            rfl_socket_write(self.handle(), &bytes[offset], count)
+        };
+        if (n == -2) {
+            Ok(None)
+        } else if (n < 0) {
+            Err(socket_error())
+        } else {
+            Ok(Some(n as usize))
+        }
+    }
+    /// Shuts down read (0), write (1), or both (2), affecting all retained owners.
+    export fn shutdown(&self, how: u16) -> Result<unit, SocketError> {
+        if (how > 2) {
+            return Err(InvalidSocketArgument);
+        }
+        if (rfl_socket_shutdown(self.handle(), how) < 0) {
+            Err(socket_error())
+        } else {
+            Ok({})
+        }
+    }
+}

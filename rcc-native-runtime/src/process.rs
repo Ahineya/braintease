@@ -13,13 +13,45 @@ extern "C" fn stop_session(_signal: libc::c_int) {
 
 const DEFAULT_MAX_PROCESSES: usize = 256;
 
+/// Compact new continuations use dense slots. Legacy packages with sparse SSA
+/// identifiers retain a bounded dense prefix and a sparse overflow map.
+#[derive(Clone, Default)]
+struct Slots {
+    dense: Vec<u64>,
+    sparse: BTreeMap<u64, u64>,
+}
+impl Slots {
+    fn insert(&mut self, slot: u64, value: u64) {
+        if slot < 4096 {
+            let slot = slot as usize;
+            if self.dense.len() <= slot {
+                self.dense.resize(slot + 1, 0);
+            }
+            self.dense[slot] = value;
+        } else {
+            self.sparse.insert(slot, value);
+        }
+    }
+    fn get(&self, slot: u64) -> u64 {
+        if slot < 4096 {
+            self.dense.get(slot as usize).copied().unwrap_or(0)
+        } else {
+            self.sparse.get(&slot).copied().unwrap_or(0)
+        }
+    }
+    fn clear(&mut self) {
+        self.dense.clear();
+        self.sparse.clear();
+    }
+}
+
 #[derive(Clone)]
 struct Frame {
     id: u64,
     token: u32,
     args: Vec<u64>,
     pc: u64,
-    slots: BTreeMap<u64, u64>,
+    slots: Slots,
     base: Option<usize>,
     mark: usize,
     result: u64,
@@ -31,7 +63,7 @@ impl Frame {
             token,
             args,
             pc: 0,
-            slots: BTreeMap::new(),
+            slots: Slots::default(),
             base: None,
             mark: 0,
             result,
@@ -78,6 +110,7 @@ struct Process {
     staged: Option<(u32, std::sync::Arc<images::Loaded>)>,
     jumps: BTreeMap<u64, Jump>,
     loading: Option<(usize, Vec<u8>)>,
+    preparing: Option<images::Preparation>,
 }
 #[derive(Clone, Copy)]
 struct Request {
@@ -91,12 +124,16 @@ struct Request {
 pub(super) struct Machine {
     checkpoint: u32,
     checkpoint_count: u16,
+    just_returned: bool,
     checkpoint_time: Option<Instant>,
     pub(super) hosted: bool,
     global_template: Vec<u16>,
     extended_template: Option<(usize, Vec<u16>)>,
     active: Option<Process>,
     runnable: VecDeque<Process>,
+    // Hosted scheduling is owned by the kernel. Parked contexts are indexed by
+    // kernel slot (runtime pid minus one), never searched as a second run queue.
+    parked: Vec<Option<Process>>,
     waiting: Vec<Process>,
     // PID -> (parent, raw exit status). Zombies count towards the process cap.
     zombies: BTreeMap<u16, (u16, u16)>,
@@ -124,6 +161,28 @@ impl Machine {
                 )
             })
             .unwrap_or_default()
+    }
+    #[cfg(test)]
+    pub(super) fn test_hosted() -> Self {
+        Self {
+            hosted: true,
+            active: Some(Process {
+                pid: 1,
+                parent: 0,
+                frames: Vec::new(),
+                image: None,
+                wait: None,
+                module: None,
+                staged: None,
+                jumps: BTreeMap::new(),
+                loading: None,
+                preparing: None,
+            }),
+            ..Self::default()
+        }
+    }
+    pub(super) fn preparing(&mut self) -> &mut Option<images::Preparation> {
+        &mut self.active.as_mut().unwrap().preparing
     }
     pub(super) fn loading(&mut self) -> &mut Option<(usize, Vec<u8>)> {
         &mut self.active.as_mut().unwrap().loading
@@ -250,6 +309,7 @@ impl Runtime {
             staged: None,
             jumps: active.jumps.clone(),
             loading: None,
+            preparing: None,
         };
         child.frames.last_mut().unwrap().result(result, 0);
         self.processes.frame().result(result, u64::from(pid));
@@ -417,6 +477,7 @@ impl Runtime {
                     self.processes.root_status = Some(request.a);
                     self.processes.active = None;
                     self.processes.runnable.clear();
+                    self.processes.parked.clear();
                 }
                 8 => {
                     let slot = request.a;
@@ -424,9 +485,9 @@ impl Runtime {
                         || slot >= self.processes.max_processes as u64
                         || self
                             .processes
-                            .runnable
-                            .iter()
-                            .any(|p| u64::from(p.pid) == slot + 1)
+                            .parked
+                            .get(slot as usize)
+                            .is_some_and(Option::is_some)
                         || u64::from(self.processes.active.as_ref().unwrap().pid) == slot + 1
                     {
                         self.processes
@@ -443,10 +504,16 @@ impl Runtime {
                             staged: None,
                             jumps: self.processes.active.as_ref().unwrap().jumps.clone(),
                             loading: None,
+                            preparing: None,
                         };
                         child.frames.last_mut().unwrap().result(request.result, 0);
                         self.processes.frame().result(request.result, 1);
-                        self.processes.runnable.push_back(child);
+                        if self.processes.parked.len() <= slot as usize {
+                            self.processes
+                                .parked
+                                .resize_with(slot as usize + 1, || None);
+                        }
+                        self.processes.parked[slot as usize] = Some(child);
                     }
                 }
                 9 | 10 => {
@@ -457,19 +524,21 @@ impl Runtime {
                         self.processes.frame().result(request.result, 0);
                         return;
                     }
-                    let index = self
-                        .processes
-                        .runnable
-                        .iter()
-                        .position(|p| u64::from(p.pid) == request.a + 1)
+                    let mut target = usize::try_from(request.a)
+                        .ok()
+                        .and_then(|slot| self.processes.parked.get_mut(slot))
+                        .and_then(Option::take)
                         .unwrap_or_else(|| fatal("hosted kernel selected an absent context"));
-                    let mut target = self.processes.runnable.remove(index).unwrap();
                     self.processes.frame().result(request.result, 0);
                     let image = self.park_image();
                     let mut previous = self.processes.active.take().unwrap();
                     if request.op == 9 {
                         previous.image = Some(image);
-                        self.processes.runnable.push_back(previous);
+                        let slot = usize::from(previous.pid - 1);
+                        if self.processes.parked.len() <= slot {
+                            self.processes.parked.resize_with(slot + 1, || None);
+                        }
+                        self.processes.parked[slot] = Some(previous);
                     }
                     self.restore_image(target.image.take().unwrap());
                     self.processes.active = Some(target);
@@ -573,6 +642,12 @@ impl Runtime {
 impl Runtime {
     fn checkpoint_due(&mut self) -> u64 {
         let machine = &mut self.processes;
+        // Aggregate results point into the callee's released frame until the
+        // caller copies them. A hosted callback must not reuse that storage
+        // between the return step and the caller's continuation.
+        if machine.just_returned {
+            return 0;
+        }
         if machine.hosted && machine.checkpoint == 0 {
             return 0;
         }
@@ -660,7 +735,7 @@ helper!(rcc_native_process_frame(rt, cells) {
     frame.mark = mark;
     pointer(mark)
 });
-helper!(rcc_native_process_slot(rt, slot) { rt.processes.frame().slots.get(&slot).copied().unwrap_or(0) });
+helper!(rcc_native_process_slot(rt, slot) { rt.processes.frame().slots.get(slot) });
 helper!(rcc_native_process_save(rt, slot, value) { rt.processes.frame().slots.insert(slot, value); 0 });
 helper!(rcc_native_process_pc(rt) { rt.processes.frame().pc });
 helper!(rcc_native_process_set_pc(rt, pc) {
@@ -690,6 +765,7 @@ helper!(rcc_native_process_return(rt, value) {
     let frame = rt.processes.active.as_mut().unwrap().frames.pop().unwrap();
     rt.processes.active.as_mut().unwrap().jumps.retain(|_, j| j.frame.id != frame.id);
     rt.stack = frame.mark;
+    rt.processes.just_returned = true;
     if rt.processes.active.as_ref().unwrap().frames.is_empty() {
         rt.processes.request = Some(Request { op: 4, a: value, b: 0, result: 0 });
     } else { rt.processes.frame().result(frame.result, value); }
@@ -780,6 +856,7 @@ unsafe extern "C" fn rcc_native_process_start(
                 staged: None,
                 jumps: BTreeMap::new(),
                 loading: None,
+                preparing: None,
             }),
             next_pid: 2,
             max_processes,
@@ -795,6 +872,7 @@ unsafe extern "C" fn rcc_native_process_start(
                 }
                 return rt.processes.root_status.unwrap_or(0);
             }
+            rt.processes.just_returned = false;
             rt.poll();
             let token = rt.processes.frame().token;
             rt.functions[&token].0
@@ -825,5 +903,132 @@ unsafe extern "C" fn rcc_native_process_start(
             });
         }
         rt.images.collect(&mut rt.functions);
+    }
+}
+
+#[cfg(test)]
+mod return_checkpoint_tests {
+    use super::*;
+
+    #[test]
+    fn dense_and_legacy_sparse_slots_clear_clone_and_reuse() {
+        let mut slots = Slots::default();
+        let mut reference = BTreeMap::new();
+        let mut seed = 17u64;
+        for step in 0..10000 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let slot = match step % 3 {
+                0 => seed % 32,
+                1 => 4090 + seed % 12,
+                _ => seed,
+            };
+            slots.insert(slot, seed);
+            reference.insert(slot, seed);
+            assert_eq!(slots.get(slot), seed);
+            if step % 127 == 0 {
+                let child = slots.clone();
+                slots.clear();
+                assert_eq!(slots.get(slot), 0);
+                for (&key, &value) in &reference {
+                    assert_eq!(child.get(key), value);
+                }
+                reference.clear();
+            }
+        }
+        slots.clear();
+        slots.insert(0, 42);
+        assert_eq!(slots.dense.len(), 1);
+        assert_eq!(slots.get(4095), 0);
+    }
+
+    #[test]
+    fn hosted_high_slot_switch_drop_and_reuse_are_indexed() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        rt.processes = Machine::test_hosted();
+        rt.processes.max_processes = 64;
+        rt.processes
+            .active
+            .as_mut()
+            .unwrap()
+            .frames
+            .push(Frame::new(1, vec![], 0));
+        let request = |op, a| Request {
+            op,
+            a,
+            b: 0,
+            result: 1,
+        };
+        for round in 0..4 {
+            rt.memory.write(BANK + 9, round);
+            rt.handle_request(request(8, 63));
+            assert!(rt.processes.runnable.is_empty());
+            rt.handle_request(request(9, 63));
+            assert_eq!(rt.processes.active.as_ref().unwrap().pid, 64);
+            assert_eq!(rt.processes.frame().slots.get(0), 0);
+            rt.memory.write(BANK + 9, 99);
+            rt.handle_request(request(10, 0));
+            assert_eq!(rt.processes.active.as_ref().unwrap().pid, 1);
+            assert!(rt.processes.parked[63].is_none());
+            assert_eq!(rt.memory.read(BANK + 9), round);
+        }
+    }
+
+    #[test]
+    fn hosted_checkpoint_waits_for_aggregate_return_copy() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let returned = 2 * BANK + 32;
+        let mut callee = Frame::new(2, vec![], 1);
+        callee.mark = returned;
+        rt.stack = returned + 13;
+        rt.memory.write_from(returned, &[11; 13]);
+        rt.processes.hosted = true;
+        rt.processes.checkpoint = 3;
+        rt.processes.checkpoint_count = 255;
+        rt.processes.checkpoint_time = Some(Instant::now() - Duration::from_millis(10));
+        rt.processes.active = Some(Process {
+            pid: 1,
+            parent: 0,
+            frames: vec![Frame::new(1, vec![], 0), callee],
+            image: None,
+            wait: None,
+            module: None,
+            staged: None,
+            jumps: BTreeMap::new(),
+            loading: None,
+            preparing: None,
+        });
+        unsafe {
+            rcc_native_process_return(&mut rt, pointer(returned));
+        }
+        // This is the scheduler boundary before the caller can copy the result.
+        if rt.checkpoint_due() != 0 {
+            rt.handle_request(Request {
+                op: 15,
+                a: 0,
+                b: 0,
+                result: 0,
+            });
+            let scratch = unsafe { rcc_native_process_frame(&mut rt, 13) };
+            rt.memory.fill(linear(scratch)..linear(scratch) + 13, 99);
+        }
+        let copied: Vec<_> = rt.memory.cells(returned..returned + 13).collect();
+        assert_eq!(copied, vec![11; 13]);
+        assert_eq!(rt.processes.frame().slots.get(0), pointer(returned));
+        // Once the caller continuation has consumed the return, callbacks run
+        // normally and may reuse the released stack storage.
+        rt.processes.just_returned = false;
+        assert_eq!(rt.checkpoint_due(), 1);
+        rt.handle_request(Request {
+            op: 15,
+            a: 0,
+            b: 0,
+            result: 0,
+        });
+        let scratch = unsafe { rcc_native_process_frame(&mut rt, 13) };
+        assert_eq!(linear(scratch), returned);
+        rt.memory.fill(returned..returned + 13, 99);
+        assert_eq!(copied, vec![11; 13]);
     }
 }

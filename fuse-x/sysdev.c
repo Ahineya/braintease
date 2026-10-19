@@ -4,14 +4,17 @@
 #include <kdata.h>
 #include <string.h>
 #include "resources.h"
+#include "entropy-device.h"
+#include "crypto-device.h"
 int fuse_system_open(uint_fast8_t m,uint16_t flags) {
     used(flags);
-    if(m==0 || m==2 || m==3) return 0;
+    if(m==0 || m==2 || m==3 || m==4 || m==5) return 0;
     udata.u_error=ENXIO;return -1;
 }
 int fuse_system_read(uint_fast8_t m,uint_fast8_t raw,uint_fast8_t flags) {
     usize_t n=udata.u_count>32767UL ? 32767UL : udata.u_count;
     used(raw);used(flags);
+    if(m==4)return entropy_read();
     if(!m) return 0;
     if(m==2) {
         if(udata.u_sysio) memset(udata.u_base,0,n);
@@ -33,6 +36,7 @@ int fuse_system_write(uint_fast8_t m,uint_fast8_t raw,uint_fast8_t flags) {
     udata.u_error=EINVAL;return -1;
 }
 int fuse_system_ioctl(uint_fast8_t m,uarg_t request,char *p) {
+    if(m==5)return crypto_ioctl(request,p);
     if(m==3) {
         if(request==RIPPLE_PROCINFO) {
             struct ripple_procinfo info;
@@ -67,7 +71,7 @@ int fuse_system_ioctl(uint_fast8_t m,uarg_t request,char *p) {
             info.version=RIPPLE_SYSINFO_VERSION;
             info.ram_kib=ramsize;info.pool_kib=procmem;info.used_kib=pagemap_mem_used();
             info.mapped_kib=info.used_kib;info.slots=PTABSIZE;
-            info.heap_cells=16UL*64000UL;info.stack_cells=3UL*64000UL;
+            info.heap_cells=FUSE_HEAP_CELLS;info.stack_cells=3UL*64000UL;
             info.uptime_ticks=ticks.full;info.ticks_per_second=10;
             for(i=0;i<PTABSIZE;i++) if(ptab[i].p_status!=P_EMPTY) ++info.processes;
             return uput(&info,p,sizeof(info));

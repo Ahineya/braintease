@@ -1,0 +1,6 @@
+{
+  "name": "rvm-browser-console",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {"@xterm/xterm": "5.5.0"}
+}

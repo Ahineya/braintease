@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${FUSE_X_BUILD:-$ROOT/fuse-x/build}"
 run_only=0
 build_only=0
+rebuild=0
 fresh=0
 install_apps=0
 disk=""
@@ -22,6 +23,8 @@ mode=--run
 mode_set=0
 value=""
 timeout="${RCC_NATIVE_TIMEOUT:-}"
+audio="${RCC_NATIVE_AUDIO:-auto}"
+audio_wav="${RCC_NATIVE_AUDIO_WAV:-}"
 default_network=off
 if [[ "$(uname -s)" == Darwin ]]; then default_network=shared; fi
 network="${RCC_NATIVE_NET:-${RIPPLE_NET:-$default_network}}"
@@ -31,11 +34,13 @@ usage() {
 Usage: scripts/run-fuse-x.sh [options]
 
 Build Fuse-X, prepare its root image, and start the native FUZIX shell.
-Try help, ls, native-hello, lynx http://wiby.me/, and shutdown.
+Try help, ls, native-hello, telegram, music /music, lynx http://wiby.me/, and shutdown.
 Files persist across launches.
 Use shutdown for a clean exit. The Bourne shell supports scripts, pipelines,
 redirection and job control. Ripple RXE executables require native recompilation.
 
+  --incremental        Build only changed inputs (default)
+  --rebuild            Force rebuilding OS/programs; preserve the disk
   --run-only           Use existing executable and image without building
   --build-only         Build and prepare the image without running
   --disk IMAGE         Use an existing raw C16 V2 root image without installing apps
@@ -62,6 +67,8 @@ redirection and job control. Ripple RXE executables require native recompilation
                        so the vmnet sudo prompt precedes guest input handling.
   --timeout N          Limit execution to N host seconds (checks default to 10;
                        interactive sessions have no default time limit)
+  --audio MODE         auto (default), on (also headless), or off
+  --audio-wav FILE     Capture rendered PCM in a WAV file
   -h, --help           Show this help
 
 Default image: fuse-x/build/ROOTFS.IMG; preserved across launches and rebuilds.
@@ -71,8 +78,11 @@ Ctrl-] detaches an interactive console. Exiting its shell starts a new shell;
 use shutdown or --stop to stop the kernel. --attach replays recent console output.
 Set FUSE_X_BUILD for another build directory. Build output goes to build.log
 there. Shell sessions and --write-check open the selected image read/write.
+Normal launches cache content fingerprints and rebuild only changed components.
+The first launch after this upgrade may rebuild older artifacts once.
 Normal builds update bootstrap manifests and native executables on the default
-image, preserving other files and saving a backup when the image changes.
+image, preserving other files and keeping one previous image in DISK.bak.
+RIPPLE_IMAGE_BACKUPS overrides the retained count (0 disables backups).
 Examples:
   scripts/run-fuse-x.sh
   scripts/run-fuse-x.sh --run-only
@@ -88,6 +98,8 @@ while [[ $# -gt 0 ]]; do
         -h|--help) usage; exit 0 ;;
         --run-only) run_only=1; shift ;;
         --build-only) build_only=1; shift ;;
+        --incremental) shift ;;
+        --rebuild) rebuild=1; shift ;;
         --fresh) fresh=1; shift ;;
         --install-apps) install_apps=1; shift ;;
         --detach) detach=1; shift ;;
@@ -99,12 +111,14 @@ while [[ $# -gt 0 ]]; do
         --no-share)
             [[ "$share_set" == 0 ]] || fail 'choose only one of --share and --no-share'
             share_set=1; shift ;;
-        --disk|--from-ripple|--timeout|--write-check|--read-check|--net|--share)
+        --disk|--from-ripple|--timeout|--write-check|--read-check|--net|--share|--audio|--audio-wav)
             [[ $# -ge 2 ]] || fail "$1 requires a value"
             case "$1" in
                 --disk) [[ -n "$2" ]] || fail '--disk requires an image'; disk="$2" ;;
                 --from-ripple) [[ -n "$2" ]] || fail '--from-ripple requires an image'; ripple_disk="$2" ;;
                 --timeout) timeout="$2" ;;
+                --audio) audio="$2" ;;
+                --audio-wav) [[ -n "$2" ]] || fail '--audio-wav requires a path'; audio_wav="$2" ;;
                 --net) [[ -n "$2" ]] || fail '--net requires a mode or socket path'; network="$2" ;;
                 --share)
                     [[ "$share_set" == 0 ]] || fail 'choose only one of --share and --no-share'
@@ -135,10 +149,11 @@ if [[ -n "$timeout" ]]; then
     [[ "$timeout" =~ ^[0-9]+$ && "$timeout" =~ [1-9] ]] || fail '--timeout must be a positive whole number'
 elif [[ "$mode" != --run ]]; then timeout=10
 fi
-if [[ "$run_only" == 1 && ( "$build_only" == 1 || "$fresh" == 1 || -n "$ripple_disk" || "$install_apps" == 1 ) ]]; then
-    fail '--run-only cannot be combined with --build-only, --fresh, --from-ripple, or --install-apps'
+if [[ "$run_only" == 1 && ( "$build_only" == 1 || "$rebuild" == 1 || "$fresh" == 1 || -n "$ripple_disk" || "$install_apps" == 1 ) ]]; then
+    fail '--run-only cannot be combined with --build-only, --rebuild, --fresh, --from-ripple, or --install-apps'
 fi
 explicit_disk=0
+case "$audio" in auto|on|off) ;; *) fail '--audio must be auto, on, or off';; esac
 if [[ -n "$disk" ]]; then
     explicit_disk=1
     [[ -f "$disk" ]] || fail "disk not found: $disk"
@@ -149,6 +164,17 @@ fi
 if [[ -n "$ripple_disk" ]]; then
     [[ -f "$ripple_disk" ]] || fail "Ripple disk not found: $ripple_disk"
     [[ ! -e "$disk" || "$fresh" == 1 ]] || fail 'default root image already exists; use --fresh to replace it with the extracted root'
+fi
+if [[ -n "$audio_wav" ]]; then
+    python3 - "$audio_wav" "$disk" "$ripple_disk" <<'PY' || fail 'audio capture must use a separate output file'
+import os, sys
+from pathlib import Path
+output = Path(sys.argv[1]).resolve()
+for name in sys.argv[2:]:
+    if name and (output == Path(name).resolve() or
+                 output.exists() and Path(name).exists() and os.path.samefile(output, name)):
+        raise SystemExit(1)
+PY
 fi
 if python3 "$ROOT/fuse-x/session.py" status --state "$OUT/session"; then
     fail 'Fuse-X is already running; use --attach or --stop before building or opening its image'
@@ -165,8 +191,12 @@ if [[ "$run_only" == 0 ]]; then
     OUT="$(cd "$OUT" && pwd)"
     log="$OUT/build.log"
     printf 'Building Fuse-X (log: %s)...\n' "$log" >&2
-    if ! make -C "$ROOT/fuse-x" tools >"$log" 2>&1; then cat "$log" >&2; exit 1; fi
-    if ! make -C "$ROOT/fuse-x" "BUILD=$OUT" -j4 >>"$log" 2>&1; then cat "$log" >&2; exit 1; fi
+    build_arguments=(fuse-x --build "$OUT")
+    if [[ "$rebuild" == 1 ]]; then build_arguments+=(--rebuild); fi
+    if ! python3 "$ROOT/scripts/build_progress.py" --log "$log" -- \
+        python3 "$ROOT/scripts/build-os.py" "${build_arguments[@]}"; then
+        exit 1
+    fi
 fi
 [[ -x "$OUT/fuse-x" ]] || fail "missing executable: $OUT/fuse-x; run without --run-only first"
 
@@ -179,13 +209,10 @@ if [[ "$run_only" == 0 && ( ! -e "$disk" || "$fresh" == 1 ) ]]; then
         node "$ROOT/fuse-x/image.mjs" create "$temporary/ROOTFS.IMG" --apps "$OUT/apps" >/dev/null
     fi
     if [[ -e "$disk" ]]; then
-        backup="$disk.bak"
-        suffix=1
-        while [[ -e "$backup" || -L "$backup" ]]; do backup="$disk.bak.$suffix"; suffix=$((suffix + 1)); done
-        mv "$disk" "$backup"
-        printf 'Previous root image saved to %s\n' "$backup" >&2
+        node "$ROOT/ports/fuzix/tools/image-backup.mjs" save "$disk" >&2
     fi
     mv "$temporary/ROOTFS.IMG" "$disk"
+    node "$ROOT/ports/fuzix/tools/image-backup.mjs" prune "$disk"
     rmdir "$temporary"
     trap - EXIT
     printf 'Prepared root image: %s\n' "$disk" >&2
@@ -200,6 +227,8 @@ if [[ "$build_only" == 1 ]]; then
 fi
 printf 'Running Fuse-X %s using %s\n' "$mode" "$disk" >&2
 export RCC_NATIVE_NET="$network"
+export RCC_NATIVE_AUDIO="$audio"
+if [[ -n "$audio_wav" ]]; then export RCC_NATIVE_AUDIO_WAV="$audio_wav"; fi
 if [[ "$gui" == 1 ]]; then unset RCC_NATIVE_HEADLESS;
 elif [[ "$headless" == 1 || "$mode" != --run ]]; then export RCC_NATIVE_HEADLESS=1; fi
 if [[ -n "$timeout" ]]; then export RCC_NATIVE_TIMEOUT="$timeout"; else unset RCC_NATIVE_TIMEOUT; fi

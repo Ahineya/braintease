@@ -584,3 +584,39 @@ fn computation_loops_schedule_children_without_explicit_yields() {
         42,
     );
 }
+
+#[test]
+fn direct_helpers_and_resumable_callbacks_keep_their_abi_across_fork() {
+    let source = concat!(
+        "#include <native_process.h>\n",
+        "static volatile unsigned long calls;\n",
+        "unsigned long helper(unsigned long n) { ++calls; return n * 65537UL + 7; }\n",
+        "static unsigned long (*volatile callback)(unsigned long) = helper;\n",
+        "int main(void) {\n",
+        "if(helper(3)!=196618UL || callback(5)!=327692UL || calls!=2) return 1;\n",
+        "int pid=rcc_process_fork(); int status;\n",
+        "if(!pid) { if(helper(9)!=589840UL || callback(11)!=720914UL || calls!=4) return 90; return 17; }\n",
+        "if(rcc_process_wait(pid,&status)!=pid || status!=17 || calls!=2) return 2;\n",
+        "return callback(1)==65544UL && calls==3 ? 42 : 3; }\n"
+    );
+    Fixture::new().run(source, 42);
+}
+
+#[test]
+fn nonsuspending_variadic_helpers_have_both_direct_and_token_entry_points() {
+    Fixture::new().run(r#"
+        #include <stdarg.h>
+        #include <native_process.h>
+        int sum(int n, ...) {
+            va_list a; va_start(a,n);
+            long first=va_arg(a,long); double second=va_arg(a,double);
+            va_end(a); return n+(int)first+(int)second;
+        }
+        static int (*volatile indirect)(int,...)=sum;
+        int main(void) {
+            rcc_process_yield();
+            if(sum(3,20L,1.5)!=24 || indirect(4,30L,2.5)!=36)return 1;
+            return 42;
+        }
+    "#, 42);
+}

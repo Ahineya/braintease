@@ -176,8 +176,10 @@ instructions without increasing guest RAM. This requires host standalone macro
 or BF output. The physical allocation becomes
 `T = 8*(max(N*B, 76+4*I, 76+4*C*B, 224)+33)`; the BF host still enforces
 `N` RAM banks. An explicit reservation can exceed the default STORC limit,
-within the architectural 16-bit PC/PCB space. FUZIX uses 68 code banks and
-80 RAM banks, loading the BIOS, kernel and userspace into separate code ranges.
+within the architectural 16-bit PC/PCB space. The retired full non-MMU FUZIX
+experiment used 68 code banks and 80 RAM banks for its disk loader. The current
+[minimal FUZIX boot profile](../../ports/fuzix/rbf/README.md) links its kernel
+directly into BF, uses four RAM banks and needs no dynamic code reservation.
 
 Interrupts are **compiled out by default**. Enable them when linking:
 

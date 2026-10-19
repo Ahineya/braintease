@@ -11,6 +11,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+/* Exercise the same bounded drawing adapter used by RFL applications. */
+#include "../../../rfl/os/curses.c"
 
 static int report, failures, assertions;
 static volatile sig_atomic_t alarm_seen;
@@ -41,6 +43,40 @@ static void scan_checks(void) {
     check(sscanf("32768", "%d", &a) == 0 && a == 99 && errno == ERANGE);
     errno = 0;
     check(sscanf("1.5", "%f", &a) == 0 && errno == EINVAL && a == 99);
+}
+static void unicode_checks(int master) {
+    uint32_t value;WINDOW *w=newwin(2,6,0,0);
+    static const unsigned char title[]={0xd0,0x96,'e',0xcc,0x81,0};
+    static const char lead[]={0xc4},tail[]={0x82},bad[]={0xe2,27,'[','A'};
+    static const char line[]={0xd0,0x96,'e',0xcc,0x81,127,'\n'};
+    static const char collision[]={0xc4,0x87,'\n'};
+    char text[16];
+    check(w!=NULL);if(!w)return;
+    wattrset(w,A_BOLD|COLOR_PAIR(5));wmove(w,0,0);
+    check(ripple_curses_scalar(w,'A')==OK&&ripple_curses_scalar(w,0x4e2d)==OK&&ripple_curses_scalar(w,0x1f642UL)==OK);
+    check((w->_line[0][1]&A_CHARTEXT)==0x4e2d&&(w->_line[0][2]&A_CHARTEXT)==RU_CONTINUATION&&
+          (w->_line[0][3]&A_CHARTEXT)==0x1f642UL&&PAIR_NUMBER(w->_line[0][3])==5);
+    wmove(w,1,0);check(wadd_utf8(w,title,5)==OK);
+    check((w->_line[1][0]&A_CHARTEXT)==0x416&&ru_scalar(w->_line[1][1]&A_CHARTEXT,1)==0x301&&w->_curx==2);
+    wmove(w,0,2);ripple_curses_scalar(w,'X');check((w->_line[0][1]&A_CHARTEXT)==' '&&(w->_line[0][2]&A_CHARTEXT)=='X');
+    wbkgd(w,0);wmove(w,0,3);waddch(w,'Z');
+    rfl_curses_fill(w,0,0,3,0x4e2d,A_BOLD);
+    check((w->_line[0][0]&A_CHARTEXT)==0x4e2d&&(w->_line[0][1]&A_CHARTEXT)==RU_CONTINUATION&&
+          (w->_line[0][2]&A_CHARTEXT)==' '&&(w->_line[0][3]&A_CHARTEXT)=='Z');
+    rfl_curses_fill(w,1,5,300,0x4e2d,0);
+    check((w->_line[1][5]&A_CHARTEXT)==' '&&w->_cury==1);
+    rfl_curses_fill(w,1,0,2,0x301,0);
+    check((w->_line[1][0]&A_CHARTEXT)==RU_REPLACEMENT&&(w->_line[1][1]&A_CHARTEXT)==RU_REPLACEMENT);
+    wmove(w,1,4);ripple_curses_scalar(w,0x80000000UL);ripple_curses_scalar(w,0xd800);
+    check(w->_line[1][4]==RU_REPLACEMENT&&w->_line[1][5]==RU_REPLACEMENT);
+    check(delwin(w)==OK);
+    check(write(master,lead,1)==1&&wget_wch(stdscr,&value)==ERR);
+    check(write(master,tail,1)==1&&wget_wch(stdscr,&value)==OK&&value==0x102);
+    check(write(master,"\033[B",3)==3&&wget_wch(stdscr,&value)==KEY_CODE_YES&&value==KEY_DOWN);
+    check(write(master,bad,sizeof(bad))==sizeof(bad)&&wget_wch(stdscr,&value)==OK&&value==RU_REPLACEMENT);
+    check(wget_wch(stdscr,&value)==KEY_CODE_YES&&value==KEY_UP);
+    check(write(master,line,sizeof(line))==sizeof(line)&&wgetnstr(stdscr,text,15)==OK&&text[0]==0xd0&&text[1]==0x96&&!text[2]);
+    check(write(master,collision,sizeof(collision))==sizeof(collision)&&wgetnstr(stdscr,text,15)==OK&&text[0]==0xc4&&text[1]==0x87&&!text[2]);
 }
 int main(void) {
     int master, slave, original_in, original_out, n, i;
@@ -100,6 +136,7 @@ int main(void) {
     keypad(stdscr, FALSE);
     check(write(master, "\033[A", 3) == 3 && getch() == 27 && getch() == '[' && getch() == 'A');
     keypad(stdscr, TRUE);
+    unicode_checks(master);
     check(write(master, "abcd\177Z\n", 7) == 7 && wgetnstr(stdscr, bounded.text, 3) == OK &&
           !strcmp(bounded.text, "abZ") && bounded.before == 'L' && bounded.after == 'R');
     check(wgetstr(stdscr, bounded.text) == ERR);

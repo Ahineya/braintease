@@ -1,0 +1,16 @@
+[package]
+name = "binspect"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+byteorder = { version = "=1.5.0", default-features = false }
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+debug = 0
+incremental = false

@@ -23,6 +23,8 @@ pub struct FieldLayout {
     pub field_type: Type,
     pub offset: u64,  // Offset in words from start of struct
     pub size: u64,    // Size in words
+    pub bit_width: Option<u8>,
+    pub bit_offset: u8,
 }
 
 /// Calculate the memory layout for a struct
@@ -50,8 +52,28 @@ pub fn calculate_struct_layout_with_defs(
 ) -> Result<StructLayout, CompilerError> {
     let mut layout_fields = Vec::new();
     let mut current_offset = 0u64;
+    let mut unit: Option<(u64, u64, u8)> = None;
     
     for (i, field) in fields.iter().enumerate() {
+        if let Some(width) = field.bit_width {
+            let size = get_type_size(&field.field_type, type_definitions).ok_or_else(||
+                CompilerError::semantic_error("Incomplete bit-field type".into(), location.clone()))?;
+            if width == 0 { unit = None; continue; }
+            let (start, _, used) = match unit {
+                Some((start, old_size, used)) if size == old_size && used as u64 + width as u64 <= size * 16 => (start, size, used),
+                _ => {
+                    let start = current_offset;
+                    current_offset = current_offset.checked_add(size).ok_or_else(||
+                        CompilerError::semantic_error("Struct size overflow".into(), location.clone()))?;
+                    (start, size, 0)
+                }
+            };
+            layout_fields.push(FieldLayout { name: field.name.clone(), field_type: field.field_type.clone(),
+                offset: start, size, bit_width: Some(width), bit_offset: used });
+            unit = Some((start, size, used + width));
+            continue;
+        }
+        unit = None;
         let is_last = i + 1 == fields.len();
         let is_fam = matches!(field.field_type, Type::Array { size: None, .. });
 
@@ -68,7 +90,7 @@ pub fn calculate_struct_layout_with_defs(
                 name: field.name.clone(),
                 field_type: field.field_type.clone(),
                 offset: current_offset,
-                size: 0,
+                size: 0, bit_width: None, bit_offset: 0,
             });
             continue;
         }
@@ -97,7 +119,7 @@ pub fn calculate_struct_layout_with_defs(
             name: field.name.clone(),
             field_type: field.field_type.clone(),
             offset: current_offset,
-            size: field_size,
+            size: field_size, bit_width: None, bit_offset: 0,
         });
         
         current_offset = new_offset;
@@ -119,6 +141,7 @@ pub fn calculate_union_layout_with_defs(
     let mut total_size = 0u64;
 
     for field in fields {
+        if field.bit_width == Some(0) { continue; }
         // Flexible array members are permitted in structs, never unions.
         if matches!(field.field_type, Type::Array { size: None, .. }) {
             return Err(crate::semantic::SemanticError::IncompleteType {
@@ -142,7 +165,7 @@ pub fn calculate_union_layout_with_defs(
             name: field.name.clone(),
             field_type: field.field_type.clone(),
             offset: 0,
-            size: field_size,
+            size: field_size, bit_width: field.bit_width, bit_offset: 0,
         });
         total_size = total_size.max(field_size);
     }
@@ -162,14 +185,8 @@ fn get_type_size(ty: &Type, type_definitions: Option<&HashMap<String, Type>>) ->
             if let Some(defs) = type_definitions {
                 if let Some(Type::Struct { fields: actual_fields, .. }) = defs.get(name) {
                     // Calculate size of the resolved struct
-                    let mut total = 0u64;
-                    for field in actual_fields {
-                        if matches!(field.field_type, Type::Array { size: None, .. }) {
-                            continue;
-                        }
-                        total += get_type_size(&field.field_type, type_definitions)?;
-                    }
-                    return Some(total);
+                    return calculate_struct_layout_with_defs(actual_fields,
+                        SourceLocation::new_simple(0, 0), type_definitions).ok().map(|l| l.total_size);
                 }
             }
             // If we can't resolve it, fall back to normal size calculation

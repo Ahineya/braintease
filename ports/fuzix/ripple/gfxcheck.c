@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <gx.h>
+#include "../../../ports/graphics/raster-check.inc"
 #include "pty-limits.h"
 extern long call(unsigned,long,long,long,long);
 static int fd;
@@ -20,15 +21,16 @@ static void create(void){memset(&w,0,sizeof(w));w.version=GX_VERSION;w.width=640
 static void destroy(void){struct gx_handle h={GX_VERSION,0};h.handle=w.window;C(ioctl(fd,GX_DESTROY,&h)==0);}
 int main(int argc,char **argv) {
     struct gx_info info;struct gx_fill f;struct gx_copy c;struct gx_upload u;struct gx_handle h;
-    unsigned short stack[640],*pixels,*cross;unsigned long i;int pid,status,high,ptys[8],extra;
+    unsigned short stack[640],*pixels,*cross;unsigned long i;int pid,status,high,ptys[RIPPLE_PTY_COUNT],extra;
     char path[]="/dev/ptyp0";
     if(argc>1&&!strcmp(argv[1],"fd-child")){C(fcntl(31,F_GETFD)==-1&&errno==EBADF);return 0;}
     fd=open("/dev/gfx",O_RDWR);C(fd>=0);C(ioctl(fd,GX_INFO,&info)==0);C(info.version==1&&info.max_windows==1);
+    C(raster_checks(fd)==0);
     high=fcntl(fd,F_DUPFD,31);C(high==31);C(fcntl(high,F_SETFD,FD_CLOEXEC)==0);
     extra=fcntl(high,F_DUPFD,20);C(extra==20);C(fcntl(extra,F_GETFD)==FD_CLOEXEC);close(extra);
     pid=fork();C(pid>=0);if(!pid){char *args[]={"gfxcheck","fd-child",NULL};execv("/bin/gfxcheck",args);_exit(100);}
     C(waitpid(pid,&status,0)==pid&&status==0);C(fcntl(high,F_GETFD)==FD_CLOEXEC);close(high);
-    for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]='0'+i;ptys[i]=open(path,O_RDWR|O_NOCTTY);C(ptys[i]>=0);}
+    for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=RIPPLE_PTY_DIGIT(i);ptys[i]=open(path,O_RDWR|O_NOCTTY);C(ptys[i]>=0);}
     extra=open(path,O_RDWR|O_NOCTTY);C(extra<0&&errno==EBUSY);
     for(i=0;i<RIPPLE_PTY_COUNT;i++)close(ptys[i]);
     create();h.version=GX_VERSION;h.handle=w.window;

@@ -1,0 +1,163 @@
+import { normalize } from "lib/path";
+import {} from "std/result";
+
+export const NO_TRACK: usize = 65535;
+export const MAX_TRACKS: usize = 256;
+
+export struct Playlist {
+    tracks: Vec<String>,
+    current: usize,
+    shuffle: bool,
+    played: Vec<bool>,
+    history: Vec<usize>,
+    seed: u32
+}
+
+export fn playlist(seed: u32) -> Playlist {
+    Playlist { tracks: [], current: NO_TRACK, shuffle: false, played: [], history: [], seed: seed }
+}
+
+export fn wav_path(path: String) -> bool {
+    if (path.len() < 4) {
+        return false;
+    }
+    let end = path.len();
+    path[end - 4] == '.' && (path[end - 3] == 'w' || path[end - 3] == 'W') && (path[end - 2] == 'a' || path[end - 2] == 'A') && (path[end - 1] == 'v' || path[end - 1] == 'V')
+}
+
+impl Playlist {
+    export fn add(&mut self, path: String) -> Result<usize, String> {
+        if (path.is_empty() || path[0] != '/' || path.len() > 255 || !wav_path(path)) {
+            return Err("Choose a WAV file (path up to 255 bytes)");
+        }
+        for (ch in path) {
+            if (ch == '\0' || ch as u32 > 255) {
+                return Err("Unsupported music path");
+            }
+        }
+        let path = normalize(path);
+        for (i in 0..self.tracks.len()) {
+            if (self.tracks[i] == path) {
+                return Ok(i);
+            }
+        }
+        if (self.tracks.len() >= MAX_TRACKS) {
+            return Err("Playlist is full (256 tracks)");
+        }
+        self.tracks.push(path);
+        self.played.push(false);
+        Ok(self.tracks.len() - 1)
+    }
+
+    /// Caller stops playback first when removing the current track.
+    export fn remove(&mut self, index: usize) {
+        if (index >= self.tracks.len()) {
+            return;
+        }
+        for (i in index..self.tracks.len() - 1) {
+            self.tracks[i] = self.tracks[i + 1];
+            self.played[i] = self.played[i + 1];
+        }
+        self.tracks.pop();
+        self.played.pop();
+        let mut history: Vec<usize> = [];
+        for (i in self.history) {
+            if (i != index) {
+                history.push(if (i > index) {
+                    i - 1
+                } else {
+                    i
+                });
+            }
+        }
+        self.history = history;
+        if (self.current == index) {
+            self.current = NO_TRACK;
+        } else if (self.current != NO_TRACK && self.current > index) {
+            self.current -= 1;
+        }
+    }
+
+    fn choose(&mut self, index: usize) -> Option<usize> {
+        if (index >= self.tracks.len()) {
+            return None;
+        }
+        self.current = index;
+        self.played[index] = true;
+        if (self.history.len() >= MAX_TRACKS) {
+            for (i in 0..self.history.len() - 1) {
+                self.history[i] = self.history[i + 1];
+            }
+            self.history.pop();
+        }
+        self.history.push(index);
+        Some(index)
+    }
+
+    /// An explicit play starts a new traversal, including a fresh shuffle bag.
+    export fn begin(&mut self, index: usize) -> Option<usize> {
+        self.history = [];
+        for (i in 0..self.played.len()) {
+            self.played[i] = false;
+        }
+        self.current = NO_TRACK;
+        self.choose(index)
+    }
+
+    /// Shuffle bags repeat indefinitely, without repeating the boundary track.
+    export fn next(&mut self) -> Option<usize> {
+        if (self.shuffle) {
+            let mut remaining: usize = 0;
+            for (done in self.played) {
+                if (!done) {
+                    remaining += 1;
+                }
+            }
+            if (self.tracks.is_empty()) {
+                return None;
+            }
+            let mut boundary = false;
+            if (remaining == 0) {
+                for (i in 0..self.played.len()) {
+                    self.played[i] = false;
+                }
+                boundary = self.tracks.len() > 1 && self.current != NO_TRACK;
+                remaining = self.tracks.len() - if (boundary) {
+                    1 as usize
+                } else {
+                    0 as usize
+                };
+            }
+            // Small wrapping PRNG; seeded from guest entropy by the UI.
+            self.seed = self.seed * 1664525 + 1013904223;
+            let mut pick = ((self.seed >> 8) % remaining as u32) as usize;
+            for (i in 0..self.tracks.len()) {
+                if (!self.played[i] && (!boundary || i != self.current)) {
+                    if (pick == 0) {
+                        return self.choose(i);
+                    }
+                    pick -= 1;
+                }
+            }
+            None
+        } else {
+            let index = if (self.current == NO_TRACK) {
+                0 as usize
+            } else {
+                self.current + 1
+            };
+            self.choose(index)
+        }
+    }
+
+    export fn previous(&mut self) -> Option<usize> {
+        if (self.history.len() < 2) {
+            return None;
+        }
+        let old = self.history[self.history.len() - 1];
+        self.played[old] = false;
+        self.history.pop();
+        self.current = self.history[self.history.len() - 1];
+        Some(self.current)
+    }
+}

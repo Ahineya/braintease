@@ -18,7 +18,13 @@
 #include "z_zone.h"
 #include "doom_port.h"
 #include "doom_resolution.h"
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#ifdef DOOM_GUEST
+#include "guest.h"
+#endif
+#ifdef RIPPLE
+#include "render_fast.h"
+#endif
+#if (defined(RIPPLE) || defined(RCC_NATIVE)) && !defined(DOOM_GUEST)
 #include <mmio.h>
 #include <vm_devices.h>
 #include "render_fast.h"
@@ -31,7 +37,7 @@ float mouse_acceleration = 1.0f;
 int mouse_threshold = 10;
 int vanilla_keyboard_mapping = 1;
 int usegamma;
-int usemouse = 1;
+int usemouse = DOOM_MOUSE;
 int screen_width = DOOM_OUTPUT_WIDTH, screen_height = DOOM_OUTPUT_HEIGHT, screen_bpp = 16;
 int fullscreen, aspect_ratio_correct, show_diskicon, diskicon_readbytes;
 char *video_driver = "ripple";
@@ -43,7 +49,7 @@ static byte palette_rgb[768];
 static uint32_t logical_tick;
 static uint32_t presented;
 static unsigned char held[256];
-#if !defined(RIPPLE) && !defined(RCC_NATIVE)
+#if !defined(RIPPLE) && !defined(RCC_NATIVE) && !defined(DOOM_GUEST)
 static const char *capture_path;
 static unsigned long capture_frame = 1;
 static FILE *input_file;
@@ -77,7 +83,10 @@ void Doom_NextTick(void)
 #if DOOM_PCM
     Doom_PcmBeforeTick();
 #endif
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#ifdef DOOM_GUEST
+    Doom_GuestTick(logical_tick + 1UL);
+    ++logical_tick;
+#elif defined(RIPPLE) || defined(RCC_NATIVE)
     VmClock clock;
     if (vm_next_tick(&clock) != VM_DEVICE_OK) I_Error("VM tick failed");
     if (clock.hz != 35 || clock.tick != logical_tick + 1UL)
@@ -153,6 +162,7 @@ long Doom_AddMouseDelta(long current, long delta)
 void Doom_PostMouse(unsigned int buttons, long dx, long dy)
 {
     event_t event;
+    if (!usemouse) return;
     if (dx > 1024L) dx = 1024L;
     if (dx < -1024L) dx = -1024L;
     if (dy > 1024L) dy = 1024L;
@@ -168,7 +178,9 @@ void Doom_PostMouse(unsigned int buttons, long dx, long dy)
 
 void I_StartTic(void)
 {
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#ifdef DOOM_GUEST
+    Doom_GuestInput();
+#elif defined(RIPPLE) || defined(RCC_NATIVE)
     VmInputEvent events[16];
     VmInputBatch batch;
     VmInputState state;
@@ -215,7 +227,7 @@ void I_StartTic(void)
 
 void Doom_ConfigureCapture(const char *path, unsigned long frame, const char *input)
 {
-#if !defined(RIPPLE) && !defined(RCC_NATIVE)
+#if !defined(RIPPLE) && !defined(RCC_NATIVE) && !defined(DOOM_GUEST)
     capture_path = path;
     capture_frame = frame;
     if (input) {
@@ -247,14 +259,16 @@ void I_InitGraphics(void)
         }
     }
 #endif
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#ifdef DOOM_GUEST
+    Doom_GuestGraphics();
+#elif defined(RIPPLE) || defined(RCC_NATIVE)
     VmDeviceCaps caps;
     if (vm_devices_caps(&caps) != VM_DEVICE_OK || (caps.bits & 15U) != 15U)
         I_Error("VM device ABI 1 with RGB565_EXT, clock and keyboard required");
     display_set_mode(DISP_MODE_RGB565_EXT);
     display_enable();
-    if (vm_input_configure(VM_POINTER_RELATIVE) != VM_DEVICE_OK)
-        I_Error("VM relative pointer configuration failed");
+    if (vm_input_configure(usemouse ? VM_POINTER_RELATIVE : VM_POINTER_ABSOLUTE) != VM_DEVICE_OK)
+        I_Error("VM pointer configuration failed");
 #endif
     I_SetPalette(W_CacheLumpName("PLAYPAL", PU_CACHE));
 }
@@ -293,6 +307,13 @@ int I_GetPaletteIndex(int r, int g, int b)
 static void finish_update(int repeat)
 {
     size_t i;
+#if defined(DOOM_GUEST) && DOOM_RESOLUTION_SCALE == 1
+    if (Doom_GuestIndexed()) {
+        palette_changed = 0;
+        Doom_GuestPresentIndexed(I_VideoBuffer, palette565, ++presented);
+        return;
+    }
+#endif
 #ifdef RIPPLE
     if (!repeat || palette_changed) {
 #if DOOM_RESOLUTION_SCALE == 1
@@ -321,10 +342,14 @@ static void finish_update(int repeat)
 #endif
     palette_changed = 0;
     ++presented;
+#ifndef DOOM_GUEST
     printf("ENGINE frame %lu tick %lu state %d episode %d map %d\n",
            (unsigned long)presented, (unsigned long)logical_tick,
            (int)gamestate, gameepisode, gamemap);
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#endif
+#ifdef DOOM_GUEST
+    Doom_GuestPresent(framebuffer, presented);
+#elif defined(RIPPLE) || defined(RCC_NATIVE)
     if (vm_present_rgb565(framebuffer, DOOM_OUTPUT_WIDTH, DOOM_OUTPUT_HEIGHT, DOOM_OUTPUT_WIDTH) != VM_DEVICE_OK)
         I_Error("VM presentation failed");
 #else
@@ -346,7 +371,9 @@ void Doom_RepeatFrame(void) { finish_update(1); }
 
 void I_ReadScreen(byte *dest) { memcpy(dest, I_VideoBuffer, (size_t)SCREENWIDTH * SCREENHEIGHT); }
 void I_ShutdownGraphics(void) {
-#if defined(RIPPLE) || defined(RCC_NATIVE)
+#ifdef DOOM_GUEST
+    Doom_GuestShutdown();
+#elif defined(RIPPLE) || defined(RCC_NATIVE)
     vm_input_configure(VM_POINTER_ABSOLUTE);
 #endif
 }
@@ -377,7 +404,12 @@ void I_WaitVBL(int count) {}
 byte *I_ZoneBase(size_t *size)
 {
     byte *zone;
+#ifdef DOOM_GUEST
+    /* Leave room for renderer tables and stacks in FUZIX's user pool. */
+    *size = 6UL * 1024UL * 1024UL;
+#else
     *size = 8UL * 1024UL * 1024UL;
+#endif
     zone = malloc(*size);
     if (!zone) I_Error("Cannot allocate Doom zone");
     return zone;

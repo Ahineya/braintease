@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
 #include <kdata.h>
 #include <printf.h>
@@ -68,6 +69,9 @@ static blkno_t mapcalc(inoptr ino, usize_t *size, uint_fast8_t m)
 /* Writei (and readi) need more i/o error handling */
 void readi(register inoptr ino, uint_fast8_t flag)
 {
+#ifdef CONFIG_RIPPLE_IO
+    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) { ripple_pipe_io(ino,0,flag); return; }
+#endif
 	usize_t amount;
 	blkno_t pblk;
 	bufptr bp;
@@ -168,6 +172,9 @@ void readi(register inoptr ino, uint_fast8_t flag)
 
 void writei(register inoptr ino, uint_fast8_t flag)
 {
+#ifdef CONFIG_RIPPLE_IO
+    if (getmode(ino) == MODE_R(F_PIPE) && ino->c_dev == NO_DEVICE) { ripple_pipe_io(ino,1,flag); return; }
+#endif
 	usize_t amount;
 	bufptr bp;
 	bool ispipe = false;

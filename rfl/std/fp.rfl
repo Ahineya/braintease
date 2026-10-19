@@ -1,0 +1,291 @@
+// Constructor-polymorphic operations. The explicit-callback helpers coexist
+// with the statically selected Functor and Monad contracts below.
+
+/// Applies the supplied container map operation. `f` runs according to `mapping`'s policy (for example, once for Some and never for None).
+export fn map_with<F<_>, A, B>(value: F<A>, f: fn(A) -> B, mapping: fn(F<A>, fn(A) -> B) -> F<B>) -> F<B> {
+    mapping(move(value), f)
+}
+
+/// Applies the supplied container bind operation. Evaluation order and short circuiting belong to `binding`.
+export fn flat_map_with<F<_>, A, B>(value: F<A>, f: fn(A) -> F<B>, binding: fn(F<A>, fn(A) -> F<B>) -> F<B>) -> F<B> {
+    binding(move(value), f)
+}
+
+/// Changes the container using the supplied operation, preserving its element type. The callback is specialized to A; this does not assert a universally quantified natural transformation.
+export fn transform<F<_>, G<_>, A>(value: F<A>, convert: fn(F<A>) -> G<A>) -> G<A> {
+    convert(move(value))
+}
+
+/// A constructor that can transform each contained value. Implementations must preserve identity and composition, and visit values in their documented order.
+export trait Functor<_> {
+    /// Transforms each value in the constructor's traversal order.
+    fn map<A, B>(value: Self<A>, f: fn(A) -> B) -> Self<B>;
+}
+
+/// A constructor with value injection and sequential composition. Implementations must satisfy left/right unit and associativity. Callbacks are reusable; owned captures require a separate consuming-callable API.
+export trait Monad<_> {
+    /// Injects one owned value into the computation.
+    fn pure<A>(value: A) -> Self<A>;
+    /// Composes each value with f, preserving the constructor's sequential order.
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B>;
+}
+
+/// Transforms a container using its statically selected Functor implementation.
+export fn map<F<_>: Functor, A, B>(value: F<A>, f: fn(A) -> B) -> F<B> {
+    F::map(move(value), f)
+}
+
+/// Injects a value into a Monad. Supply the constructor explicitly or through an expected result type.
+export fn pure<F<_>: Monad, A>(value: A) -> F<A> {
+    F::pure(move(value))
+}
+
+/// Composes a container with a reusable callback, in its Monad's sequential order.
+export fn flat_map<F<_>: Monad, A, B>(value: F<A>, f: fn(A) -> F<B>) -> F<B> {
+    F::flat_map(move(value), f)
+}
+
+/// Derives mapping from Monad operations. The continuation captures only the reusable function, preserving single ownership of each supplied element.
+export fn map_monadic<F<_>: Monad, A, B>(value: F<A>, f: fn(A) -> B) -> F<B> {
+    F::flat_map(move(value), fn(a: A) => F::pure(f(move(a))))
+}
+
+impl Functor for Option {
+    fn map<A, B>(value: Self<A>, f: fn(A) -> B) -> Self<B> {
+        match move(value) {
+            Some(a) => Some(f(move(a))),
+            None => None
+        }
+    }
+}
+
+impl Monad for Option {
+    fn pure<A>(value: A) -> Self<A> {
+        Some(move(value))
+    }
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        match move(value) {
+            Some(a) => f(move(a)),
+            None => None
+        }
+    }
+}
+
+// Fix the failure type and vary the success slot. Neither mapping nor binding
+// invokes its callback on Err; the original failure is transferred unchanged.
+impl<E> Functor for Result<_, E> {
+    fn map<A, B>(value: Self<A>, f: fn(A) -> B) -> Self<B> {
+        match move(value) {
+            Ok(a) => Ok(f(move(a))),
+            Err(error) => Err(move(error))
+        }
+    }
+}
+
+impl<E> Monad for Result<_, E> {
+    fn pure<A>(value: A) -> Self<A> {
+        Ok(move(value))
+    }
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        match move(value) {
+            Ok(a) => f(move(a)),
+            Err(error) => Err(move(error))
+        }
+    }
+}
+
+/// Maps a Result's success value, inferring its fixed error type from value. Err transfers its error unchanged without calling f.
+export fn map_result<A, B, E>(value: Result<A, E>, f: fn(A) -> B) -> Result<B, E> {
+    map<Result<_, E>, A, B>(move(value), f)
+}
+
+/// Composes Result computations that share an error type. The first Err short circuits the chain.
+export fn flat_map_result<A, B, E>(value: Result<A, E>, f: fn(A) -> Result<B, E>) -> Result<B, E> {
+    flat_map<Result<_, E>, A, B>(move(value), f)
+}
+
+// Pop transfers ownership, whereas ordinary vector iteration copies elements.
+// Reverse once so callbacks still run in left-to-right source order.
+fn reverse_owned<A>(values: Vec<A>) -> Vec<A> {
+    let mut values = move(values);
+    let mut result: Vec<A> = [];
+    while (!values.is_empty()) {
+        match values.pop() {
+            Some(value) => result.push(move(value)),
+            None => {}
+        };
+    }
+    move(result)
+}
+
+impl Functor for Vec {
+    fn map<A, B>(values: Self<A>, f: fn(A) -> B) -> Self<B> {
+        let mut values = reverse_owned(move(values));
+        let mut result: Vec<B> = [];
+        while (!values.is_empty()) {
+            match values.pop() {
+                Some(value) => result.push(f(move(value))),
+                None => {}
+            };
+        }
+        move(result)
+    }
+}
+
+impl Monad for Vec {
+    fn pure<A>(value: A) -> Self<A> {
+        [move(value)]
+    }
+    fn flat_map<A, B>(values: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        let mut values = reverse_owned(move(values));
+        let mut result: Vec<B> = [];
+        while (!values.is_empty()) {
+            match values.pop() {
+                Some(value) => {
+                    let mut part = reverse_owned(f(move(value)));
+                    while (!part.is_empty()) {
+                        match part.pop() {
+                            Some(value) => result.push(move(value)),
+                            None => {}
+                        };
+                    }
+                },
+                None => {}
+            };
+        }
+        move(result)
+    }
+}
+
+/// A constructor that invokes its callback at most once. Consuming callbacks
+/// can own resources; implementations release unused callbacks on empty/error paths.
+export trait FunctorOnce<_> {
+    /// Transforms zero or one values, consuming f or releasing it unused.
+    fn map_once<A, B>(value: Self<A>, f: once fn(A) -> B) -> Self<B>;
+}
+
+/// Sequential composition for constructors with at most one success value.
+/// Reusable Monad remains separate: Vec must be allowed to call f many times.
+export trait MonadOnce<_> {
+    /// Injects one owned value.
+    fn pure_once<A>(value: A) -> Self<A>;
+    /// Composes zero or one values, consuming f or releasing it unused.
+    fn flat_map_once<A, B>(value: Self<A>, f: once fn(A) -> Self<B>) -> Self<B>;
+}
+
+/// Maps at most one value, transferring the callback's ownership.
+export fn map_once<F<_>: FunctorOnce, A, B>(value: F<A>, f: once fn(A) -> B) -> F<B> {
+    F::map_once(move(value), move(f))
+}
+
+/// Injects a value into a constructor that supports consuming composition.
+export fn pure_once<F<_>: MonadOnce, A>(value: A) -> F<A> {
+    F::pure_once(move(value))
+}
+
+/// Sequentially composes at most one value with an owned continuation.
+export fn flat_map_once<F<_>: MonadOnce, A, B>(value: F<A>, f: once fn(A) -> F<B>) -> F<B> {
+    F::flat_map_once(move(value), move(f))
+}
+
+impl FunctorOnce for Option {
+    fn map_once<A, B>(value: Self<A>, f: once fn(A) -> B) -> Self<B> {
+        match move(value) {
+            Some(a) => Some(f(move(a))),
+            None => None
+        }
+    }
+}
+
+impl MonadOnce for Option {
+    fn pure_once<A>(value: A) -> Self<A> {
+        Some(move(value))
+    }
+    fn flat_map_once<A, B>(value: Self<A>, f: once fn(A) -> Self<B>) -> Self<B> {
+        match move(value) {
+            Some(a) => f(move(a)),
+            None => None
+        }
+    }
+}
+
+impl<E> FunctorOnce for Result<_, E> {
+    fn map_once<A, B>(value: Self<A>, f: once fn(A) -> B) -> Self<B> {
+        match move(value) {
+            Ok(a) => Ok(f(move(a))),
+            Err(error) => Err(move(error))
+        }
+    }
+}
+
+impl<E> MonadOnce for Result<_, E> {
+    fn pure_once<A>(value: A) -> Self<A> {
+        Ok(move(value))
+    }
+    fn flat_map_once<A, B>(value: Self<A>, f: once fn(A) -> Self<B>) -> Self<B> {
+        match move(value) {
+            Ok(a) => f(move(a)),
+            Err(error) => Err(move(error))
+        }
+    }
+}
+
+/// Sequential binding independent of unrestricted value injection. Reusable
+/// effects support this operation even when their output can be move-only.
+export trait FlatMap<_> {
+    /// Sequentially composes values using a reusable continuation.
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B>;
+}
+
+/// Composes values using a constructor's independent FlatMap capability.
+export fn bind<F<_>: FlatMap, A, B>(value: F<A>, f: fn(A) -> F<B>) -> F<B> {
+    F::flat_map(move(value), f)
+}
+
+/// Constructs values from a reusable factory. Effects invoke it once per run;
+/// eager containers invoke it now. This is distinct from Monad::pure(value).
+export trait FromFactory<_> {
+    /// Invokes a factory according to the constructor's execution policy.
+    fn pure_with<A>(make: fn() -> A) -> Self<A>;
+}
+
+/// Injects fresh values according to the constructor's factory policy.
+export fn pure_with<F<_>: FromFactory, A>(make: fn() -> A) -> F<A> {
+    F::pure_with(make)
+}
+
+impl FlatMap for Option {
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        flat_map<Option, A, B>(move(value), f)
+    }
+}
+
+impl<E> FlatMap for Result<_, E> {
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        flat_map<Result<_, E>, A, B>(move(value), f)
+    }
+}
+
+impl FlatMap for Vec {
+    fn flat_map<A, B>(value: Self<A>, f: fn(A) -> Self<B>) -> Self<B> {
+        flat_map<Vec, A, B>(move(value), f)
+    }
+}
+
+impl FromFactory for Option {
+    fn pure_with<A>(make: fn() -> A) -> Self<A> {
+        Some(make())
+    }
+}
+
+impl<E> FromFactory for Result<_, E> {
+    fn pure_with<A>(make: fn() -> A) -> Self<A> {
+        Ok(make())
+    }
+}
+
+impl FromFactory for Vec {
+    fn pure_with<A>(make: fn() -> A) -> Self<A> {
+        [make()]
+    }
+}

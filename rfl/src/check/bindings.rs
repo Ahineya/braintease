@@ -41,8 +41,7 @@ impl<'a> Checker<'a> {
         None
     }
 
-    /// A name from an enclosing function becomes an immutable local.
-    /// The value is copied when the closure is created.
+    /// Reusable closures copy captures; consuming closures transfer unshared captures.
     pub(super) fn resolve(&mut self, name: &str) -> Option<u32> {
         if let Some(id) = self.lookup(name) {
             return Some(id);
@@ -68,12 +67,19 @@ impl<'a> Checker<'a> {
                 format!("`{}` cannot be captured mutably", self.show(ty)),
             ));
         }
-        let local = self.bind(name.to_string(), ty, parent_binding.shared);
+        let transfer = self.capture_once && !parent_binding.shared;
+        let local = self.bind(
+            name.to_string(),
+            ty,
+            parent_binding.shared || (transfer && parent_binding.mutable),
+        );
         if parent_binding.shared {
             self.bindings[local as usize].shared = true;
         }
         self.captures.push(crate::typed::Capture {
+            span: self.current_span.start,
             parent,
+            transfer,
             local,
             ty,
             shared: parent_binding.shared,

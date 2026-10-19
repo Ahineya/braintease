@@ -3,8 +3,9 @@
 #include <termios.h>
 #include <sys/wait.h>
 #include <string.h>
-#define NJOB 16
-#define NMEMBER 16
+#include "process-limits.h"
+#define NJOB RIPPLE_PROCESS_SLOTS
+#define NMEMBER RIPPLE_PROCESS_SLOTS
 struct member { int pid, status, state; }; /* state: running, stopped, exited */
 struct job {
     int group, count, last, notified;

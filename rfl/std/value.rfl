@@ -1,0 +1,4 @@
+/// Compiler-derived capability for ordinary RFL copy/COW values. Owned values,
+/// consuming functions, and aggregates storing them do not satisfy this bound.
+/// This describes language copy semantics, not a bitwise copy or deep clone.
+export trait Copy {}

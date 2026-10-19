@@ -359,8 +359,6 @@ fn word_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     mgr.pin_register(bs);
     let tmp = reg(mgr, naming, &mut insts, "word_temporary");
     mgr.pin_register(tmp);
-    let carry = reg(mgr, naming, &mut insts, "word_carry");
-    mgr.pin_register(carry);
     // All allocations precede branches, so no spill slot is initialized on
     // only one path through this instruction.
     insts.push(AsmInst::Li(bs, bank_size as i16));
@@ -373,16 +371,17 @@ fn word_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
         insts.push(AsmInst::Mod(word, word, bs));
         insts.push(AsmInst::Label(normalized));
     }
-    insts.push(AsmInst::Add(tmp, addr, delta));
-    insts.push(AsmInst::Sltu(carry, tmp, addr));
-    insts.push(AsmInst::Move(addr, tmp));
+    // Both offsets are now canonical. Compare before addition to handle
+    // bank crossings and native-word overflow with one test and less pressure.
     let adjust = naming.i32_label("gep_word_adjust");
     let done = naming.i32_label("gep_word_done");
-    insts.push(AsmInst::Bne(carry, Reg::R0, adjust.clone()));
-    insts.push(AsmInst::Sltu(tmp, addr, bs));
-    insts.push(AsmInst::Bne(tmp, Reg::R0, done.clone()));
+    insts.push(AsmInst::Sub(tmp, bs, delta));
+    insts.push(AsmInst::Sltu(bs, addr, tmp));
+    insts.push(AsmInst::Beq(bs, Reg::R0, adjust.clone()));
+    insts.push(AsmInst::Add(addr, addr, delta));
+    insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
     insts.push(AsmInst::Label(adjust));
-    insts.push(AsmInst::Sub(addr, addr, bs));
+    insts.push(AsmInst::Sub(addr, addr, tmp));
     insts.push(AsmInst::AddI(bank, bank, 1));
     insts.push(AsmInst::Label(done));
     let bank_name = naming.temp_with_context("pointer", "word_offset_bank");
@@ -391,7 +390,7 @@ fn word_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     mgr.set_pointer_bank(naming.temp_name(result), BankInfo::Dynamic(bank_name));
     mgr.unpin_register(addr);
     mgr.unpin_register(bank);
-    for r in [delta, bs, tmp, carry] {
+    for r in [delta, bs, tmp] {
         mgr.unpin_register(r);
         mgr.free_register(r);
     }
@@ -401,35 +400,48 @@ fn word_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
 /// Constant increments need only native operations, including carry/borrow.
 fn constant_offset(mgr: &mut RegisterPressureManager, naming: &mut NameGenerator,
     ptr: &Value, offset: i64, result: TempId, bank_size: u16) -> Vec<AsmInst> {
-    let mut insts = vec![AsmInst::Comment("GEP: bank overflow checked before losing carry".into())];
+    let mut insts = vec![AsmInst::Comment("GEP: bank overflow checked before stepping".into())];
     let (addr, bank) = components(mgr, naming, ptr, &mut insts);
-    let quotient = offset.div_euclid(bank_size as i64);
-    let remainder = offset.rem_euclid(bank_size as i64) as u16;
-    // components() returns owned copies. Reuse them for the result instead of
-    // reserving another address/bank pair and forcing unrelated values to spill.
+    // Keep negative remainders negative: p - 1 should leave the bank alone
+    // except at offset zero, rather than decrementing and then restoring it.
+    let quotient = offset / bank_size as i64;
+    let remainder = offset % bank_size as i64;
+    // Allocate before branching; the allocator must not spill on just one arm.
     let scratch = reg(mgr, naming, &mut insts, "constant_scratch"); mgr.pin_register(scratch);
     let limit = reg(mgr, naming, &mut insts, "constant_limit"); mgr.pin_register(limit);
     let bank_name = naming.temp_with_context("pointer", "offset_bank");
     if quotient != 0 { insts.push(AsmInst::AddI(bank, bank, quotient as i16)); }
     let adjust = naming.i32_label("gep_adjust");
     let done = naming.i32_label("gep_done");
-    if remainder != 0 {
+    if remainder > 0 {
+        // addr + r crosses a bank iff addr >= bank_size - r. Comparing
+        // before adding also covers a carry past 65535 with the same test.
+        insts.push(AsmInst::Li(limit, (bank_size as i64 - remainder) as i16));
+        insts.push(AsmInst::Sltu(scratch, addr, limit));
+        insts.push(AsmInst::Beq(scratch, Reg::R0, adjust.clone()));
         insts.push(AsmInst::AddI(addr, addr, remainder as i16));
-        // After adding r modulo 65536, carry is exactly (new_address < r).
-        // This retains overflow without keeping the original address live.
-        insts.push(AsmInst::Li(limit, remainder as i16));
+        insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+        insts.push(AsmInst::Label(adjust));
+        insts.push(AsmInst::Sub(addr, addr, limit));
+        insts.push(AsmInst::AddI(bank, bank, 1));
+    } else if remainder < 0 {
+        insts.push(AsmInst::Li(limit, (-remainder) as i16));
         insts.push(AsmInst::Sltu(scratch, addr, limit));
         insts.push(AsmInst::Bne(scratch, Reg::R0, adjust.clone()));
+        insts.push(AsmInst::Sub(addr, addr, limit));
+        insts.push(AsmInst::Beq(Reg::R0, Reg::R0, done.clone()));
+        insts.push(AsmInst::Label(adjust));
+        insts.push(AsmInst::AddI(addr, addr, (bank_size as i64 + remainder) as i16));
+        insts.push(AsmInst::AddI(bank, bank, -1));
+    } else {
+        // Integer-to-pointer casts may carry an offset outside the bank.
+        // Retain the existing single-bank normalization even for p + 0.
+        insts.push(AsmInst::Li(limit, bank_size as i16));
+        insts.push(AsmInst::Sltu(scratch, addr, limit));
+        insts.push(AsmInst::Bne(scratch, Reg::R0, done.clone()));
+        insts.push(AsmInst::Sub(addr, addr, limit));
+        insts.push(AsmInst::AddI(bank, bank, 1));
     }
-    insts.push(AsmInst::Li(limit, bank_size as i16));
-    insts.push(AsmInst::Sltu(scratch, addr, limit));
-    insts.push(AsmInst::Bne(scratch, Reg::R0, done.clone()));
-    insts.push(AsmInst::Label(adjust));
-    // The carry edge above has limit=remainder; materialize the bank size on
-    // both paths before adjusting. No register allocation occurs across them.
-    insts.push(AsmInst::Li(limit, bank_size as i16));
-    insts.push(AsmInst::Sub(addr, addr, limit));
-    insts.push(AsmInst::AddI(bank, bank, 1));
     insts.push(AsmInst::Label(done));
     mgr.bind_value_to_register(naming.temp_name(result), addr);
     mgr.bind_value_to_register(bank_name.clone(), bank);

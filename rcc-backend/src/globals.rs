@@ -408,6 +408,25 @@ impl GlobalManager {
         insts
     }
     fn lower_aggregate_init(&self, global: &GlobalVariable, ty: &IrType, values: &[Value], address: u32) -> Vec<AsmInst> {
+        // C unions use raw I16-array storage. The frontend splits scalar
+        // members into cells but retains each relocatable pointer as one
+        // two-cell initializer atom, so element count is not cell count.
+        if matches!(ty, IrType::Array { element_type, .. } if **element_type == IrType::I16) &&
+            values.iter().all(|v| matches!(v, Value::Constant(_) | Value::FatPtr(_) | Value::Function(_) | Value::Global(_))) {
+            let mut insts = Vec::new();
+            let mut offset = 0u32;
+            let capacity = ty.size_in_words().expect("sized cell initializer");
+            for value in values {
+                let pointer = matches!(value, Value::FatPtr(_) | Value::Function(_) | Value::Global(_));
+                let width = if pointer { 2 } else { 1 };
+                assert!(u64::from(offset + width) <= capacity, "cell initializer exceeds object storage");
+                let mut element = global.clone();
+                element.var_type = if pointer { IrType::FatPtr(Box::new(IrType::I16)) } else { IrType::I16 };
+                insts.extend(self.lower_single_value_init(&element, value, address + offset));
+                offset += width;
+            }
+            return insts;
+        }
         let mut values = values.iter().peekable();
         let insts = self.lower_aggregate_elements(global, ty, &mut values, address);
         assert!(values.next().is_none(), "too many global aggregate initializers");

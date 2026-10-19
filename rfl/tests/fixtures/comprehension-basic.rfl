@@ -1,0 +1,8 @@
+fn main() {
+    let answer = for {
+        a <- Some(20);
+        b <- Some(22);
+        yield a + b;
+    };
+    println(answer);
+}

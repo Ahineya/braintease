@@ -7,13 +7,15 @@ impl<'a> Checker<'a> {
         &mut self,
         span: usize,
         receiver: &Expr,
+        method_span: usize,
         method: &str,
         resolved: &str,
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
         let receiver_mark = self.borrows.len();
-        let recv = self.check_expr(receiver, None)?;
+        let hint = self.method_receiver_hint(receiver, method_span, method, expected)?;
+        let recv = self.check_expr(receiver, hint)?;
         if let Some(trait_name) = self
             .trait_dispatch
             .get(&(span, self.current_span.end, method.into()))
@@ -110,7 +112,7 @@ impl<'a> Checker<'a> {
                 return self.check_inherent(span, receiver, recv.ty, &info, args, expected);
             }
         }
-        let candidates = self.trait_candidates(span, recv.ty, method)?;
+        let candidates = self.trait_candidates(method_span, recv.ty, method)?;
         if candidates.len() > 1 {
             return Err(CompileError::at(
                 self.source,
@@ -138,6 +140,104 @@ impl<'a> Checker<'a> {
             }
         }
         result
+    }
+
+    // A generic constructor call can need its result context before we know
+    // its receiver type. Propagate the result only for a unique, non-generic
+    // trait operation that preserves that exact receiver type. This neither
+    // guesses a type parameter from a projection nor retries expression checking.
+    fn method_receiver_hint(
+        &mut self,
+        receiver: &Expr,
+        method_span: usize,
+        method: &str,
+        expected: Option<Ty>,
+    ) -> Result<Option<Ty>, CompileError> {
+        let Some(want) = expected else {
+            return Ok(None);
+        };
+        if self.peek(receiver).is_some() {
+            return Ok(None);
+        }
+        if !self.receiver_result_shape(receiver, want) {
+            return Ok(None);
+        }
+        if self.type_key(want).is_some_and(|key| {
+            self.methods
+                .iter()
+                .any(|m| m.type_name == key && m.method == method)
+        }) {
+            return Ok(None);
+        }
+        let candidates = self.trait_candidates(method_span, want, method)?;
+        if candidates.len() != 1 {
+            return Ok(None);
+        }
+        let contract = &candidates[0];
+        let required = self
+            .traits
+            .iter()
+            .find(|t| t.name == *contract)
+            .unwrap()
+            .methods
+            .iter()
+            .find(|m| m.name == method)
+            .unwrap();
+        if !required.type_params.is_empty() {
+            return Ok(None);
+        }
+        let signature = self.projected_method_signature(contract, method, want)?;
+        Ok((signature.ret == want).then_some(want))
+    }
+
+    fn receiver_result_shape(&self, expression: &Expr, want: Ty) -> bool {
+        if let Some(ty) = self.peek(expression) {
+            return ty == want;
+        }
+        let tail_matches = |block: &Block| {
+            block
+                .tail
+                .as_ref()
+                .is_some_and(|tail| self.receiver_result_shape(tail, want))
+        };
+        match &expression.kind {
+            ExprKind::Block(block) | ExprKind::Unsafe(block) => tail_matches(block),
+            ExprKind::If {
+                then_body,
+                else_body: Some(other),
+                ..
+            } => tail_matches(then_body) && self.receiver_result_shape(other, want),
+            ExprKind::Match { arms, .. } => {
+                !arms.is_empty()
+                    && arms
+                        .iter()
+                        .all(|arm| self.receiver_result_shape(&arm.body, want))
+            }
+            ExprKind::Call { callee, .. } => {
+                let Some(schema) = self.fn_schemas.get(callee) else {
+                    return false;
+                };
+                let function = &self.ast_fns[schema.index];
+                let Some(ret @ ParsedTy::Named { name, .. }) = &function.ret else {
+                    return false;
+                };
+                // id<T>(T)->T still gets T from its arguments, rather than
+                // forcing the final method's result onto an unrelated receiver.
+                if schema.type_params.contains(name) {
+                    return false;
+                }
+                let mut solved = vec![None; schema.type_params.len()];
+                self.infer_field(
+                    ret,
+                    want,
+                    &schema.type_params,
+                    &mut solved,
+                    expression.span.start,
+                )
+                .is_ok()
+            }
+            _ => false,
+        }
     }
 
     pub(super) fn check_inherent(
@@ -257,6 +357,7 @@ impl<'a> Checker<'a> {
             Ty::Vec(_) => "Vec".to_string(),
             Ty::Owned(_) => "Owned".to_string(),
             Ty::ErasedOwner => "ErasedOwner".to_string(),
+            Ty::SharedOwner => "SharedOwner".to_string(),
             Ty::Slice(_) => "Slice".to_string(),
             Ty::I8 => "i8".to_string(),
             Ty::U8 => "u8".to_string(),
@@ -273,7 +374,8 @@ impl<'a> Checker<'a> {
             Ty::Char => "char".to_string(),
             Ty::String => "String".to_string(),
             Ty::Struct { id, .. } => self.structs[id as usize].name.clone(),
-            Ty::Unit
+            Ty::Constructor(_)
+            | Ty::Unit
             | Ty::Func(_)
             | Ty::CFn(_)
             | Ty::Ref(_)
@@ -305,6 +407,23 @@ impl<'a> Checker<'a> {
     ) -> Result<TExpr, CompileError> {
         if let Some(trait_name) = self.trait_name(ty_name) {
             return self.check_trait_assoc(span, &trait_name, method, args, expected);
+        }
+        let owner = if ty_name == "Self" {
+            self.assoc_self.as_ref().map(|(_, ty)| *ty)
+        } else {
+            self.subst.get(ty_name).copied()
+        };
+        if let Some(ty @ Ty::Constructor(_)) = owner {
+            return self.check_constructor_operation(span, ty_name, ty, method, args, expected);
+        }
+        if !self
+            .methods
+            .iter()
+            .any(|m| m.type_name == ty_name && m.method == method)
+        {
+            if let Some(ty) = self.constructor_names.get(ty_name).copied() {
+                return self.check_constructor_operation(span, ty_name, ty, method, args, expected);
+            }
         }
         let Some(info) = self
             .methods

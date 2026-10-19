@@ -1,0 +1,96 @@
+// Run: python3 rcc-wasm/examples/browser/run.py --ui
+import macro { html } from "std/html_macro";
+import { Html } from "std/html";
+import { program, Cmd, perform } from "std/ui_command";
+import { Future, sleep } from "std/future";
+struct Model {
+    count: i16,
+    name: String,
+    rows: Vec<String>,
+    selected: String,
+    notice: String,
+    choice: String
+}
+
+type Msg = Increment | Rename(String) | Reverse | Select(String) | Later | TimerDone | Choose(String) | Ignore;
+async fn delayed() -> Msg {
+    sleep(30).unwrap().await;
+    TimerDone
+}
+
+fn update(model: Model, message: Msg) -> (Model, Vec<Cmd<Msg>>) {
+    let mut commands: Vec<Cmd<Msg>> = [];
+    let mut model = model;
+    match message {
+        Increment => {
+            model.count += 1;
+        },
+        Rename(name) => {
+            model.name = name;
+        },
+        Reverse => {
+            let mut rows: Vec<String> = [];
+            let mut i = model.rows.len();
+            while (i > 0) {
+                i -= 1;
+                rows.push(model.rows[i]);
+            }
+            model.rows = rows;
+        },
+        Select(name) => {
+            model.selected = name;
+        },
+        Later => {
+            commands.push(perform(delayed()));
+        },
+        TimerDone => {
+            model.notice = "Timer complete";
+        },
+        Choose(choice) => {
+            model.choice = choice;
+        },
+        Ignore => {},
+    } (model, move(commands))
+}
+
+fn Badge(label: String, children: Vec<Html<Msg>>) -> Html<Msg> {
+    html!{
+        <strong>
+            {label}
+            {children}
+        </strong>
+    }
+}
+
+fn view(model: &Model) -> Html<Msg> {
+    let mut rows: Vec<Html<Msg>> = [];
+    for (name in model.rows) {
+        rows.push(html!{
+            <li key={name}>
+                <button on_click={Select(name)}>{name}</button>
+            </li>
+        });
+    }
+    html!{
+        <section class="rfl-ui">
+            <h2>Typed RFL UI 🌍</h2>
+            <button data-action="increment" on_click={Increment}>Count: {model.count}</button>
+            <label>Name <input value={model.name} on_input={fn(name: String) => Rename(name)}/></label>
+            <p>Hello, {model.name}!</p>
+            <button data-action="reverse" on_click={Reverse}>Reverse list</button>
+            <ul>{rows}</ul>
+            <p>Selected: {model.selected}</p>
+            <button data-action="later" on_click={Later}>Await a timer</button>
+            <p>{model.notice}</p>
+            <Badge label={"Views & messages"}/>
+            <label>Choose <select value={model.choice} on_input={fn(choice: String) => Choose(choice)}>
+                <option value="Ada">Ada</option>
+                <option value="Grace">Grace</option>
+            </select></label>
+        </section>
+    }
+}
+
+fn main() {
+    program(Model { count: 0, name: "Ripple", rows: ["Ada", "Grace", "Edsger"], selected: "none", notice: "Ready", choice: "Grace" }, update, view, 8).unwrap();
+}

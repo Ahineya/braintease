@@ -34,6 +34,7 @@ pub fn lower_module_with_memory_mode(module: &Module, bank_size: u16, trace_spil
         // keep the new private counter home through ordinary Phi destruction.
         crate::optimize::rotate_counted_loops(function);
         crate::optimize::destroy_phis(function)?;
+        crate::optimize::cfg::order_for_lowering(function);
     }
     let module = &optimized;
     info!("V2: Lowering module '{}' with bank_size {}", module.name, bank_size);

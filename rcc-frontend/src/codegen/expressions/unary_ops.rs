@@ -14,6 +14,20 @@ pub fn generate_unary_operation(
     operand: &TypedExpr,
     result_type: &Type,
 ) -> Result<Value, CompilerError> {
+    if super::bit_fields::spec(operand).is_some() {
+        if matches!(op, UnaryOp::AddressOf) {
+            return Err(CompilerError::semantic_error("Cannot take the address of a bit-field".into(), rcc_common::SourceLocation::new_simple(0, 0)));
+        }
+        if matches!(op, UnaryOp::PreIncrement | UnaryOp::PostIncrement | UnaryOp::PreDecrement | UnaryOp::PostDecrement) {
+            let addr = generate_lvalue_address(gen, operand)?;
+            let (value, unit) = super::bit_fields::load(gen, operand, addr.clone())?;
+            let operation = if matches!(op, UnaryOp::PreIncrement | UnaryOp::PostIncrement) { IrBinaryOp::Add } else { IrBinaryOp::Sub };
+            let next = Value::Temp(gen.builder.build_binary(operation, value.clone(), Value::Constant(1), convert_type_default(operand.get_type())?)?);
+            let next = super::conversions::convert_integer(gen, next, operand.get_type(), operand.get_declared_type())?;
+            let stored = super::bit_fields::store(gen, operand, addr, next, unit)?;
+            return Ok(if matches!(op, UnaryOp::PostIncrement | UnaryOp::PostDecrement) { value } else { stored });
+        }
+    }
     match op {
         UnaryOp::AddressOf => {
             if matches!(operand.get_type(), Type::Function { .. }) {

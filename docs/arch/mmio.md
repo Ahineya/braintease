@@ -16,7 +16,8 @@ Bank 0, words **0–31** are the MMIO header. TEXT40 VRAM starts at word **32**.
 | 7 | DISP_STATUS | R | ready / flush_done |
 | 8 | DISP_CTL | R/W | enable / clear |
 | 9 | DISP_FLUSH | W | present frame |
-| 10–15 | Reserved | R/W | reads zero; writes ignored |
+| 10 | MATH_STACK | R/W | RVM: read ABI 1; write packet offset in current SB |
+| 11–15 | Reserved | R/W | reads zero; writes ignored |
 | 16 | DISP_RESOLUTION | R/W | RGB565 hi8=width lo8=height |
 | 17–20 | STORE_* | | block storage (16-bit word addressed) |
 | 21 | IRQ_STATUS | R/W | pending bits; **write ORs** |
@@ -69,6 +70,40 @@ it is complete before the next guest instruction. There is no polling loop.
 | HOST_REALTIME | 9 | 10 | read host Unix UTC calendar time |
 | HOST_IDLE | 10 | 4 | yield or request a bounded host wait of at most 10 ms |
 | HOST_TERMINAL | 11 | 4 | read live host terminal rows and columns |
+| HOST_RANDOM | 12 | 6 | fill RAM cells with host cryptographic random octets |
+| CRYPTO | 13 | 6 | stateless ECC and public RSA calculations |
+| TTY_WRITE | 14 | 8 | synchronously print up to 4096 raw octets from RAM |
+| MATH | 15 | 16 | IEEE binary32/binary64 arithmetic, conversions and binary64 libm |
+
+`TTY_WRITE` submits `[1, 8, bank, offset, count, 0, 0, 0]`. The host copies the
+low eight bits of each source cell to stdout and flushes before returning.
+Count is 0–4096; zero flushes without printing (the pointer must still identify
+ordinary RAM). Source and descriptor may cross banks but cannot overlap or
+address MMIO. Reserved cells must be zero. It grants no tick and raises no IRQ.
+Cell 6 reports octets accepted. Invalid requests have no output or memory
+effects; an `IO` error can report partial progress in cell 6, which must not be
+replayed. It is a synchronous DMA-style transfer, without a worker or retained
+guest pointer. No additional MMIO registers or capability bits are needed;
+`UNKNOWN_COMMAND`/`UNSUPPORTED` permit a scalar fallback.
+
+`vm_tty_write()` exposes status and progress. Standalone `tty_write_bytes()`
+uses it with a legacy fallback, and `puts`/`printf` batch their text through it.
+Scalar `putchar` keeps the legacy host newline handling. FUZIX/Fuse-X libc keeps
+using ordinary `write`: the shared physical-console path stages 256 user cells
+in kernel RAM before DMA, preserving foreground checks, STOP/DISCARD and output
+processing. Characters requiring newline conversion use the existing scalar
+path. PTY/Telnet queues and redirected files keep their existing device paths.
+The native runtime flushes pending scalar output before DMA to preserve order.
+Callers must serialize the mailbox against interrupts; MMU user pointers must
+never be submitted as physical DMA pointers.
+
+`VM_CAP_HOST_RANDOM` (0x8000) advertises host OS entropy. Submit
+`[1, 6, bank, offset, count, 0]`, with count 1–256. Each output cell contains
+one octet; invalid ranges, descriptor overlap and OS failures leave RAM
+unchanged. This is independent of the seeded `RNG` registers. See the
+[entropy contract and guest devices](entropy.md).
+
+`CRYPTO` uses its own query operation for discovery; the original CAPS bits are full. See the [crypto coprocessor contract](crypto.md).
 
 Capability `VM_CAP_HOST_CLOCK` (0x1000) advertises both host clocks in RVM,
 RBF and native C. Both return `[1, 10, seconds (four cells), nanoseconds
@@ -159,3 +194,74 @@ The device mailbox and all existing MMIO addresses are unchanged.
 
 Storage COMMIT/COMMIT_ALL are durable host-file barriers in RVM. STORE_CTL bit 4
 is a sticky host I/O error (write one to clear); see [storage semantics](../../rvm/mmio.md#durable-storage-commits-and-errors).
+
+## Floating-point acceleration
+
+`runtime/include/vm_math.h` defines the shared scalar contract. The request is
+16 cells: `[1, 16, operation, reserved=0, A (4 cells), B (4 cells), result (4 cells)]`.
+Multiword fields are least-significant cell first. Floating operands/results
+are raw IEEE bits; integer operands/results are scalar values. Single precision
+occupies the low 32 bits. Unused B must be zero. Query operation zero with A=B=0
+returns 7: binary32 arithmetic, binary64 arithmetic, and binary64 math. CAPS has
+no free bits, so discover this service with QUERY and check its status.
+
+The two arithmetic ranges, 0x101–0x113 and 0x201–0x213, implement add/subtract,
+multiply/divide, conversions from/to unsigned/signed 32/64-bit integers,
+conversion from the other floating width, and six comparisons, in that order.
+The `UI`/`SI` suffixes refer to 32-bit values (C16 `unsigned long`/`long`).
+Integer conversion saturates, truncates toward zero, and maps NaN to zero.
+Arithmetic uses round-to-nearest, ties-to-even, gradual underflow and signed
+zeros; NaN results are canonical quiet NaNs. Comparisons retain IEEE unordered
+semantics. Transcendental results use host libm and can differ in their last
+bits between hosts. The guest does not expose host errno or floating exception
+flags, or a changeable rounding environment. `rint` uses ties-to-even.
+
+Operations 0x301–0x321 cover sqrt, floor, ceil, trunc, round, sin/cos/tan,
+asin/acos/atan/atan2, hyperbolic and inverse hyperbolic functions, exp/expm1,
+log/log1p/log2/log10, pow, cbrt, hypot, fabs, fmod, copysign, fmin/fmax and rint.
+The header is authoritative for individual numbers. Invalid mailbox requests
+leave RAM unchanged. Calls do not advance logical time, raise device IRQs,
+retain pointers or allocate guest buffers.
+
+### Atomic RVM stack submission
+
+The ordinary mailbox uses physical pointers and requires serialization. For
+frequent pure calculations, RVM additionally accepts one STORE to bank 0,
+address 10. Its value is the packet offset in the **current SB**. The CPU reads
+and validates the entire packet against the current data map and read/write
+permissions, computes the result, then writes its result and the completion
+status to packet cell 3. On a descriptor error only cell 3 changes. Translation
+or COW faults change no packet cells and retry that one STORE after the kernel
+resolves the fault. Packets may cross pages/banks. No shared mailbox registers
+are touched, so an IRQ or process switch between packet construction and
+submission cannot substitute another process's request.
+
+This is a narrowly permitted user-mode operation; other physical MMIO remains
+privileged. User code must first check bit 2 (`4`) of the readable
+`MMU_FEATURES` CSR 28. Older RVMs do not permit user access to address 10.
+Unprotected code can probe address 10 directly: ABI 1 means available, zero
+means use the ordinary mailbox. The C helper also verifies that the packet's
+bank equals current SB; otherwise it uses the fallback path.
+
+### Runtime and libc integration
+
+Standalone software float helpers try the atomic stack path, then the serialized
+physical mailbox, and retain integer-only fallbacks. FUZIX libc uses the atomic
+path and falls back to syscall 27 selector `0x4D41`: the kernel validates and
+stages the 16-cell user packet, submits it with IRQs disabled, then copies the
+successful result back. The fallback preserves errno. Native Fuse-X already
+uses hardware arithmetic and now exposes the same math operations through the
+pure scalar `__rcc_host_math` service, including application-package bindings.
+
+The floating SDK supplies addressable C double functions for the QuickJS Math
+surface. Cheap fabs/copysign/floor/ceil/trunc stay local. Use `float-sdk` with
+FUZIX or `--float-format` with `fuse-x/cc.py`. Expanded libm requires an updated
+host; an unavailable operation returns a quiet NaN and guest `ENOSYS`. This is
+separate from the arithmetic helpers' software fallback. `RCC_SOFTWARE_FLOAT`
+disables automatic arithmetic acceleration for reference builds.
+
+Validation: `python3 runtime/tests/float/guest.py` boots both real kernels on
+disposable disks, checks math function pointers, IEEE edge cases, concurrent
+forked processes and the kernel staging fallback, and compares warm arithmetic
+with explicitly software-only helpers. `python3 runtime/tests/float/standalone.py`
+checks the direct RVM path. Both harnesses snapshot their compiler and save logs/results under `build/float-accel`.

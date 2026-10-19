@@ -1,4 +1,6 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
+#include <process-state.h>
 #include <timer.h>
 #include <version.h>
 #include <kdata.h>
@@ -42,6 +44,12 @@ void bufinit(void)
 {
 	register bufptr bp;
 
+#if defined(CONFIG_RIPPLE_IO) && defined(CONFIG_DYNAMIC_BUFPOOL)
+    bufpool=ripple_kernel_alloc(NBUFS*sizeof(struct blkbuf));
+    if (!bufpool) panic("block buffers");
+    memset(bufpool,0,NBUFS*sizeof(struct blkbuf));
+    bufpool_end=bufpool+NBUFS;
+#endif
 	for (bp = bufpool; bp < bufpool_end; ++bp) {
 		bp->bf_dev = NO_DEVICE;
 		bp->bf_busy = BF_FREE;
@@ -96,7 +104,7 @@ void create_init(void)
 	makeproc(init_process, &udata);
 
 	udata.u_insys = 1;
-	init_process->p_status = P_RUNNING;
+	proc_setstate(init_process,P_RUNNING);
 
 	/* Poke the execve arguments into user data space so _execve() can read them back */
 	/* Some systems only have a tiny window we can use at boot as most of
@@ -384,9 +392,16 @@ void fuzix_main(void)
 	   scheduling and the like */
 	ptab_end = &ptab[maxproc];
 
+#ifdef CONFIG_RIPPLE_IO
+    /* Supervisor cache storage must be reserved after the page allocator is
+     * initialized, before creating any process mappings. */
+    pagemap_init();
+#endif
 	bufinit();
 	fstabinit();
+#ifndef CONFIG_RIPPLE_IO
 	pagemap_init();
+#endif
 	create_init();
 
 	/* Parameters message */

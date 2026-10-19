@@ -23,14 +23,16 @@ mod unix {
         file: Arc<File>,
         parent: Arc<File>,
         name: CString,
-        writer: Option<File>,
+        writer: Option<Arc<File>>,
         entries: Option<Vec<u16>>,
+        directory: bool,
     }
     #[derive(Default)]
     pub(crate) struct HostFs {
         root: Option<Arc<File>>,
         identities: BTreeMap<Identity, u16>,
         nodes: BTreeMap<u16, Node>,
+        dirty: BTreeMap<u16, Arc<File>>,
     }
     fn error(e: io::Error) -> u16 {
         match e.raw_os_error().unwrap_or(libc::EIO) {
@@ -104,7 +106,8 @@ mod unix {
             Ok(id)
         }
         fn insert(&mut self, file: File, parent: Arc<File>, name: CString) -> Result<u16> {
-            let id = self.id(ident(&file)?)?;
+            let metadata = file.metadata().map_err(error)?;
+            let id = self.id((metadata.dev(), metadata.ino()))?;
             self.nodes
                 .entry(id)
                 .and_modify(|n| {
@@ -119,6 +122,7 @@ mod unix {
                     name,
                     writer: None,
                     entries: None,
+                    directory: metadata.is_dir(),
                 });
             Ok(id)
         }
@@ -129,7 +133,7 @@ mod unix {
         // Mac process has moved an open directory outside the exported tree.
         fn directory(&self, id: u16) -> Result<Arc<File>> {
             let file = self.file(id)?;
-            if !file.metadata().map_err(error)?.is_dir() {
+            if !self.nodes[&id].directory {
                 return Err(20);
             }
             self.beneath(&file)?;
@@ -182,9 +186,14 @@ mod unix {
             }
             self.insert(file, dir, name)
         }
-        fn writable(&mut self, id: u16) -> Result<&mut File> {
+        fn writable(&mut self, id: u16) -> Result<Arc<File>> {
             let n = self.nodes.get(&id).ok_or(9u16)?;
-            if n.file.metadata().map_err(error)?.is_dir() {
+            // An opened object's kind cannot change in place. Reusing its
+            // established writer needs neither stat nor another path lookup.
+            if let Some(writer) = &n.writer {
+                return Ok(writer.clone());
+            }
+            if n.directory {
                 return Err(21);
             }
             if n.writer.is_none() {
@@ -193,9 +202,9 @@ mod unix {
                 if ident(&writer)? != ident(&n.file)? {
                     return Err(2);
                 }
-                self.nodes.get_mut(&id).unwrap().writer = Some(writer);
+                self.nodes.get_mut(&id).unwrap().writer = Some(Arc::new(writer));
             }
-            Ok(self.nodes.get_mut(&id).unwrap().writer.as_mut().unwrap())
+            Ok(self.nodes[&id].writer.as_ref().unwrap().clone())
         }
         fn stat(&mut self, id: u16) -> Result<[u32; 8]> {
             let m = self.file(id)?.metadata().map_err(error)?;
@@ -310,7 +319,7 @@ mod unix {
         }
         fn read(&mut self, id: u16, offset: u32, count: usize) -> Result<Vec<u16>> {
             let file = self.file(id)?;
-            if file.metadata().map_err(error)?.is_dir() {
+            if self.nodes[&id].directory {
                 if offset == 0 || self.nodes[&id].entries.is_none() {
                     let data = self.listing(id)?;
                     self.nodes.get_mut(&id).unwrap().entries = Some(data);
@@ -333,11 +342,25 @@ mod unix {
             }
             Ok(data[..n as usize].iter().map(|&b| b as u16).collect())
         }
-        fn sync(&self) -> Result<()> {
-            for n in self.nodes.values() {
-                if let Some(writer) = &n.writer {
-                    writer.sync_all().map_err(error)?;
-                }
+        // Keep at most 64 extra capabilities between barriers. Closing a guest
+        // descriptor does not force durability, and unlinked dirty files remain
+        // flushable until sync. Flush errors retain the failed/pending entries.
+        fn prepare_dirty(&mut self, id: u16) -> Result<()> {
+            if self.dirty.len() >= 64 && !self.dirty.contains_key(&id) {
+                self.sync()?;
+            }
+            Ok(())
+        }
+        fn mark_dirty(&mut self, id: u16) -> Result<()> {
+            let n = self.nodes.get(&id).ok_or(9u16)?;
+            self.dirty
+                .insert(id, n.writer.as_ref().unwrap_or(&n.file).clone());
+            Ok(())
+        }
+        fn sync(&mut self) -> Result<()> {
+            while let Some((&id, file)) = self.dirty.first_key_value() {
+                file.sync_all().map_err(error)?;
+                self.dirty.remove(&id);
             }
             Ok(())
         }
@@ -400,6 +423,7 @@ mod unix {
                         .map(|c| u8::try_from(c).map_err(|_| 22u16))
                         .collect();
                     let data = data?;
+                    self.hostfs.prepare_dirty(id)?;
                     let file = self.hostfs.writable(id)?;
                     let n = if a[4] != 0 {
                         let old = checked(unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) })?;
@@ -439,9 +463,17 @@ mod unix {
                         a[5] = a[1] + n as u32;
                         n
                     };
+                    if n > 0 {
+                        self.hostfs.mark_dirty(id)?;
+                    }
+                    if a[6] != 0 {
+                        file.sync_all().map_err(error)?;
+                        self.hostfs.dirty.remove(&id);
+                    }
                     return Ok(n as u32);
                 }
                 5 => {
+                    self.hostfs.prepare_dirty(id)?;
                     let parent = self.hostfs.directory(id)?;
                     let name = component(self.hostfs_string(a[1])?)?;
                     if a[3] != 0 {
@@ -464,12 +496,15 @@ mod unix {
                         a[2] & 0o777,
                     )?;
                     let writer = if a[3] == 0 {
-                        Some(file.try_clone().map_err(error)?)
+                        Some(Arc::new(file.try_clone().map_err(error)?))
                     } else {
                         None
                     };
                     let id = self.hostfs.insert(file, parent, name)?;
                     self.hostfs.nodes.get_mut(&id).unwrap().writer = writer;
+                    if a[3] == 0 {
+                        self.hostfs.mark_dirty(id)?;
+                    }
                     self.hostfs.nodes.get_mut(&(a[0] as u16)).unwrap().entries = None;
                     return Ok(id as u32);
                 }
@@ -533,6 +568,7 @@ mod unix {
                     self.hostfs.nodes.get_mut(&(a[2] as u16)).unwrap().entries = None;
                 }
                 9 => {
+                    self.hostfs.prepare_dirty(id)?;
                     if a[1] > i32::MAX as u32 {
                         return Err(27);
                     }
@@ -540,14 +576,18 @@ mod unix {
                         .writable(id)?
                         .set_len(a[1] as u64)
                         .map_err(error)?;
+                    self.hostfs.mark_dirty(id)?;
                 }
                 10 => {
+                    self.hostfs.prepare_dirty(id)?;
                     let file = self.hostfs.file(id)?;
                     checked(unsafe {
                         libc::fchmod(file.as_raw_fd(), (a[1] & 0o777) as libc::mode_t)
                     })?;
+                    self.hostfs.mark_dirty(id)?;
                 }
                 11 => {
+                    self.hostfs.prepare_dirty(id)?;
                     let file = self.hostfs.file(id)?;
                     let times = [
                         libc::timespec {
@@ -560,14 +600,11 @@ mod unix {
                         },
                     ];
                     checked(unsafe { libc::futimens(file.as_raw_fd(), times.as_ptr()) })?;
+                    self.hostfs.mark_dirty(id)?;
                 }
                 12 => {
                     if id != 1 {
-                        if let Some(node) = self.hostfs.nodes.remove(&id) {
-                            if let Some(writer) = node.writer {
-                                writer.sync_all().map_err(error)?;
-                            }
-                        }
+                        self.hostfs.nodes.remove(&id);
                     }
                 }
                 13 => self.hostfs.sync()?,
@@ -677,6 +714,48 @@ mod unix {
             assert_eq!(component(vec![b'x'; 31]), Err(37));
             let listing = fs.listing(1).unwrap();
             assert_eq!(listing.len(), 64); // . and .. only, no escaping symlink.
+        }
+        #[test]
+        fn dirty_closed_and_unlinked_objects_survive_until_explicit_barrier() {
+            let fixture = Fixture::new();
+            let path = fixture.0.join("export/dirty");
+            std::fs::write(&path, b"old").unwrap();
+            let mut fs = fixture.mount();
+            let id = fs.lookup(1, b"dirty".to_vec()).unwrap();
+            fs.prepare_dirty(id).unwrap();
+            let writer = fs.writable(id).unwrap();
+            writer.set_len(123).unwrap();
+            fs.mark_dirty(id).unwrap();
+            std::fs::remove_file(&path).unwrap();
+            fs.nodes.remove(&id);
+            assert_eq!(fs.dirty.len(), 1);
+            assert_eq!(fs.dirty[&id].metadata().unwrap().len(), 123);
+            fs.sync().unwrap();
+            assert!(fs.dirty.is_empty());
+            fs.sync().unwrap();
+        }
+        #[test]
+        fn dirty_capabilities_are_bounded_and_clean_opens_need_no_barrier() {
+            let fixture = Fixture::new();
+            let mut fs = fixture.mount();
+            for n in 0..130 {
+                let name = format!("file{n}");
+                std::fs::write(fixture.0.join("export").join(&name), b"x").unwrap();
+                let id = fs.lookup(1, name.into_bytes()).unwrap();
+                fs.writable(id).unwrap();
+                fs.prepare_dirty(id).unwrap();
+                fs.mark_dirty(id).unwrap();
+                fs.nodes.remove(&id);
+                assert!(fs.dirty.len() <= 64);
+            }
+            assert_eq!(fs.dirty.len(), 2);
+            fs.sync().unwrap();
+            assert!(fs.dirty.is_empty());
+            std::fs::write(fixture.0.join("export/clean"), b"").unwrap();
+            let id = fs.lookup(1, b"clean".to_vec()).unwrap();
+            fs.writable(id).unwrap();
+            fs.nodes.remove(&id);
+            assert!(fs.dirty.is_empty());
         }
         #[test]
         fn binary_cells_and_shared_identity_remain_distinct_from_host_descriptors() {

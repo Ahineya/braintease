@@ -17,6 +17,10 @@ public final class EditorTest {
         rename();
         formatting();
         traits();
+        consumingCallables();
+        comprehensions();
+        macros();
+        htmlHighlighting();
         Path build = Path.of(args.length == 0 ? "build" : args[0]);
         Files.createDirectories(build);
         Path temporary = Files.createTempDirectory(build, "editor-test-");
@@ -100,6 +104,72 @@ public final class EditorTest {
             var range = RflLspCustomization.identifierRange(text, start + 1);
             require(range != null && range.getStartOffset() == start && range.getLength() == name.length(), "trait, method and bound rename range");
         }
+    }
+
+    private static void consumingCallables() {
+        require(tokens("once").equals(List.of(RflTokens.IDENTIFIER)), "once remains a contextual identifier");
+        require(tokens("once fn").equals(List.of(RflTokens.IDENTIFIER, RflTokens.KEYWORD)), "consuming function modifier and fn tokenize");
+        String text = "fn call(f: once fn(i16) -> i16) -> i16 { f(42) } fn main() { let once = 1; let f = once fn(x: i16) => x; }";
+        require(!tokens(text).contains(TokenType.BAD_CHARACTER), "consuming types and lambda syntax tokenize");
+        int start = text.indexOf("once =");
+        require(RflLspCustomization.identifierRange(text, start + 1).getStartOffset() == start, "ordinary once binding remains renameable");
+    }
+
+    private static void comprehensions() {
+        String text = "fn main(){let yield=1;let p=for once{n<-Some(yield);let m=n+1;yield m};}";
+        require(!tokens(text).contains(TokenType.BAD_CHARACTER), "comprehensions and arrows tokenize");
+        require(tokens("yield").equals(List.of(RflTokens.IDENTIFIER)), "yield remains contextual");
+        int start = text.indexOf("yield=");
+        require(RflLspCustomization.identifierRange(text, start + 1).getStartOffset() == start,
+            "ordinary yield binding remains renameable");
+    }
+
+    private static void macros() {
+        String text = "fn main(){let view=html!{<p>isn't ordinary @ RFL 🙂 {name}</p>};}";
+        require(tokens("macro").equals(List.of(RflTokens.IDENTIFIER)), "macro remains contextual");
+        require(!tokens(text).contains(TokenType.BAD_CHARACTER), "raw DSL is an opaque lossless group");
+        require(tokens(text).contains(RflTokens.MACRO_BODY), "macro group captured");
+        int start = text.indexOf("name}");
+        require(RflLspCustomization.identifierRange(text,start+1).getStartOffset() == start, "interpolations can ask server prepareRename");
+        RflLexer full = new RflLexer(); full.start(text);
+        while (full.getTokenType() != null) {
+            RflLexer restarted = new RflLexer(); restarted.start(text,full.getTokenStart(),text.length(),full.getState());
+            require(restarted.getTokenType()==full.getTokenType() && restarted.getTokenEnd()==full.getTokenEnd(), "macro lexer restart");full.advance();
+        }
+        require(tokens("html!{unfinished isn't @ 🙂").contains(RflTokens.MACRO_BODY), "incomplete raw input remains tolerant");
+    }
+
+    private static void htmlHighlighting() {
+        for (String text : new String[] {
+            "fn view(){html!{<div class=\"x\">isn't 🙂 &amp; {fn(x:i16)=>{x+1}}<input value={name}/></div>};}",
+            "import macro {html as view} from \"std/html_macro\";fn main(){view!{<><svg><path d=\"M0\"/></svg></>};}",
+            "import macro {html as render} from \"std/html_macro\";fn main(){html!{<div>{render!{<section>nested</section>}}</div>};}",
+            "html!{<div><!-- comment -->{html!{<b>{name}</b>}}</div>}",
+            "html!{<Badge count=42>/* outer /* inner */ } */{name}</Badge>}",
+            "html!{<div title=\"unfinished", "html!{<div>{fn(s:String)=>{s", "raw!{<opaque @ 🙂>}",
+        }) {
+            var lexer = new RflSyntaxHighlighter().getHighlightingLexer(); lexer.start(text);
+            int end = 0; boolean tag = false, attribute = false, rfl = false;
+            while (lexer.getTokenType() != null) {
+                require(lexer.getTokenStart() == end && lexer.getTokenEnd() > end, "HTML coverage and progress");
+                end = lexer.getTokenEnd();
+                if (text.contains("html as render")) require(lexer.getTokenType() != RflTokens.MACRO_BODY, "nested HTML alias is highlighted");
+                String spelling = text.substring(lexer.getTokenStart(), lexer.getTokenEnd());
+                if (spelling.startsWith("/* outer")) require(lexer.getTokenType() == RflTokens.HTML_COMMENT && spelling.endsWith("} */"), "nested DSL comments");
+                if (spelling.equals("42")) require(lexer.getTokenType() == RflTokens.NUMBER, "component numeric property");
+                tag |= lexer.getTokenType() == RflTokens.HTML_TAG;
+                attribute |= lexer.getTokenType() == RflTokens.HTML_ATTRIBUTE;
+                rfl |= lexer.getTokenType() == RflTokens.KEYWORD;
+                var restarted = new RflSyntaxHighlighter().getHighlightingLexer();
+                restarted.start(text, lexer.getTokenStart(), text.length(), lexer.getState());
+                require(restarted.getTokenType() == lexer.getTokenType() && restarted.getTokenEnd() == end, "HTML incremental restart");
+                lexer.advance();
+            }
+            require(end == text.length(), "HTML lossless coverage");
+            if (text.startsWith("fn view")) require(tag && attribute && rfl, "HTML tags/attributes and embedded RFL highlighted separately");
+            if (text.contains("html as view")) require(tag, "HTML macro import alias");
+        }
+        require(new RflSyntaxHighlighter().getTokenHighlights(RflTokens.HTML_TAG).length > 0, "HTML theme colours");
     }
 
     private static List<IElementType> tokens(String text) {

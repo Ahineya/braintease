@@ -67,31 +67,31 @@ void clrscr(void)
 
 /* This are terminal independent characters which can be used in curses */
 
-unsigned int ACS_ULCORNER;
-unsigned int ACS_LLCORNER;
-unsigned int ACS_URCORNER;
-unsigned int ACS_LRCORNER;
-unsigned int ACS_RTEE;
-unsigned int ACS_LTEE;
-unsigned int ACS_BTEE;
-unsigned int ACS_TTEE;
-unsigned int ACS_HLINE;
-unsigned int ACS_VLINE;
-unsigned int ACS_PLUS;
-unsigned int ACS_S1;
-unsigned int ACS_S9;
-unsigned int ACS_DIAMOND;
-unsigned int ACS_CKBOARD;
-unsigned int ACS_DEGREE;
-unsigned int ACS_PLMINUS;
-unsigned int ACS_BULLET;
-unsigned int ACS_LARROW;
-unsigned int ACS_RARROW;
-unsigned int ACS_DARROW;
-unsigned int ACS_UARROW;
-unsigned int ACS_BOARD;
-unsigned int ACS_LANTERN;
-unsigned int ACS_BLOCK;
+chtype ACS_ULCORNER;
+chtype ACS_LLCORNER;
+chtype ACS_URCORNER;
+chtype ACS_LRCORNER;
+chtype ACS_RTEE;
+chtype ACS_LTEE;
+chtype ACS_BTEE;
+chtype ACS_TTEE;
+chtype ACS_HLINE;
+chtype ACS_VLINE;
+chtype ACS_PLUS;
+chtype ACS_S1;
+chtype ACS_S9;
+chtype ACS_DIAMOND;
+chtype ACS_CKBOARD;
+chtype ACS_DEGREE;
+chtype ACS_PLMINUS;
+chtype ACS_BULLET;
+chtype ACS_LARROW;
+chtype ACS_RARROW;
+chtype ACS_DARROW;
+chtype ACS_UARROW;
+chtype ACS_BOARD;
+chtype ACS_LANTERN;
+chtype ACS_BLOCK;
 
 /* These defines describe the full set of grafic block characters which
  * can be defined via termcap.
@@ -125,7 +125,7 @@ unsigned int ACS_BLOCK;
 #define VERTLINE   25
 #define PARAGRAPH  26
 
-unsigned int _cursgraftable[27] =
+chtype _cursgraftable[27] =
 {
  '>', '<', 'v', '^', '#', ':', ' ', '#', '+', '\'', '#', '+', '+',
  '+', '+', '+', '-', ' ', '-', ' ', '_', '+', '+', '+', '+', '|'

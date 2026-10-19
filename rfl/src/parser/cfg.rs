@@ -75,6 +75,7 @@ impl Parser<'_> {
             "target_arch" => Ok(match self.target {
                 rcc_ir::target::Target::Ripple => value == "ripple16",
                 rcc_ir::target::Target::Native => value == std::env::consts::ARCH,
+                rcc_ir::target::Target::Wasm => value == "wasm32",
             }),
             _ => Err(CompileError::at(
                 self.source,

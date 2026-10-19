@@ -5,7 +5,9 @@
 
 /* Read-only snapshot from /dev/proc. Counts use physical KiB (1024 octets),
  * not C characters. Shared pages are counted once in used_kib; mapped_kib
- * counts each process mapping. No kernel addresses are exposed. */
+ * counts each process mapping. Pool usage also includes pinned supervisor
+ * allocations; these are not process mappings or shared COW pages.
+ * No kernel addresses are exposed. */
 #define RIPPLE_SYSINFO 0x5201
 #define RIPPLE_SYSINFO_VERSION 1
 #define RIPPLE_SYSINFO_MMU 1

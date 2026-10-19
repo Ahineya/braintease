@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../src/pcm_sound.c"
+#ifdef DOOM_GUEST
+int Doom_GuestAudioOpen(unsigned long rate,unsigned frames) { return 1; }
+void Doom_GuestAudioStart(void) {}
+void Doom_GuestAudioClose(void) {}
+void Doom_GuestAudioSubmit(const short *samples,unsigned frames) {}
+int Doom_GuestAudioMix(struct pcm_mix_voice *voices,unsigned count,short *samples,unsigned frames) { return 0; }
+int Doom_GuestAudioNeeded(unsigned frames) { return 0; }
+#endif
 static byte lump_data[44];
 static unsigned int reads, releases;
 uint32_t Doom_Tick(void) { return 0; }
@@ -10,10 +18,12 @@ uint32_t W_LumpLength(unsigned int lump) { (void)lump;return sizeof(lump_data); 
 void *W_CacheLumpNum(int lump,int tag) { (void)lump;(void)tag;++reads;return lump_data; }
 void W_ReleaseLumpNum(int lump) { (void)lump;++releases; }
 int W_GetNumForName(char *name) { if(strcmp(name,"dspistol"))exit(2);return 1; }
+int W_CheckNumForName(char *name) { return !strcmp(name,"dspistol")?1:-1; }
 void I_Error(char *error,...) {puts(error);exit(1);}
 static void check(int condition) {if(!condition){puts("PCM MIXER FAIL");exit(1);}}
 int main(void) {
     sfxinfo_t sfx;
+    sfxinfo_t preload[3];
     unsigned int i;
     static short expected[8]={-32768,-32768,-16384,-16384,0,0,32512,32512};
     memset(&sfx,0,sizeof(sfx));strcpy(sfx.name,"pistol");sfx.lumpnum=1;
@@ -22,6 +32,10 @@ int main(void) {
     lump_data[4]=36;lump_data[5]=lump_data[6]=lump_data[7]=0;
     lump_data[24]=0;lump_data[25]=64;lump_data[26]=128;lump_data[27]=255;
     check(doom_pcm_module.Init(true));check(doom_pcm_module.GetSfxLumpNum(&sfx)==1);
+    if(doom_pcm_module.CacheSounds) {
+        memset(preload,0,sizeof(preload));preload[1]=sfx;strcpy(preload[2].name,"absent");
+        doom_pcm_module.CacheSounds(preload,3);check(reads==1 && releases==0);
+    }
     check(doom_pcm_module.StartSound(&sfx,0,127,0)==0);
     check(doom_pcm_module.SoundIsPlaying(0));mix_block();
     for(i=0;i<8;++i){check(mixed[i*2]==expected[i]);check(mixed[i*2+1]==0);}

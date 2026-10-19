@@ -7,6 +7,11 @@
 #include "curspriv.h"
 
 static int ended = 1, cleanup_registered;
+static int bracketed_paste;
+void ripple_curses_bracketed_paste(int enabled) {
+    bracketed_paste = !!enabled;
+    if (!ended) { fputs(enabled ? "\033[?2004h" : "\033[?2004l", stdout); fflush(stdout); }
+}
 static void replace_window(WINDOW *destination, WINDOW *replacement) {
     WINDOW old = *destination;
     *destination = *replacement;
@@ -20,10 +25,12 @@ int reset_shell_mode(void) { return tcsetattr(0, TCSANOW, &_orig_tty) < 0 ? ERR 
 int reset_prog_mode(void) {
     if (!stdscr || tcsetattr(0, TCSANOW, &_tty) < 0) return ERR;
     if (ended) { fputs("\033[?1049h", stdout); fflush(stdout); }
+    if (ended && bracketed_paste) { fputs("\033[?2004h", stdout); fflush(stdout); }
     ended = 0; clearok(stdscr, TRUE); ripple_curses_invalidate(); return OK;
 }
 int endwin(void) {
     if (ended) return OK;
+    if (bracketed_paste) fputs("\033[?2004l", stdout);
     fflush(stdout);
     /* Exit paths must restore attributes/cursor and input, even when screen
      * allocations or rendering have failed. Windows survive suspend/resume. */
@@ -83,6 +90,7 @@ int resizeterm(int rows, int cols) {
     screen->_keypad = stdscr->_keypad; screen->_delay = stdscr->_delay;
     screen->_nodelay = stdscr->_nodelay; screen->_scroll = stdscr->_scroll;
     screen->_attrs = stdscr->_attrs;
+    screen->_input_utf8 = stdscr->_input_utf8;
     /* WINDOW identities remain stable for applications caching stdscr. */
     replace_window(stdscr, screen); replace_window(curscr, physical);
     replace_window(_cursvar.tmpwin, pending);

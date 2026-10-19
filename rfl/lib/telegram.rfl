@@ -1,0 +1,213 @@
+// OS-only C engine; build_os.py links it with guest networking and crypto.
+extern "C" {
+    fn tg_client_new(config: *const u8, session: *const u8) -> *mut u16;
+    fn tg_client_free(client: *mut u16);
+    fn tg_client_step(client: *mut u16);
+    fn tg_client_state(client: *mut u16) -> u16;
+    fn tg_client_revision(client: *mut u16) -> u32;
+    fn tg_client_status(client: *mut u16) -> *const u8;
+    fn tg_client_qr(client: *mut u16) -> *const u8;
+    fn tg_client_hint(client: *mut u16) -> *const u8;
+    fn tg_client_password_length(client: *mut u16) -> u16;
+    fn tg_client_password_scalar(client: *mut u16, value: u32) -> i16;
+    fn tg_client_password_key(client: *mut u16, key: i16) -> i16;
+    fn tg_client_send(client: *mut u16, text: *const u8, count: u16) -> i16;
+    fn tg_client_restart(client: *mut u16) -> i16;
+    fn tg_client_browse(client: *mut u16) -> i16;
+    fn tg_client_filter(client: *mut u16, query: *const u8);
+    fn tg_client_chat_count(client: *mut u16) -> u16;
+    fn tg_client_chat_key(client: *mut u16, row: u16) -> u16;
+    fn tg_client_chat_title(client: *mut u16, row: u16) -> *const u8;
+    fn tg_client_chat_flags(client: *mut u16, row: u16) -> u16;
+    fn tg_client_chat_unread(client: *mut u16, row: u16) -> u16;
+    fn tg_client_open(client: *mut u16, row: u16) -> i16;
+    fn tg_client_active_title(client: *mut u16) -> *const u8;
+    fn tg_client_active_key(client: *mut u16) -> u16;
+    fn tg_client_can_send(client: *mut u16) -> i16;
+    fn tg_client_send_active(client: *mut u16, text: *const u8, count: u16) -> i16;
+    fn tg_client_history_more(client: *mut u16) -> i16;
+    fn tg_client_latest(client: *mut u16);
+    fn tg_client_history_lines(client: *mut u16, width: u16) -> u16;
+    fn tg_client_history_line(client: *mut u16, row: u16, width: u16) -> *const u8;
+}
+
+export const CONNECTING: u16 = 1;
+export const QR_LOGIN: u16 = 2;
+export const PASSWORD: u16 = 3;
+export const READY: u16 = 4;
+export const SENDING: u16 = 5;
+export const FAILED: u16 = 6;
+
+export struct Client {
+    state: Owned<*mut u16>
+}
+
+fn path(value: String) -> Result<Vec<u8>, String> {
+    if (value.is_empty() || value.len() > 255) {
+        return Err("Invalid Telegram configuration/session path");
+    }
+    let mut out: Vec<u8> = [];
+    for (i in 0..value.len()) {
+        if (value[i] == '\0' || value[i] as u32 > 255) {
+            return Err("Invalid Telegram path octet");
+        }
+        out.push(value[i] as u8);
+    }
+    out.push(0);
+    Ok(out)
+}
+
+fn text(p: *const u8, limit: usize) -> String {
+    let mut value = "";
+    for (i in 0..limit) {
+        let ch = unsafe {
+            p[i]
+        };
+        if (ch == 0) {
+            break;
+        }
+        value = value + from_byte(ch);
+    }
+    value
+}
+
+/// Opens private runtime files. Starts no network work until step().
+export fn client(config: String, session: String) -> Result<Client, String> {
+    let cfg = path(config)?;
+    let saved = path(session)?;
+    let p = unsafe {
+        tg_client_new(&cfg[0], &saved[0])
+    };
+    if (p.is_null()) {
+        return Err("Cannot load Telegram config/session. Use private regular files (mode 0600).");
+    }
+    Ok(Client { state: owned(p, fn(value: &mut *mut u16) => {
+        tg_client_free(*value);
+    }) })
+}
+
+impl Client {
+    fn raw(&self) -> *mut u16 {
+        let p = self.state.borrow();
+        *p
+    }
+    /// Bounded nonblocking progress; call regularly from the UI loop.
+    export fn step(&self) {
+        tg_client_step(self.raw());
+    }
+    export fn state(&self) -> u16 {
+        tg_client_state(self.raw())
+    }
+    export fn revision(&self) -> u32 {
+        tg_client_revision(self.raw())
+    }
+    export fn status(&self) -> String {
+        text(tg_client_status(self.raw()), 160)
+    }
+    export fn qr_uri(&self) -> String {
+        text(tg_client_qr(self.raw()), 85)
+    }
+    export fn password_hint(&self) -> String {
+        text(tg_client_hint(self.raw()), 256)
+    }
+    /// Only a count crosses the FFI. Password bytes remain in erased C storage.
+    export fn password_length(&self) -> usize {
+        tg_client_password_length(self.raw()) as usize
+    }
+    export fn password_key(&self, key: i16) -> bool {
+        tg_client_password_key(self.raw(), key) != 0
+    }
+    /// Inserts a scalar into private erasable C password storage.
+    export fn password_scalar(&self, value: u32) -> bool {
+        tg_client_password_scalar(self.raw(), value) != 0
+    }
+    export fn reconnect(&self) -> bool {
+        tg_client_restart(self.raw()) != 0
+    }
+    export fn browse(&self) -> bool {
+        tg_client_browse(self.raw()) != 0
+    }
+    export fn filter(&self, query: String) {
+        match path(query) {
+            Ok(bytes) => unsafe {
+                tg_client_filter(self.raw(), &bytes[0]);
+            },
+            Err(_) => {
+                let empty: Vec<u8> = [0];
+                unsafe {
+                    tg_client_filter(self.raw(), &empty[0]);
+                }
+            },
+        }
+    }
+    export fn chat_count(&self) -> usize {
+        tg_client_chat_count(self.raw()) as usize
+    }
+    export fn chat_key(&self, row: usize) -> usize {
+        tg_client_chat_key(self.raw(), row as u16) as usize
+    }
+    export fn chat_title(&self, row: usize) -> String {
+        text(tg_client_chat_title(self.raw(), row as u16), 128)
+    }
+    export fn chat_flags(&self, row: usize) -> u16 {
+        tg_client_chat_flags(self.raw(), row as u16)
+    }
+    export fn chat_unread(&self, row: usize) -> usize {
+        tg_client_chat_unread(self.raw(), row as u16) as usize
+    }
+    export fn open_chat(&self, row: usize) -> bool {
+        tg_client_open(self.raw(), row as u16) != 0
+    }
+    export fn active_title(&self) -> String {
+        text(tg_client_active_title(self.raw()), 128)
+    }
+    export fn active_key(&self) -> usize {
+        tg_client_active_key(self.raw()) as usize
+    }
+    export fn can_send(&self) -> bool {
+        tg_client_can_send(self.raw()) != 0
+    }
+    export fn more_history(&self) -> bool {
+        tg_client_history_more(self.raw()) != 0
+    }
+    export fn latest(&self) {
+        tg_client_latest(self.raw());
+    }
+    export fn history_lines(&self, width: usize) -> usize {
+        tg_client_history_lines(self.raw(), width as u16) as usize
+    }
+    export fn history_line(&self, row: usize, width: usize) -> String {
+        text(tg_client_history_line(self.raw(), row as u16, width as u16), 4100)
+    }
+    export fn send_active(&self, value: String) -> bool {
+        if (value.is_empty() || value.len() > 2048) {
+            return false;
+        }
+        let mut bytes: Vec<u8> = [];
+        for (i in 0..value.len()) {
+            if (value[i] as u32 > 255 || value[i] == '\0') {
+                return false;
+            }
+            bytes.push(value[i] as u8);
+        }
+        unsafe {
+            tg_client_send_active(self.raw(), &bytes[0], bytes.len() as u16) != 0
+        }
+    }
+    /// Sends text exclusively to the account's own Saved Messages peer.
+    export fn send_saved(&self, value: String) -> bool {
+        if (value.is_empty() || value.len() > 2048) {
+            return false;
+        }
+        let mut bytes: Vec<u8> = [];
+        for (i in 0..value.len()) {
+            if (value[i] as u32 > 255 || value[i] == '\0') {
+                return false;
+            }
+            bytes.push(value[i] as u8);
+        }
+        unsafe {
+            tg_client_send(self.raw(), &bytes[0], bytes.len() as u16) != 0
+        }
+    }
+}

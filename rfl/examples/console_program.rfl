@@ -1,0 +1,13 @@
+import { Console, ConsoleError, read_line, print, println as print_line } from "std/console";
+import { Effect, flat_map, map2 } from "std/effect";
+
+// The application knows only a Console capability, not the terminal or test log.
+export fn greeting<R: Console>() -> Effect<R, ConsoleError, unit> {
+    let name = map2(print<R>("Name: "), read_line<R>(), fn(_: unit, name: Option<String>) => name);
+    flat_map(name, fn(name: Option<String>) => {
+        match name {
+            Some(name) => print_line<R>("Hello, " + name + "!"),
+            None => print_line<R>("Hello, stranger!")
+        }
+    })
+}

@@ -14,6 +14,47 @@ use std::{
 pub(super) const PAGE_CELLS: usize = 512;
 pub(super) const KERNEL_START: usize = 240 * BANK;
 type Page = [u16; PAGE_CELLS];
+const LEAF_PAGES: usize = 128;
+type Leaf = Vec<Arc<Page>>;
+
+/// Fork shares one root. A write detaches only the root, its leaf, and the page.
+/// Unchanged writes never detach any level, including the shared zero page.
+#[derive(Clone)]
+pub(super) struct Pages {
+    root: Arc<Vec<Arc<Leaf>>>,
+}
+impl Pages {
+    fn new(pages: Vec<Arc<Page>>) -> Self {
+        Self {
+            root: Arc::new(
+                pages
+                    .chunks(LEAF_PAGES)
+                    .map(|leaf| Arc::new(leaf.to_vec()))
+                    .collect(),
+            ),
+        }
+    }
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.root.iter().map(|leaf| leaf.len()).sum()
+    }
+    #[cfg(test)]
+    fn iter(&self) -> impl Iterator<Item = &Arc<Page>> {
+        self.root.iter().flat_map(|leaf| leaf.iter())
+    }
+}
+impl std::ops::Index<usize> for Pages {
+    type Output = Arc<Page>;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.root[index / LEAF_PAGES][index % LEAF_PAGES]
+    }
+}
+impl std::ops::IndexMut<usize> for Pages {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        let root = Arc::make_mut(&mut self.root);
+        &mut Arc::make_mut(&mut root[index / LEAF_PAGES])[index % LEAF_PAGES]
+    }
+}
 
 pub(super) struct Kernel {
     cells: Vec<u16>,
@@ -25,7 +66,7 @@ pub(super) struct Kernel {
 pub(super) enum Memory {
     Flat(Vec<u16>),
     Paged {
-        pages: Vec<Arc<Page>>,
+        pages: Pages,
         kernel: Arc<Mutex<Kernel>>,
     },
 }
@@ -63,7 +104,7 @@ impl Memory {
             allocated: BTreeMap::new(),
         };
         *self = Self::Paged {
-            pages,
+            pages: Pages::new(pages),
             kernel: Arc::new(Mutex::new(kernel)),
         };
     }
@@ -90,9 +131,8 @@ impl Memory {
             Self::Flat(cells) => cells[index] = value,
             Self::Paged { pages, kernel } => {
                 if index < KERNEL_START {
-                    let page = &mut pages[index / PAGE_CELLS];
-                    if page[index % PAGE_CELLS] != value {
-                        Arc::make_mut(page)[index % PAGE_CELLS] = value;
+                    if pages[index / PAGE_CELLS][index % PAGE_CELLS] != value {
+                        Arc::make_mut(&mut pages[index / PAGE_CELLS])[index % PAGE_CELLS] = value;
                     }
                 } else {
                     kernel.lock().unwrap().cells[index - KERNEL_START] = value;
@@ -135,9 +175,8 @@ impl Memory {
                 while start < KERNEL_START && !values.is_empty() {
                     let offset = start % PAGE_CELLS;
                     let count = values.len().min(PAGE_CELLS - offset);
-                    let page = &mut pages[start / PAGE_CELLS];
-                    if page[offset..offset + count] != values[..count] {
-                        Arc::make_mut(page)[offset..offset + count]
+                    if pages[start / PAGE_CELLS][offset..offset + count] != values[..count] {
+                        Arc::make_mut(&mut pages[start / PAGE_CELLS])[offset..offset + count]
                             .copy_from_slice(&values[..count]);
                     }
                     start += count;
@@ -223,6 +262,43 @@ impl rvm::devices::GuestMemory for Memory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn fork_shares_directory_and_detaches_only_the_modified_leaf() {
+        let mut parent = Memory::new();
+        parent.enable_processes();
+        let mut child = parent.clone();
+        child.write(LEAF_PAGES * PAGE_CELLS + 3, 0);
+        child.write_from(LEAF_PAGES * PAGE_CELLS - 1, &[0; 4]);
+        let (Memory::Paged { pages: a, .. }, Memory::Paged { pages: b, .. }) = (&parent, &child)
+        else {
+            panic!()
+        };
+        assert!(Arc::ptr_eq(&a.root, &b.root));
+        let page_refs = Arc::strong_count(&a[0]);
+        let mut grandchild = child.clone();
+        let Memory::Paged { pages, .. } = &grandchild else {
+            panic!()
+        };
+        assert_eq!(Arc::strong_count(&pages[0]), page_refs); // no 30,000 handle clones
+        grandchild.write(LEAF_PAGES * PAGE_CELLS + 3, 99);
+        let (Memory::Paged { pages: a, .. }, Memory::Paged { pages: b, .. }) =
+            (&parent, &grandchild)
+        else {
+            panic!()
+        };
+        assert!(!Arc::ptr_eq(&a.root, &b.root));
+        assert!(Arc::ptr_eq(&a.root[0], &b.root[0]));
+        assert!(!Arc::ptr_eq(&a.root[1], &b.root[1]));
+        assert!(Arc::ptr_eq(&a[LEAF_PAGES + 1], &b[LEAF_PAGES + 1]));
+        child.write(LEAF_PAGES * PAGE_CELLS + 3, 7);
+        assert_eq!(parent.read(LEAF_PAGES * PAGE_CELLS + 3), 0);
+        assert_eq!(grandchild.read(LEAF_PAGES * PAGE_CELLS + 3), 99);
+        child.write(KERNEL_START - 1, 0xffff);
+        assert_eq!(parent.read(KERNEL_START - 1), 0);
+        drop(parent);
+        drop(grandchild);
+        assert_eq!(child.read(LEAF_PAGES * PAGE_CELLS + 3), 7);
+    }
     fn shared(a: &Memory, b: &Memory, index: usize) -> bool {
         let (Memory::Paged { pages: a, .. }, Memory::Paged { pages: b, .. }) = (a, b) else {
             panic!()
@@ -240,7 +316,7 @@ mod tests {
             panic!()
         };
         assert_eq!(a.len(), 30_000);
-        assert!(a.iter().zip(b).all(|(a, b)| Arc::ptr_eq(a, b)));
+        assert!(a.iter().zip(b.iter()).all(|(a, b)| Arc::ptr_eq(a, b)));
         assert!(shared(&parent, &child, BANK + 1));
         child.write(BANK + 1, 43);
         assert_eq!(parent.read(BANK + 1), 42);

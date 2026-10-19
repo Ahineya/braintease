@@ -88,7 +88,18 @@ int stat(const char *p, struct stat *s) {
     convert_stat(s, &k);
     return 0;
 }
-int lstat(const char *p, struct stat *s) { return stat(p, s); }
+int lstat(const char *p, struct stat *s) {
+    struct _uzistat k;
+    if (call(70, (long)p, (long)&k, 0, 0) < 0) return -1;
+    convert_stat(s, &k);
+    return 0;
+}
+int symlink(const char *target, const char *path) {
+    return call(68, (long)target, (long)path, 0, 0);
+}
+int readlink(const char *path, char *buf, int len) {
+    return call(69, (long)path, (long)buf, len, 0);
+}
 int fstat(int fd, struct stat *s) {
     struct _uzistat k;
     if (call(16, fd, (long)&k, 0, 0) < 0)
@@ -195,7 +206,7 @@ int isatty(int fd) {
 }
 int remove(const char *p) {
     struct stat s;
-    if (stat(p, &s) < 0)
+    if (lstat(p, &s) < 0)
         return -1;
     return S_ISDIR(s.st_mode) ? rmdir(p) : unlink(p);
 }

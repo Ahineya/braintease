@@ -20,6 +20,8 @@ rebinding, expiry and address conflict checks; see the [DHCP guide](dhcp.md).
 | [HTTP server](http-server.md) | Guest TCP listen/accept, hardcoded HTML, browser/curl and bounded request handling |
 | [HTTP client](http.md) | Streaming GET, bounded response parsing, guest DNS and the automatic host HTTP demo |
 | [Terminal browser plan](terminal-browser.md) | FUZIX/Fuse-X browser feasibility, HTTP targets, Lynx/Links decisions, curses and porting gates |
+| [Graphical browser](gui-browser.md) | NetSurf on Nano-X, guest HTTP/verified HTTPS, porting decisions and acceptance gates |
+| [Guest TLS port](../../ports/tls/README.md) | Shared wolfSSL client, HTTPS htget, host entropy, guest trust roots and acceptance tests |
 | [Local IPC and capacity](local-ipc.md) | Guest Unix stream sockets, socketpair, lifetime, readiness and larger TCP pools |
 | [select contract](select.md) | Implemented descriptor readiness, C16 ABI, graphics/PTY/socket integration and tests |
 | [TCP client](tcp.md) | Streams, retransmission, flow control, half-close and the automatic host echo demo |

@@ -91,7 +91,11 @@ impl<'a> Checker<'a> {
                     "a borrow needs a named place (a local, field, or indexed element)",
                 ));
             }
-            let value = self.check_expr(expr, None)?;
+            let inner_hint = match expected {
+                Some(Ty::Ref(id)) => Some(self.refs[id as usize].inner),
+                _ => None,
+            };
+            let value = self.check_expr(expr, inner_hint)?;
             if value.ty.is_ref() {
                 return Err(CompileError::at(
                     self.source,
@@ -224,7 +228,7 @@ impl<'a> Checker<'a> {
                 return Ok(TExpr {
                     ty: want,
                     kind: TExprKind::Borrow {
-                            span,
+                        span,
                         binding: id,
                         mutable,
                         projections,
@@ -243,7 +247,7 @@ impl<'a> Checker<'a> {
         Ok(TExpr {
             ty: refty,
             kind: TExprKind::Borrow {
-                            span,
+                span,
                 binding: id,
                 mutable,
                 projections,

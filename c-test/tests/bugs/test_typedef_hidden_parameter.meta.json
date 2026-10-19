@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "A variable or parameter may hide its typedef name (Hubbub bookmark)",
+  "expected": "Y\n"
+}

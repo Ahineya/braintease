@@ -18,16 +18,79 @@
 @@ -33 +33 @@
 -  return((win->_line[win->_cury][win->_curx]) & 0xff);
 +  return((win->_line[win->_cury][win->_curx]));
+--- a/Library/libs/curses/cursesio.c
++++ b/Library/libs/curses/cursesio.c
+@@ -70,25 +70,25 @@
+-unsigned int ACS_ULCORNER;
+-unsigned int ACS_LLCORNER;
+-unsigned int ACS_URCORNER;
+-unsigned int ACS_LRCORNER;
+-unsigned int ACS_RTEE;
+-unsigned int ACS_LTEE;
+-unsigned int ACS_BTEE;
+-unsigned int ACS_TTEE;
+-unsigned int ACS_HLINE;
+-unsigned int ACS_VLINE;
+-unsigned int ACS_PLUS;
+-unsigned int ACS_S1;
+-unsigned int ACS_S9;
+-unsigned int ACS_DIAMOND;
+-unsigned int ACS_CKBOARD;
+-unsigned int ACS_DEGREE;
+-unsigned int ACS_PLMINUS;
+-unsigned int ACS_BULLET;
+-unsigned int ACS_LARROW;
+-unsigned int ACS_RARROW;
+-unsigned int ACS_DARROW;
+-unsigned int ACS_UARROW;
+-unsigned int ACS_BOARD;
+-unsigned int ACS_LANTERN;
+-unsigned int ACS_BLOCK;
++chtype ACS_ULCORNER;
++chtype ACS_LLCORNER;
++chtype ACS_URCORNER;
++chtype ACS_LRCORNER;
++chtype ACS_RTEE;
++chtype ACS_LTEE;
++chtype ACS_BTEE;
++chtype ACS_TTEE;
++chtype ACS_HLINE;
++chtype ACS_VLINE;
++chtype ACS_PLUS;
++chtype ACS_S1;
++chtype ACS_S9;
++chtype ACS_DIAMOND;
++chtype ACS_CKBOARD;
++chtype ACS_DEGREE;
++chtype ACS_PLMINUS;
++chtype ACS_BULLET;
++chtype ACS_LARROW;
++chtype ACS_RARROW;
++chtype ACS_DARROW;
++chtype ACS_UARROW;
++chtype ACS_BOARD;
++chtype ACS_LANTERN;
++chtype ACS_BLOCK;
+@@ -128 +128 @@
+-unsigned int _cursgraftable[27] =
++chtype _cursgraftable[27] =
 --- a/Library/libs/curses/curspriv.h
 +++ b/Library/libs/curses/curspriv.h
-@@ -21 +21 @@
+@@ -20,2 +20,2 @@
+-#define CHR_MSK	((int) 0x00ff)		/* ASCIIZ character mask */
 -#define	ATR_MSK	((int) 0xff00)		/* attribute mask */
++#define CHR_MSK	((chtype) A_CHARTEXT)		/* ASCIIZ character mask */
 +#define	ATR_MSK	((chtype) A_ATTRIBUTES)		/* attribute mask */
 --- a/Library/libs/curses/doupdt.c
 +++ b/Library/libs/curses/doupdt.c
 @@ -61 +61 @@
 -	putchar(ch);
 +	putchar(ch & CHR_MSK);
+--- a/Library/libs/curses/move.c
++++ b/Library/libs/curses/move.c
+@@ -8,0 +9,2 @@
++	win->_last_valid = 0;
++	win->_grapheme.started = 0;
 --- a/Library/libs/curses/options.c
 +++ b/Library/libs/curses/options.c
 @@ -51 +51 @@
@@ -97,18 +160,30 @@
 @@ -32 +32 @@
 -  int ch = c;
 +  chtype ch = c;
+--- a/Library/libs/curses/wbox.c
++++ b/Library/libs/curses/wbox.c
+@@ -13 +13 @@
+-int wbox(WINDOW *win, int ymin, int xmin, int ymax, int xmax, unsigned int v, unsigned int h)
++int wbox(WINDOW *win, int ymin, int xmin, int ymax, int xmax, chtype v, chtype h)
+@@ -15 +15 @@
+-  unsigned int vc, hc, ulc, urc, llc, lrc;	/* corner chars */
++  chtype vc, hc, ulc, urc, llc, lrc;	/* corner chars */
 --- a/Library/libs/curses/wclrtobot.c
 +++ b/Library/libs/curses/wclrtobot.c
 @@ -11 +11,2 @@
 -  int y, minx, startx, *ptr, *end, *maxx, blank;
 +  int y, minx, startx;
 +  chtype *ptr, *end, *maxx, blank;
+@@ -12,0 +14 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/wclrtoeol.c
 +++ b/Library/libs/curses/wclrtoeol.c
 @@ -11 +11,2 @@
 -  int *maxx, *ptr, *end, y, x, minx, blank;
 +  chtype *maxx, *ptr, *end, blank;
 +  int y, x, minx;
+@@ -12,0 +14 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/wdelch.c
 +++ b/Library/libs/curses/wdelch.c
 @@ -11,3 +11,3 @@
@@ -118,18 +193,24 @@
 +  chtype *temp1;
 +  chtype *temp2;
 +  chtype *end;
+@@ -17,0 +18 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/wdeleteln.c
 +++ b/Library/libs/curses/wdeleteln.c
 @@ -12 +12,2 @@
 -  int *end, *temp, y, blank;
 +  chtype *end, *temp, blank;
 +  int y;
+@@ -13,0 +15 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/werase.c
 +++ b/Library/libs/curses/werase.c
 @@ -11 +11,2 @@
 -  int *end, *start, y, blank;
 +  chtype *end, *start, blank;
 +  int y;
+@@ -12,0 +14 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/winmove.c
 +++ b/Library/libs/curses/winmove.c
 @@ -28 +28,3 @@
@@ -146,9 +227,13 @@
 +  chtype *temp1;
 +  chtype *temp2;
 +  chtype *end;
+@@ -16,0 +17 @@
++  win->_last_valid = 0;
 --- a/Library/libs/curses/winsertln.c
 +++ b/Library/libs/curses/winsertln.c
 @@ -11 +11,2 @@
 -  int *temp, *end, y, blank;
 +  chtype *temp, *end, blank;
 +  int y;
+@@ -12,0 +14 @@
++  win->_last_valid = 0;

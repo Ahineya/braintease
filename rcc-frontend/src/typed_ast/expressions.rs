@@ -79,6 +79,7 @@ pub enum TypedExpr {
         object: Box<TypedExpr>,
         member: String,
         offset: u64,  // Computed offset in words
+        bit_field: Option<(u8, u8)>, // (width, least significant bit)
         is_pointer: bool,  // true for ->, false for .
         expr_type: Type,
     },
@@ -172,7 +173,10 @@ pub enum TypedExpr {
 impl TypedExpr {
     /// The value type after dropping top-level lvalue qualifiers.
     pub fn get_type(&self) -> &Type {
-        self.get_declared_type().unqualified()
+        if matches!(self, TypedExpr::MemberAccess { bit_field: Some((1..=15, _)), .. })
+            && !matches!(self.get_declared_type().unqualified(), Type::Bool) {
+            &Type::Int
+        } else { self.get_declared_type().unqualified() }
     }
 
     /// Preserve lvalue qualifiers when deciding how to access an object.

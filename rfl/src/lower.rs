@@ -8,11 +8,15 @@
 //! stack only holds the driver and the function that is running right now.
 
 mod arrays;
+mod async_drop;
 mod async_functions;
+mod browser;
 mod buffer_ownership;
 mod build;
+mod callbacks;
 mod closures;
 mod constants;
+mod direct;
 mod dispatch;
 mod emit;
 mod erasure;
@@ -22,6 +26,7 @@ mod frames;
 mod liveness;
 mod managed_runtime;
 mod memory;
+mod moves;
 mod numeric;
 mod objects;
 mod optimize;
@@ -88,6 +93,8 @@ struct Slot {
 }
 
 struct Proc {
+    /// A bounded synchronous body with a private output buffer.
+    direct: bool,
     async_context: Option<usize>,
     async_result: Option<Ty>,
     name: String,
@@ -115,7 +122,9 @@ struct Proc {
 struct LowerCap {
     /// Binding in the function that creates the closure.
     parent: u32,
-    /// Slot in this function that receives the copy.
+    /// Transfer the captured cells instead of retaining their contents.
+    transfer: bool,
+    /// Slot in this function that receives the capture.
     slot: usize,
     ty: Ty,
     cells: i64,
@@ -250,6 +259,8 @@ enum Insn {
     Closure {
         dest: usize,
         func: String,
+        /// Caller slots read when constructing the environment, in capture order.
+        captures: Vec<usize>,
     },
     VecLit {
         dest: usize,
@@ -488,6 +499,8 @@ enum Term {
     Suspend {
         next: usize,
         cleanup: Vec<usize>,
+        /// Synthetic Owned<F> whose cancellation belongs to this await.
+        awaited: usize,
     },
     Return,
     Jump(usize),
@@ -533,6 +546,7 @@ enum Term {
 
 struct Built {
     procs: Vec<Proc>,
+    known_calls: Vec<std::collections::BTreeMap<usize, String>>,
     adts: Vec<AdtDef>,
     collections: Arc<crate::typed::CollectionTypes>,
     /// Parallel to `structs`.
@@ -557,6 +571,7 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let tuples = Arc::new(module.tuples.clone());
     let collections = Arc::new(module.collections.clone());
     let resources = Arc::new(crate::resources::ResourceTypes::new(module));
+    let scope_cleanup = Arc::new(crate::resources::ResourceTypes::for_scope_cleanup(module));
     let functions = expand_async_functions(&module.functions, &resources);
     let mut procs = functions
         .iter()
@@ -569,13 +584,17 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
                 tuples.clone(),
                 collections.clone(),
                 resources.clone(),
+                scope_cleanup.clone(),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
     retain_reachable(&mut procs);
+    callbacks::resolve_captures(&mut procs)?;
     for proc in &mut procs {
         fold_scalar_constants(proc);
     }
+    let known_calls = callbacks::analyze(&procs);
+    direct::analyze(&mut procs, &module.adts);
     let mut need_alloc =
         !module.collections.owners.is_empty() || procs.iter().any(|p| p.async_result.is_some());
     let mut need_fail = need_alloc;
@@ -729,6 +748,7 @@ fn build(module: &TModule) -> Result<Built, CompileError> {
     let cstrs = c_strings(&procs);
     Ok(Built {
         procs,
+        known_calls,
         adts: module.adts.clone(),
         collections,
         repr_c: module.repr_c.clone(),
@@ -769,6 +789,7 @@ fn c_strings(procs: &[Proc]) -> Vec<Vec<u16>> {
 fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
     let mut module = Module::new(module_name.to_string());
     let mut builder = IrBuilder::new();
+    browser::global(&mut module, built);
     if built.need_alloc || built.need_fail || built.need_heap {
         module.add_function(extern_fn("rfl_halt", IrType::Void, Vec::new()));
         if !built.need_io {
@@ -835,10 +856,14 @@ fn emit(module_name: &str, built: &Built) -> Result<Module, CompileError> {
         });
     }
     for proc in &built.procs {
-        emit_proc(&mut builder, proc, built)?;
+        let entries = emit_proc(&mut builder, proc, built)?;
         let mut function = builder.finish_function().unwrap();
-        promote_frame_words(&mut function, proc);
+        promote_frame_words(&mut function, proc, &entries);
         module.add_function(function);
+        if proc.direct {
+            direct::wrapper(&mut builder, proc, built.need_alloc)?;
+            module.add_function(builder.finish_function().unwrap());
+        }
     }
     emit_driver(&mut builder, built)?;
     module.add_function(builder.finish_function().unwrap());

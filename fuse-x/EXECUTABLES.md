@@ -37,7 +37,15 @@ See [application coverage](APPLICATIONS.md).
 The SDK caches native IR from portable libc and its hosted syscall bridge.
 File operations, stdio, directory access, environment, formatting, allocation,
 and process operations enter the same FUZIX kernel as the bootstrap programs.
-The allocator uses the hosted bank-aware brk/sbrk region. Custom signal handlers
+New SDK allocators opt into banks 48–239 on first growth: 12,288,000 C16 cells
+(24,000 KiB) of heap per process, disjoint from frames, argument storage,
+application globals and the shared kernel arena. Large individual requests can
+span this region, including full-HD RGB565 canvases. Growth remains bounded and
+allocations can fail; this is address-space capacity, not reserved resident RAM.
+Old packages retain their original banks 8–30 and allocator limits. The arena
+switch does not clear or merge storage in the intervening argument/global
+banks, and needs no package or C ABI change.
+Custom signal handlers
 run after completed system calls, following FUZIX's
 one-shot signal semantics. Continuation-aware `setjmp`/`longjmp` preserve live
 execution state across nested calls and fork. A handler may call the kernel or
@@ -47,6 +55,10 @@ to enable loop checkpoints. Kernel callbacks and their signal handlers remain
 uninterrupted until they block or return. Socket I/O and DNS
 use the guest protocol stack and existing Ethernet device. Build and runtime coverage are recorded separately
 in the application inventory; untested options and modes remain unvalidated.
+
+Aggregate return values temporarily point into the released callee frame.
+The caller copies them before its next ordinary call; automatic timer callbacks
+are deferred across that return boundary so they cannot overwrite the result.
 
 ## Package and runtime interface
 
@@ -84,6 +96,23 @@ function exports, and binds an explicit helper table. Applications do not link
 another copy of the native runtime or resolve arbitrary kernel symbols. The
 runtime checks each helper name and arity against its supported interface.
 
+The kernel streams packages in 4,096-cell chunks, releasing filesystem buffers
+before servicing clocks/devices and scheduling other processes (about every
+5 ms). `rcc_hosted_image_prepare` transfers the owned package to a two-worker
+native loader pool. Those workers never borrow Runtime or guest memory. The
+kernel polls with `rcc_hosted_image_poll`, yielding between polls; each poll
+installs at most 128 function bindings. A pending result is zero, failure is
+`0xFFFFFFFF`, and success is the staged entry token. The older synchronous
+load/finish helpers remain available for compatibility.
+
+Each process owns its construction, pending job and staged result. Cancellation
+never joins a worker; abandoned queued jobs are skipped and completed orphaned
+results release their library and temporary directory. A partially installed
+function table cannot be entered as an application. Global function-token ranges
+are allocated atomically across workers. Validation errors leave the old program
+intact. Signal delivery is deferred until the loader releases its resources and
+exec commits or returns.
+
 Each load receives distinct logical function tokens. Code constants and global
 function-pointer initializers resolve into that image's token namespace. Every
 process retains its loaded code across fork and while entering kernel syscalls.
@@ -115,3 +144,13 @@ private memory after fork, shared descriptor offsets, exec environment and globa
 reset, code retained by children across parent exec, and malformed-image rollback.
 Repeated launches also check that retired images are unloaded while the kernel
 continues running and that temporary code files disappear after shutdown.
+
+`python3 fuse-x/test_scheduling.py` exercises two Lynx launches, concurrent exec,
+a CPU-bound loop and 2,000 terminal redraws through mux during 20 seconds of PCM
+playback. It checks a 10 ms sleeper's worst wakeup gap (200 ms ceiling), successful
+exec, zero logical missing PCM frames and zero discarded clock catch-up. All disks
+are disposable. `--live-audio` feeds a silent WAV through the actual host speaker
+callback and additionally checks recovered physical starvation gaps (100 ms
+ceiling); it fails if no speaker opens. Thresholds are configurable for slow hosts.
+Physical counters are independent of logical PCM underruns and remain zero in
+muted runs. They exclude startup, deliberate pause/stop and terminal drain silence.

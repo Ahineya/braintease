@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
 #include <version.h>
 #include <kdata.h>
@@ -26,6 +27,8 @@ struct runload loadavg[3] = {
 
 #ifndef CONFIG_DYNAMIC_BUFPOOL
 struct blkbuf bufpool[NBUFS];
+#elif defined(CONFIG_RIPPLE_IO)
+struct blkbuf *bufpool, *bufpool_end;
 #endif
 
 struct p_tab ptab[PTABSIZE];
@@ -109,11 +112,11 @@ const syscall_t syscall_dispatch[FUZIX_SYSCALL_COUNT] = {
 	_nosys,
 #endif
 	_ftruncate,		/* Fuzix system call 67 */
+    _symlink,       /* 68: guest symbolic link creation */
+    _readlink,      /* 69: read link contents without following */
+    _lstat,         /* 70: stat the link itself */
 #if defined(CONFIG_LEVEL_2)
-	_nosys,			/* 68-71 reserved */
-	_nosys,
-	_nosys,
-	_nosys,
+    _nosys,         /* 71 reserved */
 	_select,		/* FUZIX system call 72 */
 	_setgroups,		/* FUZIX system call 73 */
 	_getgroups,		/* FUZIX system call 74 */
@@ -123,7 +126,7 @@ const syscall_t syscall_dispatch[FUZIX_SYSCALL_COUNT] = {
 	_setsid,		/* FUZIX system call 78 */
 	_getsid,		/* FUZIX system call 79 */
 #elif defined(CONFIG_JOB_CONTROL)
-    _nosys, _nosys, _nosys, _nosys,
+    _nosys,
 #ifdef CONFIG_SELECT
     _select,
 #else

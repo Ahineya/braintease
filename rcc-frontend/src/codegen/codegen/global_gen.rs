@@ -74,7 +74,10 @@ pub fn generate_global_variable(
                     }.into());
                 }
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(CodegenError::InternalError {
+                message: format!("Initializer for global '{name}': {e}"),
+                location: rcc_common::SourceLocation::new_simple(0, 0),
+            }.into()),
         }
     } else {
         None
@@ -160,6 +163,40 @@ fn generate_constant_initializer(
         }
         TypedExpr::ArrayInitializer { elements, .. }
         | TypedExpr::CompoundLiteral { initializer: elements, .. } => {
+            if matches!(expr.get_type().unqualified(), Type::Union { .. }) {
+                let values = if let Some(member) = elements.first() {
+                    let value = generate_constant_initializer(gen, member)?;
+                    let ty = convert_type_default(member.get_declared_type())?;
+                    super::constant_cells::cells(value, &ty)?
+                } else { Vec::new() };
+                return Ok(Value::ConstantAggregate(values));
+            }
+            if let Type::Struct { fields, .. } = expr.get_type() {
+                if fields.iter().any(|f| f.bit_width.is_some()) {
+                    let layout = crate::semantic::struct_layout::calculate_struct_layout(fields, rcc_common::SourceLocation::new_simple(0, 0))?;
+                    let mut values = Vec::new();
+                    let mut layouts = layout.fields.iter();
+                    let mut unit_offset = None;
+                    for (index, declared) in fields.iter().enumerate() {
+                        if declared.bit_width == Some(0) { continue; }
+                        let field = layouts.next().unwrap();
+                        if let Some(width) = field.bit_width {
+                            if unit_offset != Some(field.offset) { values.push(Value::Constant(0)); unit_offset = Some(field.offset); }
+                            if !field.name.is_empty() {
+                                let value = elements.get(index).and_then(scalar_initializer_constant).ok_or_else(||
+                                    CompilerError::semantic_error("Bit-field global initializer must be an integer constant".into(), rcc_common::SourceLocation::new_simple(0, 0)))?;
+                                let Value::Constant(unit) = values.last_mut().unwrap() else { unreachable!() };
+                                let value = if matches!(field.field_type.unqualified(), Type::Bool) { (value != 0) as i64 } else { value };
+                                *unit |= (value & crate::codegen::expressions::bit_fields::mask(width)).wrapping_shl(field.bit_offset as u32);
+                            }
+                        } else {
+                            unit_offset = None;
+                            values.push(generate_constant_initializer(gen, &elements[index])?);
+                        }
+                    }
+                    return Ok(Value::ConstantAggregate(values));
+                }
+            }
             let values = elements.iter().map(|elem| generate_constant_initializer(gen, elem))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Value::ConstantAggregate(values))
@@ -180,6 +217,8 @@ pub(super) fn scalar_initializer_constant(expr: &TypedExpr) -> Option<i64> {
         TypedExpr::Cast { operand, target_type, .. } if target_type.is_integer() => {
             if operand.get_type().is_floating() {
                 super::constant_float::cast_integer(operand, target_type)?
+            } else if matches!(operand.get_type(), Type::Pointer { .. }) {
+                null_based_member_address(operand)?
             } else {
                 scalar_initializer_constant(operand)?
             }
@@ -228,5 +267,30 @@ fn normalize_initializer_integer(value: i64, ty: &Type) -> i64 {
         Type::Long => value as i32 as i64,
         Type::UnsignedLong => value as u32 as i64,
         _ => value,
+    }
+}
+
+// The implementation of offsetof in stddef.h forms a member address from a
+// null base. Fold this layout query without emitting a runtime dereference.
+fn null_based_member_address(expr: &TypedExpr) -> Option<i64> {
+    use crate::ast::UnaryOp;
+    fn object(expr: &TypedExpr) -> Option<i64> {
+        match expr {
+            TypedExpr::MemberAccess { object: base, offset, is_pointer, bit_field: None, .. } => {
+                let base = if *is_pointer { null_based_member_address(base)? } else { object(base)? };
+                base.checked_add(*offset as i64)
+            }
+            TypedExpr::Unary { op: UnaryOp::Dereference, operand, .. } => null_based_member_address(operand),
+            TypedExpr::ArrayIndex { array, index, elem_type, .. } => {
+                object(array)?.checked_add(scalar_initializer_constant(index)?.checked_mul(elem_type.size_in_words()? as i64)?)
+            }
+            _ => None,
+        }
+    }
+    match expr {
+        TypedExpr::Cast { target_type: Type::Pointer { .. }, operand, .. }
+            if scalar_initializer_constant(operand) == Some(0) => Some(0),
+        TypedExpr::Unary { op: UnaryOp::AddressOf, operand, .. } => object(operand),
+        _ => None,
     }
 }

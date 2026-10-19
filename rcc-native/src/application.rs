@@ -18,12 +18,18 @@ pub(super) fn manifest(compiler: &Compiler, cells: u32) -> Result<Manifest, Stri
             helper_arity(name).ok_or_else(|| format!("unknown application helper {name}"))?;
         helpers.insert(name.clone(), arity);
     }
-    for f in compiler.ir.functions.iter().filter(|f| f.is_external) {
+    // C calls may have a valid source declaration without a standalone IR
+    // declaration. callee() records those imports during code generation too.
+    for name in compiler
+        .functions
+        .keys()
+        .filter(|name| compiler.ir.get_function(name).is_none_or(|f| f.is_external))
+    {
         if let Some((_, arity)) = rcc_ir::target::NATIVE_SERVICES
             .iter()
-            .find(|(n, _)| *n == f.name)
+            .find(|(n, _)| *n == name)
         {
-            helpers.insert(format!("rcc_native_ext_{}", f.name), *arity);
+            helpers.insert(format!("rcc_native_ext_{name}"), *arity);
         }
     }
     Ok(Manifest {
@@ -180,4 +186,28 @@ pub fn compile_application(modules: &[Module], output: &Path) -> Result<(), Stri
             .map_err(|e| e.to_string())?;
     }
     std::fs::rename(&temporary, output).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn implicit_scalar_service_calls_are_in_the_application_manifest() {
+        let module = rcc_ir::parse_module(
+            r#"module app {
+          target native
+          function i64 @main(i32 %0) {
+            block 0:
+              %1 = call i64 global @__rcc_host_math(0, 0, 0)
+              ret %1
+          }
+        }"#,
+        )
+        .unwrap();
+        let (_, manifest) =
+            super::super::compile_object_inner(&module, &Default::default(), true).unwrap();
+        let helpers = manifest.unwrap().helpers;
+        assert!(helpers
+            .iter()
+            .any(|h| h.symbol == "rcc_native_ext___rcc_host_math" && h.arity == 3));
+    }
 }

@@ -22,6 +22,8 @@ impl CollectionTypes {
 
 #[derive(Debug, Clone)]
 pub struct TModule {
+    /// Callable signature IDs whose values require ownership transfer.
+    pub once_functions: Vec<u32>,
     pub collections: CollectionTypes,
     pub functions: Vec<TFn>,
     /// Concrete algebraic types, indexed by [`Ty::Adt`](crate::ty::Ty::Adt).
@@ -76,7 +78,7 @@ pub struct TFn {
     /// The frame reserves two cells after the parameters for an environment pointer.
     /// Every function has the slot, so a named function and a lambda use one call protocol.
     pub closure: bool,
-    /// Values copied into the environment when the closure is created.
+    /// Values captured into the environment when the closure is created.
     pub captures: Vec<Capture>,
     /// Parallel to `bindings`. A shared binding's slot holds a box pointer.
     pub shared: Vec<bool>,
@@ -86,6 +88,10 @@ pub struct TFn {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Capture {
+    /// Source use that introduced this capture.
+    pub span: usize,
+    /// Transfer an unshared binding into and out of a consuming environment.
+    pub transfer: bool,
     /// Binding in the function that creates the closure.
     pub parent: u32,
     /// Binding in this function that receives the capture.
@@ -259,7 +265,7 @@ pub enum TExprKind {
         callee: Box<TExpr>,
         args: Vec<TExpr>,
     },
-    /// A lambda lifted to `func`. The value is a closure with an empty environment.
+    /// A callable targeting `func`, with that function's capture environment.
     Closure {
         func: String,
     },

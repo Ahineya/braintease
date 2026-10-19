@@ -1,0 +1,814 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="950" viewBox="0 0 2400 950" font-family="Arial, sans-serif"><rect width="100%" height="100%" fill="#f7f9fc"/><text x="45" y="53" font-size="34" font-weight="bold" fill="#142b42">Braintease repository architecture</text><text x="45" y="88" font-size="19" fill="#41566d">What enables and feeds what  |  Source snapshot 18 October 2026  |  Repeated component names connect the four views</text><text x="45" y="120" font-size="17" fill="#376a9b">Blue arrows: compiles or emits</text><text x="410" y="120" font-size="17" fill="#2a805b">Green: runs or enables</text><text x="720" y="120" font-size="17" fill="#79629e">Dashed purple: shared code or service</text><text x="1160" y="120" font-size="17" fill="#bc842f">Amber boxes: experimental or incomplete</text><rect x="45" y="145" width="1140" height="310" rx="12" fill="#fff" stroke="#d3dbe5"/><text x="67" y="178" font-size="21" font-weight="bold" fill="#182b40">01   Languages become executable artifacts</text><svg x="55" y="198" width="1120" height="245"
+ viewBox="0.00 0.00 1574.00 305.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(12.96 292.4)">
+<title>compiler</title>
+<polygon fill="white" stroke="none" points="-12.96,12.96 -12.96,-292.4 1561.08,-292.4 1561.08,12.96 -12.96,12.96"/>
+<!-- c -->
+<g id="node1" class="node">
+<title>c</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M165.98,-250.44C165.98,-250.44 50.49,-250.44 50.49,-250.44 44.49,-250.44 38.49,-244.44 38.49,-238.44 38.49,-238.44 38.49,-213 38.49,-213 38.49,-207 44.49,-201 50.49,-201 50.49,-201 165.98,-201 165.98,-201 171.98,-201 177.98,-207 177.98,-213 177.98,-213 177.98,-238.44 177.98,-238.44 177.98,-244.44 171.98,-250.44 165.98,-250.44"/>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-229.92" font-family="Arial" font-size="14.00">C99 / RCC</text>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-213.12" font-family="Arial" font-size="14.00">rcpp + rcc&#45;frontend</text>
+</g>
+<!-- ir -->
+<g id="node6" class="node">
+<title>ir</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M409.5,-157.84C409.5,-157.84 282.75,-157.84 282.75,-157.84 276.75,-157.84 270.75,-151.84 270.75,-145.84 270.75,-145.84 270.75,-103.6 270.75,-103.6 270.75,-97.6 276.75,-91.6 282.75,-91.6 282.75,-91.6 409.5,-91.6 409.5,-91.6 415.5,-91.6 421.5,-97.6 421.5,-103.6 421.5,-103.6 421.5,-145.84 421.5,-145.84 421.5,-151.84 415.5,-157.84 409.5,-157.84"/>
+<text xml:space="preserve" text-anchor="middle" x="346.13" y="-137.32" font-family="Arial" font-size="14.00">RCC IR</text>
+<text xml:space="preserve" text-anchor="middle" x="346.13" y="-120.52" font-family="Arial" font-size="14.00">target + C16 layout</text>
+<text xml:space="preserve" text-anchor="middle" x="346.13" y="-103.72" font-family="Arial" font-size="14.00">rcc&#45;ir / shared linking</text>
+</g>
+<!-- c&#45;&gt;ir -->
+<g id="edge1" class="edge">
+<title>c&#45;&gt;ir</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M178.36,-204.45C199.11,-198.06 216.47,-192.72 216.47,-192.72 216.47,-192.72 244.24,-178.05 273.97,-162.33"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="274.77,-164.68 279.81,-159.24 272.48,-160.35 274.77,-164.68"/>
+<text xml:space="preserve" text-anchor="middle" x="243.61" y="-187.59" font-family="Arial" font-size="11.00">emits</text>
+</g>
+<!-- rfl -->
+<g id="node2" class="node">
+<title>rfl</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M189.13,-183.44C189.13,-183.44 27.35,-183.44 27.35,-183.44 21.35,-183.44 15.35,-177.44 15.35,-171.44 15.35,-171.44 15.35,-146 15.35,-146 15.35,-140 21.35,-134 27.35,-134 27.35,-134 189.13,-134 189.13,-134 195.13,-134 201.13,-140 201.13,-146 201.13,-146 201.13,-171.44 201.13,-171.44 201.13,-177.44 195.13,-183.44 189.13,-183.44"/>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-162.92" font-family="Arial" font-size="14.00">RFL</text>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-146.12" font-family="Arial" font-size="14.00">parser / checker / lowering</text>
+</g>
+<!-- rfl&#45;&gt;ir -->
+<g id="edge2" class="edge">
+<title>rfl&#45;&gt;ir</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M201.45,-145.43C221.29,-142.57 242.14,-139.56 261.62,-136.76"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="261.94,-139.19 268.52,-135.76 261.24,-134.34 261.94,-139.19"/>
+<text xml:space="preserve" text-anchor="middle" x="243.61" y="-144" font-family="Arial" font-size="11.00">emits</text>
+</g>
+<!-- pc -->
+<g id="node3" class="node">
+<title>pc</title>
+<path fill="#fff4e3" stroke="#c99b5e" stroke-dasharray="5,2" d="M177.07,-116.44C177.07,-116.44 39.4,-116.44 39.4,-116.44 33.4,-116.44 27.4,-110.44 27.4,-104.44 27.4,-104.44 27.4,-79 27.4,-79 27.4,-73 33.4,-67 39.4,-67 39.4,-67 177.07,-67 177.07,-67 183.07,-67 189.07,-73 189.07,-79 189.07,-79 189.07,-104.44 189.07,-104.44 189.07,-110.44 183.07,-116.44 177.07,-116.44"/>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-95.92" font-family="Arial" font-size="14.00">Portable C</text>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-79.12" font-family="Arial" font-size="14.00">cproc&#45;derived frontend</text>
+</g>
+<!-- pc&#45;&gt;ir -->
+<g id="edge3" class="edge">
+<title>pc&#45;&gt;ir</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M189.43,-102.94C212.64,-106.19 238.04,-109.74 261.46,-113.01"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="261.11,-115.44 268.38,-113.98 261.78,-110.59 261.11,-115.44"/>
+<text xml:space="preserve" text-anchor="middle" x="243.61" y="-115.45" font-family="Arial" font-size="11.00">emits</text>
+</g>
+<!-- rust -->
+<g id="node4" class="node">
+<title>rust</title>
+<path fill="#fff4e3" stroke="#c99b5e" stroke-dasharray="5,2" d="M204.47,-49.44C204.47,-49.44 12,-49.44 12,-49.44 6,-49.44 0,-43.44 0,-37.44 0,-37.44 0,-12 0,-12 0,-6 6,0 12,0 12,0 204.47,0 204.47,0 210.47,0 216.47,-6 216.47,-12 216.47,-12 216.47,-37.44 216.47,-37.44 216.47,-43.44 210.47,-49.44 204.47,-49.44"/>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-28.92" font-family="Arial" font-size="14.00">Rust prototype</text>
+<text xml:space="preserve" text-anchor="middle" x="108.24" y="-12.12" font-family="Arial" font-size="14.00">MIR &#45;&gt; rust&#45;rcc (Ripple / native)</text>
+</g>
+<!-- rust&#45;&gt;ir -->
+<g id="edge4" class="edge">
+<title>rust&#45;&gt;ir</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M191.06,-49.9C205.74,-54.42 216.47,-57.72 216.47,-57.72 216.47,-57.72 243.58,-71.83 272.9,-87.11"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="271.71,-89.25 279.06,-90.31 273.98,-84.9 271.71,-89.25"/>
+<text xml:space="preserve" text-anchor="middle" x="243.61" y="-80.82" font-family="Arial" font-size="11.00">emits</text>
+</g>
+<!-- hand -->
+<g id="node5" class="node">
+<title>hand</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M646.07,-203.72C646.07,-203.72 462.5,-203.72 462.5,-203.72 456.5,-203.72 450.5,-197.72 450.5,-191.72 450.5,-191.72 450.5,-179.72 450.5,-179.72 450.5,-173.72 456.5,-167.72 462.5,-167.72 462.5,-167.72 646.07,-167.72 646.07,-167.72 652.07,-167.72 658.07,-173.72 658.07,-179.72 658.07,-179.72 658.07,-191.72 658.07,-191.72 658.07,-197.72 652.07,-203.72 646.07,-203.72"/>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-181.52" font-family="Arial" font-size="14.00">Hand&#45;written Ripple assembly</text>
+</g>
+<!-- rl -->
+<g id="node8" class="node">
+<title>rl</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M876.25,-208.44C876.25,-208.44 770.49,-208.44 770.49,-208.44 764.49,-208.44 758.49,-202.44 758.49,-196.44 758.49,-196.44 758.49,-171 758.49,-171 758.49,-165 764.49,-159 770.49,-159 770.49,-159 876.25,-159 876.25,-159 882.25,-159 888.25,-165 888.25,-171 888.25,-171 888.25,-196.44 888.25,-196.44 888.25,-202.44 882.25,-208.44 876.25,-208.44"/>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-187.92" font-family="Arial" font-size="14.00">rasm + rlink</text>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-171.12" font-family="Arial" font-size="14.00">.asm / .pobj / .par</text>
+</g>
+<!-- hand&#45;&gt;rl -->
+<g id="edge5" class="edge">
+<title>hand&#45;&gt;rl</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M658.55,-184.95C688.88,-184.72 721.41,-184.48 749.43,-184.27"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="749.41,-186.72 756.39,-184.21 749.37,-181.82 749.41,-186.72"/>
+<text xml:space="preserve" text-anchor="middle" x="698.36" y="-188.14" font-family="Arial" font-size="11.00">assembles</text>
+</g>
+<!-- rip -->
+<g id="node7" class="node">
+<title>rip</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M637.71,-149.44C637.71,-149.44 470.86,-149.44 470.86,-149.44 464.86,-149.44 458.86,-143.44 458.86,-137.44 458.86,-137.44 458.86,-112 458.86,-112 458.86,-106 464.86,-100 470.86,-100 470.86,-100 637.71,-100 637.71,-100 643.71,-100 649.71,-106 649.71,-112 649.71,-112 649.71,-137.44 649.71,-137.44 649.71,-143.44 643.71,-149.44 637.71,-149.44"/>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-128.92" font-family="Arial" font-size="14.00">Ripple backend</text>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-112.12" font-family="Arial" font-size="14.00">rcc&#45;backend + rcc&#45;codegen</text>
+</g>
+<!-- ir&#45;&gt;rip -->
+<g id="edge6" class="edge">
+<title>ir&#45;&gt;rip</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M421.85,-124.72C430.84,-124.72 440.15,-124.72 449.46,-124.72"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="449.42,-127.17 456.42,-124.72 449.42,-122.27 449.42,-127.17"/>
+</g>
+<!-- nat -->
+<g id="node11" class="node">
+<title>nat</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M615.33,-275.44C615.33,-275.44 493.25,-275.44 493.25,-275.44 487.25,-275.44 481.25,-269.44 481.25,-263.44 481.25,-263.44 481.25,-238 481.25,-238 481.25,-232 487.25,-226 493.25,-226 493.25,-226 615.33,-226 615.33,-226 621.33,-226 627.33,-232 627.33,-238 627.33,-238 627.33,-263.44 627.33,-263.44 627.33,-269.44 621.33,-275.44 615.33,-275.44"/>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-254.92" font-family="Arial" font-size="14.00">Native backend</text>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-238.12" font-family="Arial" font-size="14.00">rcc&#45;native / Cranelift</text>
+</g>
+<!-- ir&#45;&gt;nat -->
+<g id="edge12" class="edge">
+<title>ir&#45;&gt;nat</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M386.51,-158.24C415.72,-183.11 450.5,-212.72 450.5,-212.72 450.5,-212.72 461.88,-216.92 477.06,-222.54"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="476.04,-224.77 483.46,-224.9 477.74,-220.18 476.04,-224.77"/>
+</g>
+<!-- wasm -->
+<g id="node13" class="node">
+<title>wasm</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M614.35,-82.44C614.35,-82.44 494.23,-82.44 494.23,-82.44 488.23,-82.44 482.23,-76.44 482.23,-70.44 482.23,-70.44 482.23,-45 482.23,-45 482.23,-39 488.23,-33 494.23,-33 494.23,-33 614.35,-33 614.35,-33 620.35,-33 626.35,-39 626.35,-45 626.35,-45 626.35,-70.44 626.35,-70.44 626.35,-76.44 620.35,-82.44 614.35,-82.44"/>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-61.92" font-family="Arial" font-size="14.00">Wasm backend</text>
+<text xml:space="preserve" text-anchor="middle" x="554.29" y="-45.12" font-family="Arial" font-size="14.00">rcc&#45;wasm + runtime</text>
+</g>
+<!-- ir&#45;&gt;wasm -->
+<g id="edge15" class="edge">
+<title>ir&#45;&gt;wasm</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M421.98,-100.1C438.15,-94.78 450.5,-90.72 450.5,-90.72 450.5,-90.72 460.19,-87.61 473.61,-83.3"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="474.11,-85.71 480.03,-81.24 472.61,-81.05 474.11,-85.71"/>
+</g>
+<!-- rip&#45;&gt;rl -->
+<g id="edge7" class="edge">
+<title>rip&#45;&gt;rl</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M650.2,-145.69C682.96,-152.92 719.11,-160.91 749.79,-167.69"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="749,-170.02 756.37,-169.14 750.06,-165.24 749,-170.02"/>
+</g>
+<!-- image -->
+<g id="node9" class="node">
+<title>image</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1176.19,-145.44C1176.19,-145.44 1041.64,-145.44 1041.64,-145.44 1035.64,-145.44 1029.64,-139.44 1029.64,-133.44 1029.64,-133.44 1029.64,-108 1029.64,-108 1029.64,-102 1035.64,-96 1041.64,-96 1041.64,-96 1176.19,-96 1176.19,-96 1182.19,-96 1188.19,-102 1188.19,-108 1188.19,-108 1188.19,-133.44 1188.19,-133.44 1188.19,-139.44 1182.19,-145.44 1176.19,-145.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-124.92" font-family="Arial" font-size="14.00">RLINK / SYS1 / RXE1</text>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-108.12" font-family="Arial" font-size="14.00">Ripple machine code</text>
+</g>
+<!-- rl&#45;&gt;image -->
+<g id="edge8" class="edge">
+<title>rl&#45;&gt;image</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M888.71,-169.42C927.69,-160.76 977.94,-149.6 1020.49,-140.15"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="1020.94,-142.55 1027.24,-138.64 1019.88,-137.77 1020.94,-142.55"/>
+</g>
+<!-- cpu -->
+<g id="node10" class="node">
+<title>cpu</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1197.58,-212.44C1197.58,-212.44 1020.25,-212.44 1020.25,-212.44 1014.25,-212.44 1008.25,-206.44 1008.25,-200.44 1008.25,-200.44 1008.25,-175 1008.25,-175 1008.25,-169 1014.25,-163 1020.25,-163 1020.25,-163 1197.58,-163 1197.58,-163 1203.58,-163 1209.58,-169 1209.58,-175 1209.58,-175 1209.58,-200.44 1209.58,-200.44 1209.58,-206.44 1203.58,-212.44 1197.58,-212.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-191.92" font-family="Arial" font-size="14.00">CPU template + bf_cpu</text>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-175.12" font-family="Arial" font-size="14.00">BF export / bfm / compact .bf</text>
+</g>
+<!-- rl&#45;&gt;cpu -->
+<g id="edge10" class="edge">
+<title>rl&#45;&gt;cpu</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M888.71,-184.63C921.31,-185.09 961.79,-185.66 999.05,-186.18"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="998.94,-188.63 1005.98,-186.28 999.01,-183.73 998.94,-188.63"/>
+<text xml:space="preserve" text-anchor="middle" x="958.17" y="-189.38" font-family="Arial" font-size="11.00">export</text>
+</g>
+<!-- rv -->
+<g id="node15" class="node">
+<title>rv</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M1440.24,-138.72C1440.24,-138.72 1410.24,-138.72 1410.24,-138.72 1404.24,-138.72 1398.24,-132.72 1398.24,-126.72 1398.24,-126.72 1398.24,-114.72 1398.24,-114.72 1398.24,-108.72 1404.24,-102.72 1410.24,-102.72 1410.24,-102.72 1440.24,-102.72 1440.24,-102.72 1446.24,-102.72 1452.24,-108.72 1452.24,-114.72 1452.24,-114.72 1452.24,-126.72 1452.24,-126.72 1452.24,-132.72 1446.24,-138.72 1440.24,-138.72"/>
+<text xml:space="preserve" text-anchor="middle" x="1425.24" y="-116.52" font-family="Arial" font-size="14.00">RVM</text>
+</g>
+<!-- image&#45;&gt;rv -->
+<g id="edge9" class="edge">
+<title>image&#45;&gt;rv</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1188.42,-120.72C1252.83,-120.72 1340.97,-120.72 1389.19,-120.72"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1389.03,-123.17 1396.03,-120.72 1389.03,-118.27 1389.03,-123.17"/>
+<text xml:space="preserve" text-anchor="middle" x="1255.98" y="-124.02" font-family="Arial" font-size="11.00">runs</text>
+</g>
+<!-- bf -->
+<g id="node16" class="node">
+<title>bf</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M1536.12,-212.44C1536.12,-212.44 1314.37,-212.44 1314.37,-212.44 1308.37,-212.44 1302.37,-206.44 1302.37,-200.44 1302.37,-200.44 1302.37,-175 1302.37,-175 1302.37,-169 1308.37,-163 1314.37,-163 1314.37,-163 1536.12,-163 1536.12,-163 1542.12,-163 1548.12,-169 1548.12,-175 1548.12,-175 1548.12,-200.44 1548.12,-200.44 1548.12,-206.44 1542.12,-212.44 1536.12,-212.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1425.24" y="-191.92" font-family="Arial" font-size="14.00">RBF or ordinary BF engine</text>
+<text xml:space="preserve" text-anchor="middle" x="1425.24" y="-175.12" font-family="Arial" font-size="14.00">ordinary engine has no host devices</text>
+</g>
+<!-- cpu&#45;&gt;bf -->
+<g id="edge11" class="edge">
+<title>cpu&#45;&gt;bf</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1209.8,-187.72C1236.36,-187.72 1265.44,-187.72 1293.38,-187.72"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1293.04,-190.17 1300.04,-187.72 1293.04,-185.27 1293.04,-190.17"/>
+<text xml:space="preserve" text-anchor="middle" x="1255.98" y="-191.02" font-family="Arial" font-size="11.00">runs BF CPU</text>
+</g>
+<!-- fxe -->
+<g id="node12" class="node">
+<title>fxe</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M896.09,-278.44C896.09,-278.44 750.65,-278.44 750.65,-278.44 744.65,-278.44 738.65,-272.44 738.65,-266.44 738.65,-266.44 738.65,-241 738.65,-241 738.65,-235 744.65,-229 750.65,-229 750.65,-229 896.09,-229 896.09,-229 902.09,-229 908.09,-235 908.09,-241 908.09,-241 908.09,-266.44 908.09,-266.44 908.09,-272.44 902.09,-278.44 896.09,-278.44"/>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-257.92" font-family="Arial" font-size="14.00">Host executable or FXE</text>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-241.12" font-family="Arial" font-size="14.00">private native ABI</text>
+</g>
+<!-- nat&#45;&gt;fxe -->
+<g id="edge13" class="edge">
+<title>nat&#45;&gt;fxe</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M627.56,-251.53C658.9,-251.88 695.99,-252.3 729.36,-252.68"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="729.21,-255.12 736.24,-252.75 729.26,-250.22 729.21,-255.12"/>
+</g>
+<!-- nr -->
+<g id="node17" class="node">
+<title>nr</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M1189.82,-279.44C1189.82,-279.44 1028.01,-279.44 1028.01,-279.44 1022.01,-279.44 1016.01,-273.44 1016.01,-267.44 1016.01,-267.44 1016.01,-242 1016.01,-242 1016.01,-236 1022.01,-230 1028.01,-230 1028.01,-230 1189.82,-230 1189.82,-230 1195.82,-230 1201.82,-236 1201.82,-242 1201.82,-242 1201.82,-267.44 1201.82,-267.44 1201.82,-273.44 1195.82,-279.44 1189.82,-279.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-258.92" font-family="Arial" font-size="14.00">rcc&#45;native&#45;runtime</text>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-242.12" font-family="Arial" font-size="14.00">standalone or Fuse&#45;X host</text>
+</g>
+<!-- fxe&#45;&gt;nr -->
+<g id="edge14" class="edge">
+<title>fxe&#45;&gt;nr</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M908.29,-254.02C939.25,-254.13 974.64,-254.25 1006.95,-254.36"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1006.56,-256.81 1013.57,-254.39 1006.57,-251.91 1006.56,-256.81"/>
+<text xml:space="preserve" text-anchor="middle" x="958.17" y="-257.61" font-family="Arial" font-size="11.00">runs host code</text>
+</g>
+<!-- w -->
+<g id="node14" class="node">
+<title>w</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M877.42,-79.44C877.42,-79.44 769.32,-79.44 769.32,-79.44 763.32,-79.44 757.32,-73.44 757.32,-67.44 757.32,-67.44 757.32,-42 757.32,-42 757.32,-36 763.32,-30 769.32,-30 769.32,-30 877.42,-30 877.42,-30 883.42,-30 889.42,-36 889.42,-42 889.42,-42 889.42,-67.44 889.42,-67.44 889.42,-73.44 883.42,-79.44 877.42,-79.44"/>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-58.92" font-family="Arial" font-size="14.00">Generated .wasm</text>
+<text xml:space="preserve" text-anchor="middle" x="823.37" y="-42.12" font-family="Arial" font-size="14.00">private C16 ABI</text>
+</g>
+<!-- wasm&#45;&gt;w -->
+<g id="edge16" class="edge">
+<title>wasm&#45;&gt;w</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M626.51,-56.92C663.99,-56.5 709.92,-55.98 747.87,-55.56"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="747.9,-58.01 754.87,-55.48 747.85,-53.11 747.9,-58.01"/>
+</g>
+<!-- we -->
+<g id="node18" class="node">
+<title>we</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M1155.96,-78.44C1155.96,-78.44 1061.87,-78.44 1061.87,-78.44 1055.87,-78.44 1049.87,-72.44 1049.87,-66.44 1049.87,-66.44 1049.87,-41 1049.87,-41 1049.87,-35 1055.87,-29 1061.87,-29 1061.87,-29 1155.96,-29 1155.96,-29 1161.96,-29 1167.96,-35 1167.96,-41 1167.96,-41 1167.96,-66.44 1167.96,-66.44 1167.96,-72.44 1161.96,-78.44 1155.96,-78.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-57.92" font-family="Arial" font-size="14.00">Browser / Node</text>
+<text xml:space="preserve" text-anchor="middle" x="1108.91" y="-41.12" font-family="Arial" font-size="14.00">Wasm engine</text>
+</g>
+<!-- w&#45;&gt;we -->
+<g id="edge17" class="edge">
+<title>w&#45;&gt;we</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M889.78,-54.49C935.01,-54.33 995.02,-54.12 1040.65,-53.96"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1040.62,-56.41 1047.61,-53.93 1040.6,-51.51 1040.62,-56.41"/>
+<text xml:space="preserve" text-anchor="middle" x="958.17" y="-57.67" font-family="Arial" font-size="11.00">runs</text>
+</g>
+</g>
+</svg>
+<rect x="1215" y="145" width="1140" height="310" rx="12" fill="#fff" stroke="#d3dbe5"/><text x="1237" y="178" font-size="21" font-weight="bold" fill="#182b40">02   Execution platforms enable operating systems and applications</text><svg x="1225" y="198" width="1120" height="245"
+ viewBox="0.00 0.00 1473.00 261.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(12.96 247.8)">
+<title>unix</title>
+<polygon fill="white" stroke="none" points="-12.96,12.96 -12.96,-247.8 1460.24,-247.8 1460.24,12.96 -12.96,12.96"/>
+<!-- rv -->
+<g id="node1" class="node">
+<title>rv</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M139.92,-208.72C139.92,-208.72 61.82,-208.72 61.82,-208.72 55.82,-208.72 49.82,-202.72 49.82,-196.72 49.82,-196.72 49.82,-184.72 49.82,-184.72 49.82,-178.72 55.82,-172.72 61.82,-172.72 61.82,-172.72 139.92,-172.72 139.92,-172.72 145.92,-172.72 151.92,-178.72 151.92,-184.72 151.92,-184.72 151.92,-196.72 151.92,-196.72 151.92,-202.72 145.92,-208.72 139.92,-208.72"/>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-186.52" font-family="Arial" font-size="14.00">RVM + MMU</text>
+</g>
+<!-- fuz -->
+<g id="node4" class="node">
+<title>fuz</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M497.17,-150.44C497.17,-150.44 308.19,-150.44 308.19,-150.44 302.19,-150.44 296.19,-144.44 296.19,-138.44 296.19,-138.44 296.19,-113 296.19,-113 296.19,-107 302.19,-101 308.19,-101 308.19,-101 497.17,-101 497.17,-101 503.17,-101 509.17,-107 509.17,-113 509.17,-113 509.17,-138.44 509.17,-138.44 509.17,-144.44 503.17,-150.44 497.17,-150.44"/>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-129.92" font-family="Arial" font-size="14.00">FUZIX on Ripple</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-113.12" font-family="Arial" font-size="14.00">BIOS &#45;&gt; FUZIX.SYS &#45;&gt; init / sh</text>
+</g>
+<!-- rv&#45;&gt;fuz -->
+<g id="edge3" class="edge">
+<title>rv&#45;&gt;fuz</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M152.39,-179.77C189.23,-171.78 240.65,-160.63 287.22,-150.54"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="287.61,-152.96 293.93,-149.08 286.57,-148.17 287.61,-152.96"/>
+<text xml:space="preserve" text-anchor="middle" x="244.48" y="-169.25" font-family="Arial" font-size="11.00">boots</text>
+</g>
+<!-- ros -->
+<g id="node6" class="node">
+<title>ros</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M496.19,-234.84C496.19,-234.84 309.17,-234.84 309.17,-234.84 303.17,-234.84 297.17,-228.84 297.17,-222.84 297.17,-222.84 297.17,-180.6 297.17,-180.6 297.17,-174.6 303.17,-168.6 309.17,-168.6 309.17,-168.6 496.19,-168.6 496.19,-168.6 502.19,-168.6 508.19,-174.6 508.19,-180.6 508.19,-180.6 508.19,-222.84 508.19,-222.84 508.19,-228.84 502.19,-234.84 496.19,-234.84"/>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-214.32" font-family="Arial" font-size="14.00">rOS on RVM</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-197.52" font-family="Arial" font-size="14.00">IO.SYS &#45;&gt; KERNEL.SYS</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-180.72" font-family="Arial" font-size="14.00">COMMAND.COM + RXE apps</text>
+</g>
+<!-- rv&#45;&gt;ros -->
+<g id="edge4" class="edge">
+<title>rv&#45;&gt;ros</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M152.39,-192.57C189.47,-193.93 241.31,-195.84 288.11,-197.55"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="287.74,-199.99 294.83,-197.8 287.92,-195.09 287.74,-199.99"/>
+<text xml:space="preserve" text-anchor="middle" x="244.48" y="-200.18" font-family="Arial" font-size="11.00">boots</text>
+</g>
+<!-- fx -->
+<g id="node2" class="node">
+<title>fx</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M144.8,-71.72C144.8,-71.72 56.94,-71.72 56.94,-71.72 50.94,-71.72 44.94,-65.72 44.94,-59.72 44.94,-59.72 44.94,-47.72 44.94,-47.72 44.94,-41.72 50.94,-35.72 56.94,-35.72 56.94,-35.72 144.8,-35.72 144.8,-35.72 150.8,-35.72 156.8,-41.72 156.8,-47.72 156.8,-47.72 156.8,-59.72 156.8,-59.72 156.8,-65.72 150.8,-71.72 144.8,-71.72"/>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-49.52" font-family="Arial" font-size="14.00">Native runtime</text>
+</g>
+<!-- fuse -->
+<g id="node5" class="node">
+<title>fuse</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M506.14,-83.44C506.14,-83.44 299.22,-83.44 299.22,-83.44 293.22,-83.44 287.22,-77.44 287.22,-71.44 287.22,-71.44 287.22,-46 287.22,-46 287.22,-40 293.22,-34 299.22,-34 299.22,-34 506.14,-34 506.14,-34 512.14,-34 518.14,-40 518.14,-46 518.14,-46 518.14,-71.44 518.14,-71.44 518.14,-77.44 512.14,-83.44 506.14,-83.44"/>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-62.92" font-family="Arial" font-size="14.00">Fuse&#45;X</text>
+<text xml:space="preserve" text-anchor="middle" x="402.68" y="-46.12" font-family="Arial" font-size="14.00">native hosted FUZIX / FXE loader</text>
+</g>
+<!-- fx&#45;&gt;fuse -->
+<g id="edge5" class="edge">
+<title>fx&#45;&gt;fuse</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M157.03,-53.98C207.12,-54.21 273.22,-54.52 273.22,-54.52 273.22,-54.52 274.99,-54.58 278.12,-54.68"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="277.93,-57.13 285,-54.91 278.09,-52.23 277.93,-57.13"/>
+<text xml:space="preserve" text-anchor="middle" x="244.48" y="-57.82" font-family="Arial" font-size="11.00">hosts</text>
+</g>
+<!-- src -->
+<g id="node3" class="node">
+<title>src</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M189.74,-144.44C189.74,-144.44 12,-144.44 12,-144.44 6,-144.44 0,-138.44 0,-132.44 0,-132.44 0,-107 0,-107 0,-101 6,-95 12,-95 12,-95 189.74,-95 189.74,-95 195.74,-95 201.74,-101 201.74,-107 201.74,-107 201.74,-132.44 201.74,-132.44 201.74,-138.44 195.74,-144.44 189.74,-144.44"/>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-123.92" font-family="Arial" font-size="14.00">Shared FUZIX sources</text>
+<text xml:space="preserve" text-anchor="middle" x="100.87" y="-107.12" font-family="Arial" font-size="14.00">upstream kernel + local ports</text>
+</g>
+<!-- src&#45;&gt;fuz -->
+<g id="edge1" class="edge">
+<title>src&#45;&gt;fuz</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M202.12,-121.73C229.43,-122.27 259.21,-122.87 287.24,-123.43"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="286.86,-125.87 293.91,-123.56 286.96,-120.97 286.86,-125.87"/>
+<text xml:space="preserve" text-anchor="middle" x="244.48" y="-126.38" font-family="Arial" font-size="11.00">Ripple build</text>
+</g>
+<!-- src&#45;&gt;fuse -->
+<g id="edge2" class="edge">
+<title>src&#45;&gt;fuse</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M202.12,-99.32C226.51,-94.36 252.88,-88.99 278.22,-83.84"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="278.46,-86.29 284.83,-82.49 277.49,-81.49 278.46,-86.29"/>
+<text xml:space="preserve" text-anchor="middle" x="244.48" y="-99.78" font-family="Arial" font-size="11.00">native build</text>
+</g>
+<!-- sdk -->
+<g id="node7" class="node">
+<title>sdk</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M776.26,-124.84C776.26,-124.84 599.72,-124.84 599.72,-124.84 593.72,-124.84 587.72,-118.84 587.72,-112.84 587.72,-112.84 587.72,-70.6 587.72,-70.6 587.72,-64.6 593.72,-58.6 599.72,-58.6 599.72,-58.6 776.26,-58.6 776.26,-58.6 782.26,-58.6 788.26,-64.6 788.26,-70.6 788.26,-70.6 788.26,-112.84 788.26,-112.84 788.26,-118.84 782.26,-124.84 776.26,-124.84"/>
+<text xml:space="preserve" text-anchor="middle" x="687.99" y="-104.32" font-family="Arial" font-size="14.00">Shared Unix SDK and APIs</text>
+<text xml:space="preserve" text-anchor="middle" x="687.99" y="-87.52" font-family="Arial" font-size="14.00">libc / files / processes / PTYs</text>
+<text xml:space="preserve" text-anchor="middle" x="687.99" y="-70.72" font-family="Arial" font-size="14.00">sockets / select / curses</text>
+</g>
+<!-- fuz&#45;&gt;sdk -->
+<g id="edge6" class="edge">
+<title>fuz&#45;&gt;sdk</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M509.58,-113.01C532.15,-110.3 556.03,-107.44 578.69,-104.72"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="578.7,-107.18 585.36,-103.92 578.12,-102.32 578.7,-107.18"/>
+<text xml:space="preserve" text-anchor="middle" x="552.93" y="-113.04" font-family="Arial" font-size="11.00">provides</text>
+</g>
+<!-- fuse&#45;&gt;sdk -->
+<g id="edge7" class="edge">
+<title>fuse&#45;&gt;sdk</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M518.5,-72.09C538.41,-74.41 559.05,-76.82 578.78,-79.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="578.28,-81.52 585.52,-79.9 578.85,-76.66 578.28,-81.52"/>
+<text xml:space="preserve" text-anchor="middle" x="552.93" y="-81.48" font-family="Arial" font-size="11.00">provides</text>
+</g>
+<!-- tui -->
+<g id="node8" class="node">
+<title>tui</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1093.12,-217.24C1093.12,-217.24 866.79,-217.24 866.79,-217.24 860.79,-217.24 854.79,-211.24 854.79,-205.24 854.79,-205.24 854.79,-146.2 854.79,-146.2 854.79,-140.2 860.79,-134.2 866.79,-134.2 866.79,-134.2 1093.12,-134.2 1093.12,-134.2 1099.12,-134.2 1105.12,-140.2 1105.12,-146.2 1105.12,-146.2 1105.12,-205.24 1105.12,-205.24 1105.12,-211.24 1099.12,-217.24 1093.12,-217.24"/>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-196.72" font-family="Arial" font-size="14.00">Terminal applications</text>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-179.92" font-family="Arial" font-size="14.00">Commander / Rift / Telegram / music</text>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-163.12" font-family="Arial" font-size="14.00">Bourne sh / mux / Unix utilities</text>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-146.32" font-family="Arial" font-size="14.00">awk / Tcl / BASIC / bf</text>
+</g>
+<!-- sdk&#45;&gt;tui -->
+<g id="edge8" class="edge">
+<title>sdk&#45;&gt;tui</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M788.37,-120.51C806.87,-125.87 826.46,-131.54 845.78,-137.14"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="845.03,-139.48 852.44,-139.07 846.4,-134.77 845.03,-139.48"/>
+<text xml:space="preserve" text-anchor="middle" x="821.53" y="-137.02" font-family="Arial" font-size="11.00">enables</text>
+</g>
+<!-- gx -->
+<g id="node9" class="node">
+<title>gx</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M1059.29,-116.44C1059.29,-116.44 900.62,-116.44 900.62,-116.44 894.62,-116.44 888.62,-110.44 888.62,-104.44 888.62,-104.44 888.62,-79 888.62,-79 888.62,-73 894.62,-67 900.62,-67 900.62,-67 1059.29,-67 1059.29,-67 1065.29,-67 1071.29,-73 1071.29,-79 1071.29,-79 1071.29,-104.44 1071.29,-104.44 1071.29,-110.44 1065.29,-116.44 1059.29,-116.44"/>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-95.92" font-family="Arial" font-size="14.00">GX + /dev/gfx</text>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-79.12" font-family="Arial" font-size="14.00">Nano&#45;X server and clients</text>
+</g>
+<!-- sdk&#45;&gt;gx -->
+<g id="edge9" class="edge">
+<title>sdk&#45;&gt;gx</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M788.37,-91.72C817.92,-91.72 850.27,-91.72 879.8,-91.72"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="879.49,-94.17 886.49,-91.72 879.49,-89.27 879.49,-94.17"/>
+<text xml:space="preserve" text-anchor="middle" x="821.53" y="-95.02" font-family="Arial" font-size="11.00">enables</text>
+</g>
+<!-- ns -->
+<g id="node12" class="node">
+<title>ns</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1420.88,-49.44C1420.88,-49.44 1219.42,-49.44 1219.42,-49.44 1213.42,-49.44 1207.42,-43.44 1207.42,-37.44 1207.42,-37.44 1207.42,-12 1207.42,-12 1207.42,-6 1213.42,0 1219.42,0 1219.42,0 1420.88,0 1420.88,0 1426.88,0 1432.88,-6 1432.88,-12 1432.88,-12 1432.88,-37.44 1432.88,-37.44 1432.88,-43.44 1426.88,-49.44 1420.88,-49.44"/>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-28.92" font-family="Arial" font-size="14.00">NetSurf graphical browser</text>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-12.12" font-family="Arial" font-size="14.00">Lynx text browser / network tools</text>
+</g>
+<!-- sdk&#45;&gt;ns -->
+<g id="edge12" class="edge">
+<title>sdk&#45;&gt;ns</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M788.31,-63.45C823.62,-53.39 854.79,-44.52 854.79,-44.52 854.79,-44.52 1060.9,-35.73 1198.49,-29.86"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1198.18,-32.33 1205.07,-29.58 1197.97,-27.43 1198.18,-32.33"/>
+<text xml:space="preserve" text-anchor="middle" x="979.95" y="-47.82" font-family="Arial" font-size="11.00">network / files</text>
+</g>
+<!-- desktop -->
+<g id="node10" class="node">
+<title>desktop</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1435.28,-133.84C1435.28,-133.84 1205.02,-133.84 1205.02,-133.84 1199.02,-133.84 1193.02,-127.84 1193.02,-121.84 1193.02,-121.84 1193.02,-79.6 1193.02,-79.6 1193.02,-73.6 1199.02,-67.6 1205.02,-67.6 1205.02,-67.6 1435.28,-67.6 1435.28,-67.6 1441.28,-67.6 1447.28,-73.6 1447.28,-79.6 1447.28,-79.6 1447.28,-121.84 1447.28,-121.84 1447.28,-127.84 1441.28,-133.84 1435.28,-133.84"/>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-113.32" font-family="Arial" font-size="14.00">RVM desktop</text>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-96.52" font-family="Arial" font-size="14.00">NanoWM + NXDSKTOP</text>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-79.72" font-family="Arial" font-size="14.00">nxterm / clients / FuseDE foundations</text>
+</g>
+<!-- gx&#45;&gt;desktop -->
+<g id="edge10" class="edge">
+<title>gx&#45;&gt;desktop</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1071.58,-94.13C1106.15,-95.05 1146.33,-96.12 1184.14,-97.13"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1183.64,-99.56 1190.7,-97.3 1183.77,-94.67 1183.64,-99.56"/>
+<text xml:space="preserve" text-anchor="middle" x="1149.07" y="-100.06" font-family="Arial" font-size="11.00">RVM</text>
+</g>
+<!-- mac -->
+<g id="node11" class="node">
+<title>mac</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1420.11,-217.84C1420.11,-217.84 1220.2,-217.84 1220.2,-217.84 1214.2,-217.84 1208.2,-211.84 1208.2,-205.84 1208.2,-205.84 1208.2,-163.6 1208.2,-163.6 1208.2,-157.6 1214.2,-151.6 1220.2,-151.6 1220.2,-151.6 1420.11,-151.6 1420.11,-151.6 1426.11,-151.6 1432.11,-157.6 1432.11,-163.6 1432.11,-163.6 1432.11,-205.84 1432.11,-205.84 1432.11,-211.84 1426.11,-217.84 1420.11,-217.84"/>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-197.32" font-family="Arial" font-size="14.00">Fuse&#45;X desktop integration</text>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-180.52" font-family="Arial" font-size="14.00">native macOS top&#45;level windows</text>
+<text xml:space="preserve" text-anchor="middle" x="1320.15" y="-163.72" font-family="Arial" font-size="14.00">nxterm / companion clients</text>
+</g>
+<!-- gx&#45;&gt;mac -->
+<g id="edge11" class="edge">
+<title>gx&#45;&gt;mac</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1071.52,-115.79C1090.61,-120.86 1105.12,-124.72 1105.12,-124.72 1105.12,-124.72 1150.35,-137.4 1199.23,-151.1"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1198.45,-153.43 1205.85,-152.96 1199.77,-148.71 1198.45,-153.43"/>
+<text xml:space="preserve" text-anchor="middle" x="1149.07" y="-147.43" font-family="Arial" font-size="11.00">Fuse&#45;X</text>
+</g>
+<!-- gx&#45;&gt;ns -->
+<g id="edge13" class="edge">
+<title>gx&#45;&gt;ns</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1071.58,-73.77C1110.57,-66.04 1156.72,-56.9 1198.53,-48.62"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1198.79,-51.06 1205.18,-47.3 1197.84,-46.26 1198.79,-51.06"/>
+<text xml:space="preserve" text-anchor="middle" x="1149.07" y="-67.52" font-family="Arial" font-size="11.00">NetSurf GUI</text>
+</g>
+</g>
+</svg>
+<rect x="45" y="485" width="1140" height="400" rx="12" fill="#fff" stroke="#d3dbe5"/><text x="67" y="518" font-size="21" font-weight="bold" fill="#182b40">03   Guest software and host services meet at explicit boundaries</text><svg x="55" y="538" width="1120" height="335"
+ viewBox="0.00 0.00 1507.00 328.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(12.96 315.2)">
+<title>services</title>
+<polygon fill="white" stroke="none" points="-12.96,12.96 -12.96,-315.2 1493.7,-315.2 1493.7,12.96 -12.96,12.96"/>
+<!-- host -->
+<g id="node1" class="node">
+<title>host</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M188.57,-128.64C188.57,-128.64 12,-128.64 12,-128.64 6,-128.64 0,-122.64 0,-116.64 0,-116.64 0,-57.6 0,-57.6 0,-51.6 6,-45.6 12,-45.6 12,-45.6 188.57,-45.6 188.57,-45.6 194.57,-45.6 200.57,-51.6 200.57,-57.6 200.57,-57.6 200.57,-116.64 200.57,-116.64 200.57,-122.64 194.57,-128.64 188.57,-128.64"/>
+<text xml:space="preserve" text-anchor="middle" x="100.29" y="-108.12" font-family="Arial" font-size="14.00">Host device implementations</text>
+<text xml:space="preserve" text-anchor="middle" x="100.29" y="-91.32" font-family="Arial" font-size="14.00">shared from rvm modules</text>
+<text xml:space="preserve" text-anchor="middle" x="100.29" y="-74.52" font-family="Arial" font-size="14.00">TTY / display / input / clocks</text>
+<text xml:space="preserve" text-anchor="middle" x="100.29" y="-57.72" font-family="Arial" font-size="14.00">NIC / RNG / crypto / audio</text>
+</g>
+<!-- exec -->
+<g id="node2" class="node">
+<title>exec</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M480.13,-169.84C480.13,-169.84 329.25,-169.84 329.25,-169.84 323.25,-169.84 317.25,-163.84 317.25,-157.84 317.25,-157.84 317.25,-132.4 317.25,-132.4 317.25,-126.4 323.25,-120.4 329.25,-120.4 329.25,-120.4 480.13,-120.4 480.13,-120.4 486.13,-120.4 492.13,-126.4 492.13,-132.4 492.13,-132.4 492.13,-157.84 492.13,-157.84 492.13,-163.84 486.13,-169.84 480.13,-169.84"/>
+<text xml:space="preserve" text-anchor="middle" x="404.69" y="-149.32" font-family="Arial" font-size="14.00">Unix execution platforms</text>
+<text xml:space="preserve" text-anchor="middle" x="404.69" y="-132.52" font-family="Arial" font-size="14.00">RVM / native runtime</text>
+</g>
+<!-- host&#45;&gt;exec -->
+<g id="edge1" class="edge">
+<title>host&#45;&gt;exec</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M200.72,-106.19C235.32,-112.83 274.03,-120.25 308.29,-126.82"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="307.63,-129.19 314.97,-128.1 308.55,-124.38 307.63,-129.19"/>
+<text xml:space="preserve" text-anchor="middle" x="256.77" y="-128" font-family="Arial" font-size="11.00">reused services</text>
+</g>
+<!-- rbf -->
+<g id="node3" class="node">
+<title>rbf</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M484.42,-102.24C484.42,-102.24 324.96,-102.24 324.96,-102.24 318.96,-102.24 312.96,-96.24 312.96,-90.24 312.96,-90.24 312.96,-48 312.96,-48 312.96,-42 318.96,-36 324.96,-36 324.96,-36 484.42,-36 484.42,-36 490.42,-36 496.42,-42 496.42,-48 496.42,-48 496.42,-90.24 496.42,-90.24 496.42,-96.24 490.42,-102.24 484.42,-102.24"/>
+<text xml:space="preserve" text-anchor="middle" x="404.69" y="-81.72" font-family="Arial" font-size="14.00">RBF device host</text>
+<text xml:space="preserve" text-anchor="middle" x="404.69" y="-64.92" font-family="Arial" font-size="14.00">freestanding BF programs</text>
+<text xml:space="preserve" text-anchor="middle" x="404.69" y="-48.12" font-family="Arial" font-size="14.00">no PCM or OPL3</text>
+</g>
+<!-- host&#45;&gt;rbf -->
+<g id="edge2" class="edge">
+<title>host&#45;&gt;rbf</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M200.72,-81.2C233.83,-79.23 270.7,-77.04 303.84,-75.06"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="303.82,-77.52 310.66,-74.66 303.53,-72.63 303.82,-77.52"/>
+<text xml:space="preserve" text-anchor="middle" x="256.77" y="-83.56" font-family="Arial" font-size="11.00">supported subset</text>
+</g>
+<!-- unix -->
+<g id="node4" class="node">
+<title>unix</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M764.19,-169.84C764.19,-169.84 619.55,-169.84 619.55,-169.84 613.55,-169.84 607.55,-163.84 607.55,-157.84 607.55,-157.84 607.55,-132.4 607.55,-132.4 607.55,-126.4 613.55,-120.4 619.55,-120.4 619.55,-120.4 764.19,-120.4 764.19,-120.4 770.19,-120.4 776.19,-126.4 776.19,-132.4 776.19,-132.4 776.19,-157.84 776.19,-157.84 776.19,-163.84 770.19,-169.84 764.19,-169.84"/>
+<text xml:space="preserve" text-anchor="middle" x="691.87" y="-149.32" font-family="Arial" font-size="14.00">Unix guest kernel</text>
+<text xml:space="preserve" text-anchor="middle" x="691.87" y="-132.52" font-family="Arial" font-size="14.00">FUZIX or native Fuse&#45;X</text>
+</g>
+<!-- exec&#45;&gt;unix -->
+<g id="edge3" class="edge">
+<title>exec&#45;&gt;unix</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M492.41,-145.12C526.1,-145.12 564.73,-145.12 598.91,-145.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="598.52,-147.57 605.52,-145.12 598.52,-142.67 598.52,-147.57"/>
+<text xml:space="preserve" text-anchor="middle" x="551.98" y="-148.42" font-family="Arial" font-size="11.00">platform services</text>
+</g>
+<!-- net -->
+<g id="node5" class="node">
+<title>net</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M1116.73,-302.24C1116.73,-302.24 886.5,-302.24 886.5,-302.24 880.5,-302.24 874.5,-296.24 874.5,-290.24 874.5,-290.24 874.5,-248 874.5,-248 874.5,-242 880.5,-236 886.5,-236 886.5,-236 1116.73,-236 1116.73,-236 1122.73,-236 1128.73,-242 1128.73,-248 1128.73,-248 1128.73,-290.24 1128.73,-290.24 1128.73,-296.24 1122.73,-302.24 1116.73,-302.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-281.72" font-family="Arial" font-size="14.00">Guest networking</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-264.92" font-family="Arial" font-size="14.00">Ethernet &#45;&gt; IPv4 &#45;&gt; UDP / TCP / DNS</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-248.12" font-family="Arial" font-size="14.00">userspace TLS where required</text>
+</g>
+<!-- unix&#45;&gt;net -->
+<g id="edge4" class="edge">
+<title>unix&#45;&gt;net</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M748.35,-170.17C801.77,-194.28 874.5,-227.12 874.5,-227.12 874.5,-227.12 881.1,-229.32 891.28,-232.71"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="890.43,-235.01 897.85,-234.9 891.98,-230.36 890.43,-235.01"/>
+<text xml:space="preserve" text-anchor="middle" x="825.35" y="-223.41" font-family="Arial" font-size="11.00">kernel sockets</text>
+</g>
+<!-- pcm -->
+<g id="node7" class="node">
+<title>pcm</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M1109.93,-217.84C1109.93,-217.84 893.3,-217.84 893.3,-217.84 887.3,-217.84 881.3,-211.84 881.3,-205.84 881.3,-205.84 881.3,-180.4 881.3,-180.4 881.3,-174.4 887.3,-168.4 893.3,-168.4 893.3,-168.4 1109.93,-168.4 1109.93,-168.4 1115.93,-168.4 1121.93,-174.4 1121.93,-180.4 1121.93,-180.4 1121.93,-205.84 1121.93,-205.84 1121.93,-211.84 1115.93,-217.84 1109.93,-217.84"/>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-197.32" font-family="Arial" font-size="14.00">/dev/pcm</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-180.52" font-family="Arial" font-size="14.00">C WAV engine &#45;&gt; shared PCM sink</text>
+</g>
+<!-- unix&#45;&gt;pcm -->
+<g id="edge6" class="edge">
+<title>unix&#45;&gt;pcm</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M776.56,-158.17C806.05,-162.77 839.92,-168.06 872.24,-173.1"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="871.63,-175.48 878.92,-174.14 872.38,-170.64 871.63,-175.48"/>
+<text xml:space="preserve" text-anchor="middle" x="825.35" y="-173.86" font-family="Arial" font-size="11.00">audio device</text>
+</g>
+<!-- ui -->
+<g id="node9" class="node">
+<title>ui</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M1092.62,-150.24C1092.62,-150.24 910.6,-150.24 910.6,-150.24 904.6,-150.24 898.6,-144.24 898.6,-138.24 898.6,-138.24 898.6,-96 898.6,-96 898.6,-90 904.6,-84 910.6,-84 910.6,-84 1092.62,-84 1092.62,-84 1098.62,-84 1104.62,-90 1104.62,-96 1104.62,-96 1104.62,-138.24 1104.62,-138.24 1104.62,-144.24 1098.62,-150.24 1092.62,-150.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-129.72" font-family="Arial" font-size="14.00">C libraries + RFL bindings</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-112.92" font-family="Arial" font-size="14.00">text / Unicode / INI / themes</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-96.12" font-family="Arial" font-size="14.00">QR / image decoding / curses</text>
+</g>
+<!-- unix&#45;&gt;ui -->
+<g id="edge8" class="edge">
+<title>unix&#45;&gt;ui</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M776.56,-137.51C811.32,-134.34 852.18,-130.63 889.41,-127.24"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="889.58,-129.68 896.33,-126.61 889.14,-124.8 889.58,-129.68"/>
+<text xml:space="preserve" text-anchor="middle" x="825.35" y="-139.36" font-family="Arial" font-size="11.00">libc / curses</text>
+</g>
+<!-- fs -->
+<g id="node11" class="node">
+<title>fs</title>
+<path fill="#eee8f6" stroke="#b7a7ce" d="M1091.46,-66.24C1091.46,-66.24 911.76,-66.24 911.76,-66.24 905.76,-66.24 899.76,-60.24 899.76,-54.24 899.76,-54.24 899.76,-12 899.76,-12 899.76,-6 905.76,0 911.76,0 911.76,0 1091.46,0 1091.46,0 1097.46,0 1103.46,-6 1103.46,-12 1103.46,-12 1103.46,-54.24 1103.46,-54.24 1103.46,-60.24 1097.46,-66.24 1091.46,-66.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-45.72" font-family="Arial" font-size="14.00">C16 V3 filesystem</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-28.92" font-family="Arial" font-size="14.00">FUZIX disk image and tools</text>
+<text xml:space="preserve" text-anchor="middle" x="1001.61" y="-12.12" font-family="Arial" font-size="14.00">Fuse&#45;X shared folder adapter</text>
+</g>
+<!-- unix&#45;&gt;fs -->
+<g id="edge10" class="edge">
+<title>unix&#45;&gt;fs</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M758.19,-119.95C810.26,-99.88 874.5,-75.12 874.5,-75.12 874.5,-75.12 881.1,-72.92 891.28,-69.53"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="891.98,-71.88 897.85,-67.34 890.43,-67.23 891.98,-71.88"/>
+<text xml:space="preserve" text-anchor="middle" x="825.35" y="-109.23" font-family="Arial" font-size="11.00">storage</text>
+</g>
+<!-- apps -->
+<g id="node6" class="node">
+<title>apps</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1468.74,-302.24C1468.74,-302.24 1278.17,-302.24 1278.17,-302.24 1272.17,-302.24 1266.17,-296.24 1266.17,-290.24 1266.17,-290.24 1266.17,-248 1266.17,-248 1266.17,-242 1272.17,-236 1278.17,-236 1278.17,-236 1468.74,-236 1468.74,-236 1474.74,-236 1480.74,-242 1480.74,-248 1480.74,-248 1480.74,-290.24 1480.74,-290.24 1480.74,-296.24 1474.74,-302.24 1468.74,-302.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-281.72" font-family="Arial" font-size="14.00">Lynx / NetSurf / net tools</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-264.92" font-family="Arial" font-size="14.00">Telegram uses guest MTProto</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-248.12" font-family="Arial" font-size="14.00">no host Telegram or TLS proxy</text>
+</g>
+<!-- net&#45;&gt;apps -->
+<g id="edge5" class="edge">
+<title>net&#45;&gt;apps</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1129.12,-269.12C1170.53,-269.12 1216.3,-269.12 1256.86,-269.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1256.74,-271.57 1263.74,-269.12 1256.74,-266.67 1256.74,-271.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1197.45" y="-272.42" font-family="Arial" font-size="11.00">protocols stay in guest</text>
+</g>
+<!-- music -->
+<g id="node8" class="node">
+<title>music</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1448.51,-217.84C1448.51,-217.84 1298.41,-217.84 1298.41,-217.84 1292.41,-217.84 1286.41,-211.84 1286.41,-205.84 1286.41,-205.84 1286.41,-180.4 1286.41,-180.4 1286.41,-174.4 1292.41,-168.4 1298.41,-168.4 1298.41,-168.4 1448.51,-168.4 1448.51,-168.4 1454.51,-168.4 1460.51,-174.4 1460.51,-180.4 1460.51,-180.4 1460.51,-205.84 1460.51,-205.84 1460.51,-211.84 1454.51,-217.84 1448.51,-217.84"/>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-197.32" font-family="Arial" font-size="14.00">RFL music UI + wavplay</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-180.52" font-family="Arial" font-size="14.00">8 / 16 / 24&#45;bit PCM WAV</text>
+</g>
+<!-- pcm&#45;&gt;music -->
+<g id="edge7" class="edge">
+<title>pcm&#45;&gt;music</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1122.18,-193.12C1172.45,-193.12 1230.11,-193.12 1277.4,-193.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1277.14,-195.57 1284.14,-193.12 1277.14,-190.67 1277.14,-195.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1197.45" y="-196.42" font-family="Arial" font-size="11.00">streaming</text>
+</g>
+<!-- tui -->
+<g id="node10" class="node">
+<title>tui</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1464.08,-141.84C1464.08,-141.84 1282.84,-141.84 1282.84,-141.84 1276.84,-141.84 1270.84,-135.84 1270.84,-129.84 1270.84,-129.84 1270.84,-104.4 1270.84,-104.4 1270.84,-98.4 1276.84,-92.4 1282.84,-92.4 1282.84,-92.4 1464.08,-92.4 1464.08,-92.4 1470.08,-92.4 1476.08,-98.4 1476.08,-104.4 1476.08,-104.4 1476.08,-129.84 1476.08,-129.84 1476.08,-135.84 1470.08,-141.84 1464.08,-141.84"/>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-121.32" font-family="Arial" font-size="14.00">Rift / Commander / Telegram</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-104.52" font-family="Arial" font-size="14.00">wrapped text / QR login / 2FA</text>
+</g>
+<!-- ui&#45;&gt;tui -->
+<g id="edge9" class="edge">
+<title>ui&#45;&gt;tui</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1104.65,-117.12C1153.36,-117.12 1211.75,-117.12 1261.56,-117.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1261.46,-119.57 1268.46,-117.12 1261.46,-114.67 1261.46,-119.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1197.45" y="-120.42" font-family="Arial" font-size="11.00">libraries</text>
+</g>
+<!-- data -->
+<g id="node12" class="node">
+<title>data</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1462.14,-66.24C1462.14,-66.24 1284.78,-66.24 1284.78,-66.24 1278.78,-66.24 1272.78,-60.24 1272.78,-54.24 1272.78,-54.24 1272.78,-12 1272.78,-12 1272.78,-6 1278.78,0 1284.78,0 1284.78,0 1462.14,0 1462.14,0 1468.14,0 1474.14,-6 1474.14,-12 1474.14,-12 1474.14,-54.24 1474.14,-54.24 1474.14,-60.24 1468.14,-66.24 1462.14,-66.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-45.72" font-family="Arial" font-size="14.00">Guest applications and tools</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-28.92" font-family="Arial" font-size="14.00">normal host octets converted</text>
+<text xml:space="preserve" text-anchor="middle" x="1373.46" y="-12.12" font-family="Arial" font-size="14.00">explicitly to C16 cells</text>
+</g>
+<!-- fs&#45;&gt;data -->
+<g id="edge11" class="edge">
+<title>fs&#45;&gt;data</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M1103.67,-33.12C1153.31,-33.12 1213.17,-33.12 1263.79,-33.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="1263.51,-35.57 1270.51,-33.12 1263.51,-30.67 1263.51,-35.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1197.45" y="-36.42" font-family="Arial" font-size="11.00">files</text>
+</g>
+</g>
+</svg>
+<rect x="1215" y="485" width="1140" height="400" rx="12" fill="#fff" stroke="#d3dbe5"/><text x="1237" y="518" font-size="21" font-weight="bold" fill="#182b40">04   Developer tools and experimental paths connect to the same core</text><svg x="1225" y="538" width="1120" height="335"
+ viewBox="0.00 0.00 1469.00 572.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(12.96 559.2)">
+<title>development</title>
+<polygon fill="white" stroke="none" points="-12.96,12.96 -12.96,-559.2 1456.42,-559.2 1456.42,12.96 -12.96,12.96"/>
+<!-- raw -->
+<g id="node1" class="node">
+<title>raw</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M232.5,-125.84C232.5,-125.84 38.85,-125.84 38.85,-125.84 32.85,-125.84 26.85,-119.84 26.85,-113.84 26.85,-113.84 26.85,-88.4 26.85,-88.4 26.85,-82.4 32.85,-76.4 38.85,-76.4 38.85,-76.4 232.5,-76.4 232.5,-76.4 238.5,-76.4 244.5,-82.4 244.5,-88.4 244.5,-88.4 244.5,-113.84 244.5,-113.84 244.5,-119.84 238.5,-125.84 232.5,-125.84"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-105.32" font-family="Arial" font-size="14.00">Brainfuck source (.bf)</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-88.52" font-family="Arial" font-size="14.00">macro source (.bfm) / assembly</text>
+</g>
+<!-- web -->
+<g id="node4" class="node">
+<title>web</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M706.65,-66.24C706.65,-66.24 514.94,-66.24 514.94,-66.24 508.94,-66.24 502.94,-60.24 502.94,-54.24 502.94,-54.24 502.94,-12 502.94,-12 502.94,-6 508.94,0 514.94,0 514.94,0 706.65,0 706.65,0 712.65,0 718.65,-6 718.65,-12 718.65,-12 718.65,-54.24 718.65,-54.24 718.65,-60.24 712.65,-66.24 706.65,-66.24"/>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-45.72" font-family="Arial" font-size="14.00">Browser tools</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-28.92" font-family="Arial" font-size="14.00">TS assembler + macro workers</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-12.12" font-family="Arial" font-size="14.00">Rust rasm / bfm Wasm builds</text>
+</g>
+<!-- raw&#45;&gt;web -->
+<g id="edge1" class="edge">
+<title>raw&#45;&gt;web</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M244.73,-82.08C267.79,-78.02 285.36,-74.92 285.36,-74.92 285.36,-74.92 400.84,-60.04 494,-48.04"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="494.08,-50.5 500.71,-47.17 493.45,-45.64 494.08,-50.5"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-78.22" font-family="Arial" font-size="11.00">assembles / expands</text>
+</g>
+<!-- bfe -->
+<g id="node5" class="node">
+<title>bfe</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1105.15,-111.24C1105.15,-111.24 874.15,-111.24 874.15,-111.24 868.15,-111.24 862.15,-105.24 862.15,-99.24 862.15,-99.24 862.15,-57 862.15,-57 862.15,-51 868.15,-45 874.15,-45 874.15,-45 1105.15,-45 1105.15,-45 1111.15,-45 1117.15,-51 1117.15,-57 1117.15,-57 1117.15,-99.24 1117.15,-99.24 1117.15,-105.24 1111.15,-111.24 1105.15,-111.24"/>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-90.72" font-family="Arial" font-size="14.00">Brainfuck engines</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-73.92" font-family="Arial" font-size="14.00">TS worker interpreter</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-57.12" font-family="Arial" font-size="14.00">Rust bf CLI / bf_wasm browser library</text>
+</g>
+<!-- raw&#45;&gt;bfe -->
+<g id="edge2" class="edge">
+<title>raw&#45;&gt;bfe</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M244.58,-98.21C399.31,-94.03 684.13,-86.34 852.94,-81.78"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="852.99,-84.23 859.93,-81.6 852.86,-79.33 852.99,-84.23"/>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-94.83" font-family="Arial" font-size="11.00">raw .bf</text>
+</g>
+<!-- editor -->
+<g id="node2" class="node">
+<title>editor</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M208.4,-462.24C208.4,-462.24 62.96,-462.24 62.96,-462.24 56.96,-462.24 50.96,-456.24 50.96,-450.24 50.96,-450.24 50.96,-408 50.96,-408 50.96,-402 56.96,-396 62.96,-396 62.96,-396 208.4,-396 208.4,-396 214.4,-396 220.4,-402 220.4,-408 220.4,-408 220.4,-450.24 220.4,-450.24 220.4,-456.24 214.4,-462.24 208.4,-462.24"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-441.72" font-family="Arial" font-size="14.00">Editor integration</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-424.92" font-family="Arial" font-size="14.00">RFL LSP / IntelliJ</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-408.12" font-family="Arial" font-size="14.00">BF VS Code / TextMate</text>
+</g>
+<!-- core -->
+<g id="node8" class="node">
+<title>core</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M709.56,-369.84C709.56,-369.84 512.02,-369.84 512.02,-369.84 506.02,-369.84 500.02,-363.84 500.02,-357.84 500.02,-357.84 500.02,-332.4 500.02,-332.4 500.02,-326.4 506.02,-320.4 512.02,-320.4 512.02,-320.4 709.56,-320.4 709.56,-320.4 715.56,-320.4 721.56,-326.4 721.56,-332.4 721.56,-332.4 721.56,-357.84 721.56,-357.84 721.56,-363.84 715.56,-369.84 709.56,-369.84"/>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-349.32" font-family="Arial" font-size="14.00">Shared compiler pipelines</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-332.52" font-family="Arial" font-size="14.00">RCC IR / backends / rasm / rlink</text>
+</g>
+<!-- editor&#45;&gt;core -->
+<g id="edge3" class="edge">
+<title>editor&#45;&gt;core</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M220.72,-414.2C295.94,-400.84 407.02,-381.12 491.26,-366.17"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="491.44,-368.62 497.9,-364.99 490.58,-363.8 491.44,-368.62"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-405.25" font-family="Arial" font-size="11.00">checking / diagnostics</text>
+</g>
+<!-- ide -->
+<g id="node3" class="node">
+<title>ide</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M232.51,-57.84C232.51,-57.84 38.85,-57.84 38.85,-57.84 32.85,-57.84 26.85,-51.84 26.85,-45.84 26.85,-45.84 26.85,-20.4 26.85,-20.4 26.85,-14.4 32.85,-8.4 38.85,-8.4 38.85,-8.4 232.51,-8.4 232.51,-8.4 238.51,-8.4 244.51,-14.4 244.51,-20.4 244.51,-20.4 244.51,-45.84 244.51,-45.84 244.51,-51.84 238.51,-57.84 232.51,-57.84"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-37.32" font-family="Arial" font-size="14.00">Browser IDE + Electron</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-20.52" font-family="Arial" font-size="14.00">React / TypeScript / Vite / RxJS</text>
+</g>
+<!-- ide&#45;&gt;web -->
+<g id="edge4" class="edge">
+<title>ide&#45;&gt;web</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M244.92,-33.12C319.25,-33.12 417.82,-33.12 493.76,-33.12"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="493.47,-35.57 500.47,-33.12 493.47,-30.67 493.47,-35.57"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-36.42" font-family="Arial" font-size="11.00">edits / assembles</text>
+</g>
+<!-- web&#45;&gt;bfe -->
+<g id="edge5" class="edge">
+<title>web&#45;&gt;bfe</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M719.03,-45.92C760.74,-50.91 809.02,-56.67 853.1,-61.93"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="852.66,-64.35 859.9,-62.75 853.24,-59.48 852.66,-64.35"/>
+<text xml:space="preserve" text-anchor="middle" x="797.7" y="-64.27" font-family="Arial" font-size="11.00">expands / executes</text>
+</g>
+<!-- rbf -->
+<g id="node6" class="node">
+<title>rbf</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M1431.46,-111.24C1431.46,-111.24 1252.55,-111.24 1252.55,-111.24 1246.55,-111.24 1240.55,-105.24 1240.55,-99.24 1240.55,-99.24 1240.55,-57 1240.55,-57 1240.55,-51 1246.55,-45 1252.55,-45 1252.55,-45 1431.46,-45 1431.46,-45 1437.46,-45 1443.46,-51 1443.46,-57 1443.46,-57 1443.46,-99.24 1443.46,-99.24 1443.46,-105.24 1437.46,-111.24 1431.46,-111.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1342.01" y="-90.72" font-family="Arial" font-size="14.00">RBF</text>
+<text xml:space="preserve" text-anchor="middle" x="1342.01" y="-73.92" font-family="Arial" font-size="14.00">reuses Rust 16&#45;bit BF engine</text>
+<text xml:space="preserve" text-anchor="middle" x="1342.01" y="-57.12" font-family="Arial" font-size="14.00">optional BF JIT</text>
+</g>
+<!-- bfe&#45;&gt;rbf -->
+<g id="edge6" class="edge">
+<title>bfe&#45;&gt;rbf</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M1117.63,-78.12C1154.98,-78.12 1195.5,-78.12 1231.64,-78.12"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="1231.28,-80.57 1238.28,-78.12 1231.28,-75.67 1231.28,-80.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1178.85" y="-81.42" font-family="Arial" font-size="11.00">Rust engine reused</text>
+</g>
+<!-- driver -->
+<g id="node7" class="node">
+<title>driver</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M225.13,-378.24C225.13,-378.24 46.23,-378.24 46.23,-378.24 40.23,-378.24 34.23,-372.24 34.23,-366.24 34.23,-366.24 34.23,-324 34.23,-324 34.23,-318 40.23,-312 46.23,-312 46.23,-312 225.13,-312 225.13,-312 231.13,-312 237.13,-318 237.13,-324 237.13,-324 237.13,-366.24 237.13,-366.24 237.13,-372.24 231.13,-378.24 225.13,-378.24"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-357.72" font-family="Arial" font-size="14.00">rcc / rfl / rct / rbt</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-340.92" font-family="Arial" font-size="14.00">scripts / Make / image tooling</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-324.12" font-family="Arial" font-size="14.00">tests / benchmarks / replay</text>
+</g>
+<!-- driver&#45;&gt;core -->
+<g id="edge7" class="edge">
+<title>driver&#45;&gt;core</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M237.59,-345.12C311.68,-345.12 412.56,-345.12 490.62,-345.12"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="490.57,-347.57 497.57,-345.12 490.57,-342.67 490.57,-347.57"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-348.42" font-family="Arial" font-size="11.00">orchestrates / validates</text>
+</g>
+<!-- wasm -->
+<g id="node11" class="node">
+<title>wasm</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1088.82,-420.24C1088.82,-420.24 890.48,-420.24 890.48,-420.24 884.48,-420.24 878.48,-414.24 878.48,-408.24 878.48,-408.24 878.48,-366 878.48,-366 878.48,-360 884.48,-354 890.48,-354 890.48,-354 1088.82,-354 1088.82,-354 1094.82,-354 1100.82,-360 1100.82,-366 1100.82,-366 1100.82,-408.24 1100.82,-408.24 1100.82,-414.24 1094.82,-420.24 1088.82,-420.24"/>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-399.72" font-family="Arial" font-size="14.00">Generated Wasm apps</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-382.92" font-family="Arial" font-size="14.00">C browser bridge / RFL typed UI</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-366.12" font-family="Arial" font-size="14.00">batched DOM / timers / fetch</text>
+</g>
+<!-- core&#45;&gt;wasm -->
+<g id="edge10" class="edge">
+<title>core&#45;&gt;wasm</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M721.81,-357.38C768.13,-362.54 822.15,-368.56 869.43,-373.83"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="868.99,-376.25 876.21,-374.59 869.53,-371.38 868.99,-376.25"/>
+<text xml:space="preserve" text-anchor="middle" x="797.7" y="-374.42" font-family="Arial" font-size="11.00">Wasm backend</text>
+</g>
+<!-- doom -->
+<g id="node13" class="node">
+<title>doom</title>
+<path fill="#edf3fa" stroke="#aec4db" d="M1072.31,-336.24C1072.31,-336.24 906.99,-336.24 906.99,-336.24 900.99,-336.24 894.99,-330.24 894.99,-324.24 894.99,-324.24 894.99,-282 894.99,-282 894.99,-276 900.99,-270 906.99,-270 906.99,-270 1072.31,-270 1072.31,-270 1078.31,-270 1084.31,-276 1084.31,-282 1084.31,-282 1084.31,-324.24 1084.31,-324.24 1084.31,-330.24 1078.31,-336.24 1072.31,-336.24"/>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-315.72" font-family="Arial" font-size="14.00">Doom + standalone demos</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-298.92" font-family="Arial" font-size="14.00">RVM and native paths</text>
+<text xml:space="preserve" text-anchor="middle" x="989.65" y="-282.12" font-family="Arial" font-size="14.00">experimental BF launcher</text>
+</g>
+<!-- core&#45;&gt;doom -->
+<g id="edge11" class="edge">
+<title>core&#45;&gt;doom</title>
+<path fill="none" stroke="#376a9b" stroke-width="1.3" d="M721.81,-332.86C773.66,-327.08 835.17,-320.23 886.05,-314.55"/>
+<polygon fill="#376a9b" stroke="#376a9b" stroke-width="1.3" points="886.13,-317.01 892.81,-313.8 885.58,-312.14 886.13,-317.01"/>
+<text xml:space="preserve" text-anchor="middle" x="797.7" y="-332.42" font-family="Arial" font-size="11.00">multiple target builds</text>
+</g>
+<!-- portable -->
+<g id="node9" class="node">
+<title>portable</title>
+<path fill="#fff4e3" stroke="#c99b5e" stroke-dasharray="5,2" d="M217.36,-210.24C217.36,-210.24 54,-210.24 54,-210.24 48,-210.24 42,-204.24 42,-198.24 42,-198.24 42,-156 42,-156 42,-150 48,-144 54,-144 54,-144 217.36,-144 217.36,-144 223.36,-144 229.36,-150 229.36,-156 229.36,-156 229.36,-198.24 229.36,-198.24 229.36,-204.24 223.36,-210.24 217.36,-210.24"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-189.72" font-family="Arial" font-size="14.00">Guest portable C toolchain</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-172.92" font-family="Arial" font-size="14.00">rcc&#45;c &#45;&gt; rcc&#45;ripple</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-156.12" font-family="Arial" font-size="14.00">&#45;&gt; rcc&#45;as &#45;&gt; rcc&#45;ld</text>
+</g>
+<!-- portable&#45;&gt;core -->
+<g id="edge9" class="edge">
+<title>portable&#45;&gt;core</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M229.84,-203C329.78,-230.76 474.32,-270.92 474.32,-270.92 474.32,-270.92 518.54,-295.14 556.45,-315.9"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="554.89,-317.84 562.2,-319.05 557.24,-313.54 554.89,-317.84"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-274.22" font-family="Arial" font-size="11.00">RCC IR compatibility</text>
+</g>
+<!-- guests -->
+<g id="node10" class="node">
+<title>guests</title>
+<path fill="#e4f2e9" stroke="#9bbda8" d="M721.26,-210.24C721.26,-210.24 500.32,-210.24 500.32,-210.24 494.32,-210.24 488.32,-204.24 488.32,-198.24 488.32,-198.24 488.32,-156 488.32,-156 488.32,-150 494.32,-144 500.32,-144 500.32,-144 721.26,-144 721.26,-144 727.26,-144 733.26,-150 733.26,-156 733.26,-156 733.26,-198.24 733.26,-198.24 733.26,-204.24 727.26,-210.24 721.26,-210.24"/>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-189.72" font-family="Arial" font-size="14.00">Runs in FUZIX and Fuse&#45;X</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-172.92" font-family="Arial" font-size="14.00">emits Ripple RXE</text>
+<text xml:space="preserve" text-anchor="middle" x="610.79" y="-156.12" font-family="Arial" font-size="14.00">native FXE generation still host&#45;built</text>
+</g>
+<!-- portable&#45;&gt;guests -->
+<g id="edge8" class="edge">
+<title>portable&#45;&gt;guests</title>
+<path fill="none" stroke="#2a805b" stroke-width="1.3" d="M229.59,-177.12C300.86,-177.12 400.13,-177.12 479.37,-177.12"/>
+<polygon fill="#2a805b" stroke="#2a805b" stroke-width="1.3" points="478.98,-179.57 485.98,-177.12 478.98,-174.67 478.98,-179.57"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-180.42" font-family="Arial" font-size="11.00">guest tools</text>
+</g>
+<!-- ports -->
+<g id="node12" class="node">
+<title>ports</title>
+<path fill="#fff4e3" stroke="#c99b5e" stroke-dasharray="5,2" d="M259.36,-294.24C259.36,-294.24 12,-294.24 12,-294.24 6,-294.24 0,-288.24 0,-282.24 0,-282.24 0,-240 0,-240 0,-234 6,-228 12,-228 12,-228 259.36,-228 259.36,-228 265.36,-228 271.36,-234 271.36,-240 271.36,-240 271.36,-282.24 271.36,-282.24 271.36,-288.24 265.36,-294.24 259.36,-294.24"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-273.72" font-family="Arial" font-size="14.00">Exploratory or future work</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-256.92" font-family="Arial" font-size="14.00">Rust subset / QuickJS guest engine</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-240.12" font-family="Arial" font-size="14.00">NetSurf JS / Ogg or MP3 / FuseDE shell</text>
+</g>
+<!-- ports&#45;&gt;core -->
+<g id="edge12" class="edge">
+<title>ports&#45;&gt;core</title>
+<path fill="none" stroke="#bc842f" stroke-width="1.3" stroke-dasharray="5,2" d="M271.62,-285.08C340.9,-297.38 424.53,-312.23 491.3,-324.08"/>
+<polygon fill="#bc842f" stroke="#bc842f" stroke-width="1.3" points="490.51,-326.43 497.83,-325.24 491.37,-321.61 490.51,-326.43"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-323.6" font-family="Arial" font-size="11.00">bounded prototypes / future integration</text>
+</g>
+<!-- old -->
+<g id="node14" class="node">
+<title>old</title>
+<path fill="#f1f1f1" stroke="#aaaaaa" d="M232.13,-546.24C232.13,-546.24 39.22,-546.24 39.22,-546.24 33.22,-546.24 27.22,-540.24 27.22,-534.24 27.22,-534.24 27.22,-492 27.22,-492 27.22,-486 33.22,-480 39.22,-480 39.22,-480 232.13,-480 232.13,-480 238.13,-480 244.13,-486 244.13,-492 244.13,-492 244.13,-534.24 244.13,-534.24 244.13,-540.24 238.13,-546.24 232.13,-546.24"/>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-525.72" font-family="Arial" font-size="14.00">Earlier proofs and references</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-508.92" font-family="Arial" font-size="14.00">ports/fuzix/native / docs/archive</text>
+<text xml:space="preserve" text-anchor="middle" x="135.68" y="-492.12" font-family="Arial" font-size="14.00">src/experiments / src/rnd</text>
+</g>
+<!-- old&#45;&gt;core -->
+<g id="edge13" class="edge">
+<title>old&#45;&gt;core</title>
+<path fill="none" stroke="#79629e" stroke-width="1.3" stroke-dasharray="5,2" d="M244.44,-483.12C343.25,-455.61 474.32,-419.12 474.32,-419.12 474.32,-419.12 518.54,-394.97 556.45,-374.26"/>
+<polygon fill="#79629e" stroke="#79629e" stroke-width="1.3" points="557.23,-376.62 562.2,-371.12 554.88,-372.32 557.23,-376.62"/>
+<text xml:space="preserve" text-anchor="middle" x="379.84" y="-472.24" font-family="Arial" font-size="11.00">historical context</text>
+</g>
+</g>
+</svg>
+<text x="45" y="930" font-size="17" fill="#41566d">C16 means 16-bit C cells across RCC targets. RXE and FXE are different formats. FUZIX on RBF is retired. The guide explains capability limits and sources.</text></svg>

@@ -1,0 +1,460 @@
+import { start, Screen, BOLD, REVERSE, LEFT, RIGHT, CLOSED, NO_KEY, function_key } from "std/curses";
+import { arguments, working_directory, metadata, DIRECTORY, REGULAR, error_message, environment, open_read, process_id } from "std/posix";
+import { file_panel, FilePanel } from "lib/tui_files";
+import { player, Player } from "lib/music";
+import { loader, Config, Role } from "lib/tui_theme";
+import { install } from "lib/tui_curses";
+import { fitted, number } from "lib/tui";
+import { parent, joined, basename } from "lib/path";
+import {} from "std/result";
+import {} from "std/option";
+import { selection, Selection } from "lib/tui_list";
+import { NO_TRACK, wav_path } from "./playlist";
+import { Saved, defaults, restore, persist_live } from "./storage";
+
+fn clock(ms: u32) -> String {
+    let seconds = ms / 1000;
+    let rest = seconds % 60;
+    number((seconds / 60) as usize) + ":" + if (rest < 10) {
+        "0"
+    } else {
+        ""
+    } + number(rest as usize)
+}
+
+fn theme(screen: &Screen) -> Vec<u32> {
+    let body = Role { foreground: 7, background: 0, bold: false, reverse: false, underline: false };
+    let title = Role { foreground: 15, background: 4, bold: true, reverse: false, underline: false };
+    let accent = Role { foreground: 6, background: 0, bold: false, reverse: false, underline: false };
+    let selected = Role { foreground: 15, background: 4, bold: false, reverse: false, underline: false };
+    let config = Config { name: "Music", roles: [body, title, accent, selected], lines: true };
+    let loaded = loader(config, ["body", "title", "accent", "selected"]).unwrap();
+    loaded.file("/usr/share/music/themes", "/etc/music-theme.ini", true);
+    install(screen, loaded.config(), 2, [0, BOLD, 0, REVERSE]).unwrap()
+}
+
+fn seed() -> u32 {
+    match open_read("/dev/urandom") {
+        Ok(file) => {
+            match file.read(4) {
+                Ok(bytes) if (bytes.len() == 4) => {
+                    return bytes[0] as u32 | ((bytes[1] as u32) << 8) | ((bytes[2] as u32) << 16) | ((bytes[3] as u32) << 24);
+                },
+                _ => {},
+            }
+        },
+        _ => {},
+    }
+    process_id() as u32 * 7919 + 17
+}
+
+fn home(cwd: String) -> String {
+    match environment("HOME") {
+        Ok(Some(value)) if (!value.is_empty()) => joined(cwd, value),
+        _ => "/"
+    }
+}
+
+fn paint(screen: &Screen, styles: Vec<u32>, panel: &FilePanel, music: &Player, saved: &Saved, cursor: &Selection, in_playlist: bool, status: String) {
+    let rows = screen.rows();
+    let cols = screen.columns();
+    screen.background(styles[0]);
+    screen.fill(0, 0, cols, ' ', styles[1]);
+    screen.text(0, 2, "Music / WAV", styles[1]);
+    screen.text(0, cols - 16, if (saved.queue.shuffle) {
+        "Shuffle: on"
+    } else {
+        "Shuffle: off"
+    }, styles[1]);
+    screen.cursor(0, 0, false);
+    if (rows < 16 || cols < 60) {
+        screen.text(3, 2, "Please enlarge this terminal to at least 60x16.", styles[0]);
+    } else {
+        let left = (cols - 6) / 2;
+        let right = left + 4;
+        let width = cols - right - 2;
+        screen.text(2, 2, if (in_playlist) {
+            "Files"
+        } else {
+            "[Files]"
+        }, styles[2]);
+        screen.text(2, right, (if (in_playlist) {
+            "[Playlist] "
+        } else {
+            "Playlist "
+        }) + number(saved.queue.tracks.len()), styles[2]);
+        screen.text(3, 2, fitted(panel.path, left), styles[0]);
+        screen.text(3, right, "Enter play / d remove", styles[0]);
+        let height = (rows - 13) as usize;
+        for (row in 0..height) {
+            let at = panel.cursor.top + row;
+            if (at < panel.entries.len()) {
+                let item = panel.entries[at];
+                let style = if (!in_playlist && at == panel.cursor.selected) {
+                    styles[3]
+                } else {
+                    styles[0]
+                };
+                screen.fill(4 + row as i16, 2, left, ' ', style);
+                screen.text(4 + row as i16, 2, fitted((if (item.info.kind == DIRECTORY) {
+                    "/ "
+                } else {
+                    "  "
+                }) + item.name, left), style);
+            }
+            let track = cursor.top + row;
+            if (track < saved.queue.tracks.len()) {
+                let style = if (in_playlist && track == cursor.selected) {
+                    styles[3]
+                } else if (track == saved.queue.current) {
+                    styles[2]
+                } else {
+                    styles[0]
+                };
+                screen.fill(4 + row as i16, right, width, ' ', style);
+                screen.text(4 + row as i16, right, fitted((if (track == saved.queue.current) {
+                    "> "
+                } else {
+                    "  "
+                }) + number(track + 1) + " " + basename(saved.queue.tracks[track]), width), style);
+            } else if (track == 0) {
+                screen.text(4 + row as i16, right, "a: add / A: add folder", styles[0]);
+            }
+        }
+        if (in_playlist && cursor.selected < saved.queue.tracks.len()) {
+            screen.text(rows - 9, 2, fitted(saved.queue.tracks[cursor.selected], cols - 4), styles[0]);
+        }
+        screen.text(rows - 8, 2, fitted(music.title(), cols - 4), styles[1]);
+        screen.text(rows - 7, 2, clock(music.elapsed()) + " / " + clock(music.duration()) + "   Volume " + number(music.gain() as usize) + "%", styles[2]);
+        let width = (cols - 4) as usize;
+        let duration = music.duration();
+        let elapsed = music.elapsed();
+        let filled = if (duration == 0) {
+            0 as usize
+        } else {
+            ((elapsed / 100) * width as u32 / (duration / 100 + 1)) as usize
+        };
+        screen.fill(rows - 6, 2, cols - 4, '-', styles[0]);
+        screen.fill(rows - 6, 2, if (filled > width) {
+            cols - 4
+        } else {
+            filled as i16
+        }, '#', styles[2]);
+        screen.text(rows - 4, 2, fitted(status, cols - 4), styles[2]);
+        screen.text(rows - 3, 2, fitted(number(music.rate() as usize) + " Hz  " + number(music.channels() as usize) + " channels  Missing frames: " + number(music.underruns() as usize), cols - 4), styles[0]);
+    }
+    screen.fill(rows - 2, 0, cols, ' ', styles[1]);
+    screen.text(rows - 2, 1, fitted("Tab panes | a add | A folder | d remove | s shuffle | n/p next/previous", cols - 2), styles[1]);
+    screen.fill(rows - 1, 0, cols, ' ', styles[1]);
+    screen.text(rows - 1, 1, fitted("Enter open/play | Space pause | Left/Right seek | +/- volume | F10 quit", cols - 2), styles[1]);
+    screen.present();
+}
+
+/// Both explicit play and automatic advance use the same bounded skip path.
+fn playback(saved: &mut Saved, music: &Player, first: Option<usize>) -> String {
+    let mut next = first;
+    let mut failure = if (saved.queue.tracks.is_empty()) {
+        "Playlist is empty"
+    } else {
+        "Playlist finished"
+    };
+    let mut skipped: usize = 0;
+    for (attempt in 0..saved.queue.tracks.len()) {
+        match next {
+            Some(index) => {
+                music.stop();
+                let path = saved.queue.tracks[index];
+                if (music.load(path)) {
+                    return if (skipped == 0) {
+                        music.status()
+                    } else {
+                        "Skipped " + number(skipped) + " unavailable track(s); playing WAV"
+                    };
+                }
+                failure = "Skipped " + basename(path) + ": " + music.status();
+                skipped += 1;
+                next = saved.queue.next();
+            },
+            None => {
+                break;
+            }
+        }
+    }
+    saved.queue.current = NO_TRACK;
+    if (music.state() == 1 || music.state() == 2 || skipped > 0) {
+        music.stop();
+    }
+    failure
+}
+
+fn remember(path: String, saved: &mut Saved, panel: &FilePanel, music: &Player, cursor: &Selection) -> String {
+    saved.folder = panel.path;
+    saved.volume = music.gain();
+    saved.selected = cursor.selected;
+    match persist_live(path, &*saved, music, fn(player: &Player) => player.step()) {
+        Ok(_) => "",
+        Err(error) => "Cannot save music: " + error
+    }
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    let music = match player() {
+        Ok(value) => move(value),
+        Err(message) => {
+            println(message);
+            return 1;
+        }
+    };
+    let cwd = working_directory().unwrap();
+    let state_path = joined(home(cwd), ".musicrc");
+    let mut saved = defaults(cwd, seed());
+    let mut notice = match restore(state_path, &mut saved) {
+        Ok(_) => "",
+        Err(error) => "Cannot restore music: " + error
+    };
+    music.volume(saved.volume);
+    let mut status = "Add WAV files with a, or a folder with A";
+    if (args.len() > 1) {
+        let path = joined(cwd, args[1]);
+        match metadata(path) {
+            Ok(info) if (info.kind == DIRECTORY) => {
+                saved.folder = path;
+            },
+            Ok(_) => {
+                saved.folder = parent(path);
+                match saved.queue.add(path) {
+                    Ok(index) => {
+                        let first = saved.queue.begin(index);
+                        status = playback(&mut saved, &music, first);
+                        saved.selected = index;
+                    },
+                    Err(error) => {
+                        status = error;
+                    }
+                }
+            },
+            Err(_) => {
+                println("Music path does not exist");
+                return 1;
+            }
+        }
+    }
+    let mut panel = match file_panel(saved.folder, false) {
+        Ok(value) => move(value),
+        Err(_) => {
+            notice = "Saved folder unavailable; browsing current directory";
+            match file_panel(cwd, false) {
+                Ok(value) => move(value),
+                Err(error) => {
+                    println(error_message(error));
+                    return 1;
+                }
+            }
+        }
+    };
+    let screen = match start() {
+        Ok(value) => move(value),
+        Err(_) => {
+            println("Cannot start music terminal");
+            return 1;
+        }
+    };
+    let styles = theme(&screen);
+    let mut cursor = selection();
+    cursor.selected = saved.selected;
+    let mut in_playlist = false;
+    screen.timeout(20);
+    let mut repaint = true;
+    let mut last_elapsed: u32 = 0;
+    let mut last_state: u16 = 0;
+    while (true) {
+        music.step();
+        let elapsed = music.elapsed() / 200;
+        let state = music.state();
+        if (saved.queue.current != NO_TRACK && (state == 3 || state == 4)) {
+            let next = saved.queue.next();
+            status = playback(&mut saved, &music, next);
+            if (saved.queue.current != NO_TRACK) {
+                cursor.selected = saved.queue.current;
+            }
+            repaint = true;
+        } else if (state != last_state && state != 0) {
+            status = music.status();
+        }
+        if (elapsed != last_elapsed || state != last_state) {
+            repaint = true;
+        }
+        last_elapsed = elapsed;
+        last_state = state;
+        let height = if (screen.rows() > 13) {
+            (screen.rows() - 13) as usize
+        } else {
+            1 as usize
+        };
+        panel.reveal(height);
+        let count = saved.queue.tracks.len();
+        cursor.reveal(count, height);
+        if (repaint) {
+            paint(&screen, styles, &panel, &music, &saved, &cursor, in_playlist, if (notice.is_empty()) {
+                status
+            } else {
+                notice
+            });
+            repaint = false;
+        }
+        let key = screen.key();
+        if (key == CLOSED || key == 27 || key == function_key(10) || key == 113) {
+            break;
+        }
+        if (key == NO_KEY) {
+            continue;
+        }
+        repaint = true;
+        let mut changed = false;
+        if (key == 9) {
+            in_playlist = !in_playlist;
+        } else if (if (in_playlist) {
+            cursor.key(key, count, height)
+        } else {
+            panel.key(key, height)
+        }) {} else if (key == 10 || key == 13) {
+            if (in_playlist) {
+                let first = saved.queue.begin(cursor.selected);
+                status = playback(&mut saved, &music, first);
+            } else {
+                let selected = panel.selected_path();
+                if (panel.entries[panel.cursor.selected].info.kind == DIRECTORY) {
+                    if (selected.len() > 255) {
+                        status = "Folder path is too long";
+                    } else {
+                        match panel.enter(selected) {
+                            Ok(_) => {
+                                changed = true;
+                            },
+                            Err(error) => {
+                                status = error_message(error);
+                            }
+                        }
+                    }
+                } else {
+                    match saved.queue.add(selected) {
+                        Ok(index) => {
+                            let first = saved.queue.begin(index);
+                            status = playback(&mut saved, &music, first);
+                            cursor.selected = index;
+                            changed = true;
+                        },
+                        Err(error) => {
+                            status = error;
+                        }
+                    }
+                }
+            }
+        } else if (key == 97 || key == 65) {
+            if (key == 65) {
+                let before = saved.queue.tracks.len();
+                let mut failure = "";
+                for (i in 0..panel.entries.len()) {
+                    let item = panel.entries[i];
+                    if (item.info.kind == REGULAR && wav_path(item.name)) {
+                        match saved.queue.add(joined(panel.path, item.name)) {
+                            Ok(_) => {},
+                            Err(error) => {
+                                failure = error;
+                                break;
+                            }
+                        }
+                    }
+                }
+                status = if (failure.is_empty()) {
+                    "Added " + number(saved.queue.tracks.len() - before) + " track(s)"
+                } else {
+                    failure
+                };
+            } else {
+                let before = saved.queue.tracks.len();
+                let addition: Result<usize, String> = if (panel.entries[panel.cursor.selected].info.kind == DIRECTORY) {
+                    Err("Choose a WAV file; A adds this folder")
+                } else {
+                    saved.queue.add(panel.selected_path())
+                };
+                match addition {
+                    Ok(_) => {
+                        status = if (saved.queue.tracks.len() == before) {
+                            "Already in playlist"
+                        } else {
+                            "Added to playlist"
+                        };
+                    },
+                    Err(error) => {
+                        status = error;
+                    }
+                }
+            }
+            changed = true;
+        } else if (key == 100 && in_playlist && cursor.selected < count) {
+            if (saved.queue.current == cursor.selected) {
+                music.stop();
+            }
+            saved.queue.remove(cursor.selected);
+            status = "Removed from playlist";
+            changed = true;
+        } else if (key == 115) {
+            saved.queue.shuffle = !saved.queue.shuffle;
+            status = if (saved.queue.shuffle) {
+                "Shuffle: on"
+            } else {
+                "Shuffle: off"
+            };
+            changed = true;
+        } else if (key == 110 || key == 112) {
+            let next = if (saved.queue.current == NO_TRACK) {
+                saved.queue.begin(cursor.selected)
+            } else if (key == 110) {
+                saved.queue.next()
+            } else {
+                saved.queue.previous()
+            };
+            if (key == 110 || next.is_some()) {
+                status = playback(&mut saved, &music, next);
+                if (saved.queue.current != NO_TRACK) {
+                    cursor.selected = saved.queue.current;
+                }
+            }
+        } else if (key == 32) {
+            music.pause();
+            status = music.status();
+        } else if (key == LEFT) {
+            music.seek(-10);
+        } else if (key == RIGHT) {
+            music.seek(10);
+        } else if (key == 43 || key == 61) {
+            music.volume(if (music.gain() > 95) {
+                100
+            } else {
+                music.gain() + 5
+            });
+            changed = true;
+        } else if (key == 45) {
+            music.volume(if (music.gain() < 5) {
+                0
+            } else {
+                music.gain() - 5
+            });
+            changed = true;
+        }
+        if (changed) {
+            cursor.reveal(saved.queue.tracks.len(), height);
+            notice = remember(state_path, &mut saved, &panel, &music, &cursor);
+        }
+    }
+    let error = remember(state_path, &mut saved, &panel, &music, &cursor);
+    // Restore the terminal before printing a final persistence error.
+    drop(move(screen));
+    if (!error.is_empty()) {
+        println(error);
+        return 1;
+    }
+    0
+}

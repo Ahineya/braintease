@@ -30,9 +30,24 @@ impl VM {
 
     fn poll_terminal_event(&mut self) {
         if event::poll(Duration::ZERO).unwrap_or(false) {
-            if let Ok(Event::Key(key)) = event::read() {
-                self.accept_terminal_key(key);
+            if let Ok(event) = event::read() {
+                self.accept_terminal_event(event);
             }
+        }
+    }
+
+    fn accept_terminal_event(&mut self, event: Event) {
+        match event {
+            Event::Key(key) => self.accept_terminal_key(key),
+            // Crossterm consumes the host's paste delimiters. Restore them for
+            // the guest terminal application, retaining text and controls as
+            // a single ordered backlog rather than synthesizing key events.
+            Event::Paste(text) if self.display_mode != DISP_TEXT40 => {
+                self.input_buffer.extend(b"\x1b[200~");
+                self.input_buffer.extend(text.as_bytes());
+                self.input_buffer.extend(b"\x1b[201~");
+            }
+            _ => {}
         }
     }
 
@@ -76,7 +91,10 @@ impl VM {
                     let byte = if c == '?' { 127 } else { c.to_ascii_uppercase() as u8 & 31 };
                     self.input_buffer.push_back(byte);
                 }
-                KeyCode::Char(c) => self.input_buffer.push_back(c as u8),
+                KeyCode::Char(c) => {
+                    let mut octets = [0u8; 4];
+                    self.input_buffer.extend(c.encode_utf8(&mut octets).as_bytes());
+                }
                 KeyCode::Enter => self.input_buffer.push_back(b'\n'),
                 KeyCode::Backspace => self.input_buffer.push_back(8),
                 KeyCode::Tab => self.input_buffer.push_back(b'\t'),
@@ -224,6 +242,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn clipboard_paste_preserves_boundaries_unicode_and_literal_controls() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        vm.display_mode = DISP_TTY;
+        vm.input_buffer.push_back(b'x');
+        let text = "Українська e\u{301} 中 👩‍💻\r\n\x03\x1d\x1b:q!";
+        vm.accept_terminal_event(Event::Paste(text.to_string()));
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),
+                   format!("x\x1b[200~{text}\x1b[201~").into_bytes());
+        assert!(!vm.terminal_quit_requested);
+        vm.input_buffer.clear();
+        vm.display_mode = DISP_TEXT40;
+        vm.accept_terminal_event(Event::Paste(text.to_string()));
+        assert!(vm.input_buffer.is_empty());
+    }
+
+    #[test]
     fn control_c_stops_the_host_without_becoming_guest_input() {
         let mut vm = VM::with_memory_size(64, 4096);
         vm.host_input_enabled = false;
@@ -258,6 +292,15 @@ mod tests {
         }
         assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), [10, 4, 21, 127]);
         assert!(!vm.terminal_quit_requested);
+    }
+
+    #[test]
+    fn tty_unicode_input_preserves_utf8_password_octets() {
+        let mut vm = VM::with_memory_size(64, 4096);
+        for c in ['a', 'ï', '🙂'] {
+            vm.accept_terminal_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(), "aï🙂".as_bytes());
     }
 
     #[test]

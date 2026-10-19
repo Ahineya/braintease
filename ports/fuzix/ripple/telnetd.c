@@ -32,7 +32,7 @@ static int session(int fd) {
     struct telnet protocol;
     struct winsize size;
     for(i=0;i<RIPPLE_PTY_COUNT;i++) {
-        masterpath[9]=slavepath[9]='0'+i;
+        masterpath[9]=slavepath[9]=RIPPLE_PTY_DIGIT(i);
         master=open(masterpath,O_RDWR|O_NONBLOCK|O_NOCTTY);
         if(master>=0)break;
         if(errno!=EBUSY)return 1;

@@ -1,0 +1,40 @@
+import { mount_ui, Ui } from "std/ui";
+import { Html, node, text, key, on_click, attribute } from "std/html";
+struct Model {
+    step: i16
+}
+
+type Msg = Advance | Chosen(i16);
+fn update(model: Model, msg: Msg, ui: Ui<Msg>) -> Model {
+    let mut model = model;
+    match msg {
+        Advance => {
+            model.step = (model.step + 1) % 4;
+        },
+        Chosen(n) => {
+            println(n);
+        }
+    }
+    model
+}
+
+fn row(name: String, tag: String, step: i16) -> Html<Msg> {
+    node(tag, [key(name), attribute("data-key", name)], [node("button", [on_click(Chosen(step))], [text(name)])])
+}
+
+fn view(model: &Model) -> Html<Msg> {
+    let rows: Vec<Html<Msg>> = if (model.step == 0) {
+        [row("a", "li", 0), row("b", "li", 0), row("c", "li", 0)]
+    } else if (model.step == 1) {
+        [row("c", "li", 1), row("a", "li", 1), row("d", "li", 1)]
+    } else if (model.step == 2) {
+        [row("a", "li", 2), row("c", "li", 2), row("d", "div", 2)]
+    } else {
+        []
+    };
+    node("section", [], [node("button", [on_click(Advance)], [text("next")]), node("ul", [], rows)])
+}
+
+fn main() {
+    mount_ui(Model { step: 0 }, update, view, 4).unwrap();
+}

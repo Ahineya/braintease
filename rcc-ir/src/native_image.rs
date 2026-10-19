@@ -102,6 +102,7 @@ pub fn application_service(name: &str) -> bool {
             | "memchr"
             | "strchr"
             | "strrchr"
+            | "__rcc_host_math"
             | "__rfl_host_sin"
             | "__rfl_host_cos"
             | "__rcc_f64_floor"

@@ -36,6 +36,34 @@ Prefer the local `target/` binaries over copies in `/usr/local/bin`.
 
 **Bank size must match** across runtime, `rcc`, `rasm`, and `rlink`. `rct` and `runtime/Makefile` default to **64000**. CLI defaults differ (`rcc` 4096, `rasm`/`rlink` 16) — always pass `--bank-size` explicitly in a manual build.
 
+## Build artifacts and disk backups
+
+FUZIX, Fuse-X and rOS image updates retain **one previous image**, `DISK.bak`.
+Backups use sparse/clone-aware copies; successful updates remove older numbered
+and named snapshots in the same `DISK.bak.*` family. Set `RIPPLE_IMAGE_BACKUPS=2`
+to retain two recovery copies, or `0` to disable them. Unchanged images do not
+create a new backup.
+
+The OS launchers check for expired artifacts at most once per day. Idle
+experiment outputs and Rust incremental sessions expire after 24 hours. Current
+OS build directories, compiler binaries/dependencies, source files, guest disks
+and `fuse-x-shared/` are preserved. Active build references and Cargo profile
+locks protect work in progress.
+
+For manual cleanup, from the repository root:
+
+```sh
+python3 scripts/clean-artifacts.py          # preview only
+python3 scripts/clean-artifacts.py --apply  # remove the listed categories
+# After a day of experiments, use a shorter idle cutoff:
+python3 scripts/clean-artifacts.py --apply --min-age-hours 6
+```
+
+Use temporary directories with automatic cleanup for disposable test disks and
+isolated compiler builds. Reuse the standard build directory for normal work;
+avoid accumulating one permanent build tree per investigation. For disk recovery
+copies use `ports/fuzix/tools/image-backup.mjs` instead of ad-hoc `.bak.*` files.
+
 ## Running examples and tests (`rct`)
 
 `rct` is the usual way to compile and run C under `c-test/`. It rebuilds the runtime, preprocesses, compiles, assembles, links, and runs.
@@ -78,6 +106,11 @@ rcc compile source.c -o output.asm -I runtime/include --bank-size 64000
 Useful flags: `-I` include dirs, `-D` macros, `--no-preprocess`, `--save-ir`, `--print-ir`, `--emit-ir`, `--debug 0..3`, `--trace`.
 
 `rcc` does not emit startup code; programs are linked with `crt0`.
+
+The experimental [portable C frontend](rcc-portable/README.md) emits the same
+RCC IR and uses these host tools while bootstrapping. Its C11 direction and
+independent guest toolchain stages are recorded in the
+[self-hosting plan](docs/self-hosting/README.md).
 
 ### rcpp — preprocessor
 

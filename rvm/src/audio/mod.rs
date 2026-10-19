@@ -13,6 +13,7 @@ use std::{collections::VecDeque, ops::Range, path::Path};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum AudioMode {
     Auto,
+    On,
     Off,
 }
 pub const CAP_PCM: u16 = 0x0080;
@@ -22,6 +23,9 @@ pub const SUBMIT: u16 = 0x0201;
 pub const STATE: u16 = 0x0202;
 pub const CONTROL: u16 = 0x0203;
 pub const RENDER: u16 = 0x0204;
+pub const OUTPUT_STATE: u16 = 0x0205;
+pub const OUTPUT_STATS: u16 = 0x0206;
+pub const MIX: u16 = 0x0207;
 pub const MUSIC_BANK: u16 = 0x0210;
 pub const MUSIC_SCORE: u16 = 0x0211;
 pub const MUSIC_CONTROL: u16 = 0x0212;
@@ -44,7 +48,9 @@ pub fn descriptor_length(command: u16) -> Option<usize> {
         SUBMIT => Some(10),
         STATE => Some(16),
         CONTROL => Some(4),
-        RENDER => Some(6),
+        RENDER | OUTPUT_STATE => Some(6),
+        OUTPUT_STATS => Some(12),
+        MIX => Some(10),
         MUSIC_BANK | MUSIC_SCORE => Some(8),
         MUSIC_CONTROL => Some(4),
         MUSIC_STATE => Some(10),
@@ -184,6 +190,63 @@ impl AudioDevice {
         }
         let mut w: Vec<u16> = range.clone().map(|i| memory.read(i)).collect();
         match command {
+            MIX => {
+                let (count, frames) = (usize::from(w[4]), usize::from(w[7]));
+                if self.state.rate == 0 || self.state.channels != 2 { return Err(STATUS_BAD_STATE); }
+                if count > 16 || frames == 0 || frames > 1024 || w[8] != 0 || w[9] != 0 {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                let list = guest_range(memory.len(), bank_size, w[2], w[3], count * 12)?;
+                let dest = guest_range(memory.len(), bank_size, w[5], w[6], frames * 2)?;
+                let overlaps = |a: &Range<usize>, b: &Range<usize>| a.start < b.end && b.start < a.end;
+                if overlaps(&range,&list) || overlaps(&range,&dest) || overlaps(&list,&dest) {
+                    return Err(STATUS_BAD_DESCRIPTOR);
+                }
+                let mut voices = Vec::with_capacity(count);
+                for i in 0..count {
+                    let v: Vec<_> = (0..12).map(|n| memory.read(list.start+i*12+n)).collect();
+                    let (length, offset, fraction, step) = (pair(&v,2), pair(&v,4), pair(&v,6), pair(&v,8));
+                    if fraction >= 65536 || step == 0 || step > 262144 || v[10] > 127 || v[11] > 127 {
+                        return Err(STATUS_BAD_DESCRIPTOR);
+                    }
+                    let source = guest_range(memory.len(), bank_size, v[1], v[0], length as usize)?;
+                    if overlaps(&range,&source) || overlaps(&list,&source) || overlaps(&dest,&source) {
+                        return Err(STATUS_BAD_DESCRIPTOR);
+                    }
+                    voices.push((source,offset,fraction,step,v[10],v[11]));
+                }
+                let mut sums = vec![[0i32;2]; frames];
+                for (source,offset,fraction,step,left,right) in &mut voices {
+                    for sum in &mut sums {
+                        if *offset as usize >= source.len() { break; }
+                        let value = (i32::from(memory.read(source.start+*offset as usize)&255)-128)*256;
+                        sum[0] += value*i32::from(*left)/127;
+                        sum[1] += value*i32::from(*right)/127;
+                        let next = *fraction+*step;
+                        *offset += next>>16; *fraction=next&65535;
+                    }
+                }
+                for (i,sum) in sums.iter().enumerate() {
+                    for channel in 0..2 { memory.write(dest.start+i*2+channel,sum[channel].clamp(-32768,32767) as i16 as u16); }
+                }
+                for (i,(_,offset,fraction,_,_,_)) in voices.iter().enumerate() {
+                    memory.write(list.start+i*12+4,*offset as u16);memory.write(list.start+i*12+5,(*offset>>16) as u16);
+                    memory.write(list.start+i*12+6,*fraction as u16);memory.write(list.start+i*12+7,(*fraction>>16) as u16);
+                }
+            }
+            OUTPUT_STATS => {
+                let (gaps, missing, maximum) = self.host.statistics();
+                w[2] = u16::from(self.host.live());
+                w[3] = 0;
+                put(&mut w, 4, gaps.min(u64::from(u32::MAX)), 2);
+                put(&mut w, 6, missing, 4);
+                put(&mut w, 10, maximum.min(u64::from(u32::MAX)), 2);
+            }
+            OUTPUT_STATE => {
+                put(&mut w, 2, self.host.pending_frames(self.state.rate) as u64, 2);
+                w[4] = u16::from(self.host.live());
+                w[5] = 0;
+            }
             CONFIGURE => {
                 let (rate, channels, capacity) = (pair(&w, 2), w[4], pair(&w, 5) as usize);
                 if !(8000..=96000).contains(&rate)

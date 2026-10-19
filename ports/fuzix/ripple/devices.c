@@ -11,6 +11,7 @@
 #include "resources.h"
 #include "pty.h"
 #include "graphics.h"
+#include "pcm.h"
 static Fat16Fs outer;
 static Fat16DirEnt rootfile;
 /* RCC pointer arithmetic carries across the 64,000-cell bank boundary. */
@@ -39,6 +40,7 @@ ttyready_t tty_writeready(uint_fast8_t m) {
 }
 void ripple_poll(void) {
     unsigned c, n = 0;
+    struct s_queue *q = &ttyinq[1];
     irqflags_t flags;
     if (!ttyinq[1].q_size)
         return;
@@ -46,6 +48,19 @@ void ripple_poll(void) {
      * operation so an IRQ cannot enqueue later characters ahead of this one. */
     flags = di();
     while (n++ < 32 && (mmio_read(MMIO_TTY_IN_STATUS) & TTY_STATUS_HAS_BYTE)) {
+        /* Retain host input until the guest can receive it. Raw applications
+         * and mux may temporarily stop reading while downstream queues fill. */
+        if (q->q_count == q->q_size) {
+            uint8_t *p = q->q_tail;
+            unsigned left = q->q_count;
+            if (!(ttydata[1].termios.c_lflag & ICANON)) break;
+            while (left--) {
+                if (*p == '\n' || *p == ttydata[1].termios.c_cc[VEOF] ||
+                    (ttydata[1].termios.c_cc[VEOL] && *p == ttydata[1].termios.c_cc[VEOL])) break;
+                if (++p == q->q_base + q->q_size) p = q->q_base;
+            }
+            if (left != (unsigned)-1) break;
+        }
         c = mmio_read(MMIO_TTY_IN_POP);
         tty_inproc(1, c & 255);
     }
@@ -172,11 +187,13 @@ static int root_ioctl(uint_fast8_t m, uarg_t req, char *p) {
     udata.u_error = ENOTTY;
     return -1;
 }
-/* Standard FUZIX system-device minors, restricted to null, zero and proc.
+#include "entropy-device.h"
+#include "crypto-device.h"
+/* Standard FUZIX system-device minors: null, zero, proc and host urandom.
  * Kernel/physical memory access is deliberately not exposed by this port. */
 static int system_open(uint_fast8_t m, uint16_t f) {
     used(f);
-    if (m == 0 || m == 2 || m == 3)
+    if (m == 0 || m == 2 || m == 3 || m == 4 || m == 5)
         return 0;
     udata.u_error = ENXIO;
     return -1;
@@ -186,6 +203,7 @@ static int system_read(uint_fast8_t m, uint_fast8_t raw, uint_fast8_t f) {
     irqflags_t irq;
     used(raw);
     used(f);
+    if (m == 4)return entropy_read();
     if (m == 0)
         return 0;
     if (m == 2) {
@@ -222,6 +240,7 @@ static int system_write(uint_fast8_t m, uint_fast8_t raw, uint_fast8_t f) {
     return -1;
 }
 static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
+    if(m==5)return crypto_ioctl(req,p);
     if (m == 3) {
         if (req == RIPPLE_PROCINFO) {
             struct ripple_procinfo info;
@@ -273,7 +292,7 @@ static int system_ioctl(uint_fast8_t m, uarg_t req, char *p) {
                 if (ptab[i].p_status != P_EMPTY) ++info.processes;
             info.flags = RIPPLE_SYSINFO_MMU;
             info.page_cells = MMU_PAGE_CELLS;
-            info.heap_cells *= 16;
+            info.heap_cells *= MMU_HEAP_BANKS;
             ripple_mmu_usage(&info.shared_kib, &info.mapped_kib);
             irqrestore(irq);
             return uput(&info, p, sizeof(info));
@@ -293,5 +312,6 @@ struct devsw dev_tab[] = {
     {system_open, no_close, system_read, system_write, system_ioctl},
     {ripple_slave_open, ripple_slave_close, tty_read, tty_write, ripple_console_ioctl},
     {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl},
-    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl}};
-bool validdev(uint16_t d) { return major(d) < 5; }
+    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl},
+    {ripple_pcm_open, ripple_pcm_close, no_rdwr, ripple_pcm_write, ripple_pcm_ioctl}};
+bool validdev(uint16_t d) { return major(d) < 6; }

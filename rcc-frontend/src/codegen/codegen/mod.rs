@@ -8,6 +8,7 @@ mod function_gen;
 pub(crate) mod global_gen;
 mod constant_float;
 mod constant_address;
+mod constant_cells;
 
 use std::collections::{HashMap, HashSet};
 use crate::ir::{Module, IrBuilder};

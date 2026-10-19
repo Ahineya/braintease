@@ -62,6 +62,7 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
             result
         }
         Insn::AsyncNew { args, .. } => args.clone(),
+        Insn::Closure { captures, .. } => captures.clone(),
         Insn::AsyncCancel { future } => vec![*future],
         Insn::Replace { place, value, .. } => vec![*place, *value],
         Insn::IntoInner { src, .. } | Insn::EraseOwner { src, .. } => vec![*src],
@@ -138,7 +139,6 @@ pub(super) fn operands(insn: &Insn) -> Vec<usize> {
         | Insn::BoxNew { .. }
         | Insn::CFn { .. }
         | Insn::PrintLit { .. }
-        | Insn::Closure { .. }
         | Insn::CStr { .. }
         | Insn::Str { .. } => vec![],
     }

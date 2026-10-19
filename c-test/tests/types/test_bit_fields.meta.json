@@ -1,0 +1,1 @@
+{"expected":"YYYYYYYYYYYYYYYY\n","use_runtime":true,"description":"Packed bit-fields, signed extraction, union aliasing, adjacent preservation, single evaluation, initializers and wide storage"}

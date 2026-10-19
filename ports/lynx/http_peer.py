@@ -31,7 +31,7 @@ class Services(Peer):
         if len(frame) >= 54 and frame[12:14] == b'\x08\x00' and frame[23] == 6:
             at = 14 + (frame[14] & 15) * 4
             source, target, sequence = struct.unpack('!HHI', frame[at:at + 8])
-            if target == 9999 and frame[at + 13] & 2:
+            if (target == 9999 or target == 443 and target not in self.tcp_services) and frame[at + 13] & 2:
                 packet = bytearray(struct.pack('!HHIIBBHHH', target, source, 0,
                     (sequence + 1) & 0xffffffff, 80, 20, 0, 0, 0))
                 check = wire.checksum(wire.HOST_IP + wire.GUEST_IP

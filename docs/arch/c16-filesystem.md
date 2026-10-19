@@ -60,6 +60,70 @@ zeroes retained partial tails so shrink/regrow cannot reveal old contents.
 custom userspace that needs filesystem statistics; managed applications are
 rebuilt and installed normally.
 
+## Symbolic links
+
+Mode `0120000` (`S_IFLNK`) stores a symbolic link in an ordinary data block.
+Its length is 1–511 C16 characters, excludes a terminating NUL, and the target
+contains no NUL cells. No inode/superblock layout change is required. Both
+kernels and offline tools must support links before using an image containing
+them; older V3 kernels cannot resolve the new managed executable aliases.
+Rebuild statically linked userspace together with the kernel. The previous
+libc implemented `lstat` as `stat` and `readlink` as an unsupported stub;
+old recursive file tools can therefore follow links unintentionally. Normal
+managed builds track these SDK/header changes; custom binaries need rebuilding.
+
+Guest syscall slots 68/69/70 implement `symlink`, `readlink`, and `lstat`.
+Ordinary path lookup follows links, resolving relative targets from the link's
+parent and absolute targets from the process root. Expanded paths must fit in
+512 cells including NUL; at most 40 links are followed per lookup (`ELOOP`).
+Intermediate links work across mount points. `lstat` and `readlink` inspect the
+terminal link; unlink/rename/rmdir do not redirect a namespace mutation to its
+target. `open(O_CREAT|O_EXCL)` rejects existing dangling links. Hard-linking a
+symlink links its inode, without following it. Trailing slashes require a
+directory. Readlink returns the copied length without appending NUL.
+
+Managed aliases (`vi`, `mc`, `ln`, `mv`, `tcl`, `tclsh`, `sokoban`, `nslookup`)
+are relative symlinks beside their canonical `/bin` executable. Installation
+migrates previous copies/hard links while preserving other user-created hard
+links. It never follows a symlink when replacing an installed path or looking
+for an installation directory. The checker validates link storage, accounts for
+its blocks and link count, and permits dangling targets and cycles. Growth and
+V2 migration preserve link inodes and target text.
+
+Fuse-X's `/mnt/host` remains a separate contract: host symlinks are hidden and
+rejected even when their targets stay inside the export. Guest `symlink` in
+that mount returns `EOPNOTSUPP`. A link stored on the guest disk can point to a
+visible regular file/directory under `/mnt/host`; target lookup still obeys the
+host mount's restrictions.
+
+`ln -s` creates links; `ls -l` prints their targets. Plain `cp` follows a source
+link, whereas `cp -P`, recursive copying (unless `-L`, or top-level `-H`) and
+cross-device `mv` preserve link text. Recursive rm/find and tar creation do not
+traverse symlink directories. Find supports `-type l`. USTAR stores/extracts
+link targets of up to 100 characters; tar refuses extraction through symbolic
+link parents and replaces a terminal symlink before extracting a regular file.
+
+## Execution permissions
+
+Both kernels enforce execute permission before checking an executable's format.
+Even root needs at least one of the owner/group/other execute bits on a
+nondirectory file; its read/write and directory-search overrides remain intact.
+Other users need execute permission from their matching owner/group/other class.
+`access(path, X_OK)` uses the same mode check, and symlink paths use the target's
+permissions. Files with no execute bits return `EACCES`, rather than `ENOEXEC`.
+
+The Bourne shell's text-script fallback runs only after `ENOEXEC`, so direct
+paths, quoted command paths and PATH lookup all respect chmod. For example,
+`chmod 644 script` prevents `./script`, while `chmod +x script` enables it.
+Explicit `sh script` and `. script` read shell input and do not require an
+execute bit; this is intentional. The same rules apply to visible files under
+Fuse-X's `/mnt/host` mount.
+
+`python3 ports/fuzix/tools/test_exec_permissions.py` tests both targets on private
+images. It covers direct/PATH/quoted commands, chmod toggles, symbolic links,
+binaries, explicit interpretation, root and ordinary-user permission classes,
+`access`/`execve` error codes, host-mounted scripts and filesystem integrity.
+
 ## Storage and memory use
 
 RVM storage addresses physical octets with 32 bits: 4 GiB is the transport's
@@ -110,3 +174,9 @@ reclamation. It also boots a 1,001 MiB root with 64,064 FAT clusters and reads
 its final cluster through the second supervisor cache bank. Offline checks follow
 each clean shutdown. Normal kernel, graphics, job-control and application tests
 use disposable V3 images too.
+
+`python3 ports/fuzix/tools/test_symlinks.py` runs syscall/utility acceptance on
+both kernels using disposable images, including real `vi` alias editing,
+relative/absolute/dangling/cyclic targets, creation through a link, namespace
+operations, copy/delete/archive traversal, hidden host links and reboot
+persistence. Use `--os fuzix` or `--os fuse-x` to select one target.

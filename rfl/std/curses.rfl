@@ -13,6 +13,7 @@ extern "C" {
     fn rfl_curses_character(ch: i16);
     fn rfl_curses_refresh();
     fn rfl_curses_key() -> i16;
+    fn rfl_curses_bracketed(enabled: i16);
     fn rfl_curses_timeout(milliseconds: i16);
     fn rfl_curses_cursor(visible: i16);
     fn rfl_curses_suspend();
@@ -26,8 +27,11 @@ extern "C" {
     fn rfl_curses_height(window: *mut u16) -> i16;
     fn rfl_curses_width(window: *mut u16) -> i16;
     fn rfl_curses_background(window: *mut u16, style: u32);
-    fn rfl_curses_text(window: *mut u16, row: i16, column: i16, bytes: *const u8, count: i16, style: u32);
-    fn rfl_curses_fill(window: *mut u16, row: i16, column: i16, width: i16, ch: u16, style: u32);
+    fn rfl_curses_scratch() -> *mut u8;
+    fn rfl_curses_text_begin(window: *mut u16, row: i16, column: i16, style: u32) -> i16;
+    fn rfl_curses_text_chunk(bytes: *mut u8, count: i16, final: i16) -> i16;
+    fn rfl_curses_event(window: *mut u16, value: *mut u32) -> i16;
+    fn rfl_curses_fill(window: *mut u16, row: i16, column: i16, width: i16, ch: u32, style: u32);
     fn rfl_curses_border(window: *mut u16, row: i16, column: i16, rows: i16, columns: i16, style: u32);
     fn rfl_curses_stage(window: *mut u16);
     fn rfl_curses_present();
@@ -66,13 +70,13 @@ export const RESIZE: i16 = 410;
 /// Plain monochrome text.
 export const NORMAL: u32 = 0;
 /// Bold text attribute.
-export const BOLD: u32 = 512;
+export const BOLD: u32 = 4194304;
 /// Reverse-video text attribute.
-export const REVERSE: u32 = 1024;
+export const REVERSE: u32 = 8388608;
 /// Standout text attribute.
-export const STANDOUT: u32 = 2048;
+export const STANDOUT: u32 = 8388608;
 /// Underlined text attribute.
-export const UNDERLINE: u32 = 4096;
+export const UNDERLINE: u32 = 16777216;
 /// Returns the key code for function key 1 through 12.
 export fn function_key(number: i16) -> i16 {
     264 + number
@@ -122,50 +126,88 @@ export const WHITE: i16 = 7;
 /// Use the terminal's default foreground or background.
 export const DEFAULT_COLOR: i16 = -1;
 /// Alternate-character-set horizontal line, suitable for `glyph`.
-export const HLINE: u16 = 8305;
+export const HLINE: u16 = 9472;
 /// Alternate-character-set vertical line, suitable for `glyph`.
-export const VLINE: u16 = 8312;
+export const VLINE: u16 = 9474;
+/// Upper-half block, emitted as one UTF-8 terminal cell (not a Unicode scalar).
+export const UPPER_BLOCK: u16 = 9600;
+/// Lower-half block; combine two module rows into one terminal row.
+export const LOWER_BLOCK: u16 = 9604;
+/// Full block, emitted as one UTF-8 terminal cell.
+export const FULL_BLOCK: u16 = 9608;
 
 /// Encodes color pair 1–63 for combination with `BOLD`, `REVERSE` and other attributes.
 /// Pair zero uses terminal defaults. Initialize pairs with `Screen.define_pair`.
 export fn color_pair(number: u16) -> u32 {
-    ((number as u32) & 63) << 16
+    ((number as u32) & 63) << 26
+}
+
+/// Input status and value are separate, so U+0102 can never mean Down.
+export struct InputEvent {
+    /// 0: Unicode text; 1: function key; -1: timeout; -2: terminal loss.
+    kind: i16,
+    /// Unicode scalar for text events, or the decoded function-key code.
+    value: u32
+}
+
+/// Literal terminal paste boundaries, enabled explicitly by an application.
+export const PASTE_BEGIN: i16 = 411;
+/// End of a literal terminal paste when bracketed paste is enabled.
+export const PASTE_END: i16 = 412;
+impl InputEvent {
+    /// Compatibility key for shortcuts; non-ASCII text returns NO_KEY.
+    export fn key(&self) -> i16 {
+        if (self.kind < 0) {
+            self.kind
+        } else if (self.kind == 1 || self.value < 128) {
+            self.value as i16
+        } else {
+            NO_KEY
+        }
+    }
+}
+
+fn event(window: *mut u16) -> InputEvent {
+    let mut value: u32 = 0;
+    let kind = unsafe {
+        rfl_curses_event(window, &mut value)
+    };
+    InputEvent { kind: kind, value: value }
 }
 
 fn draw(window: *mut u16, row: i16, column: i16, text: String, style: u32) {
-    if (row < 0 || row >= rfl_curses_height(window) || column < 0 || column >= rfl_curses_width(window)) {
+    if (rfl_curses_text_begin(window, row, column, style) == 0) {
         return;
     }
-    let width = (rfl_curses_width(window) - column) as usize;
-    let count = if (text.len() < width) {
-        text.len()
-    } else {
-        width
-    };
-    if (count == 0) {
-        return;
-    }
-    let mut bytes: Vec<u8> = [];
-    for (i in 0..count) {
-        let ch = text[i] as u32;
-        bytes.push(if (ch >= 32 && ch <= 126) {
-            ch as u8
+    let bytes = rfl_curses_scratch();
+    let mut at: usize = 0;
+    while (at < text.len()) {
+        let n = if (text.len() - at > 512) {
+            512 as usize
         } else {
-            63 as u8
-        });
+            text.len() - at
+        };
+        for (i in 0..n) {
+            unsafe {
+                bytes[i] = text[at + i] as u8;
+            }
+        }
+        at += n;
+        if (rfl_curses_text_chunk(bytes, n as i16, if (at == text.len()) {
+            1
+        } else {
+            0
+        }) == 0) {
+            return;
+        }
     }
-    unsafe {
-        rfl_curses_text(window, row, column, &bytes[0], count as i16, style);
+    if (text.is_empty()) {
+        rfl_curses_text_chunk(bytes, 0, 1);
     }
 }
 
 fn fill(window: *mut u16, row: i16, column: i16, width: i16, ch: char, style: u32) {
-    let code = ch as u32;
-    rfl_curses_fill(window, row, column, width, if (code >= 32 && code <= 126) {
-        code as u16
-    } else {
-        63 as u16
-    }, style);
+    rfl_curses_fill(window, row, column, width, ch as u32, style);
 }
 
 impl Screen {
@@ -185,13 +227,13 @@ impl Screen {
     export fn background(&self, style: u32) {
         rfl_curses_background(rfl_curses_screen(), style);
     }
-    /// Draws clipped printable ASCII text. Other characters display as `?`.
+    /// Draws UTF-8 text, clipped by display columns without splitting a grapheme.
     export fn text(&self, row: i16, column: i16, text: String, style: u32) {
         draw(rfl_curses_screen(), row, column, text, style);
     }
     /// Writes packed character/style cells as one clipped, nonwrapping row batch.
-    /// Character occupies bits 0..7; attributes and color_pair occupy higher bits.
-    /// Control/non-ASCII characters become ?, except alternate-set glyphs.
+    /// Character/display ID occupies bits 0..20; style occupies bits 21..31.
+    /// Wide glyphs need a continuation cell (0x1fffff) in the following column.
     export fn cells(&self, row: i16, column: i16, cells: Vec<u32>) -> bool {
         if (cells.len() > 512) {
             return false;
@@ -208,13 +250,18 @@ impl Screen {
     export fn cursor_shape(&self, shape: i16) -> bool {
         rfl_curses_shape(shape) == 0
     }
-    /// Draws repeated printable ASCII characters, clipped to the screen.
+    /// Fills `width` display columns with a repeated scalar, clipping whole glyphs.
+    /// A final column too narrow for a wide glyph is filled with a space.
     export fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
         fill(rfl_curses_screen(), row, column, width, ch, style);
     }
+    /// Draws repeated curses glyphs in one bounded C call.
+    export fn glyphs(&self, row: i16, column: i16, width: i16, glyph: u16, style: u32) {
+        rfl_curses_fill(rfl_curses_screen(), row, column, width, glyph as u32, style);
+    }
     /// Draws one curses glyph, including `HLINE`/`VLINE`, with independent attributes.
     export fn glyph(&self, row: i16, column: i16, glyph: u16, style: u32) {
-        rfl_curses_fill(rfl_curses_screen(), row, column, 1, glyph, style);
+        rfl_curses_fill(rfl_curses_screen(), row, column, 1, glyph as u32, style);
     }
     /// Draws a framed rectangle using the selected line-drawing mode; invalid rectangles are ignored.
     export fn border(&self, row: i16, column: i16, rows: i16, columns: i16, style: u32) {
@@ -267,6 +314,18 @@ impl Screen {
     export fn key(&self) -> i16 {
         rfl_curses_key()
     }
+    /// Reads Unicode text or a function key without numeric collisions.
+    export fn event(&self) -> InputEvent {
+        event(rfl_curses_screen())
+    }
+    /// Requests bracketed paste; suspend/exit restore the terminal mode.
+    export fn bracketed_paste(&self, enabled: bool) {
+        rfl_curses_bracketed(if (enabled) {
+            1
+        } else {
+            0
+        });
+    }
     /// Sets input timeout: negative blocks, zero polls, positive values are milliseconds.
     export fn timeout(&self, milliseconds: i16) {
         rfl_curses_timeout(milliseconds);
@@ -298,6 +357,18 @@ impl Window {
         let p = self.state.borrow();
         *p
     }
+    /// Writes packed Unicode/style cells as a clipped, nonwrapping row batch.
+    export fn cells(&self, row: i16, column: i16, cells: Vec<u32>) -> bool {
+        if (cells.len() > 512) {
+            return false;
+        }
+        if (cells.is_empty()) {
+            return true;
+        }
+        unsafe {
+            rfl_curses_cells(self.raw(), row, column, &cells[0], cells.len() as i16) == 0
+        }
+    }
     /// Returns this window's height in cells.
     export fn rows(&self) -> i16 {
         rfl_curses_height(self.raw())
@@ -310,21 +381,29 @@ impl Window {
     export fn background(&self, style: u32) {
         rfl_curses_background(self.raw(), style);
     }
-    /// Draws clipped printable ASCII text using coordinates relative to the window.
+    /// Draws clipped UTF-8 text using coordinates relative to the window.
     export fn text(&self, row: i16, column: i16, text: String, style: u32) {
         draw(self.raw(), row, column, text, style);
     }
-    /// Fills part of a row with printable ASCII characters.
+    /// Fills display columns with a repeated scalar, clipping whole glyphs.
     export fn fill(&self, row: i16, column: i16, width: i16, ch: char, style: u32) {
         fill(self.raw(), row, column, width, ch, style);
     }
     /// Draws one alternate-set or ASCII curses glyph.
+    export fn glyphs(&self, row: i16, column: i16, width: i16, glyph: u16, style: u32) {
+        rfl_curses_fill(self.raw(), row, column, width, glyph as u32, style);
+    }
+    /// Draws one curses glyph at a window-relative cell coordinate.
     export fn glyph(&self, row: i16, column: i16, glyph: u16, style: u32) {
-        rfl_curses_fill(self.raw(), row, column, 1, glyph, style);
+        rfl_curses_fill(self.raw(), row, column, 1, glyph as u32, style);
     }
     /// Frames this window using DEC line glyphs or the selected ASCII fallback.
     export fn border(&self, style: u32) {
         rfl_curses_border(self.raw(), 0, 0, self.rows(), self.columns(), style);
+    }
+    /// Frames a rectangle within this window, in local cell coordinates.
+    export fn frame(&self, row: i16, column: i16, rows: i16, columns: i16, style: u32) {
+        rfl_curses_border(self.raw(), row, column, rows, columns, style);
     }
     /// Moves this window while preserving its content; redraw lower layers to erase its old position.
     export fn move_to(&self, row: i16, column: i16) -> bool {
@@ -345,6 +424,10 @@ impl Window {
     /// Reads keys while refreshing this window rather than overwriting it with the default screen.
     export fn key(&self) -> i16 {
         rfl_curses_window_key(self.raw())
+    }
+    /// Reads Unicode text or a function key from this window.
+    export fn event(&self) -> InputEvent {
+        event(self.raw())
     }
     /// Positions the cursor relative to this window and sets its visibility.
     export fn cursor(&self, row: i16, column: i16, visible: bool) {

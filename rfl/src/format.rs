@@ -3,6 +3,7 @@
 //! Syntax determines spacing and block layout. Token spellings (including
 //! comments and escaped literals) are retained and checked before returning.
 
+mod html;
 mod syntax;
 
 use crate::error::CompileError;
@@ -21,9 +22,9 @@ pub struct FormatEdit {
 pub fn format_source(source: &str) -> Result<String, CompileError> {
     let tokens = lexer::tokenize_with_trivia(source)?;
     let syntax = syntax::Syntax::analyze(source, &tokens)?;
-    let formatted = Printer::new(source, &tokens, &syntax).print();
+    let formatted = Printer::new(source, &tokens, &syntax).print()?;
     let after = lexer::tokenize_with_trivia(&formatted)?;
-    if !same_tokens(source, &tokens, &formatted, &after) {
+    if !same_tokens(source, &tokens, &formatted, &after, &syntax) {
         return Err(CompileError::plain(
             "formatting would change a token; source was left unchanged",
         ));
@@ -36,13 +37,23 @@ pub fn format_source(source: &str) -> Result<String, CompileError> {
 /// Minimal replacements confined to whitespace between tokens, in source order.
 pub fn format_edits(source: &str) -> Result<Vec<FormatEdit>, CompileError> {
     let formatted = format_source(source)?;
-    let before = lexer::tokenize_with_trivia(source)?;
-    let after = lexer::tokenize_with_trivia(&formatted)?;
     let mut edits = Vec::new();
     let (mut a, mut b) = (0, 0);
-    for (old, new) in before.iter().zip(&after) {
-        let old_gap = &source[a..old.span.start];
-        let new_gap = &formatted[b..new.span.start];
+    while a < source.len() || b < formatted.len() {
+        let old_start = a;
+        let new_start = b;
+        while source[a..].chars().next().is_some_and(char::is_whitespace) {
+            a += source[a..].chars().next().unwrap().len_utf8();
+        }
+        while formatted[b..]
+            .chars()
+            .next()
+            .is_some_and(char::is_whitespace)
+        {
+            b += formatted[b..].chars().next().unwrap().len_utf8();
+        }
+        let old_gap = &source[old_start..a];
+        let new_gap = &formatted[new_start..b];
         if old_gap != new_gap {
             let prefix = old_gap
                 .chars()
@@ -58,21 +69,40 @@ pub fn format_edits(source: &str) -> Result<Vec<FormatEdit>, CompileError> {
                 .map(|(ch, _)| ch.len_utf8())
                 .sum::<usize>();
             edits.push(FormatEdit {
-                start: a + prefix,
-                end: old.span.start - suffix,
+                start: old_start + prefix,
+                end: a - suffix,
                 new_text: new_gap[prefix..new_gap.len() - suffix].to_string(),
             });
         }
-        a = old.span.end;
-        b = new.span.end;
+        match (source[a..].chars().next(), formatted[b..].chars().next()) {
+            (Some(x), Some(y)) if x == y => {
+                a += x.len_utf8();
+                b += y.len_utf8();
+            }
+            (None, None) => break,
+            _ => {
+                return Err(CompileError::plain(
+                    "formatting would change non-whitespace content",
+                ))
+            }
+        }
     }
     Ok(edits)
 }
 
-fn same_tokens(a: &str, at: &[Token], b: &str, bt: &[Token]) -> bool {
+fn same_tokens(a: &str, at: &[Token], b: &str, bt: &[Token], syntax: &syntax::Syntax) -> bool {
     at.len() == bt.len()
         && at.iter().zip(bt).all(|(x, y)| {
-            x.kind == y.kind && a[x.span.start..x.span.end] == b[y.span.start..y.span.end]
+            if syntax.html_bodies.contains(&x.span.start) {
+                matches!((&x.kind, &y.kind), (K::MacroBody(_), K::MacroBody(_)))
+                    && html::equivalent(
+                        &a[x.span.start..x.span.end],
+                        &b[y.span.start..y.span.end],
+                        &syntax.html_names,
+                    )
+            } else {
+                x.kind == y.kind && a[x.span.start..x.span.end] == b[y.span.start..y.span.end]
+            }
         })
 }
 
@@ -163,7 +193,7 @@ impl<'a> Printer<'a> {
         })
     }
 
-    fn print(mut self) -> String {
+    fn print(mut self) -> Result<String, CompileError> {
         for (i, token) in self.tokens.iter().enumerate() {
             if token.kind == K::Eof {
                 break;
@@ -192,6 +222,12 @@ impl<'a> Printer<'a> {
                 }
             }
             match &token.kind {
+                K::MacroBody(_) if self.syntax.html_bodies.contains(&token.span.start) => {
+                    self.space = false;
+                    let body =
+                        html::format(text, self.indent, self.newline, &self.syntax.html_names)?;
+                    self.word(&body);
+                }
                 K::LineComment | K::BlockComment => {
                     let inline = i > 0
                         && !self.source[self.tokens[i - 1].span.end..token.span.start]
@@ -369,7 +405,7 @@ impl<'a> Printer<'a> {
             }
             self.output.push_str(self.newline);
         }
-        self.output
+        Ok(self.output)
     }
 
     fn needs_space(&self, i: usize) -> bool {
@@ -380,6 +416,9 @@ impl<'a> Printer<'a> {
         let current = &self.tokens[i];
         let a = &previous.kind;
         let b = &current.kind;
+        if self.syntax.joined.contains(&current.span.start) {
+            return false;
+        }
         if matches!(a, LineComment | BlockComment) {
             return true;
         }
@@ -403,7 +442,8 @@ impl<'a> Printer<'a> {
                     || (!matches!(a, LParen | LBracket | ColonColon)
                         && !self.syntax.tight.contains(&previous.span.start));
             }
-            return matches!(b, Lt | Shl) && !matches!(a, Ident(_) | Impl | Lt | Shl | ColonColon);
+            return matches!(b, Lt | Shl)
+                && !matches!(a, Ident(_) | Impl | For | Lt | Shl | ColonColon);
         }
         if self.syntax.tight.contains(&previous.span.start) {
             return matches!(a, Gt | Shr) && !matches!(b, LParen | RParen | RBracket | ColonColon);

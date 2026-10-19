@@ -1,0 +1,9 @@
+[workspace]
+members = ["app", "math", "macros"]
+resolver = "2"
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+debug = 0
+incremental = false

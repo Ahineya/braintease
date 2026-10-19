@@ -1,6 +1,7 @@
-import { Screen, HLINE } from "std/curses";
-import { DIRECTORY, SYMLINK } from "std/posix";
-import { Browser, Panel, selected_path } from "./model";
+import { FilePanel, PanelPalette, PanelPaint, panel_paint, draw_cached } from "lib/tui_files";
+import { Rect } from "lib/tui";
+import { Screen } from "std/curses";
+import { Browser, selected_path } from "./model";
 import { Theme } from "./theme";
 import { number, fitted } from "./format";
 
@@ -12,116 +13,87 @@ export fn visible_rows(screen: &Screen) -> usize {
     }
 }
 
-fn panel(screen: &Screen, theme: &Theme, data: Panel, x: i16, width: i16, focused: bool) {
-    let bottom = screen.rows() - 4;
-    let rows = visible_rows(screen);
-    screen.border(1, x, bottom, width, if (focused) {
-        theme.title
-    } else {
-        theme.frame
-    });
-    let title = if (focused) {
-        "[ " + data.path + " ]"
-    } else {
-        "  " + data.path + "  "
-    };
-    screen.text(1, x + 2, fitted(title, width - 4), if (focused) {
-        theme.title
-    } else {
-        theme.frame
-    });
-    screen.text(2, x + 2, "Name", theme.muted);
-    screen.text(2, x + width - 10, "Size", theme.muted);
-    if (theme.lines) {
-        for (column in 1..(width - 1) as usize) {
-            screen.glyph(3, x + column as i16, HLINE, theme.frame);
-        }
-    } else {
-        screen.fill(3, x + 1, width - 2, '-', theme.frame);
-    }
-    for (row in 0..rows) {
-        let y = row as i16 + 4;
-        let i = data.top + row;
-        if (i < data.entries.len()) {
-            let entry = data.entries[i];
-            let selected = i == data.selected;
-            let style = if (selected) {
-                if (focused) {
-                    theme.selected
-                } else {
-                    theme.inactive
-                }
-            } else if (entry.info.kind == DIRECTORY) {
-                theme.directory
-            } else {
-                theme.text
-            };
-            screen.fill(y, x + 1, width - 3, ' ', style);
-            let mark = if (selected) {
-                ">"
-            } else if (entry.info.kind == DIRECTORY) {
-                "/"
-            } else if (entry.info.kind == SYMLINK) {
-                "@"
-            } else {
-                " "
-            };
-            screen.text(y, x + 1, mark + fitted(entry.name, width - 14), style);
-            let size = if (entry.info.kind == DIRECTORY) {
-                "<DIR>"
-            } else {
-                number(entry.info.size)
-            };
-            screen.text(y, x + width - 12, fitted(size, 9), style);
-        }
-    }
-    if (data.entries.len() > rows) {
-        let thumb = (data.selected * (rows - 1) / (data.entries.len() - 1)) as i16;
-        for (row in 0..rows) {
-            screen.text(row as i16 + 4, x + width - 2, if (row as i16 == thumb) {
-                "#"
-            } else {
-                ":"
-            }, theme.muted);
-        }
-    }
-    let count = number((data.selected + 1) as u32) + "/" + number(data.entries.len() as u32);
-    screen.text(bottom, x + width - count.len() as i16 - 3, count, theme.frame);
+fn panel(screen: &Screen, theme: &Theme, data: &FilePanel, x: i16, width: i16, focused: bool, cache: &mut PanelPaint) {
+    let area = Rect { row: 1, column: x, rows: screen.rows() - 4, columns: width };
+    let colors = PanelPalette { body: theme.text, directory: theme.directory, selected: theme.selected, inactive: theme.inactive, frame: theme.frame, title: theme.title, muted: theme.muted };
+    draw_cached(screen, data, area, colors, focused, theme.lines, cache);
+}
+
+export struct Paint {
+    valid: bool,
+    width: i16,
+    height: i16,
+    single: bool,
+    right: bool,
+    left: PanelPaint,
+    other: PanelPaint,
+    status: String
+}
+
+export fn painting() -> Paint {
+    Paint { valid: false, width: 0, height: 0, single: false, right: false, left: panel_paint(), other: panel_paint(), status: "" }
 }
 
 export fn render(screen: &Screen, theme: &Theme, state: &Browser) {
-    screen.background(theme.text);
+    let mut cache = painting();
+    render_cached(screen, theme, state, &mut cache);
+}
+
+export fn render_cached(screen: &Screen, theme: &Theme, state: &Browser, cache: &mut Paint) {
     let width = screen.columns();
     let height = screen.rows();
+    let full = !cache.valid || cache.width != width || cache.height != height || (cache.single && !state.single || !cache.single && state.single) || state.single && (cache.right && !state.right_active || !cache.right && state.right_active);
+    let selection_changed = full || (cache.right && !state.right_active || !cache.right && state.right_active) || cache.left.path != state.left.path || cache.other.path != state.right.path || cache.left.selected != state.left.cursor.selected || cache.other.selected != state.right.cursor.selected;
+    if (full) {
+        screen.background(theme.text);
+        cache.left.valid = false;
+        cache.other.valid = false;
+    }
     if (width < 40 || height < 10) {
         screen.text(0, 0, "RFL Commander: terminal needs 40x10", theme.error);
         screen.text(1, 0, "Resize terminal, or q/F10 to quit", theme.text);
+        cache.valid = false;
         screen.refresh();
         return;
     }
-    screen.fill(0, 0, width, ' ', theme.status);
-    screen.text(0, 1, "RFL Commander", theme.accent);
-    screen.text(0, 16, fitted("^A About  ^O Shell  ^P Layout  r Rename | " + theme.name, width - 17), theme.status);
+    if (full) {
+        screen.fill(0, 0, width, ' ', theme.status);
+        screen.text(0, 1, "RFL Commander", theme.accent);
+        screen.text(0, 16, fitted("^A About  ^O Shell  ^P Layout  r Rename | " + theme.name, width - 17), theme.status);
+    }
     if (state.single) {
-        panel(screen, theme, if (state.right_active) {
-            state.right
+        if (state.right_active) {
+            panel(screen, theme, &state.right, 0, width, true, &mut cache.other);
         } else {
-            state.left
-        }, 0, width, true);
+            panel(screen, theme, &state.left, 0, width, true, &mut cache.left);
+        }
     } else {
         let half = width / 2;
-        panel(screen, theme, state.left, 0, half, !state.right_active);
-        panel(screen, theme, state.right, half, width - half, state.right_active);
+        panel(screen, theme, &state.left, 0, half, !state.right_active, &mut cache.left);
+        panel(screen, theme, &state.right, half, width - half, state.right_active, &mut cache.other);
     }
-    screen.fill(height - 3, 0, width, ' ', theme.status);
-    screen.text(height - 3, 1, fitted(state.status, width - 2), theme.status);
-    screen.text(height - 2, 1, fitted("Selected: " + selected_path(state), width - 2), theme.muted);
-    screen.fill(height - 1, 0, width, ' ', theme.status);
-    let labels = ["2 Load", "3 View", "4 Edit", "5 Copy", "6 Move", "7 Mkdir", "8 Del", "9 Theme", "10 Quit"];
-    let slot = width / labels.len() as i16;
-    for (i in 0..labels.len()) {
-        screen.text(height - 1, i as i16 * slot, fitted(labels[i], slot - 1), theme.accent);
+    if (full || cache.status != state.status) {
+        screen.fill(height - 3, 0, width, ' ', theme.status);
+        screen.text(height - 3, 1, fitted(state.status, width - 2), theme.status);
     }
+    if (selection_changed) {
+        screen.fill(height - 2, 0, width, ' ', theme.text);
+        screen.text(height - 2, 1, fitted("Selected: " + selected_path(state), width - 2), theme.muted);
+    }
+    if (full) {
+        screen.fill(height - 1, 0, width, ' ', theme.status);
+        let labels = ["2 Load", "3 View", "4 Edit", "5 Copy", "6 Move", "7 Mkdir", "8 Del", "9 Theme", "10 Quit"];
+        let slot = width / labels.len() as i16;
+        for (i in 0..labels.len()) {
+            screen.text(height - 1, i as i16 * slot, fitted(labels[i], slot - 1), theme.accent);
+        }
+    }
+    cache.valid = true;
+    cache.width = width;
+    cache.height = height;
+    cache.single = state.single;
+    cache.right = state.right_active;
+    cache.status = state.status;
     screen.cursor(height - 2, 0, false);
     screen.refresh();
 }

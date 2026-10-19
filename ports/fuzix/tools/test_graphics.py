@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory(prefix='fuzix-gfx-') as temp:
     temp=Path(temp);stage=temp/'build';stage.mkdir()
     for file in build.iterdir():
         if file.is_file() and file.name!='apps.json':(stage/file.name).symlink_to(file)
+    # Desktop assets are a directory, so file-only staging omitted them.
+    if (build/'fusede').is_dir():(stage/'fusede').symlink_to(build/'fusede',target_is_directory=True)
     names=json.loads((build/'apps.json').read_text());names.append('gfxcheck')
     (stage/'apps.json').write_text(json.dumps(names))
     image=temp/'test.img'
@@ -44,4 +46,4 @@ with tempfile.TemporaryDirectory(prefix='fuzix-gfx-') as temp:
     expected=struct.pack('<'+'H'*len(pixels),*pixels)
     actual=raw.read_bytes()
     assert actual==expected,('RGB565 mismatch',next((i//2 for i,(x,y) in enumerate(zip(actual,expected)) if x!=y),None),len(actual))
-print('Graphics JIT passed: uploads/overlap/fill, ownership/cleanup, FD31 CLOEXEC, eight PTYs, configurable terminal/PTY geometry, invalid-size rejection, child status and persistent restart')
+print('Graphics JIT passed: uploads/overlap/fill, ownership/cleanup, FD31 CLOEXEC, sixteen PTYs, configurable terminal/PTY geometry, invalid-size rejection, child status and persistent restart')

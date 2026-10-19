@@ -42,6 +42,8 @@ pub enum Directive {
     Warning {
         message: String,
     },
+    // Definition syntax is only diagnosed when its conditional group executes.
+    InvalidDefinition { message: String },
     Text(String),
 }
 
@@ -110,7 +112,13 @@ impl Parser {
         
         match &token.token_type {
             TokenType::Include => self.parse_include(),
-            TokenType::Define => self.parse_define(),
+            TokenType::Define => match self.parse_define() {
+                Ok(definition) => Ok(definition),
+                Err(error) => {
+                    self.skip_to_newline();
+                    Ok(Directive::InvalidDefinition { message: error.to_string() })
+                }
+            },
             TokenType::Undef => self.parse_undef(),
             TokenType::If => self.parse_if(),
             TokenType::Ifdef => self.parse_ifdef(),

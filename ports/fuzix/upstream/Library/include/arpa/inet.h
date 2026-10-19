@@ -1,6 +1,9 @@
 #ifndef _ARPA_INET_H
 #define _ARPA_INET_H
 
+/* Public address typedefs must be available regardless of include order. */
+#include <netinet/in.h>
+
 /* All our big endian platforms use gcc, and gcc gets the define right
    so trust it for big endian detection */
 

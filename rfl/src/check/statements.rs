@@ -244,11 +244,31 @@ impl<'a> Checker<'a> {
             Stmt::Expr(expr) => Ok(TStmt::Expr(self.check_expr(expr, None)?)),
             Stmt::Return { span, value } => {
                 let value = match value {
-                    Some(expr) => Some(self.check_expr(expr, Some(self.fn_ret))?),
+                    Some(expr) => Some(self.check_expr(
+                        expr,
+                        match self.lambda_return {
+                            Some(inferred) => inferred,
+                            None => Some(self.fn_ret),
+                        },
+                    )?),
                     None => None,
                 };
                 let got = value.as_ref().map(|e| e.ty).unwrap_or(Ty::Unit);
-                if got != self.fn_ret {
+                if let Some(inferred) = self.lambda_return {
+                    if inferred.is_some_and(|ty| ty != got) {
+                        return Err(CompileError::at(
+                            self.source,
+                            span.start,
+                            format!(
+                                "lambda returns both {} and {}",
+                                self.show(inferred.unwrap()),
+                                self.show(got)
+                            ),
+                        ));
+                    }
+                    self.lambda_return = Some(Some(got));
+                    self.fn_ret = got;
+                } else if got != self.fn_ret {
                     return Err(CompileError::at(
                         self.source,
                         span.start,

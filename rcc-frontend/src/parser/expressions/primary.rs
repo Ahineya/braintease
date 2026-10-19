@@ -4,6 +4,7 @@ use crate::ast::*;
 use crate::lexer::{Token, TokenType};
 use crate::parser::errors::ParseError;
 use crate::parser::Parser;
+use crate::Type;
 use rcc_common::{CompilerError, SourceSpan};
 
 impl Parser {
@@ -32,8 +33,24 @@ impl Parser {
             }
             Some(Token { token_type: TokenType::Identifier(name), .. }) => {
                 if let Some(value) = self.lookup_parser_constant(&name) {
-                    ExpressionKind::IntLiteral {
-                        value, suffix: crate::lexer::IntegerSuffix::None, hex: false,
+                    // Enumerators are signed int constants when representable,
+                    // not source integer tokens. Reclassifying a folded -1 as
+                    // an unsuffixed literal interprets its bits as ULLONG_MAX
+                    // and widens comparisons with unsigned long to 64 bits.
+                    // Retain the existing wider-enumerator extension explicitly.
+                    let target_type = if i16::try_from(value).is_ok() { Type::Int }
+                        else if i32::try_from(value).is_ok() { Type::Long }
+                        else { Type::LongLong };
+                    ExpressionKind::Cast {
+                        target_type,
+                        operand: Box::new(Expression {
+                            node_id: self.node_id_gen.next(),
+                            kind: ExpressionKind::IntLiteral {
+                                value, suffix: crate::lexer::IntegerSuffix::None, hex: false,
+                            },
+                            span: SourceSpan::new(start_location.clone(), self.current_location()),
+                            expr_type: None,
+                        }),
                     }
                 } else {
                     ExpressionKind::Identifier { name, symbol_id: None }

@@ -80,5 +80,6 @@ static void __tm_conv(struct tm *tmbuf, time_t * pt)
 struct tm *gmtime_r(time_t *timep, struct tm *result)
 {
 	__tm_conv(result, timep);
+	result->tm_isdst = 0;
 	return result;
 }

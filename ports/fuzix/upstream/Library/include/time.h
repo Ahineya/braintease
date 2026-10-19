@@ -49,9 +49,9 @@ extern char *ctime_r(time_t * __tp, char * __buf);
 extern void tzset(void);
 
 extern struct tm *gmtime(time_t *__tp);
-extern struct tm *localtime(time_t * __tp);
+extern struct tm *localtime(const time_t * __tp);
 extern struct tm *gmtime_r(time_t *__tvec, struct tm *__result);
-extern struct tm *localtime_r(time_t *__tvec, struct tm *__result);
+extern struct tm *localtime_r(const time_t *__tvec, struct tm *__result);
 
 typedef int clockid_t;
 

@@ -1,0 +1,112 @@
+{
+  "repository": "https://github.com/lucide-icons/lucide",
+  "release": "1.59.0",
+  "revision": "1ef60af944de207e0d5176905a0759ba12e6ee8d",
+  "files": [
+    {
+      "file": "LICENSE",
+      "upstream": "LICENSE",
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+    },
+    {
+      "file": "arrow-left.svg",
+      "upstream": "icons/arrow-left.svg",
+      "sha256": "c5f4b88076108eb1a0d95336e1aa7e7bb1419a3a92af96f6247d88cd3456f933"
+    },
+    {
+      "file": "arrow-right.svg",
+      "upstream": "icons/arrow-right.svg",
+      "sha256": "288397fdb73bb4f783cf9eabb726ff47357df1d4e3f1201dd748090579f108b9"
+    },
+    {
+      "file": "calculator.svg",
+      "upstream": "icons/calculator.svg",
+      "sha256": "a6b191250b1ffabdf9fc9536662309f1b0f65336aa681d75bae9f1708baaefd0"
+    },
+    {
+      "file": "file-code.svg",
+      "upstream": "icons/file-code.svg",
+      "sha256": "8ac619671f53653a483c2d5e2e6afe6d009c3198918cf76632e2cb4abf0d6721"
+    },
+    {
+      "file": "file.svg",
+      "upstream": "icons/file.svg",
+      "sha256": "499039795d7412d67664ff79d2eb6b7412e746b24c18c8fd8aba383c24ddada0"
+    },
+    {
+      "file": "folder.svg",
+      "upstream": "icons/folder.svg",
+      "sha256": "f0d92b94b797a8ab7d4c4ae33c3236c47f64068351b4e14bdb5014ee42898a39"
+    },
+    {
+      "file": "grid-2x2.svg",
+      "upstream": "icons/grid-2x2.svg",
+      "sha256": "dc1896d3b22e88e0ba45a77bc8e947b7a01d0c9fb5ff77d07d24a5589816bb84"
+    },
+    {
+      "file": "house.svg",
+      "upstream": "icons/house.svg",
+      "sha256": "28216c479005731ef5e382e7d8627eda2b129b019eb1f3d9de9f5915576d448e"
+    },
+    {
+      "file": "info.svg",
+      "upstream": "icons/info.svg",
+      "sha256": "bc977a64eb96f3e9c1041ffd09a3fceb70e3e65c02b571f76064062ed31f3cb9"
+    },
+    {
+      "file": "maximize.svg",
+      "upstream": "icons/maximize.svg",
+      "sha256": "1f790856b0de805ab62e871609f1990b89d227d472022e57a11fde015aad4826"
+    },
+    {
+      "file": "minus.svg",
+      "upstream": "icons/minus.svg",
+      "sha256": "a0c743ab6dbf545d8a6e19ef3874f48ede686ce68d25e231bd81f540d97b1f19"
+    },
+    {
+      "file": "play.svg",
+      "upstream": "icons/play.svg",
+      "sha256": "d7c34786135922a92b6896f6c2384ceeb0346afbf6041dc79982011411409833"
+    },
+    {
+      "file": "power.svg",
+      "upstream": "icons/power.svg",
+      "sha256": "1e6b84a659aa43f826cdd8df0a63d349720004e2ccb10c33e415a990a311aa05"
+    },
+    {
+      "file": "refresh-cw.svg",
+      "upstream": "icons/refresh-cw.svg",
+      "sha256": "2e10dd403c85a24f163d59fc6151aa21147fe9402e1305dfc8979208caee8944"
+    },
+    {
+      "file": "save.svg",
+      "upstream": "icons/save.svg",
+      "sha256": "ee9d56a7fec4b20dd6689546d41f68219ea8cbd67f99bd17a1bdaff5be6edb53"
+    },
+    {
+      "file": "search.svg",
+      "upstream": "icons/search.svg",
+      "sha256": "283d371c2e433817bb9c0c8310caa6c77fa4177c0f4f1168d9c83b97af7389dc"
+    },
+    {
+      "file": "settings.svg",
+      "upstream": "icons/settings.svg",
+      "sha256": "0ae27fd0f81999229e3127ac96c5b32edfea448e291d509e76212b917551d66b"
+    },
+    {
+      "file": "terminal.svg",
+      "upstream": "icons/terminal.svg",
+      "sha256": "4f9b6488b237757d5cb615ccd07502fa99774826839e2a99017784bdb2596f1a"
+    },
+    {
+      "file": "trash.svg",
+      "upstream": "icons/trash.svg",
+      "sha256": "27299f69ad7c6272be64b1b8e2d48cbd6dcf0ef0d4f92827a1affa945c91700e"
+    },
+    {
+      "file": "x.svg",
+      "upstream": "icons/x.svg",
+      "sha256": "4a9cdab38fbb96162e7dace28e33f4ca0e49d8963a6162abc3d4691b7d675117"
+    }
+  ]
+}

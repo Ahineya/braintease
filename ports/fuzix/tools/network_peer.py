@@ -18,6 +18,7 @@ class Stream:
         self.isn = (0x12345600 + local * 123) & MASK
         self.next = self.isn + 1
         self.peer_next = None if isn is None else (isn + 1) & MASK
+        self.peer_isn = isn
         self.established = self.fin = self.closed = self.reset = False
         self.closing = self.fin_sent = self.fin_acked = False
         self.pending = bytearray()
@@ -113,7 +114,7 @@ class Stream:
             self.send(self.next, 24, data)
             self.flight = (self.next, 24, data, now)
             self.next = (self.next + count) & MASK
-        elif self.closing and not self.fin_sent:
+        elif not self.pending and self.closing and not self.fin_sent:
             self.send(self.next, 17)
             self.flight = (self.next, 17, b'', now)
             self.next = (self.next + 1) & MASK
@@ -192,6 +193,12 @@ class Peer:
             assert wire.checksum(frame[26:34] + struct.pack('!BBH', 0, 6, len(p)) + p) == 0
             source, target, seq, ack, offset, flags, window, _, _ = struct.unpack('!HHIIBBHHH', p[:20])
             key = (target, source)
+            previous = self.streams.get(key)
+            if (previous and flags & 2 and not flags & 16 and seq != previous.peer_isn
+                    and (previous.closed or previous.reset or previous.fin_acked)):
+                # A guest may legitimately reuse a port after close/TIME_WAIT.
+                # Do not feed its new TLS handshake to an old SSL session.
+                del self.streams[key]
             if key not in self.streams:
                 assert flags & 2 and not flags & 16 and (target in (7001, 2323) or target in self.tcp_services), (source, target, flags)
                 self.streams[key] = Stream(self, target, source, passive=True, isn=seq)

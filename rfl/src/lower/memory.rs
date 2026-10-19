@@ -146,20 +146,14 @@ pub(super) fn copy_slot(
         return Ok(());
     }
     if cell_wise(ty) {
-        for index in 0..ty.cells() {
-            let value = load_cell(
-                builder,
-                src_frame,
-                src_proc.slots[src].offset + index,
-                IrType::I16,
-            )?;
-            store_cell(
-                builder,
-                dest_frame,
-                dest_proc.slots[dest].offset + index,
-                value,
-            )?;
-        }
+        copy_frame_cells(
+            builder,
+            src_frame,
+            src_proc.slots[src].offset,
+            dest_frame,
+            dest_proc.slots[dest].offset,
+            ty.cells(),
+        )?;
         if keeps(src_proc, ty) {
             retain_tree(
                 builder,
@@ -269,9 +263,7 @@ pub(super) fn borrowed_place(
     ref_offset: i64,
     field: i64,
 ) -> Result<Value, CompileError> {
-    let addr = load_cell(builder, frame, ref_offset, IrType::I16)?;
-    let bank = load_cell(builder, frame, ref_offset + 1, IrType::I16)?;
-    let base = fat_from_parts(builder, addr, bank)?;
+    let base = load_fat(builder, frame, ref_offset)?;
     if field == 0 {
         Ok(base)
     } else {
@@ -339,9 +331,7 @@ pub(super) fn vec_header(
 ) -> Result<Value, CompileError> {
     let offset = proc.slots[slot].offset;
     if proc.slots[slot].ty.is_ref() {
-        let addr = load_cell(builder, frame, offset, IrType::I16)?;
-        let bank = load_cell(builder, frame, offset + 1, IrType::I16)?;
-        fat_from_parts(builder, addr, bank)
+        load_fat(builder, frame, offset)
     } else {
         gep(builder, frame, offset)
     }
@@ -498,4 +488,30 @@ pub(super) fn null_ptr() -> Value {
 
 pub(super) fn fn_symbol(name: &str) -> String {
     format!("rfl_fn_{name}")
+}
+
+/// Copy disjoint (or identical) inline frame slots. Group raw cells without
+/// interpreting pointer tags or ownership; callers retain/release separately.
+/// Wide memory operations advance across banks, including unaligned frames.
+pub(super) fn copy_frame_cells(
+    builder: &mut IrBuilder,
+    src: &Value,
+    src_offset: i64,
+    dest: &Value,
+    dest_offset: i64,
+    cells: i64,
+) -> Result<(), CompileError> {
+    let mut index = 0;
+    while index < cells {
+        let (width, ty) = match cells - index {
+            4.. => (4, IrType::I64),
+            2.. => (2, IrType::I32),
+            _ => (1, IrType::I16),
+        };
+        let value = load_cell(builder, src, src_offset + index, ty.clone())?;
+        let ptr = gep(builder, dest, dest_offset + index)?;
+        builder.build_store(value, ptr, ty).ir()?;
+        index += width;
+    }
+    Ok(())
 }

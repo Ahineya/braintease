@@ -11,6 +11,7 @@ int winsertln(WINDOW *win)
   chtype *temp, *end, blank;
   int y;
 
+  win->_last_valid = 0;
   blank = ' ' | (win->_attrs & ATR_MSK);
   temp = win->_line[win->_regbottom];
   for (y = win->_regbottom; y > win->_cury; y--) {

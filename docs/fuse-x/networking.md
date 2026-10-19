@@ -31,7 +31,7 @@ kernel or unrelated sessions. Several terminal sessions should have independent
 input and output streams.
 
 `telnetd &` explicitly starts the development service. Connections get separate
-Bourne shells on the four guest PTYs, with job control and full-screen editors.
+Bourne shells on the sixteen guest PTYs, with job control and full-screen editors.
 The init supervisor keeps the kernel alive when shells exit. The launcher also
 supports `--headless --telnet` for a remote-only session, and `--detach`, `--attach`
 and `--stop` for its persistent local console. Telnet provides no
@@ -72,10 +72,64 @@ Network menu controls, configuration persistence and live attachment changes
 remain open. The local Ethernet fixture test does not require vmnet privileges
 and does not establish that an arbitrary host's vmnet setup works.
 
+After a working Ethernet helper fails or misses its five-second heartbeat,
+the runtime reports link-down and reconnects in the background. Failed retries
+back off to at most one attempt per thirty seconds. Old packet queues are
+discarded; existing TCP connections fail and applications must reconnect.
+Recovery never asks for a password inside the guest console. On macOS it can
+restart the helper only while noninteractive `sudo` authorization is available;
+otherwise the host log reports the authorization failure and the link stays down
+until a retry can succeed. Initial startup failures remain cached, avoiding
+repeated authorization prompts. These rules also apply to RVM's shared backend.
+
+Local socket congestion is handled separately from link failure. Temporary
+`EAGAIN`, `ENOBUFS` and interrupted sends do not revoke the helper's client.
+Hello and heartbeat replies retry before Ethernet forwarding. A bounded
+64-frame/64-KiB transmit queue retains frames in order while vmnet reports
+buffer exhaustion or a zero-packet write; heartbeats continue during the wait.
+A vmnet write or read that stays buffer-blocked for five seconds reports a
+failure so ordinary attachment recovery can take over. Queue overflow drops
+new Ethernet frames rather than growing host memory without limit.
+
+Actual inbound Ethernet traffic also proves helper liveness if heartbeat
+replies are delayed. Silence from a remote website alone does not establish
+that the local Ethernet attachment failed and does not restart the NIC.
+Helper errors are forwarded immediately into the session log as
+`network helper: ...`, including vmnet's numeric error status. Recovery reaps
+the helper before removing a socket left by an abnormal exit. This preserves
+the cause in the session log instead of deleting the only diagnostic with the
+old helper directory. Already running kernels keep their embedded helper;
+these changes require rebuilding and restarting the kernel.
+
+The helper regression uses the real forwarding loop with a fake vmnet API and
+injected local socket faults. It requires macOS headers and local socket access,
+but creates no virtual interface and needs no sudo:
+
+```sh
+python3 tools/network/test_vmnet.py
+cargo test --offline --jobs 2 -p rvm --lib network::
+```
+
+The local console applies bounded backpressure when output outruns the attached
+terminal. This can pause a noisy foreground program while preserving keyboard
+input, including Ctrl-C, and the separate status/stop controls. Output bytes do
+not trigger console detachment. Ctrl-] typed by the user still detaches; a
+disconnected console continues logging with bounded rotation and replay.
+
+The isolated broker flood regression needs no guest image:
+
+```sh
+python3 fuse-x/test_console_broker.py
+```
+
+Pass `--executable fuse-x/build/fuse-x` to additionally exercise a real guest's
+`cat /dev/urandom`, Ctrl-C and clean shutdown using a temporary root image.
+
 ## Capacity and guest-local services
 
-Both kernels now provide sixteen internet endpoints, sixteen active TCP
-connections and four TCP listeners. A separate pool of thirty-two Unix-domain
+Both kernels now provide 64 internet endpoints, 64 active TCP
+connections, 16 TCP listeners, 16 bound UDP ports and 128 compact TIME_WAIT
+records. A separate pool of thirty-two Unix-domain
 stream endpoints supports pathname services and `socketpair()` even offline.
 These are guest endpoints governed by FUZIX descriptors and filesystem
 permissions; they do not bridge to Mac Unix sockets. They participate in the

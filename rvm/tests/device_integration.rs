@@ -285,3 +285,28 @@ fn live_keyboard_polling_works_before_any_tick_and_does_not_advance_replay() {
         &[1, 1, 4, 0]
     );
 }
+
+#[test]
+fn console_dma_preserves_transcript_order_and_rejects_bad_descriptors() {
+    let mut vm = TestVm::new();
+    vm.write_cell(0, 0, b'A' as u16).unwrap();
+    let source = 2 * BANK_SIZE as usize - 2;
+    vm.memory[source..source + 4].copy_from_slice(&[b'B' as u16, 0, 10, 0x1ff]);
+    assert_eq!(vm.command(rvm::terminal::COMMAND, &[1,8,1,63998,4,0,0,0]),0);
+    assert_eq!(vm.memory[DESCRIPTOR + 6],4);
+    vm.write_cell(0, 0, b'C' as u16).unwrap();
+    assert_eq!(vm.get_output(),b"AB\0\n\xffC");
+    assert_eq!(vm.devices.tick(),0);
+    for descriptor in [[2,8,1,63998,4,0,0,0], [1,7,1,63998,4,0,0,0],
+                       [1,8,0,0,1,0,0,0], [1,8,4,100,8,0,0,0]] {
+        let before = vm.memory.clone();
+        assert_ne!(vm.command(rvm::terminal::COMMAND,&descriptor),0);
+        assert!(vm.get_output().is_empty());
+        // The caller placed the invalid descriptor; the device changes nothing.
+        assert_eq!(vm.memory[0..DESCRIPTOR],before[0..DESCRIPTOR]);
+        assert_eq!(vm.memory[DESCRIPTOR+8..],before[DESCRIPTOR+8..]);
+        assert_eq!(vm.memory[DESCRIPTOR..DESCRIPTOR+8],descriptor);
+    }
+    assert_eq!(vm.command(rvm::terminal::COMMAND,&[1,8,1,0,0,0,0,0]),0);
+    assert!(vm.get_output().is_empty());
+}

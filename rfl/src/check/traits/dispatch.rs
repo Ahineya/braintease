@@ -26,6 +26,9 @@ impl Checker<'_> {
         if let Some((_, bounds)) = self.opaque.get(&ty) {
             return Ok(bounds.iter().any(|b| b == name));
         }
+        if self.is_copy_trait(name) {
+            return Ok(self.copy_value(name, ty, &mut HashSet::new()));
+        }
         let key = (name.to_string(), ty);
         if !stack.insert(key.clone()) {
             return Ok(false);
@@ -109,7 +112,24 @@ impl Checker<'_> {
         let adapted = self.adapt_receiver(span, receiver, recv_ty, required.receiver)?;
         let mut call_args = vec![adapted];
         call_args.extend_from_slice(args);
-        let result = self.check_trait_assoc(span, name, method, &call_args, expected)?;
+        let owner = self.referent(recv_ty);
+        let receiver_hint = if recv_ty.is_ref() {
+            recv_ty
+        } else {
+            match required.receiver {
+                Some(Recv::Shared) => self.intern_ref(false, owner),
+                Some(Recv::Mut) => self.intern_ref(true, owner),
+                _ => owner,
+            }
+        };
+        let result = self.check_trait_assoc_with_receiver(
+            span,
+            name,
+            method,
+            &call_args,
+            expected,
+            Some(receiver_hint),
+        )?;
         if let TExprKind::Call { args, .. } = &result.kind {
             self.noted_fn(
                 &args.iter().skip(1).map(|a| a.ty).collect::<Vec<_>>(),
@@ -128,6 +148,18 @@ impl Checker<'_> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        self.check_trait_assoc_with_receiver(span, name, method, args, expected, None)
+    }
+
+    fn check_trait_assoc_with_receiver(
+        &mut self,
+        span: usize,
+        name: &str,
+        method: &str,
+        args: &[Expr],
+        expected: Option<Ty>,
+        receiver_hint: Option<Ty>,
+    ) -> Result<TExpr, CompileError> {
         let tr = self.traits.iter().find(|t| t.name == name).unwrap().clone();
         let Some(required) = tr.methods.iter().find(|m| m.name == method) else {
             return Err(CompileError::at(
@@ -136,6 +168,42 @@ impl Checker<'_> {
                 format!("`{name}` has no method `{method}`"),
             ));
         };
+        if tr.arity > 0 {
+            let owner = if matches!(required.params.first().and_then(|p|p.ty.as_ref()),Some(ParsedTy::Named{name,args,..}) if name == "Self" && !args.is_empty())
+            {
+                let mark = self.borrows.len();
+                let first = args.first().ok_or_else(|| {
+                    CompileError::at(
+                        self.source,
+                        span,
+                        "cannot infer constructor; use Constructor::operation(...)",
+                    )
+                })?;
+                let value = self.check_expr(first, None)?;
+                self.borrows.truncate(mark);
+                self.decompose_constructor(value.ty).map(|(c, _)| c)
+            } else {
+                expected.and_then(|ty| self.decompose_constructor(ty).map(|(c, _)| c))
+            };
+            let owner = owner.ok_or_else(|| {
+                CompileError::at(
+                    self.source,
+                    span,
+                    "cannot infer constructor; use Constructor::operation(...)",
+                )
+            })?;
+            return self.check_operation(span, name, owner, method, args, expected);
+        }
+        if !required.type_params.is_empty() {
+            let mark = self.borrows.len();
+            let receiver = args.first().ok_or_else(|| {
+                CompileError::at(self.source, span, "trait call needs a receiver")
+            })?;
+            let ty = self.check_expr(receiver, receiver_hint)?.ty;
+            let owner = self.referent(ty);
+            self.borrows.truncate(mark);
+            return self.check_operation(span, name, owner, method, args, expected);
+        }
         if args.len() != required.params.len() + 1 {
             return Err(CompileError::at(
                 self.source,
@@ -147,7 +215,7 @@ impl Checker<'_> {
                 ),
             ));
         }
-        let recv = self.check_expr(&args[0], None)?;
+        let recv = self.check_expr(&args[0], receiver_hint)?;
         let ty = self.referent(recv.ty);
         let recv_kind = required.receiver.unwrap();
         let wanted = match recv_kind {

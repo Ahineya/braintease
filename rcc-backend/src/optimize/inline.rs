@@ -501,6 +501,24 @@ pub(super) fn inline_small_functions(module: &mut Module) {
                 changed = true;
             }
             merge_linear_blocks(caller);
+            // Frame slots have function lifetime. A backward edge can merge
+            // an inline entry into a block laid out after its uses. The
+            // lowerer visits blocks in layout order and must register these
+            // fixed homes before any load/store resolves their pointer banks.
+            let mut homes = Vec::new();
+            for block in &mut caller.blocks {
+                block.instructions.retain(|inst| {
+                    if matches!(inst, I::Alloca { count: None | Some(Value::Constant(_)), .. }) {
+                        homes.push(inst.clone());
+                        false
+                    } else {
+                        true
+                    }
+                });
+            }
+            if let Some(entry) = caller.blocks.first_mut() {
+                entry.instructions.splice(0..0, homes);
+            }
             super::optimize_function(caller);
             // These caches are advisory; rebuild them from terminators.
             let edges: Vec<_> = caller
@@ -635,6 +653,51 @@ mod tests {
             .any(|i| matches!(i, I::Call { .. })));
         helper.blocks[1].instructions = vec![I::Branch(2)];
         assert!(!candidate(&helper));
+    }
+
+    #[test]
+    fn inline_stack_homes_survive_backward_switch_layout() {
+        let source = r#"module backward_switch {
+          function i16 @digit(i16 %0) {
+            block 0:
+              %1 = alloca i16 -> i16*
+              store i16 %0, fat(%1, mixed)
+              %2 = load i16, fat(%1, mixed)
+              %3 = sle i16 48, %2
+              br %3, label 1, label 3
+            block 1:
+              %4 = load i16, fat(%1, mixed)
+              %5 = sle i16 %4, 55
+              br %5, label 2, label 3
+            block 2:
+              %6 = load i16, fat(%1, mixed)
+              %7 = sub i16 %6, 48
+              ret %7
+            block 3:
+              ret -1
+          }
+          function i16 @caller(i16 %0) {
+            block 0:
+              br label 3
+            block 1:
+              %1 = call i16 func @digit(%0)
+              ret %1
+            block 2:
+              ret 42
+            block 3:
+              %2 = eq i16 %0, 120
+              br %2, label 2, label 1
+          }
+        }"#;
+        let mut module = rcc_ir::parse_module(source).unwrap();
+        inline_small_functions(&mut module);
+        let caller = &module.functions[1];
+        assert!(!caller.blocks.iter().flat_map(|b| &b.instructions)
+            .any(|i| matches!(i, I::Call { .. })));
+        assert!(!caller.blocks.iter().skip(1).flat_map(|b| &b.instructions)
+            .any(|i| matches!(i, I::Alloca { .. })));
+        // This used to panic resolving the bank of the cloned parameter home.
+        crate::lower::module::lower_module(&rcc_ir::parse_module(source).unwrap(), 64000, false).unwrap();
     }
 
     #[test]

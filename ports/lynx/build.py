@@ -93,22 +93,30 @@ def build_browser(args):
                         '--compiler', str(compiler), '-j', str(args.j)], check=True)
     directory = PORT / ('build/native' if args.target == 'native' else 'build/probe')
     inputs = [directory / (unit + '.ir') for unit in all_units(prepare())]
-    if args.target == 'ripple':
-        report = build_ripple(inputs, build, args.j, compiler, executable)
-    else:
-        subprocess.run([sys.executable, str(ROOT / 'fuse-x/cc.py'), *map(str, inputs),
-                        '--curses', '--float-format', '--compiler', str(compiler),
-                        '--build', str(build), '-o', str(executable)], check=True)
-        data = executable.read_bytes()
-        if data[:8] != b'FUSEX001':
-            raise RuntimeError('invalid linked executable envelope')
-        manifest_length, payload_length = struct.unpack_from('<II', data, 8)
-        manifest = json.loads(data[16:16 + manifest_length])
-        report = {'target': 'native', 'package_octets': len(data), 'payload_octets': payload_length,
-                  'global_cells': manifest['global_cells'], 'global_bank': manifest['global_bank'],
-                  'functions': len(manifest['functions'])}
-    (PORT / f'build/resources-{args.target}.json').write_text(json.dumps(report, indent=2) + '\n')
-    print(json.dumps(report, indent=2))
+    tls = build / 'tls'
+    tls.mkdir(parents=True, exist_ok=True)
+    # Match app.py's lock while compiling/lowering shared TLS objects.
+    with (tls / (args.target + '.lock')).open('a') as tls_lock:
+        fcntl.flock(tls_lock, fcntl.LOCK_EX)
+        subprocess.run([sys.executable, str(ROOT / 'ports/tls/build.py'), '--target', args.target,
+                        '--compiler', str(compiler), '--build', str(tls), '-j', str(args.j)], check=True)
+        inputs += [Path(p) for p in json.loads((tls / args.target / 'objects.json').read_text())]
+        if args.target == 'ripple':
+            report = build_ripple(inputs, build, args.j, compiler, executable)
+        else:
+            subprocess.run([sys.executable, str(ROOT / 'fuse-x/cc.py'), *map(str, inputs),
+                            '--curses', '--float-format', '--compiler', str(compiler),
+                            '--build', str(build), '-o', str(executable)], check=True)
+            data = executable.read_bytes()
+            if data[:8] != b'FUSEX001':
+                raise RuntimeError('invalid linked executable envelope')
+            manifest_length, payload_length = struct.unpack_from('<II', data, 8)
+            manifest = json.loads(data[16:16 + manifest_length])
+            report = {'target': 'native', 'package_octets': len(data), 'payload_octets': payload_length,
+                      'global_cells': manifest['global_cells'], 'global_bank': manifest['global_bank'],
+                      'functions': len(manifest['functions'])}
+        (PORT / f'build/resources-{args.target}.json').write_text(json.dumps(report, indent=2) + '\n')
+        print(json.dumps(report, indent=2))
 
 
 if __name__ == '__main__':

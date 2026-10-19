@@ -223,7 +223,10 @@ impl<'a> Checker<'a> {
         }
         if matches!(op, BinOp::Eq | BinOp::Ne) || op.is_compare() {
             let hint = self.peek(lhs).or_else(|| self.peek(rhs));
-            if hint == Some(Ty::String) || hint == Some(Ty::Char) {
+            if hint == Some(Ty::String)
+                || hint == Some(Ty::Char)
+                || (hint == Some(Ty::Bool) && matches!(op, BinOp::Eq | BinOp::Ne))
+            {
                 if hint == Some(Ty::String) && !matches!(op, BinOp::Eq | BinOp::Ne) {
                     return Err(CompileError::at(
                         self.source,

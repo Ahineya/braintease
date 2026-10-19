@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "description": "sizeof a string-initialized array is a constant expression in an array bound",
+  "use_runtime": true
+}

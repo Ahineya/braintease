@@ -1,0 +1,5 @@
+{
+  "description": "Scalar and bulk console output retain ordering through standalone puts and printf",
+  "expected": "YYYYYY\nYY:42\n",
+  "use_runtime": true
+}

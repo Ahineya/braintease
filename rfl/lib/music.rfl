@@ -1,0 +1,113 @@
+extern "C" {
+    fn music_new() -> *mut u16;
+    fn music_free(p: *mut u16);
+    fn music_stop(p: *mut u16);
+    fn music_load(p: *mut u16, path: *const u8) -> i16;
+    fn music_step(p: *mut u16);
+    fn music_pause(p: *mut u16);
+    fn music_seek(p: *mut u16, seconds: i32) -> i16;
+    fn music_volume(p: *mut u16, percent: u16);
+    fn music_state(p: *mut u16) -> u16;
+    fn music_gain(p: *mut u16) -> u16;
+    fn music_channels(p: *mut u16) -> u16;
+    fn music_rate(p: *mut u16) -> u32;
+    fn music_elapsed(p: *mut u16) -> u32;
+    fn music_duration(p: *mut u16) -> u32;
+    fn music_underruns(p: *mut u16) -> u32;
+    fn music_status(p: *mut u16) -> *const u8;
+    fn music_title(p: *mut u16) -> *const u8;
+}
+
+export struct Player {
+    state: Owned<*mut u16>
+}
+
+export fn player() -> Result<Player, String> {
+    let p = music_new();
+    if (p.is_null()) {
+        return Err("Cannot allocate music player");
+    }
+    Ok(Player { state: owned(p, fn(value: &mut *mut u16) => {
+        music_free(*value);
+    }) })
+}
+
+fn text(p: *const u8) -> String {
+    let mut out = "";
+    let limit: usize = 256;
+    for (i in 0..limit) {
+        let c = unsafe {
+            p[i]
+        };
+        if (c == 0) {
+            break;
+        }
+        out = out + from_byte(c);
+    }
+    out
+}
+
+impl Player {
+    fn raw(&self) -> *mut u16 {
+        let p = self.state.borrow();
+        *p
+    }
+    export fn load(&self, path: String) -> bool {
+        if (path.is_empty() || path.len() > 255) {
+            return false;
+        }
+        let mut bytes: Vec<u8> = [];
+        for (i in 0..path.len()) {
+            if (path[i] == '\0' || path[i] as u32 > 255) {
+                return false;
+            }
+            bytes.push(path[i] as u8);
+        }
+        bytes.push(0);
+        unsafe {
+            music_load(self.raw(), &bytes[0]) != 0
+        }
+    }
+    export fn step(&self) {
+        music_step(self.raw());
+    }
+    export fn stop(&self) {
+        music_stop(self.raw());
+    }
+    export fn pause(&self) {
+        music_pause(self.raw());
+    }
+    export fn seek(&self, seconds: i32) -> bool {
+        music_seek(self.raw(), seconds) != 0
+    }
+    export fn volume(&self, percent: u16) {
+        music_volume(self.raw(), percent);
+    }
+    export fn gain(&self) -> u16 {
+        music_gain(self.raw())
+    }
+    export fn state(&self) -> u16 {
+        music_state(self.raw())
+    }
+    export fn channels(&self) -> u16 {
+        music_channels(self.raw())
+    }
+    export fn rate(&self) -> u32 {
+        music_rate(self.raw())
+    }
+    export fn elapsed(&self) -> u32 {
+        music_elapsed(self.raw())
+    }
+    export fn duration(&self) -> u32 {
+        music_duration(self.raw())
+    }
+    export fn underruns(&self) -> u32 {
+        music_underruns(self.raw())
+    }
+    export fn status(&self) -> String {
+        text(music_status(self.raw()))
+    }
+    export fn title(&self) -> String {
+        text(music_title(self.raw()))
+    }
+}

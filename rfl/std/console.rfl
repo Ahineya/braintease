@@ -1,0 +1,52 @@
+import { Effect, from_async } from "std/effect";
+import { Environment, with_environment } from "std/effect_env";
+import { Future } from "std/future";
+
+/// A console read/write failure, overlapping operation, or oversized input line.
+export type ConsoleError =
+/// The input backend failed.
+| ConsoleReadError
+/// The output backend failed; output already written is not rolled back.
+| ConsoleWriteError
+/// Another operation of the same kind owns this console's stream.
+| ConsoleBusy
+/// The input line exceeds the backend's documented byte limit.
+| ConsoleLineTooLong;
+
+/// An injectable console service. Methods construct owned futures; no borrowed
+/// environment reference crosses suspension. Implementations document their
+/// input encoding, limits and cancellation behavior.
+export trait Console {
+    /// Reads a line without its terminator. None denotes EOF; an unterminated
+    /// final line is returned as Some. Constructed futures must be lazy.
+    fn read_line(&mut self) -> Async<Result<Option<String>, ConsoleError>>;
+    /// Writes the string's octets without adding a newline. Constructed futures
+    /// must be lazy. Cancellation cannot undo already-consumed or written data.
+    fn write_text(&mut self, text: String) -> Async<Result<unit, ConsoleError>>;
+}
+
+/// Defers a console line read until execution. The service can be the entire
+/// environment or a capability implemented by a larger application environment.
+export fn read_line<R: Console>() -> Effect<R, ConsoleError, Option<String>> {
+    from_async(fn(env: Environment<R>) => read_async(env))
+}
+
+async fn read_async<R: Console>(env: Environment<R>) -> Result<Option<String>, ConsoleError> {
+    let operation = with_environment(env, once fn(console: &mut R) => console.read_line());
+    move(operation).await
+}
+
+/// Defers writing octet text through the injected console service.
+export fn print<R: Console>(text: String) -> Effect<R, ConsoleError, unit> {
+    from_async(fn(env: Environment<R>) => write_async(env, text))
+}
+
+async fn write_async<R: Console>(env: Environment<R>, text: String) -> Result<unit, ConsoleError> {
+    let operation = with_environment(env, once fn(console: &mut R) => console.write_text(text));
+    move(operation).await
+}
+
+/// Defers writing text followed by one LF through the injected console service.
+export fn println<R: Console>(text: String) -> Effect<R, ConsoleError, unit> {
+    print<R>(text + "\n")
+}

@@ -1,0 +1,227 @@
+// User-authored JSX-shaped DSL. The compiler has no HTML-specific parser.
+import { Token, TokenStream, empty, concat, ident, call_site_ident, literal, punctuation, group, diagnostic, span_of, call_span } from "std/macro";
+// These are definition-site target dependencies, not macro-host services.
+import { node, text, attribute, event } from "./tree.rfl";
+struct Parser {
+    tokens: Vec<Token>,
+    at: usize,
+    target: String
+}
+
+fn stream(p: &mut Parser, tokens: Vec<Token>) -> TokenStream {
+    TokenStream { tokens: tokens, target: p.target, dependencies: [] }
+}
+
+fn token_is(p: &mut Parser, value: String) -> bool {
+    p.at < p.tokens.len() && p.tokens[p.at].text == value
+}
+
+fn trivia(p: &mut Parser) {
+    while (p.at < p.tokens.len() && p.tokens[p.at].kind == 4) {
+        p.at += 1;
+    }
+}
+
+fn take(p: &mut Parser, value: String) -> Result<unit, String> {
+    if (!token_is(p, value)) {
+        return Err("expected `" + value + "`");
+    }
+    p.at += 1;
+    Ok({})
+}
+
+fn name(p: &mut Parser) -> Result<String, String> {
+    if (p.at >= p.tokens.len()) {
+        return Err("expected a tag or property name");
+    }
+    let token = p.tokens[p.at];
+    if (token.kind != 1) {
+        return Err("expected a tag or property name");
+    }
+    p.at += 1;
+    Ok(token.text)
+}
+
+fn quoted(value: String) -> TokenStream {
+    let mut spelling = "\"";
+    let mut i: usize = 0;
+    while (i < value.len()) {
+        let ch = value[i];
+        if (ch == '\"') {
+            spelling = spelling + "\\\"";
+        } else if (ch == '\\') {
+            spelling = spelling + "\\\\";
+        } else if (ch == '\n') {
+            spelling = spelling + "\\n";
+        } else if (ch == '\r') {
+            spelling = spelling + "\\r";
+        } else if (ch == '\t') {
+            spelling = spelling + "\\t";
+        } else {
+            spelling = spelling + value[i..i + 1];
+        }
+        i += 1;
+    }
+    literal(spelling + "\"")
+}
+
+fn separated(values: Vec<TokenStream>) -> TokenStream {
+    let mut result = empty();
+    let mut first = true;
+    for (value in values) {
+        if (!first) {
+            result = concat(result, punctuation(","));
+        }
+        result = concat(result, value);
+        first = false;
+    }
+    result
+}
+
+fn call(callee: TokenStream, args: Vec<TokenStream>) -> TokenStream {
+    concat(callee, group("(", separated(args)))
+}
+
+fn expression(p: &mut Parser) -> Result<TokenStream, String> {
+    if (!token_is(p, "{")) {
+        return Err("expected an embedded {RFL expression}");
+    }
+    p.at += 1;
+    let mut depth: usize = 1;
+    let mut tokens: Vec<Token> = [];
+    while (p.at < p.tokens.len()) {
+        let token = p.tokens[p.at];
+        p.at += 1;
+        if (token.kind == 5) {
+            depth += 1;
+        }
+        if (token.kind == 6) {
+            depth -= 1;
+            if (depth == 0) {
+                return Ok(stream(p, tokens));
+            }
+        }
+        tokens.push(token);
+    }
+    Err("unclosed embedded expression")
+}
+
+fn value(p: &mut Parser) -> Result<TokenStream, String> {
+    if (token_is(p, "{")) {
+        return expression(p);
+    }
+    if (p.at < p.tokens.len() && p.tokens[p.at].kind == 2) {
+        let token = p.tokens[p.at];
+        p.at += 1;
+        return Ok(stream(p, [token]));
+    }
+    Err("property values must be literals or {expressions}")
+}
+
+fn element(p: &mut Parser) -> Result<TokenStream, String> {
+    take(p, "<")?;
+    let tag = name(p)?;
+    let component = tag[0] >= 'A' && tag[0] <= 'Z';
+    let mut props: Vec<TokenStream> = [];
+    let mut arguments: Vec<TokenStream> = [];
+    while (true) {
+        trivia(p);
+        if (token_is(p, ">") || token_is(p, "/")) {
+            break;
+        }
+        let property = name(p)?;
+        trivia(p);
+        take(p, "=")?;
+        trivia(p);
+        let argument = value(p)?;
+        if (component) {
+            arguments.push(argument);
+        } else {
+            let event_property = property.len() > 3 && property[0..3] == "on_";
+            props.push(call(ident(if (event_property) {
+                "event"
+            } else {
+                "attribute"
+            }), [quoted(property), argument]));
+        }
+    }
+    let mut children: Vec<TokenStream> = [];
+    if (token_is(p, "/")) {
+        take(p, "/")?;
+        take(p, ">")?;
+    } else {
+        take(p, ">")?;
+        while (true) {
+            if (p.at >= p.tokens.len()) {
+                return Err("missing closing tag for " + tag);
+            }
+            if (token_is(p, "<")) {
+                if (p.at + 1 < p.tokens.len() && p.tokens[p.at + 1].text == "/") {
+                    p.at += 2;
+                    let close = name(p)?;
+                    if (close != tag) {
+                        return Err("closing tag " + close + " does not match " + tag);
+                    }
+                    trivia(p);
+                    take(p, ">")?;
+                    break;
+                }
+                children.push(element(p)?);
+            } else if (token_is(p, "{")) {
+                children.push(expression(p)?);
+            } else {
+                let mut raw = "";
+                while (p.at < p.tokens.len() && !token_is(p, "<") && !token_is(p, "{")) {
+                    let token = p.tokens[p.at];
+                    p.at += 1;
+                    let comment = token.kind == 4 && token.text.len() >= 2 && (token.text[0..2] == "/*" || token.text[0..2] == "//");
+                    if (!comment) {
+                        raw = raw + token.text;
+                    }
+                }
+                if (raw.len() > 0) {
+                    children.push(call(ident("text"), [quoted(raw)]));
+                }
+            }
+        }
+    }
+    let array = group("[", separated(children));
+    if (component) {
+        arguments.push(array);
+        Ok(call(call_site_ident(tag), arguments))
+    } else {
+        Ok(call(ident("node"), [quoted(tag), group("[", separated(props)), array]))
+    }
+}
+
+#[proc_macro]
+export fn html(input: TokenStream) -> TokenStream {
+    let mut parser = Parser { tokens: input.tokens, at: 0, target: input.target };
+    trivia(&mut parser);
+    let output = element(&mut parser);
+    trivia(&mut parser);
+    let result: Result<TokenStream, String> = match output {
+        Err(error) => Err(error),
+        Ok(value) => {
+            if (parser.at != parser.tokens.len()) {
+                Err("trailing HTML input")
+            } else {
+                Ok(value)
+            }
+        }
+    };
+    match result {
+        Ok(value) => value,
+        Err(message) => {
+            if (parser.tokens.is_empty()) {
+                return diagnostic(call_span(), message);
+            }
+            let at = if (parser.at < parser.tokens.len()) {
+                parser.at
+            } else {
+                parser.tokens.len() - 1
+            };
+            diagnostic(span_of(parser.tokens[at]), message)
+        }
+    }
+}

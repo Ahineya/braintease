@@ -70,6 +70,18 @@ static long exprPrimary(struct expression *e, int active) {
         else if (op == '-' && value == LONG_MIN) e->error = 1;
         else if (op == '-') value = -value;
         else if (op == '!') value = !value;
+    } else if (*e->p == '[') {
+        struct picolParser parser;
+        char *text; size_t n;
+        picolInitParser(&parser, (char *)e->p);
+        if (picolParseCommand(&parser)) { e->error = 1; }
+        else {
+            n = parser.end - parser.start + 1;
+            text = picol_malloc(n + 1); memcpy(text, parser.start, n); text[n] = 0;
+            e->p = parser.p;
+            if (active && (picolEval(e->i, text) || picolInteger(e->i, e->i->result, &value))) e->error = 1;
+            free(text);
+        }
     } else if (*e->p == '$') {
         char name[80]; unsigned n = 0; int brace;
         struct picolVar *var;
@@ -144,7 +156,7 @@ static int splitList(struct picolInterp *i, const char *text, int *argc, char **
         char *word; unsigned length = 0; int brace = 0, braced = 0, quote = 0, closed = 0;
         while (isspace(*p)) p++;
         if (!*p) break;
-        if (n == 128) goto bad;
+        if (n == PICOL_WORDS) goto bad;
         word = picol_malloc(strlen(p) + 1);
         if (*p == '{') { brace = braced = 1; p++; }
         else if (*p == '"') { quote = 1; p++; }
@@ -242,7 +254,7 @@ static int commandList(struct picolInterp *i, int argc, char **argv, void *pd) {
         if (argc < 2) return picolArityErr(i, argv[0]);
         v = picolGetVar(i, argv[1]);
         if (v && splitList(i, v->val, &n, &words)) return PICOL_ERR;
-        if (n + argc - 2 > 128) { freeWords(n, words); return failure(i, "too many list elements"); }
+        if (n + argc - 2 > PICOL_WORDS) { freeWords(n, words); return failure(i, "too many list elements"); }
         words = picol_realloc(words, (n + argc - 2) * sizeof(char *) + 1);
         for (j = 2; j < argc; j++) words[n++] = picol_strdup(argv[j]);
         text = makeList(n, words); freeWords(n, words);
@@ -317,7 +329,7 @@ static int commandChannel(struct picolInterp *i, int argc, char **argv, void *pd
         numberResult(i, feof(f) != 0); return PICOL_OK;
     }
     if (!strcmp(argv[0], "read") && argc == 3 && (picolInteger(i, argv[2], &limit) || limit < 0 || limit > PICOL_LIMIT))
-        return failure(i, "read count must be 0..12000");
+        return failure(i, "read count must be 0..30000");
     text = picol_malloc(limit + 1);
     while (n < limit && (c = fgetc(f)) != EOF) {
         if (!c) { free(text); return failure(i, "NUL characters are not supported in Tcl strings"); }
@@ -328,7 +340,7 @@ static int commandChannel(struct picolInterp *i, int argc, char **argv, void *pd
     if (n == limit && (!strcmp(argv[0], "gets") || argc == 2)) {
         c = fgetc(f);
         if (ferror(f)) { free(text); return failure(i, "read failed"); }
-        if (c != EOF) { ungetc(c, f); free(text); return failure(i, "input exceeds 12000 characters"); }
+        if (c != EOF) { ungetc(c, f); free(text); return failure(i, "input exceeds 30000 characters"); }
     }
     text[n] = 0;
     if (!strcmp(argv[0], "gets") && argc == 3) {
@@ -340,21 +352,26 @@ static int commandChannel(struct picolInterp *i, int argc, char **argv, void *pd
 static int commandExec(struct picolInterp *i, int argc, char **argv, void *pd) {
     int pipefd[2], child, status = 0, failed = 0, overflow = 0, fd;
     char **args, *output; size_t n = 0; long got;
-    if (argc < 2) return picolArityErr(i, argv[0]);
-    args = picol_malloc(argc * sizeof(char *));
-    for (fd = 1; fd < argc; fd++) args[fd - 1] = argv[fd];
-    args[argc - 1] = NULL;
-    output = picol_malloc(PICOL_LIMIT + 1);
-    if (pipe(pipefd)) { free(args); free(output); return failure(i, "pipe failed"); }
+    int stream = 0, count = argc;
+    if (argc >= 4 && !strcmp(argv[argc-2], ">@stdout") && !strcmp(argv[argc-1], "2>@stderr")) {
+        stream = 1; count -= 2;
+    }
+    if (count < 2) return picolArityErr(i, argv[0]);
+    args = picol_malloc(count * sizeof(char *));
+    for (fd = 1; fd < count; fd++) args[fd - 1] = argv[fd];
+    args[count - 1] = NULL;
+    output = stream ? NULL : picol_malloc(PICOL_LIMIT + 1);
+    fflush(stdout); fflush(stderr);
+    if (!stream && pipe(pipefd)) { free(args); free(output); return failure(i, "pipe failed"); }
     child = fork();
     if (child == 0) {
-        if (dup2(pipefd[1], 1) < 0) _exit(127);
+        if (!stream && dup2(pipefd[1], 1) < 0) _exit(127);
         for (fd = 3; fd < 16; fd++) close(fd);
         execvp(args[0], args); _exit(127);
     }
-    free(args); close(pipefd[1]);
-    if (child < 0) { close(pipefd[0]); free(output); return failure(i, "fork failed"); }
-    while (1) {
+    free(args); if (!stream) close(pipefd[1]);
+    if (child < 0) { if (!stream) close(pipefd[0]); free(output); return failure(i, "fork failed"); }
+    while (!stream) {
         char discard[128];
         got = read(pipefd[0], n < PICOL_LIMIT ? output + n : discard,
                    n < PICOL_LIMIT ? PICOL_LIMIT - n : sizeof(discard));
@@ -363,11 +380,24 @@ static int commandExec(struct picolInterp *i, int argc, char **argv, void *pd) {
         if (!got) break;
         if (n < PICOL_LIMIT) n += got; else overflow = 1;
     }
-    close(pipefd[0]);
+    if (!stream) close(pipefd[0]);
     while (waitpid(child, &status, 0) < 0) { if (errno != EINTR) { failed = 1; break; } }
     if (failed || overflow || !WIFEXITED(status) || WEXITSTATUS(status)) {
-        free(output); return failure(i, overflow ? "program output exceeds 12000 characters" : "external program failed");
+        char *code[3], pid[24], detail[24];
+        if (failed || overflow) {
+            picolSetVar(i, "errorCode", failed ? "POSIX EIO" : "NONE");
+            free(output);
+            return failure(i, failed ? "external program I/O or wait failed" :
+                           "program output exceeds 30000 characters; use >@stdout 2>@stderr");
+        }
+        snprintf(pid, sizeof(pid), "%d", child);
+        snprintf(detail, sizeof(detail), "%d", WIFEXITED(status) ? WEXITSTATUS(status) : WTERMSIG(status));
+        code[0] = WIFEXITED(status) ? "CHILDSTATUS" : "CHILDKILLED"; code[1] = pid; code[2] = detail;
+        { char *text = makeList(3, code); picolSetVar(i, "errorCode", text); free(text); }
+        free(output);
+        { char message[120]; snprintf(message, sizeof(message), "external program %s %s", WIFEXITED(status) ? "exited with status" : "terminated by signal", detail); return failure(i, message); }
     }
+    if (stream) { picolSetResult(i, ""); return PICOL_OK; }
     if (n && output[n - 1] == '\n') n--;
     output[n] = 0;
     if (strlen(output) != n) { free(output); return failure(i, "NUL in program output"); }
@@ -423,7 +453,7 @@ static int evalFile(struct picolInterp *i, const char *name) {
     text = picol_malloc(PICOL_LIMIT + 1);
     n = fread(text, 1, PICOL_LIMIT, f); extra = fgetc(f);
     code = ferror(f); fclose(f);
-    if (code || extra != EOF) { free(text); return failure(i, "script read failed or exceeds 12000 characters"); }
+    if (code || extra != EOF) { free(text); return failure(i, "script read failed or exceeds 30000 characters"); }
     text[n] = 0;
     if (strlen(text) != n) { free(text); return failure(i, "NUL in script"); }
     code = picolEval(i, text); free(text); return code;
@@ -432,8 +462,11 @@ static int commandSource(struct picolInterp *i, int argc, char **argv, void *pd)
     if (argc != 2) return picolArityErr(i, argv[0]);
     return evalFile(i, argv[1]);
 }
+#include "picol-build.inc"
+
 static void registerExtras(struct picolInterp *i) {
     int j;
+    registerBuildCommands(i);
     const char *names[] = {"expr", "incr", "for", "list", "llength", "lindex", "lappend", "foreach", "puts", "open", "close", "read", "gets", "eof", "flush", "source", "eval", "catch", "exit", "error", "string", "append", "exec"};
     picolCmdFunc funcs[] = {commandExpr, commandIncr, commandFor, commandList, commandList, commandList, commandList, commandForeach, commandPuts, commandOpen, commandChannel, commandChannel, commandChannel, commandChannel, commandChannel, commandSource, commandEval, commandCatch, commandExit, commandError, commandString, commandAppend, commandExec};
     for (j = 0; j < (int)(sizeof(funcs) / sizeof(funcs[0])); j++) picolRegisterCommand(i, (char *)names[j], funcs[j], NULL);
@@ -470,13 +503,13 @@ int main(int argc, char **argv) {
         while (!interp.exiting) {
             if (interactive) { fputs(n ? "> " : "tcl> ", stdout); fflush(stdout); }
             while ((c = fgetc(stdin)) != EOF && c != '\n') {
-                if (n == PICOL_LIMIT) { code = failure(&interp, "input exceeds 12000 characters"); goto input_done; }
+                if (n == PICOL_LIMIT) { code = failure(&interp, "input exceeds 30000 characters"); goto input_done; }
                 if (!c) { code = failure(&interp, "NUL in input"); goto input_done; }
                 input[n++] = c;
             }
             if (c == EOF && ferror(stdin)) { code = failure(&interp, "stdin read failed"); break; }
             if (c == EOF && !n) break;
-            if (n == PICOL_LIMIT) { code = failure(&interp, "input exceeds 12000 characters"); break; }
+            if (n == PICOL_LIMIT) { code = failure(&interp, "input exceeds 30000 characters"); break; }
             input[n++] = '\n'; input[n] = 0;
             if (!completeScript(input) && c != EOF) continue;
             code = picolEval(&interp, input); n = 0;

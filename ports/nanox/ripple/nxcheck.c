@@ -5,11 +5,14 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <signal.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/select.h>
 #include "nano-X.h"
 #include "nxproto.h"
+#include "nx_clipboard.h"
 static int raw_peer(void){
     struct sockaddr_un a;int fd=socket(AF_UNIX,SOCK_STREAM,0);
     if(fd<0)return -1;memset(&a,0,sizeof(a));a.sun_family=AF_UNIX;strcpy(a.sun_path,GR_NAMED_SOCKET);
@@ -20,7 +23,7 @@ static int rejected(void *packet,unsigned n){
     if(fd<0)return 0;
     if(((nxReq *)packet)->reqType!=GrNumOpen){
         nxOpenReq open;unsigned long ack;
-        memset(&open,0,sizeof(open));open.reqType=GrNumOpen;open.length=sizeof(open);open.c16_magic=0x4e583101UL;
+        memset(&open,0,sizeof(open));open.reqType=GrNumOpen;open.length=sizeof(open);open.c16_magic=0x4e583102UL;
         if(write(fd,&open,sizeof(open))!=sizeof(open)||read(fd,&ack,sizeof(ack))!=sizeof(ack)||ack!=open.c16_magic){close(fd);return 0;}
     }
     if(write(fd,packet,n)!=n){close(fd);return 0;}
@@ -29,9 +32,102 @@ static int rejected(void *packet,unsigned n){
     if(got>0)got=read(fd,&c,1)==0;else got=0;
     close(fd);return got;
 }
+/* A query must transmit pending requests without publishing half a repaint.
+ * Another client forces presentation; the harness controls both commit/exit. */
+static volatile int paint_signals;
+static void paint_signal(int sig){++paint_signals;signal(sig,paint_signal);}
+static int paint_check(int pulse){
+    GR_WINDOW_ID w,child=0,pixmap=0;GR_GC_ID gc;GR_WM_PROPERTIES props;GR_WINDOW_INFO info;
+    int pid,status;
+    if(GrOpen()<0)return 1;
+    signal(SIGUSR1,paint_signal);
+    w=GrNewWindow(GR_ROOT_WINDOW_ID,pulse?300:20,pulse?300:20,pulse?12:640,pulse?12:480,0,0,0);
+    if(!w)return 1;
+    gc=GrNewGC();memset(&props,0,sizeof(props));props.flags=GR_WM_FLAGS_TITLE;
+    props.title=pulse?"Paint pulse":"Paint check";GrSetWMProperties(w,&props);
+    GrMapWindow(w);GrSetGCForeground(gc,GR_RGB(255,pulse?255:0,0));GrFillRect(w,gc,0,0,pulse?12:640,pulse?12:480);
+    if(!pulse){
+        /* Retain a third full frame (screen + window + offscreen) to exercise
+         * high-bank allocation and disconnect cleanup, beyond a tiny dialog. */
+        pixmap=GrNewPixmapEx(640,480,MWIF_RGB565,NULL);if(!pixmap)return 1;
+        child=GrNewWindow(w,8,8,24,16,0,0,0);GrMapWindow(child);
+        GrSetGCForeground(gc,GR_RGB(0,255,0));GrFillRect(child,gc,0,0,24,16);}
+    GrFlush();GrGetWindowInfo(w,&info);
+    if(pulse){puts("PAINTCHECK_PULSE");fflush(stdout);usleep(100000);GrClose();return 0;}
+    puts("PAINTCHECK_READY");fflush(stdout);
+    GrSetGCForeground(gc,GR_RGB(0,0,255));GrFillRect(w,gc,0,0,640,480);
+    GrSetGCForeground(gc,GR_RGB(255,255,255));GrFillRect(child,gc,0,0,24,16);
+    GrGetWindowInfo(w,&info);
+    pid=fork();if(pid<0)return 1;
+    if(!pid){char *args[]={"nxcheck","--pulse",NULL};execv("/bin/nxcheck",args);_exit(1);}
+    if(waitpid(pid,&status,0)!=pid||status)return 1;
+    puts("PAINTCHECK_WAITING");fflush(stdout);
+    while(paint_signals<1)usleep(1000);
+    GrFlush();GrGetWindowInfo(w,&info);puts("PAINTCHECK_COMMITTED");fflush(stdout);
+    while(paint_signals<2)usleep(1000);
+    GrClose();return 0;
+}
+static int clipboard_check(void) {
+    GR_WINDOW_ID w;char *text,*snapshot,*saved;size_t length=0,saved_length=0;unsigned long i;
+    if(GrOpen()<0)return 1;
+    w=GrNewWindow(GR_ROOT_WINDOW_ID,0,0,8,16,0,0,0);if(!w)return 1;
+    saved=nx_clipboard_get(w,&saved_length);
+    text=malloc(NXR_CLIPBOARD_MAX+1);if(!text)return 1;
+    for(i=0;i<NXR_CLIPBOARD_MAX;i++)text[i]='A'+i%26;
+    memcpy(text+511,"Ж🙂",6);text[NXR_CLIPBOARD_MAX]=0;
+    if(nx_clipboard_set(w,text,NXR_CLIPBOARD_MAX))return 1;
+    snapshot=nx_clipboard_get(w,&length);
+    if(!snapshot||length!=NXR_CLIPBOARD_MAX||memcmp(snapshot,text,length))return 1;
+    free(snapshot);
+    if(!nx_clipboard_set(w,text,NXR_CLIPBOARD_MAX+1)||!nx_clipboard_set(GR_ROOT_WINDOW_ID,"bad",3))return 1;
+    snapshot=nx_clipboard_get(w,&length);
+    if(!snapshot||length!=NXR_CLIPBOARD_MAX||memcmp(snapshot,text,length))return 1;
+    free(snapshot);free(text);
+    if(nx_clipboard_set(w,NULL,0))return 1;
+    snapshot=nx_clipboard_get(w,&length);if(!snapshot||length||snapshot[0])return 1;free(snapshot);
+    if(saved){if(nx_clipboard_set(w,saved,saved_length))return 1;free(saved);}
+    GrDestroyWindow(w);GrClose();puts("NANOX_CLIPBOARD_OK");return 0;
+}
 int main(int argc,char **argv){
     int partial;nxReq bad;
     GR_WINDOW_ID w;GR_GC_ID g;GR_SCREEN_INFO s;GR_EVENT e;GR_WM_PROPERTIES p;GR_WINDOW_INFO wi;GR_TIMER_ID timer;
+    if(argc==2&&!strcmp(argv[1],"--clipboard"))return clipboard_check();
+    if(argc==2&&!strcmp(argv[1],"--paint"))return paint_check(0);
+    if(argc==2&&!strcmp(argv[1],"--pulse"))return paint_check(1);
+    if(argc==2&&!strcmp(argv[1],"--frame")){
+        unsigned retry;GR_WINDOW_ID observed=0,parent=0;
+        if(GrOpen()<0)return 1;
+        for(retry=0;retry<40;retry++){
+            w=GrGetFocus();
+            observed=w;
+            if(w&&w!=GR_ROOT_WINDOW_ID){
+                GrGetWindowInfo(w,&wi);
+                parent=wi.parent;
+                if(wi.parent&&wi.parent!=GR_ROOT_WINDOW_ID){
+                    GrGetWindowInfo(wi.parent,&wi);
+                    if(wi.props&GR_WM_PROPS_BUFFERED){puts("NXCHECK_FRAME_BUFFERED");return 1;}
+                    puts("NANOX_FRAME_DIRECT_OK");GrClose();return 0;
+                }
+            }
+            /* Mapping and WM reparenting are asynchronous, especially while
+             * a new terminal is painting its first screen of top output. */
+            usleep(50000);
+        }
+        fprintf(stderr,"NXCHECK_FRAME_NOT_READY focus=%u parent=%u\n",observed,parent);GrClose();return 1;
+    }
+    if(argc==2&&!strcmp(argv[1],"--pressure")){
+        GR_WINDOW_ID pixmaps[16];unsigned n=0,i;
+        if(GrOpen()<0)return 1;
+        while(n<16){pixmaps[n]=GrNewPixmapEx(640,480,MWIF_RGB565,NULL);if(!pixmaps[n])break;n++;}
+        /* Allocation of the automatic backing store will also fail, but a
+         * normal exposure-driven window must still get a valid window ID. */
+        w=GrNewWindow(GR_ROOT_WINDOW_ID,0,0,640,480,0,0,0);
+        if(!w){puts("NXCHECK_PRESSURE_WINDOW_FAILED");return 1;}
+        GrGetWindowInfo(w,&wi);
+        if(wi.props&GR_WM_PROPS_BUFFERED){puts("NXCHECK_PRESSURE_BUFFERED");return 1;}
+        GrDestroyWindow(w);for(i=0;i<n;i++)GrDestroyWindow(pixmaps[i]);
+        GrClose();puts("NANOX_PRESSURE_OK");return 0;
+    }
     partial=raw_peer();bad.reqType=GrNumOpen;bad.hilength=0;bad.length=sizeof(nxOpenReq);
     if(partial<0||write(partial,&bad,1)!=1){puts("NXCHECK_PARTIAL_FAILED");return 1;}
     if(GrOpen()<0){puts("NXCHECK_OPEN_FAILED");return 1;}
@@ -68,7 +164,7 @@ int main(int argc,char **argv){
      if(!rejected(&bitmap,sizeof(bitmap))){puts("NXCHECK_BITMAP_PAYLOAD_FAILED");return 1;}}
     {int slow=raw_peer();nxOpenReq open;nxGetScreenInfoReq burst[512];unsigned i;
      if(slow<0){puts("NXCHECK_SLOW_OPEN_FAILED");return 1;}
-     memset(&open,0,sizeof(open));open.reqType=GrNumOpen;open.length=sizeof(open);open.c16_magic=0x4e583101UL;
+     memset(&open,0,sizeof(open));open.reqType=GrNumOpen;open.length=sizeof(open);open.c16_magic=0x4e583102UL;
      if(write(slow,&open,sizeof(open))!=sizeof(open)){puts("NXCHECK_SLOW_HELLO_FAILED");return 1;}
      fcntl(slow,F_SETFL,O_NONBLOCK);
      for(i=0;i<512;i++){burst[i].reqType=GrNumGetScreenInfo;burst[i].hilength=0;burst[i].length=sizeof(burst[i]);}

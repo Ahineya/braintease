@@ -6,6 +6,10 @@ impl Checker<'_> {
         params: &[TypeParam],
     ) -> Result<(), CompileError> {
         for p in params {
+            if p.name == "_" {
+                return Err(CompileError::at(self.source, p.span.start,
+                    "`_` is reserved for a slot or inference placeholder, not a type parameter name"));
+            }
             let mut seen = HashSet::new();
             for (name, span) in &p.bounds {
                 if self.trait_name(name).is_none() {
@@ -24,6 +28,19 @@ impl Checker<'_> {
                 }
                 let canonical = self.trait_name(name).unwrap();
                 let tr = self.traits.iter().find(|t| t.name == canonical).unwrap();
+                if tr.arity != p.arity {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        format!(
+                            "bound `{}` expects Self of kind arity {}, parameter `{}` has arity {}",
+                            label(&tr.name),
+                            tr.arity,
+                            p.name,
+                            p.arity
+                        ),
+                    ));
+                }
                 self.uses.push(NameUse {
                     span: *span,
                     def: tr.name_span,
@@ -37,6 +54,9 @@ impl Checker<'_> {
 
     pub(in crate::check) fn rigid(&mut self, param: &TypeParam) -> Result<Ty, CompileError> {
         self.validate_bounds(std::slice::from_ref(param))?;
+        if param.arity > 0 {
+            return Ok(self.rigid_constructor(param));
+        }
         let id = self.structs.len() as u32;
         let name = format!("$param${id}${}", param.name);
         self.structs.push(StructInfo {
@@ -81,7 +101,10 @@ impl Checker<'_> {
     }
 
     pub(in crate::check) fn check_declaration(&mut self, name: &str) -> Result<(), CompileError> {
-        if self.declarations_checked.contains(name) || self.declarations_active.contains(name) {
+        if self.signature_only.contains(name)
+            || self.declarations_checked.contains(name)
+            || self.declarations_active.contains(name)
+        {
             return Ok(());
         }
         self.declarations_active.insert(name.into());
@@ -109,6 +132,7 @@ impl Checker<'_> {
         span: usize,
     ) -> Result<(), CompileError> {
         for (p, ty) in params.iter().zip(args) {
+            self.check_kind(*ty, p.arity, span)?;
             for (name, _) in &p.bounds {
                 let canonical = self.trait_name(name).ok_or_else(|| {
                     CompileError::at(self.source, p.span.start, format!("unknown trait `{name}`"))

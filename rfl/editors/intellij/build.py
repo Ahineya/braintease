@@ -73,7 +73,8 @@ def main():
                         "org.ripple.rfl.RunConfigurationTest", str(build_dir),
                         *([str(args.server.resolve())] if args.server else [])], cwd=ROOT, check=True)
     if args.server:
-        for script in ("lsp_smoke.py", "lsp_traits.py", "lsp_associated.py", "lsp_formatting.py", "lsp_type_hints.py", "lsp_documentation.py"):
+        for script in ("lsp_smoke.py", "lsp_traits.py", "lsp_associated.py", "lsp_formatting.py", "lsp_type_hints.py", "lsp_documentation.py", "lsp_type_constructors.py",
+                       "lsp_generic_traits.py", "lsp_partial_constructors.py", "lsp_once_functions.py", "lsp_comprehensions.py", "lsp_macros.py", "lsp_formatting_latency.py"):
             subprocess.run([sys.executable, str(ROOT / "tests" / script), str(args.server.resolve())], check=True)
     # Check that every explicitly registered implementation exists in the output.
     for element in descriptor.iter():

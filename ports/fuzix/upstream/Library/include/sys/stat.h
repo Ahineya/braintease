@@ -7,7 +7,7 @@
 
 #define S_IFMT		0170000
 #define S_IFSOCK	0140000		/* Reserved, not used */
-#define S_IFLNK		0120000		/* Reserved, not used */
+#define S_IFLNK		0120000		/* Guest symbolic link */
 #define S_IFREG		0100000
 #define S_IFBLK		0060000
 #define S_IFDIR		0040000
@@ -38,7 +38,7 @@
 #define S_ISLNK(m)	(((m) & S_IFMT) == S_IFLNK)
 #define S_ISSOCK(m)	(((m) & S_IFMT) == S_IFSOCK)
 
-#define S_ISDEV(m)	(((m) & S_IFCHR) == S_IFCHR)
+#define S_ISDEV(m)	(S_ISCHR(m) || S_ISBLK(m))
 
 /* data structure for stat() */
 struct stat {

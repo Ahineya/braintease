@@ -10,6 +10,26 @@ use rvm::{
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
+// BF console bytes belong to its runner, including capture/checkpoint output.
+// Keep DMA in that same ordered queue rather than writing host stdout early.
+struct ConsoleMemory<'a, M: GuestMemory + ?Sized> {
+    ram: &'a mut M,
+    output: &'a mut Vec<u8>,
+}
+impl<M: GuestMemory + ?Sized> GuestMemory for ConsoleMemory<'_, M> {
+    fn len(&self) -> usize { self.ram.len() }
+    fn read(&self, at: usize) -> u16 { self.ram.read(at) }
+    fn write(&mut self, at: usize, value: u16) { self.ram.write(at, value); }
+    fn code_capacity(&self, bank_size: u16) -> usize { self.ram.code_capacity(bank_size) }
+    fn write_code(&mut self, bank_size: u16, start: usize, code: &[[u16; 4]]) -> Result<(), u16> {
+        self.ram.write_code(bank_size, start, code)
+    }
+    fn buffer_console_output(&mut self, bytes: &[u8]) -> bool {
+        self.output.extend_from_slice(bytes);
+        true
+    }
+}
+
 pub struct BfDevices {
     pub devices: DeviceState,
     pub display: RGB565Display,
@@ -362,7 +382,7 @@ impl BfDevices {
                 if let Some(frame) = self.devices.write_register_with_storage(
                     address,
                     value,
-                    memory,
+                    &mut ConsoleMemory { ram: memory, output: &mut self.output },
                     self.bank_size,
                     self.display_mode,
                     self.storage.as_mut(),
@@ -434,6 +454,21 @@ mod tests {
     use super::*;
     use rvm::devices::*;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn tty_dma_keeps_scalar_order_in_runner_output() {
+        let mut host = host();
+        let mut ram = vec![0; 256];
+        store(&mut host, &mut ram, HDR_TTY_OUT, 65);
+        ram[127..131].copy_from_slice(&[66, 0, 10, 255]);
+        ram[65..71].copy_from_slice(&[1, 63, 4, 0, 0, 0]);
+        command(&mut host, &mut ram, COMMAND_TTY_WRITE, 8);
+        assert_eq!(host.devices.status(), STATUS_OK);
+        assert_eq!(ram[69], 4);
+        store(&mut host, &mut ram, HDR_TTY_OUT, 67);
+        assert_eq!(host.take_output(), b"AB\0\n\xffC");
+        assert_eq!(host.devices.tick(), 0);
+    }
 
     #[test]
     fn pcm_is_not_advertised_and_audio_commands_are_explicitly_unsupported() {

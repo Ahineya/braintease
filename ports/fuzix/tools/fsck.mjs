@@ -5,8 +5,9 @@ import {fileURLToPath} from 'node:url';
 
 import {atomicWrite} from './disk.mjs';
 import {fatFile} from './fat.mjs';
+import {backupImage, pruneImageBackups} from './image-backup.mjs';
 import {BLOCK, CELLS, layout, baseFor} from './layout.mjs';
-import {Image, openImage} from './image.mjs';
+import {Image, openImage, writeImage} from './image.mjs';
 
 export function checkRoot(input, repair = false) {
   const image = Image.from(input).fork(), w = p => image.readUInt16LE(p * 2),
@@ -42,14 +43,14 @@ export function checkRoot(input, repair = false) {
           map = new Map(), size = wide(base + 4);
     if (!mode && !links) continue;
     const type = mode & 0xf000;
-    if (![0x8000, 0x4000, 0x2000, 0x6000, 0x1000, 0xc000].includes(type))
+    if (![0x8000, 0x4000, 0x2000, 0x6000, 0x1000, 0xc000, 0xa000].includes(type))
       throw Error(`inode ${ino}: invalid type`);
     // Pathname sockets have no stored stream state or filesystem data blocks.
     if (type === 0xc000 && (size || Array.from({length: 20}, (_, j) =>
         ptr(base + 12 + j * step)).some(Boolean)))
       throw Error(`inode ${ino}: invalid socket metadata`);
     // FUZIX stores named-pipe buffers in ordinary filesystem blocks too.
-    if (type === 0x8000 || type === 0x4000 || type === 0x1000) {
+    if (type === 0x8000 || type === 0x4000 || type === 0x1000 || type === 0xa000) {
       for (let j = 0; j < direct; j++) {
         const b = ptr(base + 12 + j * step);
         if (b) {
@@ -71,6 +72,15 @@ export function checkRoot(input, repair = false) {
   function cell(node, pos) {
     const b = node.map.get(Math.floor(pos / CELLS));
     return b ? w(b * CELLS + pos % CELLS) : 0;
+  }
+  // Link targets are text, not inode references. Dangling links and cycles
+  // are legal; only their storage is checked here.
+  for (const node of nodes.values()) {
+    if (node.type !== 0xa000) continue;
+    if (!node.size || node.size >= 512 || node.map.size !== 1 || !node.map.has(0))
+      throw Error(`inode ${node.ino}: invalid symbolic link size or blocks`);
+    for (let pos = 0; pos < node.size; pos++)
+      if (!cell(node, pos)) throw Error(`inode ${node.ino}: NUL in symbolic link target`);
   }
   const reachable = new Set(), parents = new Map([[1, 1]]), queue = [1];
   while (queue.length) {
@@ -107,10 +117,31 @@ export function checkRoot(input, repair = false) {
     }
     if (!dot || !dotdot) throw Error(`directory ${ino}: missing dot entries`);
   }
+  const abandonedPipes = [];
   for (const [ino, node] of nodes) {
-    if (!reachable.has(ino)) throw Error(`unreachable inode ${ino}; refusing automatic repair`);
+    if (!reachable.has(ino)) {
+      // pipe() allocates a disk inode with no directory link. An interrupted
+      // session, or shutdown with a pipe still open, can leave it allocated.
+      // Only this disposable IPC state is recoverable without a pathname;
+      // orphaned regular files/directories still require manual recovery.
+      if (node.type === 0x1000 && node.links === 0) {
+        abandonedPipes.push(node);
+        continue;
+      }
+      throw Error(`unreachable inode ${ino}; refusing automatic repair`);
+    }
     if (node.links !== (refs.get(ino) || 0))
       throw Error(`inode ${ino}: link count mismatch; refusing automatic repair`);
+  }
+  // Reachability, all directory links and every block owner have now passed
+  // validation. Reclaim in the private image only, before rebuilding free lists.
+  for (const node of abandonedPipes) {
+    issues.push(`unlinked pipe inode ${node.ino} left allocated`);
+    if (!repair) continue;
+    for (const [block, owner] of owners)
+      if (owner === node.ino) owners.delete(block);
+    image.fill(0, node.base * 2, (node.base + format.cells) * 2);
+    nodes.delete(node.ino);
   }
   const freeExpected = [];
   for (let b = isize; b < blocks; b++)
@@ -180,10 +211,10 @@ export function checkDisk(filename, repair = false) {
         result = checkRoot(root.data, repair);
   for (const message of result.issues) console.error(message);
   if (repair && result.issues.length) {
-    let backup = `${filename}.bak`, n = 1;
-    while (fs.existsSync(backup)) backup = `${filename}.bak.${n++}`;
-    fs.copyFileSync(filename, backup, fs.constants.COPYFILE_EXCL | fs.constants.COPYFILE_FICLONE);
+    if (checkRoot(result.image).issues.length) throw Error('repaired root failed validation');
+    backupImage(filename, original);
     atomicWrite(filename, root.replace(result.image));
+    pruneImageBackups(filename);
   }
   console.log(`${result.files} inodes; ${result.freeBlocks} free blocks; ${
       result.issues.length ? (repair ? 'repaired' : 'needs repair') : 'clean'}`);

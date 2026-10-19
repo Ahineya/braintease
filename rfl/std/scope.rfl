@@ -90,6 +90,12 @@ impl TaskScope {
     export fn turn<R:Reactor>(&mut self,reactor:&mut R)->Result<bool,RunError> {
         let data=self.state.borrow_mut();turn_data(data,reactor)
     }
+    /// Returns the next wake delay after reaping retired children, or None
+    /// when no task has runnable work or a timer. Does not poll or block.
+    export fn wait_hint(&mut self)->Option<u32> {
+        let data=self.state.borrow_mut();
+        if(active_data(data)==0) {None} else {data.queue.wait_hint()}
+    }
     /// Services scoped tasks until all complete. Reactor or clock failure closes the scope and cancels unfinished children.
     export fn run<R:Reactor>(&mut self,reactor:&mut R)->Result<unit,RunError> {
         let data=self.state.borrow_mut();

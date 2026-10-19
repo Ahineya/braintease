@@ -251,7 +251,20 @@ impl<'a> Checker<'a> {
             ));
         }
         let sig = self.funcs[id as usize].clone();
-        self.noted_fn(&sig.params, sig.ret, false);
+        self.note_use(span, binding, sig.once)?;
+        if sig.once
+            && self
+                .captures
+                .iter()
+                .any(|cap| cap.local == binding && !cap.transfer)
+        {
+            return Err(CompileError::at(
+                self.source,
+                span,
+                "a reusable closure cannot consume a captured callback",
+            ));
+        }
+        self.note_sig(self.show(ty));
         if args.len() != sig.params.len() {
             return Err(CompileError::at(
                 self.source,
@@ -298,7 +311,11 @@ impl<'a> Checker<'a> {
             kind: TExprKind::Apply {
                 callee: Box::new(TExpr {
                     ty,
-                    kind: TExprKind::Name(binding, 0),
+                    kind: if sig.once {
+                        TExprKind::Move { binding, span }
+                    } else {
+                        TExprKind::Name(binding, span)
+                    },
                 }),
                 args: checked,
                 params: sig.params,
@@ -314,6 +331,19 @@ impl<'a> Checker<'a> {
         args: &[Expr],
         expected: Option<Ty>,
     ) -> Result<TExpr, CompileError> {
+        self.check_generic_call_with_prefix(span, callee, type_args, args, expected, &[])
+            .map(|(call, _)| call)
+    }
+
+    pub(super) fn check_generic_call_with_prefix(
+        &mut self,
+        span: usize,
+        callee: &str,
+        type_args: &[ParsedTy],
+        args: &[Expr],
+        expected: Option<Ty>,
+        prefix: &[Ty],
+    ) -> Result<(TExpr, Vec<Ty>), CompileError> {
         let skip_self = std::mem::replace(&mut self.sig_skip_self, false);
         let type_params = self.fn_schemas[callee].type_params.clone();
         let func = self.ast_fns[self.fn_schemas[callee].index].clone();
@@ -331,22 +361,35 @@ impl<'a> Checker<'a> {
         }
         let loose_first = std::mem::replace(&mut self.loose_receiver, false);
         let mut solved = vec![None; type_params.len()];
+        for (slot, ty) in solved.iter_mut().zip(prefix) {
+            *slot = Some(*ty);
+        }
+        let remaining = type_params.len() - prefix.len();
         if !type_args.is_empty() {
-            if type_args.len() != type_params.len() {
+            if type_args.len() != remaining {
                 return Err(CompileError::at(
                     self.source,
                     span,
                     format!(
                         "`{callee}` expects {} type arguments, found {}",
-                        type_params.len(),
+                        remaining,
                         type_args.len()
                     ),
                 ));
             }
             for (index, ty) in type_args.iter().enumerate() {
-                solved[index] = Some(self.apply(ty, &HashMap::new())?);
+                let index = index + prefix.len();
+                if kinds::is_slot(ty) {
+                    continue;
+                }
+                solved[index] = Some(self.apply_argument(
+                    ty,
+                    func.type_params[index].arity,
+                    &HashMap::new(),
+                )?);
             }
-        } else if let Some(want) = expected {
+        }
+        if let Some(want) = expected {
             if let Some(ret) = &func.ret {
                 self.infer_field(ret, want, &type_params, &mut solved, span)?;
             }
@@ -388,7 +431,7 @@ impl<'a> Checker<'a> {
                 self.note_reference_use(span, &typed, want)?;
                 checked.push(typed);
             } else {
-                let typed = self.check_expr(arg, None)?;
+                let typed = self.check_inferred_argument(arg, param_ty, &type_params, &solved)?;
                 self.infer_field(param_ty, typed.ty, &type_params, &mut solved, span)?;
                 let want = self.concrete_field(param_ty, &type_params, &solved)?;
                 self.note_reference_use(span, &typed, want)?;
@@ -431,12 +474,15 @@ impl<'a> Checker<'a> {
                 ));
             }
         }
-        Ok(TExpr {
-            ty: ret,
-            kind: TExprKind::Call {
-                callee: mangled,
-                args: checked,
+        Ok((
+            TExpr {
+                ty: ret,
+                kind: TExprKind::Call {
+                    callee: mangled,
+                    args: checked,
+                },
             },
-        })
+            concrete,
+        ))
     }
 }

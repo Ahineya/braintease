@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Deterministic fragmented heap workload with full-arena recovery",
+  "expected": "Y\n"
+}

@@ -36,6 +36,10 @@ def host_command(args, image):
         vm_args = ['--net', network, *vm_args]
     if network in ('host', 'shared', 'auto') and '--net-eager' not in vm_args:
         vm_args = ['--net-eager', *vm_args]
+    if not any(v == '--audio' or v.startswith('--audio=') for v in vm_args):
+        # Unix playback follows host monotonic time rather than NEXT_TICK.
+        # Keep automated/headless runs muted unless explicitly enabled.
+        vm_args = ['--audio', 'auto' if '--headless' in vm_args else 'on', *vm_args]
     if '--visual' in vm_args and '--guest-window-close' not in vm_args:
         vm_args = ['--guest-window-close', *vm_args]
     if '--guest-ctrl-c' not in vm_args:
@@ -68,7 +72,8 @@ def main():
     if args.update:
         if image.exists() and not args.fresh:
             # The caller already owns the image lock. The checker validates
-            # all ownership and directory links before repairing metadata.
+            # all ownership and directory links before recovering abandoned
+            # zero-link pipes and repairing shutdown/free-list metadata.
             checked = subprocess.run(
                 ['node', str(Path(__file__).with_name('fsck.mjs')),
                  '--locked', str(image), '--repair'],

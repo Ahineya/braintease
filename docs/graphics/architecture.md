@@ -13,15 +13,15 @@ window.
 sh / vi / top                  graphical applications
      │ PTY stream                       │ drawing
      ▼                                  ▼
-gterm: terminal model           Nano-X engine (server planned)
+gterm: terminal model           Nano-X clients → server
      │ RGB565 upload/copy/fill/present   │
      └────────────────┬─────────────────┘
                 GX window/surface/event interface
                          │
         ┌────────────────┴────────────────┐
- RVM: kernel /dev/gfx              Fuse-X backend (planned)
+ RVM: kernel /dev/gfx              Fuse-X hosted backend
  physical scanout + DEVICE         native top-level windows
- guest desktop later              one macOS app identity
+ one guest desktop              one macOS app identity
 ```
 
 Keep terminal parsing and painting independent of the window manager. Nano-X
@@ -45,12 +45,14 @@ structures to host structs or retain translated pointers after an operation.
 | UPLOAD | Copy a caller-owned RGB565 rectangle synchronously, with a pixel stride |
 | FILL | Fill a surface rectangle with one RGB565 colour |
 | COPY | Copy a rectangle on the same surface with memmove overlap semantics |
+| RASTER_FILL / RASTER_COPY | Bulk fill/copy in caller RAM, with validated strides and complete ranges; COPY requires disjoint spans |
 | PRESENT | Publish a completed surface snapshot; no retained userspace pointer |
 | EVENT | Nonblocking per-window event; type zero means no event |
 | STATE | Recover held keys, buttons, focus and pointer state after overflow |
 | WAIT | Ripple PTY-terminal extension: atomically wait for window input, PTY output/EOF or PTY write space |
 | DESTROY | Release the window and its surface |
 | TITLE | Reserved request; usable only when advertised by the backend |
+| CLIPBOARD_READ / CLIPBOARD_WRITE | Optional owned-window plain UTF-8 text exchange, up to 32,768 octet cells; advertised by GX_CAP_CLIPBOARD |
 
 Handles are opaque and generation-checked. Applications must not assume the
 window and its surface always share a handle, even though this backend does so.
@@ -80,7 +82,7 @@ alone does not destroy a window; this avoids an inherited child's close
 releasing the parent's window. Clients must use DESTROY or exit. Revisit this
 transport policy when introducing independent server/client connections.
 
-The framebuffer uses reserved physical banks 104–108 (320,000 cells), outside
+The framebuffer uses reserved physical banks 122–126 (320,000 cells), outside
 the COW user pool. A maximum frame needs 307,200 cells / 614,400 physical octets.
 Uploads validate the complete userspace rectangle first, then resolve readable
 MMU pages and DMA into physical scanout storage. This does not expose physical
@@ -155,27 +157,52 @@ The protected profile expands capacities without increasing the existing
 
 | Resource | Before | Protected graphics profile |
 | --- | ---: | ---: |
-| Process slots | 16 | 32 |
+| Process slots | 16 | 64 |
 | Descriptors per process | 16 | 32 |
-| System open-file objects | 64 | 128 |
+| System open-file objects | 64 | 192 |
 | Cached inodes | 64 | 128 |
-| PTY pairs | 4 | 8 |
-| User data/heap virtual banks | 16 | 16 |
+| PTY pairs | 4 | 16 |
+| User data/heap virtual banks | 16 | 23 |
 | Per-process user stack | 64,000 cells | 64,000 cells |
 | TCP connections | 4 | 16 |
 
 The close-on-exec mask grows to 32 bits where UFTSIZE exceeds 16. All descriptor
-mask shifts use wide arithmetic. Kernel stacks occupy banks 32–63; MMU tables
-64–95; reference counts 96; saved task data 97; FAT chain 98–99; scanout 104–108. User physical
+mask shifts use wide arithmetic. Kernel stacks occupy banks 32–95; packed MMU tables
+96–117; reference counts 118; saved task data 119; FAT chain 120–121; scanout 122–126. User physical
 pages remain 128–255. Compile-time checks guard stack/table overlap and saved
 task-data size. Moving saved task data out of GP bank 3 leaves space for the
 larger process, inode, file and input tables. FUZIX/Ripple now supports only
 MMU builds on RVM; the former non-MMU/RBF configuration is retired.
 
-These are finite capacities, not a promise that 32 maximum-size programs fit.
+These are finite capacities, not a promise that 64 maximum-size programs fit.
 Executable allocation is still variable-size within the configured code pool.
 `free`, `ps` and `top` report the process pool and per-task mappings; reserved
 scanout belongs to kernel-reserved RAM and is not charged as user heap.
+
+## Buffered Nano-X repaints and bulk raster operations
+
+Client windows and child widgets draw into RGB565 backing buffers. Explicit
+`GrFlush()` commits each client's dirty rectangles together. Query replies can
+flush transport bytes without publishing intermediate painting; another client
+remains free to present. This prevents visible button-by-button or line-by-line
+redraws without delaying input behind an entire unbounded request stream.
+The server handles at most 32 staged requests per receive pass. NanoWM's own
+container/decorations remain direct rather than allocating duplicate surfaces.
+
+GX_CAP_RASTER advertises synchronous operations on the caller's RAM, independent
+of surface handles. Width, height and strides count RGB565 cells. The full source
+and destination extents must be valid user memory; overlapping COPY extents are
+rejected before mutation. RVM resolves writable COW pages and submits physical
+DMA spans. Fuse-X performs page-aware bulk operations on its guest memory.
+Neither backend retains guest pointers or presents automatically. The driver
+uses these operations for large fills and copies, with scalar fallbacks. General
+raster modes retain their software implementation.
+
+Heap growth can use virtual banks 8–30 (23 banks), leaving stack bank 31 and the
+C ABI unchanged. Initial executable data remains capped at 16 banks. This gives
+the server room for retained window buffers without increasing physical RAM;
+allocations still compete for the shared physical pool. MMU acceptance checks
+exercise the last heap bank, fork/COW isolation and shrinking that range.
 
 ## Fuse-X and Nano-X seam
 
@@ -209,3 +236,17 @@ snapshot the source in userspace for correct clipping and overlap across region
 bands. A later optimization can replace this copy with bounded scratch spans
 or validated GX bulk operations. The separate Nano-X server and event/window
 adapters remain the next milestone; the engine demo installs no window manager.
+
+
+## Hosted text clipboard
+
+Fuse-X advertises the optional clipboard requests and emits `GX_ACTION` edit
+commands (copy, paste, cut, select-all) in input order. Terminal Ctrl-C remains
+a real tty input; Command-C is a selection command. The AppKit main thread owns
+pasteboard access; the runtime exchanges bounded owned UTF-8 strings with the
+kernel's ownership-checked GX service. Nano-X request 251 bridges client-owned
+windows using chunked snapshots and atomic write commits. The RVM Nano-X
+server keeps a local clipboard without adding host clipboard MMIO.
+
+See [Fuse-X desktop integration](../fuse-x/desktop.md#text-clipboard) for the
+ABI, app bindings, limits and acceptance checks.

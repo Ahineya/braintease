@@ -51,7 +51,9 @@ pub(super) fn emit_erased_drop(
     builder.add_parameter(1, IrType::I16);
     let entry = builder.new_label();
     builder.create_block(entry).ir()?;
-    let obj = fat_from_parts(builder, Value::Temp(0), Value::Temp(1))?;
+    let initial = fat_from_parts(builder, Value::Temp(0), Value::Temp(1))?;
+    let walk = super::async_drop::AsyncDropWalk::new(builder, initial)?;
+    let obj = walk.current(builder)?;
     let refs = load_cell(builder, &obj, 0, IrType::I16)?;
     let last = builder
         .build_binary(IrBinaryOp::Eq, refs.clone(), Value::Constant(1), IrType::I1)
@@ -134,11 +136,12 @@ pub(super) fn emit_erased_drop(
             .build_branch_cond(Value::Temp(complete), free, cleanup)
             .ir()?;
         builder.create_block(cleanup).ir()?;
+        walk.descend(builder, built, proc, &frame, &state)?;
         // Only the active lexical scopes run user cleanup, in their recorded
         // reverse initialization order. Cleared slots make the final sweep safe.
         let sweep = builder.new_label();
         for seg in &proc.segs {
-            if let Some(Term::Suspend { next, cleanup }) = &seg.term {
+            if let Some(Term::Suspend { next, cleanup, .. }) = &seg.term {
                 let yes = builder.new_label();
                 let no = builder.new_label();
                 let eq = builder
@@ -173,7 +176,7 @@ pub(super) fn emit_erased_drop(
         .ir()?;
     builder.build_branch(done).ir()?;
     builder.create_block(done).ir()?;
-    builder.build_return(None).ir()?;
+    walk.finish(builder)?;
     module.add_function(builder.finish_function().unwrap());
     Ok(())
 }

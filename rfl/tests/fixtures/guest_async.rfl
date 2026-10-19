@@ -1,0 +1,281 @@
+import {} from "std/option";
+import {} from "std/result";
+import { address, Socket, SocketError, SocketTimedOut, SocketOsError, ResolveError, socket_pair } from "std/socket";
+import { Poller, Readiness, ReadFuture, WriteFuture, poller, monotonic_millis, READABLE } from "std/poll";
+import { Future, Poll, Pending, Ready, sleep } from "std/future";
+import { Context } from "std/task";
+import { block_on_with_budget, join_with_budget } from "std/executor";
+import { arguments, exit } from "std/posix";
+fn check(ok: bool, code: i16) {
+    if (!ok) {
+        println("ASYNC_FAILED");
+        println(code);
+        exit(code);
+    }
+}
+
+// Exercise the engine without borrowing a reactor inside any future.
+struct Transfer {
+    io: Poller,
+    socket: Socket,
+    phase: u16,
+    write: Option<WriteFuture>,
+    read: Option<ReadFuture>,
+    received: usize
+}
+
+impl Future for Transfer {
+    type Output = Result<usize, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<usize, SocketError>> {
+        if (self.phase == 0) {
+            let mut data: Vec<u8> = [];
+            for (i in 0..8192) {
+                data.push((i % 256) as u8);
+            }
+            self.write = Some(match self.io.write_all(&self.socket, data, 3000) {
+                Ok(f) => move(f),
+                Err(e) => {
+                    return Ready(Err(e));
+                }
+            });
+            self.phase = 1;
+        }
+        let mut write = take(&mut self.write);
+        match move(write) {
+            Some(f) => {
+                let mut f = move(f);
+                match f.poll(cx) {
+                    Pending => {
+                        self.write = Some(move(f));
+                    },
+                    Ready(Ok(n)) => {
+                        check(n == 8192, 4);
+                    },
+                    Ready(Err(e)) => {
+                        return Ready(Err(e));
+                    }
+                }
+            },
+            None => {}
+        }
+        if (self.received < 8192) {
+            let mut current = take(&mut self.read);
+            match move(current) {
+                None => {
+                    current = Some(match self.io.read(&self.socket, 257, 3000) {
+                        Ok(f) => move(f),
+                        Err(e) => {
+                            return Ready(Err(e));
+                        }
+                    });
+                },
+                Some(f) => {
+                    current = Some(move(f));
+                }
+            }
+            match move(current) {
+                Some(f) => {
+                    let mut f = move(f);
+                    match f.poll(cx) {
+                        Pending => {
+                            self.read = Some(move(f));
+                        },
+                        Ready(Ok(bytes)) => {
+                            check(!bytes.is_empty(), 5);
+                            for (i in 0..bytes.len()) {
+                                check(bytes[i] == ((self.received + i) % 256) as u8, 6);
+                            }
+                            self.received += bytes.len();
+                            cx.waker.wake();
+                        },
+                        Ready(Err(e)) => {
+                            return Ready(Err(e));
+                        }
+                    }
+                },
+                None => {}
+            }
+        }
+        let written = match &self.write {
+            None => true,
+            Some(_) => false
+        };
+        if (self.received == 8192 && written) {
+            Ready(Ok(self.received))
+        } else {
+            Pending
+        }
+    }
+    fn cancel(&mut self) {
+        self.write = None;
+        self.read = None;
+    }
+}
+
+import { take } from "std/mem";
+async fn client(io: Poller) -> Result<usize, SocketError> {
+    let ip = io.resolve_async("delayed.fixture", 2000)?.await?;
+    let socket = io.connect(ip, 7001, 2000)?.await?;
+    let transfer = Transfer { io: io, socket: move(socket), phase: 0, write: None, read: None, received: 0 };
+    move(transfer).await
+}
+
+async fn signal_timer() -> i16 {
+    sleep(10).unwrap().await;
+    println("RFL_ASYNC_TIMER_TRIGGER");
+    42
+}
+
+fn dns_error(io: Poller, name: String, expected: i16) {
+    let mut future = io.resolve_async(name, 3000).unwrap();
+    let mut reactor = io.reactor().unwrap();
+    match block_on_with_budget(&mut future, &mut reactor, 1000) {
+        Ok(Err(ResolveError(n))) => check(n == expected, 30),
+        _ => check(false, 31)
+    }
+}
+
+fn failover() -> i16 {
+    let io = poller().unwrap();
+    let mut reactor = io.reactor().unwrap();
+    let mut future = io.resolve_async("failover.fixture", 6000).unwrap();
+    match block_on_with_budget(&mut future, &mut reactor, 1000) {
+        Ok(Ok(ip)) => check(ip.d == 1, 32),
+        _ => check(false, 33)
+    }
+    println("RFL_GUEST_FAILOVER_OK");
+    0
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    if (args.len() > 1 && args[1] == "failover") {
+        return failover();
+    }
+    let io = poller().unwrap();
+    let copy = io.clone();
+    let mut reactor = io.reactor().unwrap();
+    match copy.reactor() {
+        Err(SocketOsError(16)) => {},
+        _ => check(false, 10)
+    }
+    let mut gated = io.resolve_async("gated.fixture", 3000).unwrap();
+    let mut ticking = signal_timer();
+    match join_with_budget(&mut gated, &mut ticking, &mut reactor, 1000) {
+        Ok((Ok(ip), 42)) => check(ip.d == 1, 19),
+        _ => check(false, 20)
+    }
+    let mut literal = io.resolve_async("127.0.0.1", 1000).unwrap();
+    match block_on_with_budget(&mut literal, &mut reactor, 1000) {
+        Ok(Ok(ip)) => check(ip.a == 127 && ip.d == 1, 21),
+        _ => check(false, 22)
+    }
+    let mut host = io.resolve_async("fromhosts.fixture", 1000).unwrap();
+    match block_on_with_budget(&mut host, &mut reactor, 1000) {
+        Ok(Ok(ip)) => check(ip.a == 10 && ip.d == 40, 23),
+        _ => check(false, 24)
+    }
+    let mut a = client(io);
+    let mut b = copy.resolve_async("tcp.fixture", 3000).unwrap();
+    match join_with_budget(&mut a, &mut b, &mut reactor, 3000) {
+        Ok((Ok(8192), Ok(ip))) => {
+            check(ip.a == 192 && ip.d == 1, 11);
+        },
+        _ => check(false, 12)
+    }
+    let mut missing = io.resolve_async("missing.fixture", 1000).unwrap();
+    match block_on_with_budget(&mut missing, &mut reactor, 1000) {
+        Ok(Err(ResolveError(1))) => {},
+        _ => check(false, 13)
+    }
+    let mut alias = io.resolve_async("alias.fixture", 2000).unwrap();
+    match block_on_with_budget(&mut alias, &mut reactor, 1000) {
+        Ok(Ok(ip)) => {
+            check(ip.d == 1, 14);
+        },
+        _ => check(false, 15)
+    }
+    for (i in 0..40) {
+        let mut stopped = io.resolve_async("silent.fixture", 1000).unwrap();
+        match block_on_with_budget(&mut stopped, &mut reactor, 1) {
+            Err(_) => {},
+            _ => check(false, 16)
+        }
+    }
+    let mut slow = io.resolve_async("silent.fixture", 70).unwrap();
+    let mut timer = sleep(10).unwrap();
+    match join_with_budget(&mut slow, &mut timer, &mut reactor, 1000) {
+        Ok((Err(SocketTimedOut), _)) => {},
+        _ => check(false, 17)
+    }
+    let mut refused = io.connect(address(192, 168, 64, 1), 7002, 1000).unwrap();
+    match block_on_with_budget(&mut refused, &mut reactor, 1000) {
+        Ok(Err(SocketOsError(49))) => {},
+        _ => check(false, 18)
+    }
+    // Shared handles survive the original variable and support driver handoff.
+    drop(move(reactor));
+    dns_error(io, "empty.fixture", 4);
+    dns_error(io, "poison.fixture", 4);
+    dns_error(io, "loop.fixture", 3);
+    dns_error(io, "oversize.fixture", 3);
+    dns_error(io, "tcp-bad.fixture", 3);
+    let mut reactor = copy.reactor().unwrap();
+    let mut retry = io.resolve_async("retry.fixture", 4000).unwrap();
+    match block_on_with_budget(&mut retry, &mut reactor, 1000) {
+        Ok(Ok(ip)) => check(ip.d == 1, 25),
+        _ => check(false, 26)
+    }
+    for (i in 0..4) {
+        let mut cancelled = io.resolve_async("silent.fixture", 3000).unwrap();
+        match block_on_with_budget(&mut cancelled, &mut reactor, 2) {
+            Err(_) => {},
+            _ => check(false, 27)
+        }
+    }
+    let (left, right) = socket_pair().unwrap();
+    let mut exclusive = io.read(&left, 512, 1000).unwrap();
+    match io.read(&left, 512, 1000) {
+        Err(SocketOsError(16)) => {},
+        _ => check(false, 37)
+    }
+    exclusive.cancel();
+    for (i in 0..24) {
+        let mut cancelled = io.read(&left, 512, 1000).unwrap();
+        match block_on_with_budget(&mut cancelled, &mut reactor, 1) {
+            Err(_) => {},
+            _ => check(false, 28)
+        }
+    }
+    let mut bytes: Vec<u8> = [];
+    let large: usize = 65536;
+    for (i in 0..large) {
+        bytes.push((i % 251) as u8);
+    }
+    let mut writing = io.write_all(&left, bytes, 1000).unwrap();
+    match io.write_all(&left, [1], 1000) {
+        Err(SocketOsError(16)) => {},
+        _ => check(false, 38)
+    }
+    writing.cancel();
+    for (i in 0..32) {
+        let unused = io.connect(address(192, 168, 64, 1), 7002, 1000).unwrap();
+    }
+    for (i in 0..4) {
+        let mut cancelled = io.write_all(&left, bytes, 1000).unwrap();
+        match block_on_with_budget(&mut cancelled, &mut reactor, 1) {
+            Err(_) => {},
+            _ => check(false, 29)
+        }
+    }
+    let received = right.try_read(32767).unwrap().unwrap();
+    check(!received.is_empty(), 34);
+    right.shutdown(1).unwrap();
+    let mut end = io.read(&left, 512, 1000).unwrap();
+    match block_on_with_budget(&mut end, &mut reactor, 1000) {
+        Ok(Ok(v)) => check(v.is_empty(), 35),
+        _ => check(false, 36)
+    }
+    println("RFL_GUEST_ASYNC_OK");
+    0
+}

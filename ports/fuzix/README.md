@@ -11,7 +11,22 @@ Run from the repository root:
 scripts/run-fuzix.sh
 ```
 
-The launcher builds incrementally and enables the JIT by default. At the prompt:
+The launcher builds incrementally and enables the JIT by default. It checks
+source contents and built outputs, reusing unchanged host tools, kernel,
+applications and guest compiler packages. The first launch after upgrading
+the build system may rebuild once to record its inputs. Use `--rebuild` to
+force rebuilding while preserving the disk, `--build-only` to build and update
+without booting, or `--run-only` to skip both building and installation.
+The terminal shows elapsed time, build stages and current compilation activity,
+with an update every ten seconds during quiet work or build-lock waits.
+Complete compiler output remains in `$FUZIX_BUILD/build.log` (default
+`build/fuzix/build.log`).
+
+Normal builds also install the [guest C toolchain](../../rcc-portable/README.md).
+Inside FUZIX, `cc hello.c -o hello` and `./hello` compile and run a C program
+using the installed headers and libraries under `/usr/lib/rcc`.
+
+At the prompt:
 
 ```text
 help
@@ -46,8 +61,7 @@ repository and the separate native Fuse-X platform are unaffected.
 `select()` and the standard descriptor-set macros are available through
 `<sys/select.h>`. Programs can sleep until files, pipes, terminals, PTYs or
 sockets are ready, a monotonic timeout expires, or a signal interrupts the wait.
-RVM supports all 32 process descriptors; native Fuse-X currently supports 16,
-with the same 32-bit-capacity C16 set layout. TCP clients can inspect asynchronous
+Both targets support 32 process descriptors with the same two-word C16 set layout. TCP clients can inspect asynchronous
 connection completion using `getsockopt(SOL_SOCKET, SO_ERROR)`.
 
 RVM `gterm` uses select for graphics events and PTY I/O. The older `GX_WAIT`
@@ -110,7 +124,7 @@ shell, and `shutdown` to save and stop the whole guest.
 
 **Telnetd grants an unauthenticated root shell, and Telnet traffic is plaintext.**
 Use it on the trusted host-only link. It starts only when requested.
-Eight PTYs and sixteen TCP connections are available,
+Sixteen PTYs and sixty-four TCP connections are available,
 shared with local PTY sessions and outgoing connections; process slots can become the limiting resource first.
 
 The guest also has `telnet HOST [PORT]`. Press **Ctrl-^** (Ctrl-Shift-6 on
@@ -131,14 +145,18 @@ alias. `dig` supports A, AAAA, MX, NS, CNAME, TXT, SOA, PTR, ANY, `@SERVER`,
 `+short` and `-x ADDRESS`. AAAA records can be inspected over IPv4 DNS even
 though the transport stack is IPv4-only.
 
-`htget http://HOST[:PORT]/PATH FILE` downloads a body; `FILE` may be `-` for
+`htget http[s]://HOST[:PORT]/PATH FILE` downloads a body; `FILE` may be `-` for
 stdout. It handles content length, close-delimited and chunked bodies,
 informational replies and up to five HTTP redirects. It requests uncompressed
 content and uses a temporary file in the destination directory, replacing the
 destination only after a successful transfer. Failed or interrupted downloads
-preserve the original file. HTTP is cleartext; HTTPS/TLS, authentication,
-cookies and compressed-content decoding are not supplied. I/O has a 30-second
-idle timeout. `echoping HOST [PORT [MESSAGE]]` tests a UDP echo service, with
+preserve the original file. HTTPS uses the [shared guest TLS library](../tls/README.md)
+with chain, DNS/IP identity and certificate-date verification. It loads guest
+trust anchors from `/etc/ssl/cert.pem`; `--cacert FILE` selects a different
+bundle for one invocation. HTTPS-to-HTTP redirects are rejected. Cookies,
+HTTP authentication and compressed-content decoding are not supplied.
+I/O has a 30-second timeout and TLS establishment allows 120 seconds for cold
+JIT compilation and guest cryptography. `echoping HOST [PORT [MESSAGE]]` tests a UDP echo service, with
 a five-second timeout. `ntpdate SERVER` displays network time; `-s` updates
 only the guest's UTC calendar. `-o HOURS` adjusts display, not the clock update.
 
@@ -146,8 +164,12 @@ IPv4, ARP, ICMP echo, UDP and TCP run in the guest using the shared
 `runtime/net` implementation. The host transports Ethernet frames. The FUZIX
 socket layer supports stream/datagram reads and writes, bind/listen/accept,
 nonblocking I/O, half-close, descriptor sharing across fork, and bounded queues.
-Protocol state occupies reserved physical bank 5; sixteen internet endpoints
-use bank 6. Thirty-two guest-local stream endpoints occupy bank 7.
+The control table occupies reserved physical bank 5; the first sixteen internet
+endpoints use bank 6. The remaining endpoints and TCP pools use permanent,
+bank-local supervisor allocations charged to the MMU physical page pool.
+There are 64 internet endpoints, 64 live TCP connections, 16 TCP listeners,
+16 bound UDP ports and 128 compact TIME_WAIT records, shared system-wide.
+Thirty-two guest-local stream endpoints occupy bank 7.
 Unix-domain sockets and `socketpair()` work offline and participate in `select()`.
 See [local IPC and capacity](../../docs/networking/local-ipc.md). Polling uses the host-clock
 timer at 10 ms resolution, and all protocol/device operations hold the kernel
@@ -170,15 +192,21 @@ private image. Both use JIT and preserve the normal guest disk.
 
 ## Protected memory
 
+The process limit is shared with Fuse-X through `ripple/process-limits.h`. It
+includes init, running/sleeping processes and unreaped children. Run
+`make -C ports/fuzix BUILD="$PWD/build/fuzix" test-process-capacity` to exercise
+all 64 slots, timeout readiness, reporting, recovery and 40 background shell
+jobs on a disposable disk.
+
 The default RVM build uses [MMU ABI 1](../../docs/arch/mmu.md), 256 physical RAM
-banks (32,000 KiB), and 32 process slots. It allows 32 descriptors per process,
-128 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
-backs user memory. Each process has up to 16 data/heap banks (1,024,000 C characters,
-roughly 2 MiB of physical memory) and a separate 64,000-cell stack. Static
-globals can span this data window; the heap begins after them, so large tables
+banks (32,000 KiB), and 64 process slots. It allows 32 descriptors per process,
+192 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
+backs user memory and pinned network allocations. Each process has up to 23 data/heap banks (1,472,000 C characters,
+roughly 2.8 MiB of physical memory) and a separate 64,000-cell stack. Static
+globals can span the first 16 banks of this window; the heap begins after them, so large tables
 reduce the remaining heap capacity. RXE initial data must leave at least one
 cell in the window. Actual allocations share the physical pool;
-32 processes cannot each consume their entire virtual capacity simultaneously.
+64 processes cannot each consume their entire virtual capacity simultaneously.
 
 Process switches select maps instead of copying data and stack banks. `fork`
 shares read-only code and COW data/stack pages; writes copy 512-cell pages as
@@ -188,10 +216,12 @@ live at the top of the stack bank, leaving the heap region available for growth.
 Invalid user accesses terminate the process with SIGSEGV. MMU/user privilege
 violations cannot write kernel tables or issue device commands.
 
-The physical layout is kernel GP 3, IRQ stack 4, network state 5, process kernel stacks 32–63,
-tables 64–95, page reference counts 96, saved task data 97, FAT chain 98–99, graphics scanout
-104–108, and user physical pages 128–255. User
-virtual code starts at bank 0, data/heap occupies 8–23, and stack uses 31.
+The physical layout is kernel GP 3, IRQ stack 4, network state 5, process kernel stacks 32–95,
+packed tables 96–117 (three processes per bank with the default code budget),
+page reference counts 118, saved task data 119, FAT chain 120–121, graphics scanout
+122–126, and the shared physical page pool in 128–255. Network allocations pin
+pages in this pool; user allocation skips them. User
+virtual code starts at bank 0, data/heap occupies 8–30, and stack uses 31.
 Supervisor data accesses in virtual banks 8–31 use the active process map;
 other kernel accesses and all device descriptors are physical. User-copy helpers
 validate mapped pages and resolve COW before writing. Heap shrinking retains
@@ -217,22 +247,22 @@ longer supported.
 
 ## Unix userspace
 
-The image now includes **113 utility, scripting, graphics and game command names**, built from the pinned
+The image includes Unix utilities, scripting tools, graphics and games, built from the pinned
 upstream sources and adapted where needed, plus the upstream V7 Bourne shell at `/bin/sh`.
 They are real executables using FUZIX system calls:
 
 | Purpose | Commands |
 | --- | --- |
 | Files and directories | `ls`, `cat`, `cp`, `mv`, `ln`, `rm`, `mkdir`, `rmdir`, `pwd`, `touch`, `chmod`, `chown`, `chgrp`, `mkfifo`, `mknod`, `basename`, `dirname`, `find`, `dd`, `tar`, `mktemp` |
-| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh`, `join`, `split`, `fmt`, `column`, `pr`, `col`, `tsort`, `cksum` |
+| Text | `echo`, `head`, `tail`, `wc`, `grep`, `fgrep`, `sed`, `sort`, `uniq`, `cut`, `tr`, `tee`, `comm`, `rev`, `expand`, `colrm`, `od`, `sum`, `cmp`, `diff`, `diffh`, `diff3`, `join`, `split`, `fmt`, `column`, `pr`, `col`, `tsort`, `cksum` |
 | Calculation and development | `expr`, `awk`, `make`, `m4`, `dc` |
 | Terminal and paging | `more`, `less`, `clear`, `stty`, `tty` |
 | Networking | `ifconfig`, `ping`, `telnet`, `telnetd`, `htget`, `dig`, `host`, `nslookup`, `echoping`, `ntpdate` |
-| Editing | `ed`, `vi` (Levee), `levee`, `vile` |
+| Editing | `ed`, `vi` (Rift), `levee`, `vile` |
 | Processes and environment | `ps`, `kill`, `sleep`, `env`, `printenv`, `id`, `whoami`, `uname`, `date`, `which`, `xargs`, `time`, `nice`, `nohup`, `groups`, `logname`, `free`, `uptime` |
 | Filesystem information | `df`, `du`, `sync` |
 | Manuals | `man` (57 installed manual pages) |
-| Fun and scripting | `bf`, `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi`, `sokoban`, `sok` |
+| Fun and scripting | `basic`, `bf`, `cowsay`, `picol`, `tcl`, `tclsh`, `wump`, `hamurabi`, `sokoban`, `sok` |
 | Shell helpers | `test`, `true`, `false`, `seq`, `yes` |
 
 Try:
@@ -269,9 +299,9 @@ echo "Today: `date`"
 
 `help`, `sync`, and `shutdown` remain small Ripple additions. PID 1 bootstraps
 straight into the shell, so it consumes one process slot. The kernel currently
-has 32 slots; pipelines,
+has 64 slots; pipelines,
 subshells, command substitutions and background tasks
-share that limit. Interactive prompts now provide Tab completion for shell builtins, executable
+share that limit. The job table and pipeline tracking also cover 64 entries. Interactive prompts now provide Tab completion for shell builtins, executable
 commands in `PATH`, and filenames/directories. Tab extends a common prefix;
 press it again to list ambiguous matches. Spaces and shell metacharacters are
 escaped, and quoted filenames work. Completion does not evaluate `$` variables,
@@ -385,14 +415,18 @@ to obtain physical usage; `free` reports unique pool totals instead. Executable
 images and reserved kernel RAM are outside the per-process page counts.
 
 `ptysh` opens a new terminal session running the shell. Exit it to return to
-the outer shell; nesting uses distinct pairs. FUZIX/Ripple exposes eight pairs:
-`/dev/ptyp0`–`/dev/ptyp7` (exclusive masters) and
-`/dev/ttyp0`–`/dev/ttyp7` (slaves, tty minors 2–9). Device nodes default to
+the outer shell; nesting uses distinct pairs. Both kernels expose sixteen pairs:
+`/dev/ptyp0`–`/dev/ptypf` (exclusive masters) and
+`/dev/ttyp0`–`/dev/ttypf` (hexadecimal suffixes; slaves, tty minors 2–17). Device nodes default to
 0600. `/dev/tty` follows the caller's controlling terminal. PTYs support
 canonical/raw input, echo, nonblocking backpressure, window-size ioctls,
 foreground signals, EOF and master-close hangup. They provide the kernel
 foundation for multiplexers and graphical terminals; `ptysh` itself is a
 single-session bridge.
+
+`mux` provides tabs, split panes, scrollback and detachable sessions on both
+kernels. Start `mux`, then Ctrl-B followed by `?` for help. See
+[the mux guide](../../docs/terminal-multiplexer.md) and `man mux`.
 
 The read-only `/dev/proc` ioctl `RIPPLE_PROCINFO` provides versioned records
 without kernel pointers, alongside `RIPPLE_SYSINFO`. Process groups and
@@ -401,13 +435,15 @@ or RCC ABI extensions are required.
 
 ## Full-screen editing
 
-`vi filename` now runs **Levee**, developed by David L Parsons. It is also
-available as `levee filename`. It supports undo (`u`), yank/put (`yy`, `p`, `P`),
+`vi filename` launches **Rift**, also available as `rift filename`.
+
+**Levee**, developed by David L Parsons, remains available as `levee filename`.
+It supports undo (`u`), yank/put (`yy`, `p`, `P`),
 regex searches (`/pattern`, `?pattern`, `n`), substitutions (`:%s/old/new/g`),
 marks, repeat (`.`), counts, and the upstream ex command set. Use `i` to insert,
 Escape to return to command mode, `h`/`j`/`k`/`l` to move, `:w` to save, `:wq`
 to save and exit, and `:q!` to discard changes. Ctrl-C cancels insert/command
-input. Starting with `vi` alone works too; `:w filename` names the buffer for
+input. Starting with `levee` alone works too; `:w filename` names the buffer for
 subsequent saves. Levee's buffer holds at most 29,999 native characters; overflowing reads
 are marked read-only. Undo and larger yanks spill to temporary disk files.
 Writes use a temporary file before replacing the destination and preserve
@@ -439,7 +475,8 @@ executable record lets `exec` replace an image when every process slot is occupi
 `free` reports physical memory in KiB: total RAM, the reserved platform area,
 the process page pool, physical pages in use, shared pages, and total process
 mappings. A shared COW page consumes physical RAM once while appearing in several
-process maps. The reserved area is not a count of live kernel allocations.
+process maps. Pinned network allocations count in pool usage but not process
+mapping/shared counts. The reserved area is not a count of live kernel allocations.
 `ps -l` reports each process's mapped data/stack size; these sizes must not be
 summed to estimate physical usage. `free` also shows occupied/total process slots
 and the data/heap and stack capacities in native cells. Slots include zombies.
@@ -504,7 +541,10 @@ example does not cause your copy to be overwritten.
 Supported commands include `set`, `incr`, `append`, `puts`, `expr`, `if`/`else`,
 `while`, `for`, single-variable `foreach`, `break`, `continue`, `proc`, `return`,
 `list`, `llength`, `lindex`, `lappend`, `string length/equal/index`, `source`,
-`eval`, `catch`, `error`, `exit`, and `exec`. Procedures have local variables,
+`eval`, `catch`, `error`, `exit`, `pwd`, `cd`, `file`, `glob`, `dict` and `exec`.
+Build scripts can expand list arguments with `{*}$list` and use `env(NAME)`
+to read or update the environment inherited by child processes.
+Procedures have local variables,
 fixed positional parameters or a final `args` parameter. Script arguments are
 available as `argc`, `argv`, and `argv0`. The bundled Picol's prefix arithmetic
 commands (`+`, `-`, `*`, `/`, comparisons) remain available, with `%` fixed/added.
@@ -512,9 +552,9 @@ commands (`+`, `-`, `*`, `/`, comparisons) remain available, with `%` fixed/adde
 Integer expressions support parentheses, variables, arithmetic, comparisons,
 boolean operators and short-circuit evaluation. They use checked signed
 32-bit integers; division rounds down, and overflow or division by zero raises
-an error. Braced expressions do not perform nested command substitutions;
-calculate those values first in a variable. `if` supports one body and an
-optional `else`; `elseif`, default procedure parameters, arrays, namespaces,
+an error. Braced expressions support nested command substitutions while
+preserving short-circuit evaluation. `if` supports one body and an
+optional `else`; `elseif`, default procedure parameters, general arrays, namespaces,
 packages, floating point, Tk and the complete Tcl standard library are absent.
 This is a small interpreter rather than a full Tcl distribution.
 
@@ -524,9 +564,13 @@ This is a small interpreter rather than a full Tcl distribution.
 not interpret shell metacharacters or pipeline syntax. External nonzero exit
 statuses become catchable errors. File writes and subprocesses use ordinary
 FUZIX system calls and the persistent filesystem.
+Append `>@stdout 2>@stderr` to stream build output instead of capturing it;
+child failures set the `errorCode` list with status or signal details.
 
-Scripts/strings are bounded at 12,000 native characters, nesting at 32 evaluator
-levels, lists/commands at 128 elements/arguments, and open file channels at eight.
+Scripts/strings are bounded at 30,000 native characters, nesting at 32 evaluator
+levels, lists/commands at 1,024 elements/arguments, and open file channels at eight.
+External commands also share the kernel's 4,096-character argument/environment
+budget, including terminators and pointer vectors.
 The current process heap can impose a smaller limit when several large values
 are live at once. Text cannot contain NUL characters; ASCII is the supported
 interchange. Malformed input, oversized scripts and script errors return nonzero
@@ -561,8 +605,7 @@ keep their old content when its managed pathname is replaced. Before an update,
 the launcher checks the filesystem while holding the disk lock. Recoverable
 shutdown/free-list metadata is repaired automatically after saving a backup;
 ambiguous structural damage stops the update with a readable error. Executable
-updates also save a backup before writing. `/bin/vi` and `/bin/levee`
-share an inode to avoid storing the editor twice. The `cp`/`mv`/`ln`
+updates also save a backup before writing. `/bin/vi` is a relative symbolic link to `rift`, without storing the editor twice. The `cp`/`mv`/`ln`
 executables and the three Picol names likewise share their respective binaries. No-op updates leave the
 image and its modification time untouched. An exclusive companion lock covers
 updates, VM execution, and offline checks.
@@ -808,6 +851,16 @@ to stderr so stdout remains usable in pipelines. Numeric suffixes are `k` (1024)
 and `-h` are available. It compares stdin through `-`, handles unterminated final
 lines, and returns 0 for equal files, 1 for differences, and 2 for errors.
 `diffh` supplies the bounded-memory heuristic comparison used by `diff -h`.
+`diff3 file1 file2 file3` compares three versions. `-e` produces an `ed` script
+applying overlapping changes and changes unique to file3 to file1; `-x` selects
+overlapping changes, and `-3` selects changes unique to file3. Successful diff3
+reports/scripts return 0; input, subprocess and output errors return 2.
+One operand may be stdin (`-`), and `--` ends options. Both commands accept
+separate option groups and filenames containing spaces or shell punctuation.
+The comparison limit is 30,000 lines per input, with memory/candidate limits
+possibly reached earlier. Offsets are 32-bit and long lines are streamed.
+Editor scripts require newline-terminated text; `-e` escapes single-dot lines.
+The historical forward `diff -f` refuses single-dot insertion lines.
 Unified/context output and recursive directory comparison are not provided.
 
 `tar` creates, lists and extracts USTAR archives, including recursive directories,
@@ -963,12 +1016,22 @@ formatting are not supplied. Dynamic records and format buffers have a
 16,000-character ceiling, with the total process heap imposing an additional
 limit; a large record/program can exhaust that heap sooner.
 
-`make` is the historical MWC implementation: makefile/Makefile lookup, includes,
-macros, command-line assignments, timestamps, suffix rules, automatic variables
-and `-f`, `-r`, `-n`, `-q`, `-s`, `-i` are available. Its `$<` expands the
-prerequisite list. GNU make extensions such as `.PHONY`, pattern functions and
-parallel `-j` builds are not supplied. Default rules/macros live in `/usr/lib`.
-There is no guest C compiler yet, but make can run the existing shell tools.
+`make` extends the historical MWC implementation with `.PHONY`, `.DELETE_ON_ERROR`,
+optional `-include`, `?=` and `+=`. `$<` selects the first prerequisite and `$^`
+lists all prerequisites without duplicates. Command-line variable overrides,
+timestamps, suffix rules and the existing command options remain available.
+Image-seeded files with epoch-zero timestamps count as existing files. Pattern
+functions and parallel `-j` builds are not supplied. Default rules/macros live
+in `/usr/lib`.
+
+The guest `cc` toolchain produces Ripple RXE executables, and its initial source
+snapshot is installed at `/usr/src/rcc`. The expanded Tcl subset coordinates
+compiler builds using file operations, globbing, dictionaries, environment
+variables, `{*}` list expansion and streamed `exec` output. See
+[guest compiler builds](../../rcc-portable/README.md#guest-source-builds) for the
+bootstrap commands, validation status and current limits. `execve` accepts a
+combined 4,096 C16 characters for arguments, environment, terminators and pointer
+vectors; oversized requests fail with `E2BIG`.
 
 `m4` provides definitions, arguments, quoting, includes, conditionals, integer
 evaluation, diversions and shell commands. `dc` provides arbitrary-precision
@@ -978,7 +1041,7 @@ operators so the shell passes them through. Ctrl-C interrupts these programs
 and returns to the shell.
 
 Executable code uses first-fit contiguous bank regions sized to each linked
-image, shared across fork and freed with the last reference. There are 32 process
+image, shared across fork and freed with the last reference. There are 64 process
 slots, retaining the RCC calling ABI.
 One spare image record allows staged exec without overwriting the running
 image. A failed allocation returns ENOMEM and preserves that image; exec needs
@@ -1031,7 +1094,7 @@ ambiguous listings, history eviction, wrapped-line editing, prompt cancellation,
 six-stage pipelines, and Levee search/substitution, yank/put, native-character
 and disk-backed undo, saved permissions, overflow handling and reboot
 persistence. RVM unit tests check Tab and navigation-key
-forwarding; disk tests check the shared `vi`/`levee` inode and preservation of
+forwarding; disk tests check the `vi` → `rift` symbolic link and preservation of
 older user hard links during upgrades.
 
 The fun-tool suite checks cowsay wrapping, designs, stdin and input limits;
@@ -1053,8 +1116,8 @@ inode numbers. The shared FAT builder retains its default rOS layout.
 
 Run `scripts/run-fuzix.sh --visual`, then `gterm` at the console. This starts
 an 80×30 PTY shell in an RGB565 window; `gterm COMMAND ARG...` runs a command.
-The protected profile has 32 process slots, 32 descriptors per process,
-128 system open-file/inode slots and eight PTYs. Closing the graphics window
+The protected profile has 64 process slots, 32 descriptors per process,
+192 system open-file slots, 128 cached inodes and sixteen PTYs. Closing the graphics window
 hangs up that terminal session while FUZIX remains available on the console.
 `exit` returns to the console; `shutdown` saves the disk and stops the kernel.
 

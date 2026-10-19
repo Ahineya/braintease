@@ -1,0 +1,47 @@
+.TH DATE 1
+.SH NAME
+date \- show the current date and time
+.SH SYNOPSIS
+.B date
+[-u]
+.SH DESCRIPTION
+Print local date, time, timezone abbreviation and year. With -u, print UTC.
+The kernel clock and file timestamps remain UTC regardless of display timezone.
+.SH TIMEZONE
+The TZ environment variable overrides the first line of /etc/TZ. An unset TZ
+uses that system-wide file; an empty or invalid TZ selects UTC. Without either
+setting, UTC is used. New libc builds support these settings on both FUZIX/Ripple
+and Fuse-X; older statically linked programs need rebuilding to use them.
+.PP
+Use a POSIX-style rule: STDoffset, optionally followed by
+DST[offset],start,end. Offsets are hours west of UTC, with optional minutes
+and seconds; thus CET-1 is one hour east of UTC and EST5 is five hours west.
+Names have 3 through 31 letters, or are enclosed in angle brackets to allow
+digits and plus/minus signs. UTC and GMT alone are also accepted.
+.PP
+Daylight-saving zones require explicit start and end rules. Mm.w.d means
+weekday d (Sunday is 0) in week w of month m; week 5 means the last occurrence.
+Jn means Julian day 1 through 365 ignoring February 29. A bare n means day
+0 through 365 counting leap days. Each rule may end in /hour[:minute[:second]];
+the default is 02:00 local time before the transition. The summer offset
+defaults to one hour ahead of standard time.
+.PP
+For Albania's current Central European rules:
+.nf
+TZ='CET-1CEST,M3.5.0/2,M10.5.0/3'
+export TZ
+.fi
+.PP
+For a persistent default used by shells, mux and newly built applications:
+.nf
+echo 'CET-1CEST,M3.5.0/2,M10.5.0/3' > /etc/TZ
+.fi
+.PP
+An exported TZ takes precedence over that file; leave it unset when using the
+system default. The rules repeat annually: IANA names such as Europe/Tirane,
+binary zoneinfo files and historical rule changes are not implemented.
+Changes to the host Mac's timezone do not change guest settings automatically.
+.SH FILES
+/etc/TZ
+.SH SEE ALSO
+mux(1), sh(1)

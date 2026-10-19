@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* Bounded, select-driven ASCII input for the shared C16 curses port. */
+/* Bounded, select-driven byte and Unicode input for the shared C16 curses port. */
 #include <curses.h>
 #include <errno.h>
 #include <string.h>
@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include "curspriv.h"
 
-static int pushed[64], count;
+static int pushed[64], count, batching, paste_active, paste_match;
 static int milliseconds(unsigned long *value) {
     struct timespec now;
     if (clock_gettime(CLOCK_MONOTONIC, &now) < 0) return ERR;
@@ -29,7 +29,6 @@ void wtimeout(WINDOW *w, int milliseconds) {
 static int input(int delay) {
     fd_set readset;
     struct timeval timeout, *wait = NULL;
-    char c;
     int fd = fileno(stdin), n;
     if (stdin->pushed != EOF) { n = stdin->pushed; stdin->pushed = EOF; return n; }
     if (stdin->pos < stdin->len) return (unsigned char)stdin->buf[stdin->pos++];
@@ -42,9 +41,10 @@ static int input(int delay) {
     }
     n = select(fd + 1, &readset, NULL, NULL, wait);
     if (n <= 0) return ERR;
-    n = read(fd, &c, 1);
-    if (n != 1) { if (!n) stdin->eof = 1; return ERR; }
-    return (unsigned char)c;
+    n = read(fd, stdin->buf, batching ? sizeof(stdin->buf) : 1);
+    if (n <= 0) { if (!n) stdin->eof = 1; return ERR; }
+    stdin->pos = 1; stdin->len = n;
+    return (unsigned char)stdin->buf[0];
 }
 static int sequence(const int *s, int n) {
     int last = s[n - 1], number = 0, i;
@@ -81,6 +81,8 @@ static int sequence(const int *s, int n) {
     case 21: return KEY_F(10);
     case 23: return KEY_F(11);
     case 24: return KEY_F(12);
+    case 200: paste_active = 1; paste_match = 0; return KEY_PASTE_BEGIN;
+    case 201: return KEY_PASTE_END;
     default: return ERR;
     }
 }
@@ -88,9 +90,10 @@ int wgetch(WINDOW *w) {
     int c, s[32], n = 1, key;
     unsigned long start, now;
     if (!w || !stdscr) { errno = EINVAL; return ERR; }
-    if (ripple_curses_resize()) return KEY_RESIZE;
+    if (!batching && ripple_curses_resize()) return KEY_RESIZE;
     if (isendwin() && reset_prog_mode() == ERR) return ERR;
-    wrefresh(w);
+    if (!batching) wrefresh(w);
+again:
     c = count ? pushed[--count] : input(w->_delay < 0 && _cursvar.halfdelay > 0
                                       ? _cursvar.halfdelay * 100 : w->_delay);
     if (c == ERR) {
@@ -98,6 +101,19 @@ int wgetch(WINDOW *w) {
         if (ripple_curses_resize()) return KEY_RESIZE;
         errno = saved_error;
         return ERR;
+    }
+    if (paste_active) {
+        static const char ending[] = "\033[201~";
+        if (c == ending[paste_match]) {
+            if (++paste_match == 6) { paste_active = paste_match = 0; return KEY_PASTE_END; }
+            goto again;
+        }
+        if (paste_match) {
+            ungetch(c);
+            while (paste_match > 1) ungetch(ending[--paste_match]);
+            paste_match = 0; return 27;
+        }
+        return c;
     }
     if (w->_keypad && c == 27) {
         s[0] = c;
@@ -123,30 +139,73 @@ int wgetch(WINDOW *w) {
     if (_cursvar.echoit && c < 256) waddch(w, c);
     return c;
 }
-int wgetnstr(WINDOW *w, char *s, int limit) {
-    int n = 0, c, saved_echo = _cursvar.echoit;
-    if (!w || !s || limit < 0) { errno = EINVAL; return ERR; }
-    s[0] = 0;
-    _cursvar.echoit = 0;
+/* The status distinguishes Unicode text from legacy KEY_* codes. A partial
+ * sequence survives a polling timeout; invalid continuations are retried. */
+int wget_wch(WINDOW *w, uint32_t *value) {
+    int c, decoded, echo;
+    if (!w || !value) { errno = EINVAL; return ERR; }
+    echo = _cursvar.echoit; _cursvar.echoit = 0;
     for (;;) {
         c = wgetch(w);
-        if (c == ERR) { _cursvar.echoit = saved_echo; return ERR; }
-        if (c == '\n' || c == '\r') break;
-        if (c == 8 || c == 127 || c == KEY_BACKSPACE) {
-            if (n) {
-                s[--n] = 0;
-                if (saved_echo && w->_curx > 0) {
-                    wmove(w, w->_cury, w->_curx - 1); waddch(w, ' ');
-                    wmove(w, w->_cury, w->_curx - 1);
+        if (c == ERR) {
+            if (feof(stdin) && w->_input_utf8.need) {
+                w->_input_utf8.need = 0; *value = RU_REPLACEMENT; break;
+            }
+            _cursvar.echoit = echo; return ERR;
+        }
+        if (c > 255) {
+            if (w->_input_utf8.need) { ungetch(c); w->_input_utf8.need = 0; *value = RU_REPLACEMENT; break; }
+            *value = c; _cursvar.echoit = echo; return KEY_CODE_YES;
+        }
+        decoded = ru_decode(&w->_input_utf8, c, value);
+        if (decoded < 0) ungetch(c);
+        if (decoded) break;
+    }
+    _cursvar.echoit = echo;
+    if (echo) waddch(w, *value);
+    return OK;
+}
+/* Read complete Unicode scalars already available, without screen refreshes or
+ * per-octet syscalls. Keep function/control events for the ordinary input path. */
+unsigned ripple_curses_text_run(WINDOW *w, unsigned char *out, unsigned limit, int literal) {
+    unsigned n = 0, size; unsigned char bytes[4]; uint32_t cp; int status, delay;
+    if (!w || !out) return 0;
+    delay = w->_delay; wtimeout(w, 0); batching = 1;
+    while (limit - n >= 4) {
+        status = wget_wch(w, &cp);
+        if (status == ERR) break;
+        if (status == KEY_CODE_YES || (!literal && (cp < 32 || cp == 127))) { ungetch((int)cp); break; }
+        size = ru_encode(cp, bytes); memcpy(out + n, bytes, size); n += size;
+    }
+    batching = 0; wtimeout(w, delay); return n;
+}
+int wgetnstr(WINDOW *w, char *s, int limit) {
+    int n=0,status,saved_echo=_cursvar.echoit,startx,starty;uint32_t cp;
+    unsigned char bytes[4];unsigned size;size_t previous;unsigned oldwidth;
+    if(!w||!s||limit<0){errno=EINVAL;return ERR;}
+    s[0]=0;startx=w->_curx;starty=w->_cury;_cursvar.echoit=0;
+    for(;;){
+        status=wget_wch(w,&cp);
+        if(status==ERR){_cursvar.echoit=saved_echo;return ERR;}
+        if(status==OK&&(cp=='\n'||cp=='\r'))break;
+        if((status==KEY_CODE_YES&&cp==KEY_BACKSPACE)||(status==OK&&(cp==8||cp==127))){
+            if(n){
+                previous=ru_previous_grapheme((const unsigned char *)s,n,n);
+                oldwidth=ru_columns((const unsigned char *)s+previous,n-previous);
+                n=previous;s[n]=0;
+                if(saved_echo&&w->_cury==starty){
+                    int x=startx+ru_columns((const unsigned char *)s,n);unsigned i;
+                    wmove(w,starty,x);for(i=0;i<oldwidth;i++)ripple_curses_scalar(w,' ');wmove(w,starty,x);
                 }
             }
-        } else if (c >= 32 && c < 127 && n < limit) {
-            s[n++] = c; s[n] = 0;
-            if (saved_echo) waddch(w, c);
+        }else if(status==OK&&cp>=32&&ru_width(cp)>=0){
+            size=ru_encode(cp,bytes);
+            if(size<=(unsigned)(limit-n)){
+                memcpy(s+n,bytes,size);n+=size;s[n]=0;if(saved_echo)waddch(w,cp);
+            }
         }
     }
-    _cursvar.echoit = saved_echo;
-    return OK;
+    _cursvar.echoit=saved_echo;return OK;
 }
 int wgetstr(WINDOW *w, char *s) {
     /* This legacy signature cannot know the caller's capacity. */

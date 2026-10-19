@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* RXE1 loader for Ripple's separate instruction and data memories. */
 #include "platform.h"
+#include "pcm.h"
 #include "graphics.h"
 #include <kdata.h>
 #include <printf.h>
@@ -113,6 +114,7 @@ static uint32_t longat(uint32_t p) {
 arg_t _execve(void) {
     inoptr ino;
     struct s_argblk *abuf, *ebuf;
+    struct s_argblk saved_args, saved_env;
     uint32_t entry, nins, data, nr, pos, idx, i, expect;
     unsigned base, bank, addr, kind, chunk_off, cells[4];
     int slot = -1;
@@ -171,12 +173,16 @@ arg_t _execve(void) {
         udata.u_error = ENOMEM;
         goto bad;
     }
-    abuf = tmpbuf();
-    ebuf = tmpbuf();
+    /* Private kernel stacks survive scheduling and the userspace map change. */
+    abuf = &saved_args;
+    ebuf = &saved_env;
     if (rargs((uint8_t **)udata.u_argn1, abuf) ||
         rargs((uint8_t **)udata.u_argn2, ebuf)) {
-        tmpfree(abuf);
-        tmpfree(ebuf);
+        goto bad;
+    }
+    if ((unsigned long)abuf->a_arglen + ebuf->a_arglen +
+        (abuf->a_argc + ebuf->a_argc + 2UL) * sizeof(uptr_t) > RIPPLE_ARG_MAX) {
+        udata.u_error = E2BIG;
         goto bad;
     }
     base = code_base[slot];
@@ -232,8 +238,6 @@ arg_t _execve(void) {
         }
     }
     if (ripple_mmu_exec_data((unsigned)(udata.u_ptab-ptab), data)) {
-        tmpfree(abuf);
-        tmpfree(ebuf);
         udata.u_error = ENOMEM;
         goto bad;
     }
@@ -278,6 +282,7 @@ arg_t _execve(void) {
     ripple_argv = (unsigned long)av;
     ripple_envp = (unsigned long)ev;
     ripple_gfx_exit(udata.u_ptab);
+    ripple_pcm_exit(udata.u_ptab);
     for (i = 0; i < UFTSIZE; i++)
         if (udata.u_cloexec & (1UL << i))
             doclose(i);
@@ -301,8 +306,6 @@ arg_t _execve(void) {
     }
     udata.u_ptab->p_flags |= PFL_EXECED;
     memcpy(udata.u_ptab->p_name, udata.u_name, sizeof(udata.u_name));
-    tmpfree(abuf);
-    tmpfree(ebuf);
     i_deref(ino);
     ripple_code_free(udata.u_ptab);
     task_code[(unsigned)(udata.u_ptab - ptab)] = slot;
@@ -311,7 +314,8 @@ arg_t _execve(void) {
     ripple_exec_pc = (unsigned)(entry % 64000UL);
     __hard_di();
     udata.u_insys = 0;
-    udata.u_ptab->p_status = P_RUNNING;
+    proc_setstate(udata.u_ptab,P_RUNNING);
+    proc_sched_switch();
     ripple_enter_user();
     panic("exec returned");
 bad:

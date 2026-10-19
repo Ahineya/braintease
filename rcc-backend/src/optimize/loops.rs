@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 /// Existing dedicated preheaders suffice for frontend-generated C loops. Skip
 /// irreducible loops and loops requiring edge splitting/phi repair.
 pub(super) fn hoist_invariants(function: &mut Function) {
-    if super::cfg::Cfg::new(function).is_err() { return; }
+    let Ok(cfg) = super::cfg::Cfg::new(function) else { return; };
     let n = function.blocks.len();
     // Frontend C blocks have explicit terminators. Do not infer a natural
     // loop from incomplete CFG edges in hand-written/fallthrough IR.
@@ -19,64 +19,12 @@ pub(super) fn hoist_invariants(function: &mut Function) {
     if n < 2 {
         return;
     }
-    let ids: HashMap<_, _> = function
-        .blocks
-        .iter()
-        .enumerate()
-        .map(|(i, b)| (b.id, i))
-        .collect();
-    let mut successors = vec![Vec::new(); n];
-    let mut predecessors = vec![Vec::new(); n];
-    for (i, block) in function.blocks.iter().enumerate() {
-        let labels = match block.instructions.last() {
-            Some(Instruction::Branch(l)) => vec![*l],
-            Some(Instruction::BranchCond {
-                true_label,
-                false_label,
-                ..
-            }) => vec![*true_label, *false_label],
-            _ => vec![],
-        };
-        for l in labels {
-            if let Some(&j) = ids.get(&l) {
-                if !successors[i].contains(&j) {
-                    successors[i].push(j);
-                    predecessors[j].push(i);
-                }
-            }
-        }
-    }
-    let mut reachable = HashSet::new();
-    let mut work = vec![0];
-    while let Some(i) = work.pop() {
-        if reachable.insert(i) {
-            work.extend(&successors[i]);
-        }
-    }
-    let mut dom = vec![reachable.clone(); n];
-    dom[0] = HashSet::from([0]);
-    loop {
-        let mut changed = false;
-        for i in 1..n {
-            if !reachable.contains(&i) {
-                continue;
-            }
-            let mut set = reachable.clone();
-            for &p in &predecessors[i] {
-                if reachable.contains(&p) {
-                    set.retain(|j| dom[p].contains(j));
-                }
-            }
-            set.insert(i);
-            if set != dom[i] {
-                dom[i] = set;
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
+    // Reuse the validated CFG and dominance analysis instead of solving the
+    // same fixed point again with a second set representation.
+    let successors = cfg.successors;
+    let predecessors = cfg.predecessors;
+    let reachable = cfg.reachable;
+    let dom = cfg.dominators;
     let mut loops = HashMap::<usize, HashSet<usize>>::new();
     for tail in 0..n {
         if !reachable.contains(&tail) {

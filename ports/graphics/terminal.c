@@ -2,50 +2,81 @@
 #include "terminal.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 struct vt_cell *vt_cells(struct vt *t){return t->cells[t->alternate];}
 void vt_dirty(struct vt *t){memset(t->dirty,1,t->rows);}
 static unsigned colour(struct vt *t) {
     unsigned f=t->fg,b=t->bg;
     if(t->bold&&f<8)f+=8;
-    return t->reverse?(f<<4)|b:(b<<4)|f;
+    return (t->reverse?(f<<4)|b:(b<<4)|f) |
+        (t->underline?256:0) | (t->blink?512:0);
+}
+static void clear_cell(struct vt *t,unsigned at) {
+    struct vt_cell *p=vt_cells(t);
+    if(p[at].ch==RU_CONTINUATION&&at%t->cols){p[at-1].ch=' ';}
+    else if(p[at].ch>=128&&ru_glyph_width(p[at].ch)==2&&at%t->cols+1<t->cols)p[at+1].ch=' ';
+    p[at].ch=' ';
+}
+/* Repair split glyphs after column insertion/deletion or a clipped resize. */
+static void repair_row(struct vt_cell *p,unsigned cols) {
+    unsigned x;int wide=0;
+    for(x=0;x<cols;x++) {
+        if(p[x].ch==RU_CONTINUATION) { if(!wide)p[x].ch=' ';wide=0; }
+        else {
+            wide=p[x].ch>=128&&ru_glyph_width(p[x].ch)==2;
+            if(wide&&(x+1==cols||p[x+1].ch!=RU_CONTINUATION)){p[x].ch=RU_REPLACEMENT;wide=0;}
+        }
+    }
 }
 static void erase(struct vt *t,unsigned start,unsigned end) {
     struct vt_cell *p=vt_cells(t);unsigned i;
     if(end>t->rows*t->cols)end=t->rows*t->cols;
+    if(start>=end)return;
+    clear_cell(t,start);clear_cell(t,end-1);
     for(i=start;i<end;i++){p[i].ch=' ';p[i].colour=colour(t);t->dirty[i/t->cols]=1;}
 }
 static int valid_size(unsigned cols,unsigned rows) {
     return cols&&cols<=VT_MAX_COLS&&rows&&rows<=VT_MAX_ROWS;
 }
+void vt_destroy(struct vt *t) {
+    free(t->cells[0]);free(t->cells[1]);memset(t,0,sizeof(*t));
+}
 int vt_init_size(struct vt *t,unsigned cols,unsigned rows) {
+    struct vt_cell *a,*b;
+    unsigned long size;
     if(!valid_size(cols,rows))return -1;
-    memset(t,0,sizeof(*t));t->cols=cols;t->rows=rows;t->fg=7;t->bottom=rows-1;t->visible=t->wrap=1;
+    size=(unsigned long)cols*rows*sizeof(*a);
+    a=malloc(size);if(!a)return -1;
+    b=malloc(size);if(!b){free(a);return -1;}
+    memset(t,0,sizeof(*t));t->cells[0]=a;t->cells[1]=b;
+    t->cols=cols;t->rows=rows;t->fg=7;t->bottom=rows-1;t->visible=t->wrap=1;
     erase(t,0,t->rows*t->cols);t->alternate=1;erase(t,0,t->rows*t->cols);t->alternate=0;
     return 0;
 }
 void vt_init(struct vt *t) {vt_init_size(t,VT_DEFAULT_COLS,VT_DEFAULT_ROWS);}
 int vt_resize(struct vt *t,unsigned cols,unsigned rows) {
+    struct vt_cell *next[2];
     unsigned plane,y,x,oldcols=t->cols,oldrows=t->rows,width,height;
     if(!valid_size(cols,rows)||!valid_size(oldcols,oldrows))return -1;
     if(cols==oldcols&&rows==oldrows)return 0;
+    next[0]=malloc((unsigned long)cols*rows*sizeof(**next));
+    if(!next[0])return -1;
+    next[1]=malloc((unsigned long)cols*rows*sizeof(**next));
+    if(!next[1]){free(next[0]);return -1;}
     width=cols<oldcols?cols:oldcols;height=rows<oldrows?rows:oldrows;
     for(plane=0;plane<2;plane++) {
-        struct vt_cell *p=t->cells[plane];
-        /* Widen bottom-up and narrow top-down so restriding cannot overwrite
-         * a source row that has not been moved yet. */
-        if(cols>oldcols) {
-            y=height;
-            while(y--){memmove(p+y*cols,p+y*oldcols,width*sizeof(*p));}
-        } else for(y=0;y<height;y++)memmove(p+y*cols,p+y*oldcols,width*sizeof(*p));
-        for(y=0;y<rows;y++)for(x=0;x<cols;x++)if(y>=oldrows||x>=oldcols) {
-            p[y*cols+x].ch=' ';p[y*cols+x].colour=colour(t);
+        for(y=0;y<rows;y++)for(x=0;x<cols;x++) {
+            next[plane][y*cols+x].ch=' ';next[plane][y*cols+x].colour=colour(t);
         }
+        for(y=0;y<height;y++){memcpy(next[plane]+y*cols,t->cells[plane]+y*oldcols,width*sizeof(**next));repair_row(next[plane]+y*cols,cols);}
     }
+    /* Publish only after both allocations succeed; failure preserves the model. */
+    free(t->cells[0]);free(t->cells[1]);t->cells[0]=next[0];t->cells[1]=next[1];
     t->cols=cols;t->rows=rows;
     if(t->x>=cols)t->x=cols-1;if(t->y>=rows)t->y=rows-1;
     if(t->sx>=cols)t->sx=cols-1;if(t->sy>=rows)t->sy=rows-1;
     if(t->primary_x>=cols)t->primary_x=cols-1;if(t->primary_y>=rows)t->primary_y=rows-1;
-    t->top=t->pending=0;t->bottom=rows-1;
+    t->top=t->pending=t->last_at=t->grapheme.started=0;t->bottom=rows-1;
     memset(t->dirty,0,sizeof(t->dirty));vt_dirty(t);return 0;
 }
 static void scroll(struct vt *t,int amount) {
@@ -70,6 +101,24 @@ static unsigned param(struct vt *t,unsigned n,unsigned fallback) {
     return n<=t->count&&t->params[n]?t->params[n]:fallback;
 }
 static unsigned bound(unsigned n,unsigned max){return n>max?max:n;}
+/* Approximate extended colours on the shared 16-colour ROM/ANSI palette.
+ * Keep GUI consumers compatible with the existing packed colour cell ABI. */
+static unsigned nearest(unsigned r,unsigned g,unsigned b) {
+    static const unsigned char rgb[16][3]={{0,0,0},{170,0,0},{0,170,0},{170,85,0},
+        {0,0,170},{170,0,170},{0,170,170},{170,170,170},
+        {85,85,85},{255,85,85},{85,255,85},{255,255,85},
+        {85,85,255},{255,85,255},{85,255,255},{255,255,255}};
+    unsigned i,best=0;unsigned long distance=~0UL,d;long dr,dg,db;
+    for(i=0;i<16;i++) {dr=(long)r-rgb[i][0];dg=(long)g-rgb[i][1];db=(long)b-rgb[i][2];
+        d=dr*dr+dg*dg+db*db;if(d<distance){distance=d;best=i;}}
+    return best;
+}
+static unsigned cube(unsigned c){return c?55+40*c:0;}
+static unsigned indexed(unsigned c) {
+    unsigned n;if(c<16)return c;
+    if(c<232){n=c-16;return nearest(cube(n/36),cube((n/6)%6),cube(n%6));}
+    n=8+(c-232)*10;return nearest(n,n,n);
+}
 static void csi(struct vt *t,unsigned c) {
     unsigned n=param(t,0,1),i,start=t->y*t->cols+t->x;
     struct vt_cell *p=vt_cells(t);
@@ -81,6 +130,7 @@ static void csi(struct vt *t,unsigned c) {
             case 1:t->appcursor=on;break;
             case 7:t->wrap=on;t->pending=0;break;
             case 25:t->visible=on;break;
+            case 2004:t->bracketed_paste=on;break;
             case 47:case 1047:case 1049:
                 if(on&&!t->alternate) {
                     t->primary_x=t->x;t->primary_y=t->y;t->alternate=1;t->x=t->y=0;
@@ -114,16 +164,23 @@ static void csi(struct vt *t,unsigned c) {
     case 'm':
         for(i=0;i<=t->count;i++) {
             unsigned a=t->params[i];
-            if(!a){t->fg=7;t->bg=t->bold=t->reverse=0;}
+            if(!a){t->fg=7;t->bg=t->bold=t->reverse=t->underline=t->blink=0;}
             else if(a==1)t->bold=1;else if(a==22)t->bold=0;
+            else if(a==4)t->underline=1;else if(a==24)t->underline=0;
+            else if(a==5)t->blink=1;else if(a==25)t->blink=0;
             else if(a==7)t->reverse=1;else if(a==27)t->reverse=0;
             else if(a>=30&&a<=37)t->fg=a-30;else if(a==39)t->fg=7;
             else if(a>=40&&a<=47)t->bg=a-40;else if(a==49)t->bg=0;
             else if(a>=90&&a<=97)t->fg=a-90+8;
             else if(a>=100&&a<=107)t->bg=a-100+8;
-            else if(a==38||a==48) { /* consume unsupported extended colour payload */
-                if(i+1<=t->count&&t->params[i+1]==5)i=bound(i+2,t->count);
-                else if(i+1<=t->count&&t->params[i+1]==2)i=bound(i+4,t->count);
+            else if(a==38||a==48) {
+                unsigned mapped=7,valid=0;
+                if(i+2<=t->count&&t->params[i+1]==5){
+                    if(t->params[i+2]<256){mapped=indexed(t->params[i+2]);valid=1;}i+=2;
+                } else if(i+4<=t->count&&t->params[i+1]==2){
+                    if(t->params[i+2]<256&&t->params[i+3]<256&&t->params[i+4]<256){mapped=nearest(t->params[i+2],t->params[i+3],t->params[i+4]);valid=1;}i+=4;
+                }
+                if(valid){if(a==38)t->fg=mapped;else t->bg=mapped;}
             }
         }
         return;
@@ -142,8 +199,9 @@ static void csi(struct vt *t,unsigned c) {
         n=bound(n,t->cols-t->x);
         if(c=='@'){memmove(p+start+n,p+start,(t->cols-t->x-n)*sizeof(*p));erase(t,start,start+n);}
         else {memmove(p+start,p+start+n,(t->cols-t->x-n)*sizeof(*p));erase(t,(t->y+1)*t->cols-n,(t->y+1)*t->cols);}
-        t->dirty[t->y]=1;break;
+        repair_row(p+t->y*t->cols,t->cols);t->dirty[t->y]=1;break;
     case 'X':erase(t,start,start+bound(n,t->cols-t->x));break;
+    case 'q':if(t->intermediate==' '&&t->params[0]<=6)t->cursor_shape=t->params[0];break;
     case 's':t->sx=t->x;t->sy=t->y;break;
     case 'u':t->x=t->sx;t->y=t->sy;break;
     case 'n':
@@ -157,19 +215,78 @@ static void csi(struct vt *t,unsigned c) {
     }
     t->pending=0;
 }
+static void put_cell(struct vt *t,uint32_t cp) {
+    struct vt_cell *p=vt_cells(t);unsigned at,w=1,old;int width;
+    if(cp>=128||(t->grapheme.started&&t->grapheme.previous==RU_PREPEND)) {
+        if(!t->last_at){t->grapheme.started=0;ru_join(&t->grapheme,cp);}
+        if(t->last_at&&!t->grapheme.started){
+            unsigned i,n=ru_scalar_count(p[t->last_at-1].ch);
+            for(i=0;i<n;i++)ru_join(&t->grapheme,ru_scalar(p[t->last_at-1].ch,i));
+        }
+        if(t->last_at&&ru_join(&t->grapheme,cp)) {
+            uint32_t glyph;at=t->last_at-1;old=ru_glyph_width(p[at].ch);
+            glyph=ru_append(p[at].ch,cp);w=ru_glyph_width(glyph);
+            if(w==2&&at%t->cols+1==t->cols){glyph=RU_REPLACEMENT;w=1;}
+            p[at].ch=glyph;
+            if(w<old){p[at+1].ch=' ';if(t->pending)t->pending=0;else if(t->x)--t->x;}
+            if(w>old){clear_cell(t,at+1);p[at+1].ch=RU_CONTINUATION;p[at+1].colour=p[at].colour;
+                if(t->x+1<t->cols)++t->x;else t->pending=t->wrap;}
+            t->dirty[at/t->cols]=1;return;
+        }
+        width=ru_width(cp);if(width<0)return;
+        if(!width){cp=ru_append(0x25cc,cp);w=1;}else w=width;
+    } else t->grapheme.started=0;
+    if(t->pending){t->x=0;newline(t);}
+    if(w==2&&(t->cols<2||t->x+1==t->cols)){
+        if(t->wrap&&t->cols>1){t->x=0;newline(t);}else{cp=RU_REPLACEMENT;w=1;}
+    }
+    at=t->y*t->cols+t->x;
+    if(p[at].ch>=128)clear_cell(t,at);
+    if(w==2)clear_cell(t,at+1);
+    p[at].ch=cp;p[at].colour=colour(t);
+    if(w==2){p[at+1].ch=RU_CONTINUATION;p[at+1].colour=p[at].colour;}
+    t->last_at=at+1;t->dirty[t->y]=1;
+    if(t->x+w<t->cols)t->x+=w;else{t->x=t->cols-1;t->pending=t->wrap;}
+}
 void vt_feed(struct vt *t,const char *s,unsigned size) {
     unsigned c;
     t->dirty[t->y]=1;
     while(size--) {
         c=(unsigned char)*s++;
+        /* Most terminal output is a printable ASCII run. Cache style and
+         * cursor state once, and avoid Unicode lookup/decoder calls entirely. */
+        if(!t->parser&&!t->utf8.need&&!t->pending&&c>=32&&c<127&&
+           !(t->shift?t->g1:t->g0)&&!(t->grapheme.started&&t->grapheme.previous==RU_PREPEND)) {
+            struct vt_cell *cells=vt_cells(t);unsigned x=t->x,at=t->y*t->cols+x,attr=colour(t);
+            do {
+                if(cells[at].ch>=128)clear_cell(t,at);
+                cells[at].ch=c;cells[at].colour=attr;++at;++x;
+                if(x==t->cols||!size||(unsigned char)*s<32||(unsigned char)*s>=127)break;
+                c=(unsigned char)*s++;--size;
+            }while(1);
+            t->last_at=at;t->grapheme.started=0;t->dirty[t->y]=1;
+            if(x==t->cols){t->x=x-1;t->pending=t->wrap;}else t->x=x;
+            continue;
+        }
+        if(!t->parser&&(t->utf8.need||c>=128)) {
+            uint32_t cp;int decoded=ru_decode(&t->utf8,c,&cp);
+            if(decoded)put_cell(t,cp);
+            if(decoded>=0)continue;
+            /* The rejected octet may itself start another multibyte scalar. */
+            if(c>=128){decoded=ru_decode(&t->utf8,c,&cp);if(decoded)put_cell(t,cp);continue;}
+            /* Otherwise reprocess the rejected ASCII/control/ESC below. */
+        }
+        if(c<32||t->parser){t->last_at=0;t->grapheme.started=0;}
         if(t->parser==3){if(c==7)t->parser=0;else if(c==27)t->parser=4;continue;}
         if(t->parser==4){t->parser=c=='\\'?0:3;continue;}
+        if(t->parser==6){if(c==27)t->parser=4;continue;}
         if(t->parser==5){if(t->charset_target)t->g1=c=='0';else t->g0=c=='0';t->parser=0;continue;}
         if(t->parser==1) {
             t->parser=0;
             switch(c) {
-            case '[':t->parser=2;t->count=t->private_mode=0;memset(t->params,0,sizeof(t->params));break;
+            case '[':t->parser=2;t->count=t->private_mode=t->intermediate=0;memset(t->params,0,sizeof(t->params));break;
             case ']':t->parser=3;break;
+            case 'P':case '^':case '_':t->parser=6;break;
             case '(':case ')':t->charset_target=c==')';t->parser=5;break;
             case '7':t->sx=t->x;t->sy=t->y;break;
             case '8':t->x=t->sx;t->y=t->sy;t->pending=0;break;
@@ -177,8 +294,8 @@ void vt_feed(struct vt *t,const char *s,unsigned size) {
             case 'E':newline(t);t->x=0;break;
             case 'M':if(t->y==t->top)scroll(t,-1);else if(t->y)--t->y;break;
             case 'c':
-                t->x=t->y=t->top=t->pending=t->alternate=t->appcursor=0;
-                t->bottom=t->rows-1;t->fg=7;t->bg=t->bold=t->reverse=0;t->visible=t->wrap=1;
+                t->x=t->y=t->top=t->pending=t->alternate=t->appcursor=t->bracketed_paste=0;
+                t->bottom=t->rows-1;t->fg=7;t->bg=t->bold=t->reverse=t->underline=t->blink=0;t->visible=t->wrap=1;
                 t->g0=t->g1=t->shift=0;
                 erase(t,0,t->rows*t->cols);break;
             }
@@ -188,6 +305,7 @@ void vt_feed(struct vt *t,const char *s,unsigned size) {
             if(c=='?'&&!t->count&&!t->params[0])t->private_mode=1;
             else if(c>='0'&&c<='9')t->params[t->count]=(t->params[t->count]>999?9999:t->params[t->count]*10+c-'0');
             else if(c==';'){if(t->count<15)++t->count;else t->parser=0;}
+            else if(c>=32&&c<=47)t->intermediate=c;
             else if(c>=64&&c<=126){csi(t,c);t->parser=0;}
             else if(c==27)t->parser=1;else t->parser=0;
             continue;
@@ -199,21 +317,18 @@ void vt_feed(struct vt *t,const char *s,unsigned size) {
         if(c==8){if(t->x)--t->x;t->pending=0;continue;}
         if(c==9){t->x=bound((t->x/8+1)*8,t->cols-1);t->pending=0;continue;}
         if(c<32||c==127)continue;
-        if(t->pending){t->x=0;newline(t);}
-        /* DEC Special Graphics maps onto the ROM font's CP437 line cells. */
+        /* DEC Special Graphics and UTF-8 address the same Unicode glyphs. */
         if(t->shift?t->g1:t->g0) {
             switch(c) {
-            case 'q':c=196;break;case 'x':c=179;break;
-            case 'l':c=218;break;case 'k':c=191;break;
-            case 'm':c=192;break;case 'j':c=217;break;
-            case 't':c=195;break;case 'u':c=180;break;
-            case 'w':c=194;break;case 'v':c=193;break;
-            case 'n':c=197;break;
+            case 'q':c=0x2500;break;case 'x':c=0x2502;break;
+            case 'l':c=0x250c;break;case 'k':c=0x2510;break;
+            case 'm':c=0x2514;break;case 'j':c=0x2518;break;
+            case 't':c=0x251c;break;case 'u':c=0x2524;break;
+            case 'w':c=0x252c;break;case 'v':c=0x2534;break;
+            case 'n':c=0x253c;break;
             }
         }
-        vt_cells(t)[t->y*t->cols+t->x].ch=c<256?c:'?';
-        vt_cells(t)[t->y*t->cols+t->x].colour=colour(t);t->dirty[t->y]=1;
-        if(t->x<t->cols-1)++t->x;else t->pending=t->wrap;
+        put_cell(t,c);
     }
     t->dirty[t->y]=1;
 }

@@ -11,11 +11,29 @@ Run a script, evaluate -c text, or enter an interactive Tcl-style prompt.
 The command names picol, tcl and tclsh select the same interpreter.
 .PP
 Supported facilities include variables, procedures, lists, expr, if, while,
-for, foreach, catch, source, file channels and exec. This is a small Picol
+for, foreach, catch, source, file channels, flat dictionaries and exec. This is a small Picol
 based subset, not the full Tcl language or package ecosystem.
 .PP
 open filename a appends to a text file. Read it later with cat filename.
 exec runs a command with literal arguments and captures its standard output.
+The trailing arguments >@stdout 2>@stderr instead stream output directly;
+use this form for build logs. A failed child sets errorCode to a list beginning
+with CHILDSTATUS or CHILDKILLED, followed by its PID and exit status or signal.
+.PP
+Use {*}$list to expand a list into command arguments. env(NAME) variables
+read and update the environment inherited by child processes. Braced expr
+expressions support command substitutions, with short-circuit evaluation.
+.PP
+Build helpers include pwd, cd, glob (with -nocomplain), file join, dirname,
+tail, mkdir, rename, delete, exists, isfile, isdirectory, mtime and size.
+mkdir creates parent directories. rename rejects an existing destination.
+delete removes files and empty directories; its -force option only ignores
+missing paths and does not recursively remove directory trees.
+dict supports create, get, set, exists, size and keys for flat dictionaries.
+.PP
+Strings and captured output are limited to 30,000 characters; lists and
+expanded commands to 1,024 words. exec also shares the system's 4,096-character
+argument/environment budget, including pointer vectors and terminators.
 Ctrl-C interrupts and returns to the shell; exit leaves the interpreter.
 .SH EXAMPLES
 .nf

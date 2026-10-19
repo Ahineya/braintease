@@ -5,7 +5,7 @@ The existing Ripple FUZIX application list is the source of the build inventory.
 editor, Tcl, awk, game, and network sources. It never generates files in
 `ports/fuzix/`.
 
-The 2026-10-17 inventory builds **113/113 programs and aliases**, including the
+The 2026-10-17 inventory builds **115/115 programs and aliases**, including the
 Bourne shell, Vile, Levee, awk, make, m4, dc, Picol Tcl, and the ported games.
 Fifty-two application behavior checks cover file operations, text tools,
 programming tools and system reports. Compilation alone is not a promise that
@@ -16,6 +16,7 @@ make -C fuse-x applications
 python3 fuse-x/apps.py sh levee awk
 python3 fuse-x/test_applications.py --executable fuse-x/build/fuse-x
 python3 fuse-x/test_shell.py --executable fuse-x/build/fuse-x --compiler target/release/rcc
+python3 ports/fuzix/tools/test_diff.py --os fuse-x
 ```
 
 Build results, sizes, requirements and diagnostics live in
@@ -34,17 +35,29 @@ previous image before replacement.
 The build report determines managed programs; stray packages in `build/apps/`
 are not silently installed.
 
+The shared V7 `diff` and `diff3` run as native guest applications. `diff3` accepts
+three filenames, one optional stdin operand, and `-e`/`-x`/`-3` editor-script
+modes. Their regression suite checks reference comparison ranges, applies
+generated scripts using host and guest editors, and covers 255 changes,
+large offsets/lines, C16 text, quoted paths, errors and temporary-file cleanup.
+
+The shared [BASIC interpreter](../ports/basic/README.md) installs as `basic`.
+It includes a terminal port of Granny Bingo and a small language example under
+`/usr/share/basic/`. Rift recognizes `.bas` files and runs them with F5. The
+integration suite tests language behavior, editing/running, and game persistence
+on disposable Fuse-X and FUZIX disks.
+
 The default `/bin/sh` is the existing Bourne shell. `/bin/fxsh` retains the
 bootstrap shell for debugging. One generated copy of the Bourne shell's main
 source replaces its V7 null-pointer decrement sentinel with an explicit pointer
 constant. All imported sources remain intact. Custom signal handlers and
 nonlocal jumps use native continuations, while FUZIX owns pipes, process groups,
-wait/stop/continue behavior and the four guest PTY pairs.
+wait/stop/continue behavior and the sixteen guest PTY pairs.
 
 Levee's native build also adapts its save routine to create temporary files in
 the destination directory. That keeps replacement atomic when editing a file
 on `/mnt/host`, where renaming a temporary file from the root image's `/tmp`
-would correctly return `EXDEV`. The `vi` alias uses the same package.
+would correctly return `EXDEV`. The `vi` alias launches Rift; Levee remains available as `levee`.
 
 The ten network programs install normally. The hosted kernel enables
 `CONFIG_NET` and reuses the existing socket bridge and guest protocol stack.
@@ -53,8 +66,11 @@ Ripple bank with an allocation in shared hosted kernel memory. Network polls
 run during idle and syscall entry/return. See [networking](README.md#networking-and-remote-shells)
 for launch settings and [the network tests](test_network.py) for runtime coverage.
 
-Current limits still include cooperative scheduling, 16 process slots, up to
+Current limits still include cooperative scheduling, 64 process slots, up to
 sixteen 64,000-cell global banks per program, a bounded heap window, and
 provisional RAM accounting. Native packages may reach 64 MiB and stream through a 4,096-cell
 kernel buffer. Native code remains trusted host code; compatibility pointer
 checks are not host isolation.
+
+`mux` is the shared C terminal multiplexer: tabs, tiled panes, history/copy and
+named detachable sessions. See [the guide](../docs/terminal-multiplexer.md).

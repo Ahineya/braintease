@@ -50,17 +50,17 @@ int ripple_deadline_arm(struct ripple_deadline_queue *q, unsigned slot,
     *link = slot + 1;
     return 0;
 }
-uint32_t ripple_deadline_poll(struct ripple_deadline_queue *q,
-                             const struct ripple_deadline_time *now) {
-    uint32_t ready = 0;
-    unsigned slot;
+void ripple_deadline_poll(struct ripple_deadline_queue *q,
+                         const struct ripple_deadline_time *now,
+                         struct ripple_deadline_ready *ready) {
+    unsigned slot,i;
+    for(i=0;i<RIPPLE_DEADLINE_WORDS;i++)ready->bits[i]=0;
     while (q->head) {
         slot = q->head - 1;
         if (now && before(now, &q->slots[slot].at)) break;
         q->head = q->slots[slot].next;
         q->slots[slot].next = 0;
         q->slots[slot].state = now ? RIPPLE_DEADLINE_EXPIRED : RIPPLE_DEADLINE_ERROR;
-        ready |= 1UL << slot;
+        ready->bits[slot >> 5] |= 1UL << (slot & 31);
     }
-    return ready;
 }

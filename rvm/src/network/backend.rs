@@ -5,6 +5,13 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     thread,
 };
+
+#[cfg(unix)]
+fn socket_backpressure(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::WouldBlock
+        || error.kind() == std::io::ErrorKind::Interrupted
+        || error.raw_os_error() == Some(libc::ENOBUFS)
+}
 #[cfg(unix)]
 use std::{
     sync::atomic::AtomicU64,
@@ -117,11 +124,14 @@ impl NetworkBackend {
                                             "network helper reported a link failure",
                                         ));
                                     } else {
+                                        if valid_frame(&buffer[..count]) {
+                                            heard = Instant::now();
+                                        }
                                         background.receive(buffer[..count].to_vec());
                                     }
                                 }
-                                Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                                Err(e) if socket_backpressure(&e) => break,
                                 Err(e) => return Err(e),
                             }
                         }
@@ -136,8 +146,8 @@ impl NetworkBackend {
                                 Ok(n) if n == frame.octets.len() => {
                                     background.transmitted(pending.take().unwrap(), true);
                                 }
-                                Err(e) if e.kind() == ErrorKind::WouldBlock => break,
                                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                                Err(e) if socket_backpressure(&e) => break,
                                 other => {
                                     return Err(std::io::Error::other(format!(
                                         "network transmit: {other:?}"
@@ -148,9 +158,7 @@ impl NetworkBackend {
                         if heartbeat.elapsed() >= Duration::from_secs(1) {
                             match socket.send(b"RNET\x02") {
                                 Ok(5) => heartbeat = Instant::now(),
-                                Err(e)
-                                    if e.kind() == ErrorKind::WouldBlock
-                                        || e.kind() == ErrorKind::Interrupted => {}
+                                Err(e) if socket_backpressure(&e) => {}
                                 other => {
                                     return Err(std::io::Error::other(format!(
                                         "network heartbeat: {other:?}"
@@ -192,6 +200,25 @@ impl NetworkBackend {
             device: port,
             directory,
         })
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transient_socket_buffer_pressure_is_not_a_dead_backend() {
+        for code in [libc::EAGAIN, libc::EINTR, libc::ENOBUFS] {
+            assert!(socket_backpressure(&std::io::Error::from_raw_os_error(
+                code
+            )));
+        }
+        for code in [libc::ECONNREFUSED, libc::ECONNRESET, libc::ENOENT] {
+            assert!(!socket_backpressure(&std::io::Error::from_raw_os_error(
+                code
+            )));
+        }
     }
 }
 impl Drop for NetworkBackend {

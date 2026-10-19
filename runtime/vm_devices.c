@@ -16,6 +16,36 @@ static unsigned long join_words(unsigned short lo, unsigned short hi) {
     return (unsigned long)lo | ((unsigned long)hi << 16);
 }
 
+unsigned short vm_tty_write(const void *data, unsigned short count, unsigned short *completed) {
+    volatile unsigned short descriptor[8];
+    unsigned long address = (unsigned long)data;
+    unsigned short status;
+    *completed = 0;
+    if (count > VM_TTY_WRITE_MAX) return VM_DEVICE_BAD_DESCRIPTOR;
+    if (vm_devices_version() != VM_DEVICE_ABI_VERSION) return VM_DEVICE_UNSUPPORTED;
+    descriptor[0] = VM_DEVICE_ABI_VERSION; descriptor[1] = 8;
+    descriptor[2] = address >> 16; descriptor[3] = address;
+    descriptor[4] = count; descriptor[5] = descriptor[6] = descriptor[7] = 0;
+    status = submit(VM_DEVICE_TTY_WRITE, descriptor);
+    *completed = descriptor[6];
+    return status;
+}
+
+void tty_write_bytes(const char *data, unsigned short count) {
+    unsigned short n, done, status, i;
+    while (count) {
+        n = count > VM_TTY_WRITE_MAX ? VM_TTY_WRITE_MAX : count;
+        status = vm_tty_write(data, n, &done);
+        if (status == VM_DEVICE_UNKNOWN_COMMAND || status == VM_DEVICE_UNSUPPORTED) {
+            for (i = 0; i < n; ++i) mmio_write(MMIO_TTY_OUT, data[i]);
+            done = n;
+        }
+        if (!done) return;
+        data += done; count -= done;
+        if (status == VM_DEVICE_IO_ERROR) return;
+    }
+}
+
 unsigned short vm_devices_version(void) {
     return mmio_read(MMIO_DEVICE_VERSION);
 }
@@ -179,4 +209,33 @@ unsigned short vm_input_configure(unsigned short mode) {
 int vm_key_is_down(const VmInputState *state, unsigned short key) {
     if (key >= VM_KEY_COUNT) return 0;
     return (state->held[key >> 4] & (1U << (key & 15))) != 0;
+}
+
+unsigned short vm_host_random(unsigned char *output,unsigned short count) {
+    volatile unsigned short descriptor[6];unsigned long address=(unsigned long)output;
+    if(!count||count>VM_HOST_RANDOM_MAX)return VM_DEVICE_BAD_DESCRIPTOR;
+    if(vm_devices_version()!=VM_DEVICE_ABI_VERSION)return VM_DEVICE_UNSUPPORTED;
+    descriptor[0]=VM_DEVICE_ABI_VERSION;descriptor[1]=6;
+    descriptor[2]=(unsigned short)(address>>16);descriptor[3]=(unsigned short)address;
+    descriptor[4]=count;descriptor[5]=0;
+    return submit(VM_DEVICE_HOST_RANDOM,descriptor);
+}
+
+#include <vm_crypto.h>
+unsigned short vm_crypto(struct vm_crypto_request *request) {
+    volatile unsigned short descriptor[6];
+    unsigned long address=(unsigned long)request;
+    descriptor[0]=VM_DEVICE_ABI_VERSION;descriptor[1]=6;
+    descriptor[2]=(unsigned short)(address>>16);descriptor[3]=(unsigned short)address;
+    descriptor[4]=sizeof(*request);descriptor[5]=0;
+    return submit(VM_DEVICE_CRYPTO,descriptor);
+}
+unsigned short vm_crypto_gcm(struct vm_crypto_gcm_request *request) {
+    volatile unsigned short descriptor[6];
+    unsigned long address=(unsigned long)request;
+    if(request->data_len>VM_CRYPTO_GCM_MAX)return VM_DEVICE_BAD_DESCRIPTOR;
+    descriptor[0]=VM_DEVICE_ABI_VERSION;descriptor[1]=6;
+    descriptor[2]=(unsigned short)(address>>16);descriptor[3]=(unsigned short)address;
+    descriptor[4]=VM_CRYPTO_GCM_HEADER+request->data_len;descriptor[5]=0;
+    return submit(VM_DEVICE_CRYPTO,descriptor);
 }

@@ -1,0 +1,37 @@
+// Compile with --target wasm, then load through rcc-wasm/browser/bridge.mjs.
+import { mount, patch, decode_events, CLICK, PREVENT_DEFAULT } from "std/browser";
+
+fn main() {
+    mount();
+    let mut dom = patch();
+    let button = dom.string("button");
+    let hello = dom.string("Hello, browser 🌍 — click me!");
+    dom.element(1, button);
+    dom.text(2, hello);
+    dom.insert(0, 1, 0);
+    dom.insert(1, 2, 0);
+    dom.listen(1, CLICK, 1, PREVENT_DEFAULT);
+    move(dom).commit();
+    println("RFL browser ready 🌍");
+}
+
+export extern "C" fn ripple_browser_on_events(data: *const u16, cells: u32) {
+    let events = decode_events(data, cells).unwrap();
+    let mut changed = false;
+    for (event in events) {
+        if (event.listener == 1 && event.kind == CLICK) {
+            println("Click received in RFL!");
+            changed = true;
+        }
+    }
+    if (changed) {
+        let mut dom = patch();
+        let text = dom.string("Wasm received your click 🌍");
+        dom.set_text(2, text);
+        move(dom).commit();
+    }
+}
+
+export extern "C" fn ripple_browser_on_dispose() {
+    println("RFL browser disposed");
+}

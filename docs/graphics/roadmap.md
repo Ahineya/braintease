@@ -40,7 +40,7 @@ both targets, independently of coarse accounting and IRQ frequency; see
 [timers](../../ports/fuzix/TIMERS.md). Choose bounded message
 framing in C16 cells explicitly. Use the independent local endpoint pool for
 guest drawing messages. Internet
-capacity has also grown to sixteen TCP connections and four listeners. Measure
+capacity has also grown to sixty-four TCP connections and sixteen listeners. Measure
 real terminal/editor memory and latency before raising further limits.
 
 Window management is built around Nano-X in the next milestone. On RVM, the
@@ -78,10 +78,10 @@ bounds and client disconnect cleanup keep ordinary broken clients isolated.
 The real-kernel JIT test exercises independent clients, timers, partial and
 malformed frames, launcher-created terminals, shell-to-disk I/O, NanoWM movement
 and corner resize, updated PTY dimensions, display close/reopen and clean disk
-shutdown. Full optional image/font/protocol coverage and the Fuse-X native
-window/surface lifecycle backend remain further milestones. The latter must
-retain native macOS window management rather than composing a second guest
-desktop inside a host window.
+shutdown. Full optional image/font/protocol coverage remains further work.
+The [Fuse-X native backend](../fuse-x/desktop.md) now maps top-level windows to
+independent Mac surfaces, retaining native macOS window management rather than
+composing a second guest desktop inside a host window.
 
 Terminal preparation is implemented: the shared model has runtime geometry and
 a bounded resize API for both screens; `gterm -g 64x20` renders at 512×320 pixels
@@ -114,9 +114,10 @@ Use this working Nano-X desktop to select retained components and design the cus
 Do not commit to a large existing desktop environment. Keep drawing, app IPC
 and window-management policy independently replaceable.
 
-The next agreed stage is to port NXDSKTOP and its companion apps as a useful
-lightweight desktop, then evaluate Nuklear before building the custom FuseDE
-shell and file manager. See the [FuseDE roadmap](../fusede/roadmap.md) for scope
+NXDSKTOP is now the basic RVM desktop, with message boxes, file selection,
+Levee launching and Calculator. `startx --minimal` retains the older launcher.
+Continue with its remaining companion apps, then evaluate Nuklear before
+building the custom FuseDE shell and file manager. See the [FuseDE roadmap](../fusede/roadmap.md) for scope
 and acceptance criteria. Companion apps also target Fuse-X native windows;
 the hosted platform retains macOS window management.
 

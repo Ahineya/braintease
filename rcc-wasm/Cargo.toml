@@ -1,0 +1,19 @@
+[package]
+name = "rcc-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "Direct WebAssembly backend for shared Ripple IR"
+
+[dependencies]
+rcc-ir.workspace = true
+rcc-frontend.workspace = true
+rcc-preprocessor = { path = "../rcc-preprocessor" }
+rcc-backend = { path = "../rcc-backend" }
+wasm-encoder = { version = "0.240", default-features = false, features = ["std"] }
+wasmparser = { version = "0.240", default-features = false, features = ["std", "validate", "features"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

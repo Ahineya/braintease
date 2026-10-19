@@ -1,0 +1,29 @@
+.TH NXVIEW 1
+.SH NAME
+nxview \- graphical image viewer
+.SH SYNOPSIS
+.B nxview
+[file ...]
+.SH DESCRIPTION
+View local PNG, baseline JPEG, GIF or BMP files in a resizable Nano-X window.
+GIF displays its first frame. Transparent images appear over a checkerboard.
+With no arguments, a file selector opens. Opening another file or cancelling
+the selector preserves the current picture until a replacement loads successfully.
+Files are decoded by the shared image library, independently of NetSurf.
+.SH CONTROLS
+Open or O/Ctrl-O opens the file selector. F or 0 fits the picture into the
+window without enlarging small pictures. 1 selects actual size.
++ and - zoom around the centre of the visible picture, from 10% to 800%
+subject to coordinate limits. Drag the picture or use arrow keys to pan;
+the mouse wheel pans vertically. [ and ] or PageUp/PageDown select the
+previous/next filename supplied on the command line. Q or Escape closes
+the viewer. The toolbar provides equivalent open, previous/next, fit,
+actual-size and zoom controls.
+.SH LIMITS
+Files must be regular files of at most 1 MiB, with at most 262144 pixels
+and no dimension greater than 4096 pixels. Unsupported or damaged files
+report an error in the status bar and on standard error. Progressive JPEG,
+animation, SVG, remote URLs, editing and saving conversions are not supported.
+Available process memory may impose a lower limit, particularly on RVM.
+.SH EXAMPLE
+nxview /usr/share/netsurf/images/landscape.jpg

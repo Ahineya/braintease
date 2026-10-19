@@ -1,0 +1,233 @@
+import macro { html } from "std/html_macro";
+import { Html } from "std/html";
+import { Event } from "std/html_event";
+import { route_href } from "std/router";
+import { decimal } from "./codec";
+import { Model, Todo, Msg, Filter, All, Active, Completed, Ignore, NewTitle, Add, Toggle, ToggleAll, Delete, ClearCompleted, BeginEdit, EditTitle, CommitEdit, BlurEdit, CancelEdit, RetryLoad, RetrySave, StartEmpty, remaining, visible, path } from "./model";
+fn composing(event: &Event) -> bool {
+    (event.modifiers & 16) != 0
+}
+
+fn row(todo: Todo, model: &Model) -> Html<Msg> {
+    let id = todo.id;
+    let editing = match model.editing {
+        Some(current) => current == id,
+        None => false
+    };
+    let class = (if (todo.completed) {
+        "completed "
+    } else {
+        ""
+    }) + (if (editing) {
+        "editing"
+    } else {
+        ""
+    });
+    let editor: Option<Html<Msg>> = if (editing) {
+        Some(html!{
+            <input
+                class="edit"
+                maxlength="256"
+                aria-label="Edit todo"
+                value={model.edit_title}
+                autofocus={true}
+                on_input={fn(title: String) => EditTitle(id, title)}
+                on_blur={fn(event: Event) => BlurEdit(id, event.value)}
+                on_keydown={
+                    fn(event: Event) => {
+                        if (composing(&event)) {
+                            Ignore
+                        } else if (event.key == "Enter") {
+                            CommitEdit(id)
+                        } else if (event.key == "Escape") {
+                            CancelEdit(id)
+                        } else {
+                            Ignore
+                        }
+                    }
+                }
+            />
+        })
+    } else {
+        None
+    };
+    html!{
+        <li
+            key={decimal(id)}
+            data-id={decimal(id)}
+            class={class}
+        >
+            <div class="view">
+                <input
+                    class="toggle"
+                    type="checkbox"
+                    aria-label="Complete todo"
+                    checked={todo.completed}
+                    on_change={fn(done: bool) => Toggle(id, done)}
+                />
+                <label on_double_click={fn(event: Event) => BeginEdit(id)}>{todo.title}</label>
+                <button
+                    class="destroy"
+                    aria-label="Delete todo"
+                    on_click={Delete(id)}
+                >×</button>
+            </div>
+            {editor}
+        </li>
+    }
+}
+
+fn link(filter: Filter, current: Filter, label: String) -> Html<Msg> {
+    let selected = path(filter) == path(current);
+    html!{
+        <li>
+            <a
+                href={route_href(filter, path).unwrap()}
+                class={
+                    if (selected) {
+                        "selected"
+                    } else {
+                        ""
+                    }
+                }
+                aria-current={
+                    if (selected) {
+                        "page"
+                    } else {
+                        "false"
+                    }
+                }
+            >{label}</a>
+        </li>
+    }
+}
+
+export fn view(model: &Model) -> Html<Msg> {
+    let left = remaining(model.todos);
+    let total = model.todos.len();
+    let mut rows: Vec<Html<Msg>> = [];
+    for (todo in model.todos) {
+        if (visible(model.filter, todo.completed)) {
+            rows.push(row(todo, model));
+        }
+    }
+    let main: Option<Html<Msg>> = if (model.loaded && total != 0) {
+        Some(html!{
+            <section class="main">
+                <input
+                    id="toggle-all"
+                    class="toggle-all"
+                    type="checkbox"
+                    aria-label="Toggle all todos"
+                    checked={left == 0}
+                    on_change={fn(done: bool) => ToggleAll(done)}
+                />
+                <label for="toggle-all">Mark all as complete</label>
+                <ul class="todo-list">{rows}</ul>
+            </section>
+        })
+    } else {
+        None
+    };
+    let footer: Option<Html<Msg>> = if (model.loaded && total != 0) {
+        let clear: Option<Html<Msg>> = if (left != total) {
+            Some(html!{
+                <button class="clear-completed" on_click={ClearCompleted}>Clear completed</button>
+            })
+        } else {
+            None
+        };
+        Some(html!{
+            <footer class="footer">
+                <span class="todo-count">
+                    <strong>{left}</strong>
+                    {
+                        if (left == 1) {
+                            " item left"
+                        } else {
+                            " items left"
+                        }
+                    }
+                </span>
+                <ul class="filters">
+                    {link(All, model.filter, "All")}
+                    {link(Active, model.filter, "Active")}
+                    {link(Completed, model.filter, "Completed")}
+                </ul>
+                {clear}
+            </footer>
+        })
+    } else {
+        None
+    };
+    let load_error: Option<Html<Msg>> = if (model.load_error != "") {
+        Some(html!{
+            <section class="error" role="alert">
+                <p>{model.load_error}</p>
+                <button data-action="retry-load" on_click={RetryLoad}>Retry loading</button>
+                <button data-action="start-empty" on_click={StartEmpty}>Use an empty list</button>
+            </section>
+        })
+    } else {
+        None
+    };
+    let save_error: Option<Html<Msg>> = if (model.save_error != "") {
+        Some(html!{
+            <section class="error" role="alert">
+                <p>{model.save_error}</p>
+                <button data-action="retry-save" on_click={RetrySave}>Retry saving</button>
+            </section>
+        })
+    } else {
+        None
+    };
+    let status = if (model.loading || !model.route_ready) {
+        "Loading…"
+    } else if (model.saving) {
+        "Saving…"
+    } else if (model.save_error != "") {
+        "Changes are not saved"
+    } else if (model.loaded) {
+        "Saved locally"
+    } else {
+        "Your stored list was left untouched"
+    };
+    html!{
+        <>
+            <section class="todoapp">
+                <header class="header">
+                    <h1>todos</h1>
+                    <input
+                        class="new-todo"
+                        maxlength="256"
+                        placeholder="What needs to be done?"
+                        aria-label="New todo"
+                        value={model.draft}
+                        autofocus={model.loaded}
+                        disabled={!model.loaded}
+                        on_input={fn(title: String) => NewTitle(title)}
+                        on_keydown={
+                            fn(event: Event) => {
+                                if (event.key == "Enter" && !composing(&event)) {
+                                    Add
+                                } else {
+                                    Ignore
+                                }
+                            }
+                        }
+                    />
+                </header>
+                {main}
+                {footer}
+            </section>
+            {load_error}
+            {save_error}
+            <p class="status" role="status">{status}</p>
+            <p class="notice">{model.notice}</p>
+            <footer class="info">
+                <p>Double-click to edit a todo</p>
+                <p>RFL + WebAssembly · state, routing and persistence in RFL</p>
+            </footer>
+        </>
+    }
+}

@@ -1,0 +1,53 @@
+import { Effect, run, sync, traverse_with } from "std/effect";
+import { Future } from "std/future";
+import { Result } from "std/result";
+import { Option } from "std/option";
+import { Reactor, block_on } from "std/executor";
+const DEPTH: u16 = 64;
+struct Clock {
+    time: u32
+}
+
+impl Reactor for Clock {
+    fn now(&self) -> u32 {
+        self.time
+    }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        self.time += 1;
+        true
+    }
+}
+
+fn main() -> i16 {
+    let mut drops: u16 = 0;
+    let p: Effect<unit, unit, Vec<Owned<u16>>> = traverse_with(fn() => {
+        let mut input: Vec<u16> = [];
+        for (i in 0..DEPTH) {
+            input.push(i);
+        }
+        input
+    }, fn(n: u16) => sync(fn() => owned(n, fn(n: &mut u16) => {
+        drops += 1;
+    })));
+    let mut clock = Clock { time: 0 };
+    for (i in 0..2) {
+        let mut f = run(p, {});
+        let mut out = block_on(&mut f, &mut clock).unwrap().unwrap();
+        if (out.len() != DEPTH as usize) {
+            return 1;
+        }
+        let mut expected = DEPTH;
+        while (!out.is_empty()) {
+            let n = out.pop().unwrap();
+            expected -= 1;
+            if (*n.borrow() != expected) {
+                return 2;
+            }
+        }
+    }
+    if (drops != DEPTH * 2) {
+        return 3;
+    }
+    println("traversed twice");
+    0
+}

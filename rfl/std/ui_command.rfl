@@ -1,0 +1,67 @@
+// Pure update/command facade. Commands own lazy programs; constructing one does
+// not execute host effects. The mounted application owns and cancels the roots.
+import { Html } from "std/html";
+import { Ui, mount_ui, queued } from "std/ui";
+import { take } from "std/mem";
+import { Option } from "std/option";
+import { Future } from "std/future";
+/// A lazy future, deferred future builder, or immediate application message.
+export type Cmd<M> = FutureCommand(Async<M>) | DeferredCommand(once fn(Ui<M>) -> Async<M>) | MessageCommand(M);
+/// Transfers an owned future into a command; execution begins after the update.
+export fn perform<M>(future: Async<M>) -> Cmd<M> {
+    FutureCommand(move(future))
+}
+
+/// Defers construction until execution, supplying the mounted capabilities.
+/// Useful for browser fetch without putting effects in a pure update function.
+export fn perform_with<M>(build: once fn(Ui<M>) -> Async<M>) -> Cmd<M> {
+    DeferredCommand(move(build))
+}
+
+/// Schedules a message for the next bounded application turn.
+export fn message<M>(value: M) -> Cmd<M> {
+    MessageCommand(move(value))
+}
+
+async fn deliver<M>(future: Async<M>, ui: Ui<M>) {
+    let value = move(future).await;
+    ui.send(move(value)).expect("UI command message queue exhausted");
+}
+
+/// Pure Model/Msg/update/view application. An update returns its next model and
+/// owned commands. Future outputs become messages; immediate messages get the
+/// next bounded turn. Empty commands cause no scheduler or host traffic.
+export fn program<Model, M>(model: Model, update: fn(Model, M) -> (Model, Vec<Cmd<M>>), view: fn(&Model) -> Html<M>, capacity: usize) -> Result<Ui<M>, String> {
+    mount_ui(move(model), fn(model: Model, msg: M, ui: Ui<M>) => {
+        let (model, commands) = update(move(model), move(msg));
+        dispatch(move(commands), ui);
+        move(model)
+    }, view, capacity)
+}
+
+fn dispatch<M>(commands: Vec<Cmd<M>>, ui: Ui<M>) -> unit {
+    let mut commands = queued(move(commands));
+    for (i in 0..commands.len()) {
+        let command = take(&mut commands[i]).unwrap();
+        match move(command) {
+            FutureCommand(future) => {
+                ui.app().spawn(deliver(move(future), ui)).expect("UI command task capacity exhausted");
+            },
+            DeferredCommand(build) => {
+                let future = build(ui);
+                ui.app().spawn(deliver(move(future), ui)).expect("UI command task capacity exhausted");
+            },
+            MessageCommand(value) => {
+                ui.send(move(value)).expect("UI command message queue exhausted");
+            },
+        }
+    }
+}
+
+/// Mounts a program and constructs its initial commands once with mounted capabilities.
+/// Initial commands start in the first bounded turn, without a synthetic DOM event.
+export fn program_with_init<Model, M>(model: Model, init: once fn(Ui<M>) -> Vec<Cmd<M>>, update: fn(Model, M) -> (Model, Vec<Cmd<M>>), view: fn(&Model) -> Html<M>, capacity: usize) -> Result<Ui<M>, String> {
+    let ui = program(move(model), update, view, capacity)?;
+    dispatch(init(ui), ui);
+    Ok(ui)
+}

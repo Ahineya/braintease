@@ -11,6 +11,7 @@ int wclrtobot(WINDOW *win)
   int y, minx, startx;
   chtype *ptr, *end, *maxx, blank;
 
+  win->_last_valid = 0;
   blank = ' ' | (win->_attrs & ATR_MSK);
   startx = win->_curx;
   for (y = win->_cury; y <= win->_regbottom; y++) {

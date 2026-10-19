@@ -28,7 +28,7 @@ static int listener(const char *name,int backlog){int fd=sock();path(name);unlin
 static void pairs(void){
     int p[2],i,pid,alias;struct sockaddr_un a;socklen_t length;
     C(socket(AF_UNIX,SOCK_DGRAM,0)==-1&&errno==EPROTONOSUPPORT);
-    C(socketpair(AF_UNIX,SOCK_STREAM,0,(void *)0x180000UL)==-1&&errno==EFAULT);
+    C(socketpair(AF_UNIX,SOCK_STREAM,0,(void *)0x60000UL)==-1&&errno==EFAULT);
     for(i=0;i<40;i++){C(socketpair(AF_LOCAL,SOCK_STREAM,0,p)==0);close(p[0]);close(p[1]);}
     C(socketpair(AF_UNIX,SOCK_STREAM,0,p)==0);
     length=sizeof(a);C(getsockname(p[0],(void *)&a,&length)==0&&length==1&&a.sun_family==AF_UNIX);
@@ -36,10 +36,10 @@ static void pairs(void){
     C(ready(p[0],0,0)==0&&ready(p[0],1,0)==1);
     for(i=0;i<2048;i++)data[i]=(i*47)^0xA500; /* Full C16 cells, not octet-only TCP. */
     C(write(p[0],data,1024)==1024);
-    C(read(p[1],(void *)0x180000UL,1)==-1&&errno==EFAULT);
+    C(read(p[1],(void *)0x60000UL,1)==-1&&errno==EFAULT);
     C(read(p[1],copy,1024)==1024&&!memcmp(data,copy,1024));
     C(fcntl(p[0],F_SETFL,O_NONBLOCK)==0);
-    C(write(p[0],(void *)0x180000UL,1)==-1&&errno==EFAULT);
+    C(write(p[0],(void *)0x60000UL,1)==-1&&errno==EFAULT);
     C(write(p[0],data,2048)==1024&&ready(p[0],1,0)==0);
     C(write(p[0],data,1)==-1&&errno==EAGAIN);
     pid=fork();C(pid>=0);
@@ -63,7 +63,7 @@ static void names(void){
     server=listener("/tmp/local.sock",2);C(stat("/tmp/local.sock",&st)==0&&S_ISSOCK(st.st_mode));
     client=sock();C(bind(client,(void *)&address,sizeof(address))==-1&&errno==EADDRINUSE);
     C(ready(server,0,0)==0&&connect_to(client)==0&&ready(server,0,0)==1);
-    len=sizeof(a);C(accept(server,(void *)0x180000UL,&len)==-1&&errno==EFAULT&&ready(server,0,0)==1);
+    len=sizeof(a);C(accept(server,(void *)0x60000UL,&len)==-1&&errno==EFAULT&&ready(server,0,0)==1);
     len=sizeof(a);accepted=accept(server,(void *)&a,&len);C(accepted>=0&&len==1&&a.sun_family==AF_UNIX);
     len=sizeof(a);C(getsockname(accepted,(void *)&a,&len)==0&&!strcmp(a.sun_path,"/tmp/local.sock"));
     len=1;C(getpeername(client,(void *)&a,&len)==0&&len==strlen("/tmp/local.sock")+2);
@@ -145,7 +145,7 @@ static void boundaries(void){
     memset(&a,'x',sizeof(a));a.sun_family=AF_UNIX;server=sock();
     C(bind(server,(void *)&a,sizeof(a))==-1&&errno==ENAMETOOLONG);
     a.sun_path[0]=0;C(bind(server,(void *)&a,sizeof(a))==-1&&errno==EOPNOTSUPP);
-    C(bind(server,(void *)0x180000UL,sizeof(a))==-1&&errno==EFAULT);close(server);free(base);
+    C(bind(server,(void *)0x60000UL,sizeof(a))==-1&&errno==EFAULT);close(server);free(base);
     puts("localcheck: bank-spanning addresses, payloads, FD pairs and invalid paths passed");
 }
 static void listener_reuse(void){

@@ -55,9 +55,17 @@ static void cleanup_managed(const char *socket_path, const char *executable) {
 static int send_message(int fd, const void *data, size_t length,
                          const struct sockaddr_un *peer, socklen_t peer_len) {
     if (sendto(fd, data, length, 0, (const struct sockaddr *)peer, peer_len) == (ssize_t)length) return 1;
-    if (errno == ENOENT || errno == ECONNREFUSED || errno == EAGAIN || errno == EWOULDBLOCK) return 0;
+    if (errno == ENOENT || errno == ECONNREFUSED) return -1;
+    /* A full datagram queue is backpressure, not a disconnected peer. In
+     * particular, never revoke the attachment over a lost heartbeat reply. */
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS || errno == EINTR) return 0;
     fail("network helper sendto"); return 0;
 }
+/* Keep vmnet write backpressure separate from control traffic. A blocked
+ * Ethernet write must not prevent us receiving/replying to heartbeats. */
+#define TX_FRAMES 64
+#define TX_OCTETS 65536
+struct queued_frame { size_t length; unsigned char data[1514]; };
 int main(int argc, char **argv) {
     int managed = argc > 2 && !strcmp(argv[argc - 1], "--managed");
     if (managed) --argc;
@@ -123,6 +131,13 @@ int main(int argc, char **argv) {
     double started = now();
     if (managed) { puts("RNET READY"); fflush(stdout); }
     unsigned long rx = 0, tx = 0, dropped = 0;
+    unsigned long tx_busy = 0, control_busy = 0;
+    struct queued_frame *pending = calloc(TX_FRAMES, sizeof(*pending));
+    if (!pending) fail("transmit queue");
+    unsigned head = 0, queued = 0;
+    size_t queued_octets = 0;
+    int hello_pending = 0, heartbeat_pending = 0;
+    double blocked_since = 0, read_blocked_since = 0;
     unsigned char *buffer = malloc(65536);
     if (!buffer) fail("malloc");
     int failed = 0;
@@ -130,7 +145,10 @@ int main(int argc, char **argv) {
         /* Owned helpers disappear after detach or a dead client's heartbeat
          * timeout, even when a VM exits through a signal without Rust drops. */
         if (managed && ((!peer_len && now() - started > 15) ||
-                        (peer_len && now() - last_seen > 5))) break;
+                        (peer_len && now() - last_seen > 5))) {
+            fprintf(stderr, "vmnet client heartbeat expired\n");
+            break;
+        }
         for (int n = 0; n < 64; ++n) {
             struct sockaddr_un from = {0}; socklen_t from_len = sizeof(from);
             ssize_t length = recvfrom(fd, buffer, 65536, 0, (struct sockaddr *)&from, &from_len);
@@ -142,41 +160,91 @@ int main(int argc, char **argv) {
                 !from.sun_path[0] || !memchr(from.sun_path, 0, sizeof(from.sun_path))) { ++dropped; continue; }
             if (length == 5 && !memcmp(buffer, "RNET\1", 5)) {
                 if (!peer_len || now() - last_seen > 5 || !strcmp(peer.sun_path, from.sun_path)) {
+                    if (!peer_len || strcmp(peer.sun_path, from.sun_path)) {
+                        dropped += queued; head = queued = 0; queued_octets = 0;
+                        blocked_since = 0; heartbeat_pending = 0;
+                    }
                     peer = from; peer_len = from_len; last_seen = now();
-                    if (!send_message(fd, hello, 13, &peer, peer_len)) { ++dropped; peer_len = 0; }
-                } else if (!send_message(fd, "RNET\3", 5, &from, from_len)) ++dropped;
+                    hello_pending = 1;
+                } else if (send_message(fd, "RNET\3", 5, &from, from_len) != 1) ++dropped;
                 continue;
             }
             if (!peer_len || strcmp(peer.sun_path, from.sun_path)) { ++dropped; continue; }
-            if (length == 5 && !memcmp(buffer, "RNET\4", 5)) { peer_len = 0; if (managed) running = 0; continue; }
+            if (length == 5 && !memcmp(buffer, "RNET\4", 5)) {
+                peer_len = 0; hello_pending = heartbeat_pending = 0;
+                dropped += queued; head = queued = 0; queued_octets = 0; blocked_since = 0;
+                if (managed) running = 0;
+                continue;
+            }
             if (length == 5 && !memcmp(buffer, "RNET\2", 5)) {
                 last_seen = now();
-                if (!send_message(fd, "RNET\2", 5, &peer, peer_len)) { ++dropped; peer_len = 0; }
+                heartbeat_pending = 1;
                 continue;
             }
             if (length < 14 || length > 1514) { ++dropped; continue; }
-            struct iovec iov = { .iov_base = buffer, .iov_len = (size_t)length };
-            struct vmpktdesc packet = { .vm_pkt_size = (size_t)length, .vm_pkt_iov = &iov, .vm_pkt_iovcnt = 1 };
-            int count = 1;
-            if (vmnet_write(interface, &packet, &count) != VMNET_SUCCESS || count != 1) {
-                fprintf(stderr, "vmnet_write failed\n"); failed = 1; running = 0; break;
+            last_seen = now();
+            if (queued == TX_FRAMES || queued_octets + (size_t)length > TX_OCTETS) { ++dropped; continue; }
+            struct queued_frame *frame = &pending[(head + queued) % TX_FRAMES];
+            memcpy(frame->data, buffer, (size_t)length); frame->length = (size_t)length;
+            ++queued; queued_octets += (size_t)length;
+        }
+        if (peer_len && (hello_pending || heartbeat_pending)) {
+            int sent = send_message(fd, hello_pending ? hello : (const unsigned char *)"RNET\2",
+                                    hello_pending ? 13 : 5, &peer, peer_len);
+            if (sent > 0) { if (hello_pending) hello_pending = 0; else heartbeat_pending = 0; }
+            else if (!sent) ++control_busy;
+            else {
+                peer_len = 0; hello_pending = heartbeat_pending = 0;
+                dropped += queued; head = queued = 0; queued_octets = 0; blocked_since = 0;
             }
-            pcap(buffer, (size_t)length);
-            ++tx;
+        }
+        for (int n = 0; n < 64 && queued && running; ++n) {
+            struct queued_frame *frame = &pending[head];
+            struct iovec iov = { .iov_base = frame->data, .iov_len = frame->length };
+            struct vmpktdesc packet = { .vm_pkt_size = frame->length, .vm_pkt_iov = &iov, .vm_pkt_iovcnt = 1 };
+            int count = 1;
+            vmnet_return_t status = vmnet_write(interface, &packet, &count);
+            if (status == VMNET_BUFFER_EXHAUSTED || (status == VMNET_SUCCESS && count == 0)) {
+                ++tx_busy;
+                if (!blocked_since) blocked_since = now();
+                if (now() - blocked_since > 5) {
+                    fprintf(stderr, "vmnet_write stalled for 5 seconds (status=%u count=%d)\n", (unsigned)status, count);
+                    failed = 1; running = 0;
+                }
+                break;
+            }
+            if (status != VMNET_SUCCESS || count != 1) {
+                fprintf(stderr, "vmnet_write failed (status=%u count=%d)\n", (unsigned)status, count);
+                failed = 1; running = 0; break;
+            }
+            blocked_since = 0;
+            pcap(frame->data, frame->length);
+            queued_octets -= frame->length; head = (head + 1) % TX_FRAMES; --queued; ++tx;
         }
         for (int n = 0; n < 64 && running; ++n) {
             struct iovec iov = { .iov_base = buffer, .iov_len = max_packet };
             struct vmpktdesc packet = { .vm_pkt_size = max_packet, .vm_pkt_iov = &iov, .vm_pkt_iovcnt = 1 };
             int count = 1;
-            if (vmnet_read(interface, &packet, &count) != VMNET_SUCCESS) {
-                fprintf(stderr, "vmnet_read failed\n"); failed = 1; running = 0; break;
+            vmnet_return_t status = vmnet_read(interface, &packet, &count);
+            if (status == VMNET_BUFFER_EXHAUSTED) {
+                if (!read_blocked_since) read_blocked_since = now();
+                if (now() - read_blocked_since > 5) {
+                    fprintf(stderr, "vmnet_read stalled for 5 seconds (status=%u)\n", (unsigned)status);
+                    failed = 1; running = 0;
+                }
+                break;
+            }
+            read_blocked_since = 0;
+            if (status != VMNET_SUCCESS) {
+                fprintf(stderr, "vmnet_read failed (status=%u count=%d)\n", (unsigned)status, count);
+                failed = 1; running = 0; break;
             }
             if (!count) break;
             pcap(buffer, packet.vm_pkt_size);
             if (!peer_len || now() - last_seen > 5 || packet.vm_pkt_size > 1514) { ++dropped; continue; }
             ssize_t sent = sendto(fd, buffer, packet.vm_pkt_size, 0, (struct sockaddr *)&peer, peer_len);
             if (sent == (ssize_t)packet.vm_pkt_size) ++rx;
-            else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOENT || errno == ECONNREFUSED)) ++dropped;
+            else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS || errno == EINTR || errno == ENOENT || errno == ECONNREFUSED)) ++dropped;
             else fail("frame sendto");
         }
         struct timespec delay = { .tv_nsec = 1000000 }; nanosleep(&delay, NULL);
@@ -187,8 +255,8 @@ int main(int argc, char **argv) {
         dispatch_semaphore_signal(ready);
     });
     if (stopping != VMNET_SUCCESS || dispatch_semaphore_wait(ready, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC))) failed = 1;
-    fprintf(stderr, "vmnet frames: guest_tx=%lu guest_rx=%lu dropped=%lu\n", tx, rx, dropped);
-    free(buffer); close(fd); unlink(argv[1]);
+    fprintf(stderr, "vmnet frames: guest_tx=%lu guest_rx=%lu dropped=%lu tx_busy=%lu control_busy=%lu\n", tx, rx, dropped, tx_busy, control_busy);
+    free(pending); free(buffer); close(fd); unlink(argv[1]);
     if (capture && fclose(capture)) failed = 1;
     if (managed && !failed) cleanup_managed(argv[1], argv[0]);
     return failed;

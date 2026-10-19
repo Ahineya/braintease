@@ -1,0 +1,97 @@
+import { Msg, HashChanged, RouteFailed, Loaded, Saved, Ignore, Todo } from "./model";
+import { decode, encode } from "./codec";
+import { Ui } from "std/ui";
+import { Cmd, perform_with } from "std/ui_command";
+import { BrowserEffectError, HostUnavailable, StorageQuota, BodyLimit, InvalidRequest, watch_location } from "std/browser_effects";
+import { load, store } from "std/browser_storage";
+import { navigate } from "std/router";
+import { Future } from "std/future";
+fn storage_key() -> String {
+    "rfl.todomvc.v1"
+}
+
+fn describe(error: BrowserEffectError) -> String {
+    match error {
+        HostUnavailable => "Browser storage or navigation is unavailable.",
+        StorageQuota => "Browser storage quota exceeded. Your changes remain in memory.",
+        BodyLimit => "Stored data exceeds the 16 KiB limit.",
+        InvalidRequest => "The storage request exceeds its limits.",
+        _ => "Browser operation failed. Please retry."
+    }
+}
+
+async fn read(ui: Ui<Msg>) -> Msg {
+    let result = load(ui.app().effects(), storage_key()).await;
+    let parsed: Result<Vec<Todo>, String> = match move(result) {
+        Ok(Some(data)) => decode(data),
+        Ok(None) => Ok([]),
+        Err(error) => Err(describe(error))
+    };
+    Loaded(move(parsed))
+}
+
+export fn read_command() -> Cmd<Msg> {
+    perform_with(once fn(ui: Ui<Msg>) => read(ui))
+}
+
+async fn write(ui: Ui<Msg>, todos: Vec<Todo>, revision: u32) -> Msg {
+    let result: Result<unit, String> = match encode(todos) {
+        Err(error) => Err(error),
+        Ok(data) => {
+            let saved = store(ui.app().effects(), storage_key(), data).await;
+            match saved {
+                Ok(_) => Ok({}),
+                Err(error) => Err(describe(error))
+            }
+        }
+    };
+    Saved(revision, result)
+}
+
+export fn write_command(todos: Vec<Todo>, revision: u32) -> Cmd<Msg> {
+    perform_with(once fn(ui: Ui<Msg>) => write(ui, todos, revision))
+}
+
+async fn routes(ui: Ui<Msg>) -> Msg {
+    while (true) {
+        let watch = watch_location(ui.app().effects(), fn(hash: String) => {
+            ui.send(HashChanged(hash)).expect("route message queue exhausted");
+        });
+        match move(watch).await {
+            Err(BodyLimit) => {
+                // The oversized snapshot terminates its bounded subscription.
+                // Repair the URL, then own a fresh subscription for later routes.
+                ui.send(RouteFailed("The URL hash exceeds the 2048-byte route limit. Showing all todos.")).unwrap();
+                match navigate(ui.app().effects(), "#/", true).await {
+                    Ok(_) => {},
+                    Err(error) => {
+                        return RouteFailed(describe(error));
+                    }
+                }
+            },
+            Err(error) => {
+                return RouteFailed(describe(error));
+            },
+            Ok(_) => {
+                return Ignore;
+            }
+        }
+    }
+    Ignore
+}
+
+async fn replace_route(ui: Ui<Msg>) -> Msg {
+    let result = navigate(ui.app().effects(), "#/", true).await;
+    match result {
+        Ok(_) => Ignore,
+        Err(error) => RouteFailed(describe(error))
+    }
+}
+
+export fn fallback_command() -> Cmd<Msg> {
+    perform_with(once fn(ui: Ui<Msg>) => replace_route(ui))
+}
+
+export fn init(ui: Ui<Msg>) -> Vec<Cmd<Msg>> {
+    [perform_with(once fn(ui: Ui<Msg>) => routes(ui)), read_command()]
+}

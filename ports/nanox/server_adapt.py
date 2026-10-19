@@ -45,7 +45,7 @@ def adapt_server(dest):
             '(((unsigned long)(req)->hilength << 16) | (req)->length)')
     replace(dest, 'nanox/nxproto.h', 'UINT32\tpid;\n} nxOpenReq;',
             'UINT32\tpid;\n    UINT32 c16_magic; /* versioned local C16 ABI handshake */\n} nxOpenReq;')
-    replace(dest, 'nanox/client.c', 'req.pid = getpid();', 'req.pid = getpid();\n    req.c16_magic = 0x4e583101UL;')
+    replace(dest, 'nanox/client.c', 'req.pid = getpid();', 'req.pid = getpid();\n    req.c16_magic = 0x4e583102UL;')
     # Advertise only the private C16 socket name, including a synchronous handshake.
     replace(dest, 'nanox/client.c', 'EPRINTF("nxclient: lost connection to Nano-X server\\n");',
             'if(getenv("NANOX_SESSION"))exit(0);\n\t\t\t\tEPRINTF("nxclient: lost connection to Nano-X server\\n");')
@@ -119,3 +119,21 @@ def adapt_server(dest):
     replace(dest, 'demos/nanox/nxlaunch.c', 'if(state->window_background_image) {', 'if(MW_FEATURE_IMAGES && state->window_background_image) {')
     # Fix a pre-existing precedence bug in the launcher child reaper.
     replace(dest,'demos/nanox/nxlaunch.c','while((pid = waitpid(-1, NULL, WNOHANG) > 0))','while((pid = waitpid(-1, NULL, WNOHANG)) > 0)')
+
+    from paint_adapt import adapt_paint
+    adapt_paint(dest)
+    from event_adapt import adapt_events
+    adapt_events(dest)
+    from image_adapt import adapt_images
+    adapt_images(dest)
+    from workspace_adapt import adapt_workspace
+    adapt_workspace(dest)
+    from clipboard_adapt import adapt_clipboard
+    adapt_clipboard(dest)
+
+    # The private protocol exposes a fixed server color table, with no mutation
+    # request. Cache successful queries per connection.
+    replace(dest,'nanox/client.c','\tnxGetSysColorReq *req;\n\tGR_COLOR color;',
+            '\tstatic GR_COLOR colors[22];static unsigned char valid[22];\n\tnxGetSysColorReq *req;\n\tGR_COLOR color;\n\tif(index>=0&&index<22&&valid[index])return colors[index];')
+    replace(dest,'nanox/client.c','\t\tcolor = 0;\n\tUNLOCK(&nxGlobalLock);\n\treturn color;',
+            '\t\tcolor = 0;\n\telse if(index>=0&&index<22){colors[index]=color;valid[index]=1;}\n\tUNLOCK(&nxGlobalLock);\n\treturn color;')

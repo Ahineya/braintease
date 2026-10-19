@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "GNU named variadic macro compatibility used by NetSurf logging"
+}

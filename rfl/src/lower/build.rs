@@ -13,6 +13,7 @@ struct FnBuild {
     loops: Vec<(usize, usize, usize)>,
     scopes: Vec<Vec<usize>>,
     resources: Arc<crate::resources::ResourceTypes>,
+    scope_cleanup: Arc<crate::resources::ResourceTypes>,
     result: Option<usize>,
     root: bool,
     /// The expression under construction is in tail position.
@@ -26,6 +27,7 @@ pub(super) fn build_fn(
     tuples: Arc<Vec<Vec<Ty>>>,
     collections: Arc<crate::typed::CollectionTypes>,
     resources: Arc<crate::resources::ResourceTypes>,
+    scope_cleanup: Arc<crate::resources::ResourceTypes>,
 ) -> Result<Proc, CompileError> {
     let mut build = FnBuild {
         slots: Vec::new(),
@@ -37,6 +39,7 @@ pub(super) fn build_fn(
         loops: Vec::new(),
         scopes: Vec::new(),
         resources: resources.clone(),
+        scope_cleanup: scope_cleanup.clone(),
         result: None,
         root: func.name == "main" || func.c_export || func.async_result.is_some(),
         tail_block: true,
@@ -72,6 +75,7 @@ pub(super) fn build_fn(
         let cells = if cap.shared { 2 } else { cap.ty.cells() };
         captures.push(LowerCap {
             parent: cap.parent,
+            transfer: cap.transfer,
             slot: build.binding_slot[cap.local as usize],
             ty: cap.ty,
             cells,
@@ -84,8 +88,10 @@ pub(super) fn build_fn(
     build.scopes.push(
         func.params
             .iter()
-            .map(|id| build.binding_slot[*id as usize])
-            .filter(|slot| resources.contains(build.slots[*slot].ty))
+            .copied()
+            .chain(func.captures.iter().filter(|c| c.transfer).map(|c| c.local))
+            .map(|id| build.binding_slot[id as usize])
+            .filter(|slot| scope_cleanup.contains(build.slots[*slot].ty))
             .collect(),
     );
     build.emit_block(&func.body, result_slot);
@@ -105,6 +111,7 @@ pub(super) fn build_fn(
         ));
     }
     Ok(Proc {
+        direct: false,
         async_context: func.async_context.map(|id| build.binding_slot[id as usize]),
         async_result: func.async_result,
         name: func.name.clone(),
@@ -145,7 +152,7 @@ impl FnBuild {
     }
 
     fn track_resource(&mut self, slot: usize) {
-        if self.resources.contains(self.slots[slot].ty) {
+        if self.scope_cleanup.contains(self.slots[slot].ty) {
             if let Some(scope) = self.scopes.last_mut() {
                 if !scope.contains(&slot) {
                     scope.push(slot);
@@ -223,8 +230,17 @@ impl FnBuild {
         }
         // A sibling branch inherits its own tail context, irrespective of
         // whether this branch returned or constructed a nested block.
-        self.cleanup_to(depth);
-        self.scopes.pop();
+        if result.is_some_and(|slot| self.slots[slot].ty.is_ref()) {
+            // An implicit borrowed receiver is represented as a block holding
+            // its snapshot and returning a reference to it. Its owner must
+            // survive the enclosing call, rather than die at this inner block.
+            // Conservatively extend it to the enclosing lexical scope.
+            let owners = self.scopes.pop().unwrap();
+            self.scopes.last_mut().unwrap().extend(owners);
+        } else {
+            self.cleanup_to(depth);
+            self.scopes.pop();
+        }
         self.tail_block = tail_block;
     }
 
@@ -258,9 +274,7 @@ impl FnBuild {
                 }
                 let fail = self.fresh();
                 self.bind_pat(pat, slot, fail);
-                if self.resources.contains(init.ty) {
-                    self.insn(Insn::Drop { slot });
-                }
+                self.insn(Insn::Drop { slot });
                 let cont = self.cur;
                 self.cur = fail;
                 self.dead = false;
@@ -361,9 +375,7 @@ impl FnBuild {
             }
             TStmt::Expr(expr) => {
                 let slot = self.emit_expr(expr);
-                if self.resources.contains(expr.ty) {
-                    self.insn(Insn::Drop { slot });
-                }
+                self.insn(Insn::Drop { slot });
             }
             TStmt::Return(value) => {
                 let saved = self.tail_block;
@@ -611,9 +623,7 @@ impl FnBuild {
             if !self.dead {
                 // Bindings now retain the selected fields. End the consuming
                 // snapshot before user code, so wildcard resources drop here.
-                if self.resources.contains(scrutinee.ty) {
-                    self.insn(Insn::Drop { slot });
-                }
+                self.insn(Insn::Drop { slot });
                 self.emit_block(&arm.body, Some(dest));
             }
             self.cleanup_to(depth);
@@ -678,9 +688,7 @@ impl FnBuild {
                                 cells,
                             });
                             self.bind_pat(nested, dest, fail);
-                            if self.resources.contains(field.ty) {
-                                self.insn(Insn::Drop { slot: dest });
-                            }
+                            self.insn(Insn::Drop { slot: dest });
                             if self.dead {
                                 return;
                             }
@@ -721,9 +729,7 @@ impl FnBuild {
                                 offset: field.offset,
                             });
                             self.bind_pat(nested, dest, fail);
-                            if self.resources.contains(field.ty) {
-                                self.insn(Insn::Drop { slot: dest });
-                            }
+                            self.insn(Insn::Drop { slot: dest });
                             if self.dead {
                                 return;
                             }

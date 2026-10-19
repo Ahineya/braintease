@@ -87,7 +87,7 @@ def main():
     if args.all:
         args.units = all_units(source)
     includes = [ROOT / 'ports/fuzix/ripple/include', ROOT / 'ports/fuzix/ripple', ROOT / 'ports/fuzix/upstream/Library/include',
-                ROOT / 'runtime/include', PORT / 'config', adapted, tables, source, source / 'src',
+                ROOT / 'runtime/include', ROOT / 'ports/tls', PORT / 'config', adapted, tables, source, source / 'src',
                 source / 'WWW/Library/Implementation', source / 'src/chrtrans']
     flags = ['-DRIPPLE_MMU=1', '-DNO_64BIT', '-DHAVE_CONFIG_H=1', '-DNO_LYNX_TRACE=1']
     stamp = datetime.fromtimestamp(int(os.environ['SOURCE_DATE_EPOCH']), timezone.utc) if 'SOURCE_DATE_EPOCH' in os.environ else datetime.now(timezone.utc)

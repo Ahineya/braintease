@@ -136,10 +136,8 @@ pub(super) fn unicode_scalar(value: i64) -> bool {
 
 pub(super) fn utf8_bytes(chars: &[u16]) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
-    for &cell in chars {
-        let Some(ch) = char::from_u32(u32::from(cell)) else {
-            return Err("string contains a surrogate".to_string());
-        };
+    for scalar in char::decode_utf16(chars.iter().copied()) {
+        let ch = scalar.map_err(|_| "string contains an unpaired surrogate".to_string())?;
         let mut buf = [0u8; 4];
         bytes.extend(ch.encode_utf8(&mut buf).as_bytes());
     }

@@ -31,7 +31,8 @@
 #include <errno.h>
 #include <limits.h>
 #include <ctype.h>
-#define PICOL_LIMIT 12000
+#define PICOL_LIMIT 30000
+#define PICOL_WORDS 1024
 #define PICOL_DEPTH 32
 
 enum {PICOL_OK, PICOL_ERR, PICOL_RETURN, PICOL_BREAK, PICOL_CONTINUE};
@@ -107,6 +108,7 @@ void *picol_realloc(void *p, size_t n) {
     if (!q) picol_oom();
     return q;
 }
+static int expandLastWord(struct picolInterp *, int *, char ***);
 static int picolCondition(struct picolInterp *, char *);
 static int splitList(struct picolInterp *, const char *, int *, char ***);
 static void freeWords(int, char **);
@@ -183,6 +185,12 @@ int picolParseVar(struct picolParser *p) {
         return PICOL_OK;
     }
     while (p->len && (isalnum(*p->p) || *p->p == '_')) { p->p++; p->len--; }
+    if (p->len && *p->p == '(' && p->start != p->p) {
+        p->p++; p->len--;
+        while (p->len && *p->p != ')') { p->p++; p->len--; }
+        if (!p->len) { p->error = "missing array close-parenthesis"; return PICOL_ERR; }
+        p->p++; p->len--;
+    }
     if (p->start == p->p) {
         p->start = p->end = p->p - 1; p->type = PT_STR;
     } else { p->end = p->p - 1; p->type = PT_VAR; }
@@ -327,8 +335,17 @@ void picolSetResult(struct picolInterp *i, char *s) {
     i->result = copy;
 }
 
+static char *environmentName(const char *name) {
+    static char key[256]; size_t n = strlen(name);
+    if (n < 6 || n > 260 || strncmp(name, "env(", 4) || name[n-1] != ')') return NULL;
+    memcpy(key, name + 4, n - 5); key[n-5] = 0; return key;
+}
+
 struct picolVar *picolGetVar(struct picolInterp *i, char *name) {
     struct picolVar *v = i->callframe->vars;
+    static struct picolVar environment;
+    char *key = environmentName(name);
+    if (key) { environment.val = getenv(key); return environment.val ? &environment : NULL; }
     while(v) {
         if (strcmp(v->name,name) == 0) return v;
         v = v->next;
@@ -337,7 +354,21 @@ struct picolVar *picolGetVar(struct picolInterp *i, char *name) {
 }
 
 int picolSetVar(struct picolInterp *i, char *name, char *val) {
-    struct picolVar *v = picolGetVar(i,name);
+    struct picolVar *v;
+    char *key = environmentName(name);
+    if (key) {
+        static struct picolVar *exports;
+        struct picolVar *owned = exports;
+        char *pair = picol_malloc(strlen(key) + strlen(val) + 2);
+        sprintf(pair, "%s=%s", key, val);
+        if (putenv(pair)) { free(pair); picolSetResult(i, "cannot set environment variable"); return PICOL_ERR; }
+        while (owned && strcmp(owned->name, key)) owned = owned->next;
+        if (!owned) { owned = picol_malloc(sizeof(*owned)); owned->name = picol_strdup(key);
+            owned->val = NULL; owned->next = exports; exports = owned; }
+        free(owned->val); owned->val = pair;
+        return PICOL_OK;
+    }
+    v = picolGetVar(i,name);
     if (v) {
         char *copy = picol_strdup(val);
         free(v->val);
@@ -400,13 +431,13 @@ static void picolUnescape(char *s) {
 }
 int picolEval(struct picolInterp *i, char *script) {
     struct picolParser p;
-    int argc = 0, j, retcode = PICOL_OK;
+    int argc = 0, j, retcode = PICOL_OK, expandword = 0;
     char **argv = NULL, errbuf[256];
     if (i->level >= PICOL_DEPTH) {
         picolSetResult(i, "evaluation nesting limit exceeded"); return PICOL_ERR;
     }
     if (strlen(script) > PICOL_LIMIT) {
-        picolSetResult(i, "script exceeds 12000 characters"); return PICOL_ERR;
+        picolSetResult(i, "script exceeds 30000 characters"); return PICOL_ERR;
     }
     i->level++;
     picolSetResult(i, "");
@@ -414,8 +445,16 @@ int picolEval(struct picolInterp *i, char *script) {
     while (1) {
         char *token;
         int len, previous = p.type;
+        if ((previous == PT_SEP || previous == PT_EOL) && p.len > 3 &&
+            !strncmp(p.p, "{*}", 3) && !isspace(p.p[3]) && p.p[3] != ';') {
+            p.p += 3; p.len -= 3; expandword = 1;
+        }
         if (picolGetToken(&p) != PICOL_OK) {
             picolSetResult(i, (char *)p.error); retcode = PICOL_ERR; break;
+        }
+        if (expandword && (p.type == PT_SEP || p.type == PT_EOL || p.type == PT_EOF)) {
+            retcode = expandLastWord(i, &argc, &argv); expandword = 0;
+            if (retcode != PICOL_OK) break;
         }
         if (p.type == PT_EOF) break;
         if (p.type == PT_SEP) continue;
@@ -454,7 +493,7 @@ int picolEval(struct picolInterp *i, char *script) {
             token = picol_strdup(i->result);
         } else if (p.type == PT_ESC) picolUnescape(token);
         if (previous == PT_SEP || previous == PT_EOL) {
-            if (argc >= 128) {
+            if (argc >= PICOL_WORDS) {
                 free(token); picolSetResult(i, "too many arguments"); retcode = PICOL_ERR; break;
             }
             argv = picol_realloc(argv, sizeof(char *) * (argc + 1));

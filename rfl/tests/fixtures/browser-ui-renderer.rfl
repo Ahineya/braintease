@@ -1,0 +1,32 @@
+import { renderer, Renderer } from "std/browser_render";
+import { Html, HtmlElement, HtmlFragment, node, text, attribute, key, svg, fragment, optional, number } from "std/html";
+import { mount, patch } from "std/browser";
+import { Result } from "std/result";
+fn main() {
+    mount();
+    let mut renderer: Renderer<i16> = renderer();
+    let initial: Html<i16> = node("div", [], [text("initial")]);
+    renderer.render(initial).unwrap();
+    renderer.render(initial).unwrap();
+    let bad: Html<i16> = node("ul", [], [node("li", [key("same")], []), node("li", [key("same")], [])]);
+    match renderer.render(bad) {
+        Err(_) => println("duplicate rejected"),
+        Ok(_) => println("BAD")
+    };
+    renderer.render(initial).unwrap();
+    let invalid: Html<i16> = node("input", [attribute("onclick", "bad")], []);
+    match renderer.render(invalid) {
+        Err(_) => println("attribute rejected"),
+        Ok(_) => println("BAD")
+    };
+    let mut many: Vec<Html<i16>> = [];
+    for (i in 0..500) {
+        many.push(node("li", [], [number(i as i64)]));
+    }
+    renderer.render(node("ul", [], many)).unwrap();
+    renderer.render(fragment([optional(None), svg("svg", [attribute("viewBox", "0 0 10 10")], [svg("circle", [attribute("r", "4")], [])]), text("done"), HtmlElement(0, "p", [], [HtmlFragment([text("direct")])])])).unwrap();
+}
+
+export extern "C" fn ripple_browser_on_events(data: *const u16, cells: u32) {}
+
+export extern "C" fn ripple_browser_on_dispose() {}

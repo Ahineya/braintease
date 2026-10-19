@@ -1,0 +1,308 @@
+import {} from "std/option";
+import {} from "std/result";
+import { Socket, SocketError, socket_pair, tcp, resolve, SocketTransferLimit, InvalidSocketArgument, SocketOsError, SocketTimedOut } from "std/socket";
+import { Readiness, poller, READABLE, WRITABLE, monotonic_millis } from "std/poll";
+import { Future, Poll, Pending, Ready } from "std/future";
+import { Context } from "std/task";
+import { Reactor, block_on_with_budget, join_with_budget } from "std/executor";
+import { arguments, exit, create, read_bytes } from "std/posix";
+import { capabilities, random_bytes, sha256, sha512, pbkdf2_sha512, modexp_2048, aes256_ige, MODEXP_2048, PBKDF2_SHA512, AES256_IGE_ENCRYPT, SHA512 } from "std/crypto";
+
+fn check(ok: bool, code: i16) {
+    if (!ok) {
+        println("GUEST_SERVICES_FAILED");
+        println(code);
+        exit(code);
+    }
+}
+
+struct Writer {
+    socket: Socket,
+    started: bool,
+    deadline: u32
+}
+
+impl Future for Writer {
+    type Output = Result<unit, SocketError>;
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<unit, SocketError>> {
+        if (!self.started) {
+            self.started = true;
+            self.deadline = cx.now + 20;
+        }
+        if (((cx.now - self.deadline) as i32) < 0) {
+            cx.waker.wake_at(self.deadline);
+            return Pending;
+        }
+        match self.socket.try_write([0, 127, 128, 255], 0) {
+            Ok(Some(4)) => Ready(Ok({})),
+            Ok(None) => {
+                cx.waker.wake_at(cx.now + 1);
+                Pending
+            },
+            Err(e) => Ready(Err(e)),
+            _ => {
+                check(false, 1);
+                Ready(Ok({}))
+            }
+        }
+    }
+    fn cancel(&mut self) {}
+}
+
+fn local() -> Result<unit, SocketError> {
+    let (left, right) = socket_pair()?;
+    check(left.try_read(4)?.is_none(), 2);
+    let mut poll = poller()?;
+    // Cancel/drop must remove every registration, including unpolled ones.
+    for (i in 0..80) {
+        let mut waiting = poll.socket(&left, READABLE)?;
+        waiting.cancel();
+    }
+    {
+        let mut waits: Vec<Readiness> = [];
+        for (i in 0..32) {
+            waits.push(poll.socket(&left, READABLE)?);
+        }
+        match poll.socket(&left, READABLE) {
+            Err(_) => {},
+            Ok(_) => check(false, 3)
+        }
+    }
+    // The wait owns the endpoint after its user-visible owner is gone.
+    let alias = left.try_clone()?;
+    let mut other_waits: Vec<Readiness> = [];
+    for (i in 0..31) {
+        other_waits.push(poll.socket(&left, READABLE)?);
+    }
+    let mut waiting = poll.socket(&left, READABLE)?;
+    drop(move(left));
+    let mut reactor = move(poll).reactor()?;
+    let mut writer = Writer { socket: right.try_clone()?, started: false, deadline: 0 };
+    let start = monotonic_millis()?;
+    match join_with_budget(&mut waiting, &mut writer, &mut reactor, 200) {
+        Ok((Ok(_), Ok(_))) => {},
+        _ => check(false, 4)
+    }
+    drop(move(other_waits));
+    check(monotonic_millis()? - start >= 20, 5);
+    let bytes = alias.try_read(16)?.unwrap();
+    check(bytes.len() == 4 && bytes[0] == 0 && bytes[1] == 127 && bytes[2] == 128 && bytes[3] == 255, 6);
+    // Exhausting an executor budget cancels a polled registration synchronously.
+    let mut cancelled = reactor.socket(&alias, READABLE)?;
+    match block_on_with_budget(&mut cancelled, &mut reactor, 1) {
+        Err(_) => {},
+        _ => check(false, 12)
+    }
+    let event = reactor.socket(&alias, READABLE)?;
+    let mut timed = move(event).with_timeout(5)?;
+    match block_on_with_budget(&mut timed, &mut reactor, 100) {
+        Ok(Err(SocketTimedOut)) => {},
+        _ => check(false, 13)
+    }
+    right.shutdown(1)?;
+    let mut end = reactor.socket(&alias, READABLE)?;
+    match block_on_with_budget(&mut end, &mut reactor, 20) {
+        Ok(Ok(_)) => {},
+        _ => check(false, 7)
+    }
+    check(alias.try_read(16)?.unwrap().is_empty(), 8);
+    match alias.try_read(32768) {
+        Err(SocketTransferLimit) => {},
+        _ => check(false, 9)
+    }
+    match right.try_write([1], 2) {
+        Err(InvalidSocketArgument) => {},
+        _ => check(false, 10)
+    }
+    // Independently owned descriptor registrations also survive close/reuse.
+    let file = create("/tmp/rfl-ready-file").unwrap();
+    let mut file_ready = reactor.descriptor(file.descriptor(), READABLE)?;
+    move(file).close().unwrap();
+    match block_on_with_budget(&mut file_ready, &mut reactor, 20) {
+        Ok(Ok(_)) => {},
+        _ => check(false, 11)
+    }
+    // No leaked socket or wait descriptors under repeated allocation.
+    for (i in 0..64) {
+        let (a, b) = socket_pair()?;
+        let event = reactor.socket(&a, WRITABLE)?;
+    }
+    println("RFL_GUEST_LOCAL_OK");
+    Ok({})
+}
+
+fn network() -> Result<unit, SocketError> {
+    let ip = resolve("fixture.test")?;
+    check(ip.a == 192 && ip.b == 168 && ip.c == 64 && ip.d == 1, 20);
+    let socket = tcp()?;
+    let poll = poller()?;
+    let mut reactor = move(poll).reactor()?;
+    if (!socket.start_connect(ip, 7001)?) {
+        let mut event = reactor.socket(&socket, WRITABLE)?;
+        match block_on_with_budget(&mut event, &mut reactor, 1000) {
+            Ok(Ok(_)) => {},
+            _ => check(false, 21)
+        }
+    }
+    socket.finish_connect()?;
+    let mut bytes: Vec<u8> = [];
+    for (i in 0..8192) {
+        bytes.push((i % 256) as u8);
+    }
+    // Deliberately fill the bounded send queue before consuming replies.
+    let mut sent: usize = 0;
+    let mut received: usize = 0;
+    while (received < bytes.len()) {
+        if (sent < bytes.len()) {
+            match socket.try_write(bytes, sent)? {
+                Some(n) => {
+                    check(n > 0, 22);
+                    sent += n;
+                },
+                None => {}
+            }
+        }
+        match socket.try_read(257)? {
+            Some(reply) => {
+                check(!reply.is_empty(), 23);
+                for (i in 0..reply.len()) {
+                    check(reply[i] == ((received + i) % 256) as u8, 24);
+                }
+                received += reply.len();
+            },
+            None => {
+                let events = if (sent < bytes.len()) {
+                    READABLE | WRITABLE
+                } else {
+                    READABLE
+                };
+                let mut event = reactor.socket(&socket, events)?;
+                match block_on_with_budget(&mut event, &mut reactor, 1000) {
+                    Ok(Ok(_)) => {},
+                    _ => check(false, 25)
+                }
+            }
+        }
+    }
+    check(sent == bytes.len(), 26);
+    socket.shutdown(1)?;
+    // A writable connection event may report failure: finish_connect must read SO_ERROR.
+    let refused = tcp()?;
+    match refused.start_connect(ip, 7002) {
+        Ok(false) => {
+            let mut event = reactor.socket(&refused, WRITABLE)?;
+            match block_on_with_budget(&mut event, &mut reactor, 1000) {
+                Ok(Ok(_)) => {},
+                _ => check(false, 27)
+            }
+            match refused.finish_connect() {
+                Err(SocketOsError(_)) => {},
+                _ => check(false, 28)
+            }
+        },
+        Err(SocketOsError(_)) => {},
+        _ => check(false, 29)
+    }
+    println("RFL_GUEST_NETWORK_OK");
+    Ok({})
+}
+
+fn terminal() -> Result<unit, SocketError> {
+    let poll = poller()?;
+    let mut reactor = move(poll).reactor()?;
+    let mut input = reactor.descriptor(0, READABLE)?;
+    println("RFL_TERMINAL_WAITING");
+    match block_on_with_budget(&mut input, &mut reactor, 1000) {
+        Ok(Ok(_)) => {},
+        _ => check(false, 50)
+    }
+    let text = read_bytes(0, 32).unwrap();
+    check(text.len() == 6 && text[0] == 114 && text[4] == 121 && text[5] == 10, 51);
+    println("RFL_GUEST_TERMINAL_OK");
+    Ok({})
+}
+
+fn crypto() {
+    let caps = capabilities().unwrap();
+    check(caps.supports(MODEXP_2048) && caps.supports(PBKDF2_SHA512) && caps.supports(AES256_IGE_ENCRYPT) && caps.supports(SHA512), 30);
+    let hash = sha256([]).unwrap();
+    check(hash.len() == 32 && hash[0] == 227 && hash[31] == 85, 31);
+    let hash = sha512([]).unwrap();
+    check(hash.len() == 64 && hash[0] == 207 && hash[63] == 62, 32);
+    let hash = pbkdf2_sha512([112, 97, 115, 115, 119, 111, 114, 100], [115, 97, 108, 116], 2).unwrap();
+    check(hash.len() == 64 && hash[0] == 225 && hash[63] == 78, 33);
+    let mut modulus: Vec<u8> = [];
+    for (i in 0..256) {
+        modulus.push(255);
+    }
+    modulus[255] = 97;
+    let n = modexp_2048([2], modulus, [17]).unwrap();
+    check(n.len() == 256 && n[253] == 2 && n[254] == 0 && n[255] == 0, 34);
+    let mut data: Vec<u8> = [];
+    let mut key: Vec<u8> = [];
+    let mut iv: Vec<u8> = [];
+    for (i in 0..512) {
+        data.push((i % 256) as u8);
+    }
+    for (i in 0..32) {
+        key.push(i as u8);
+        iv.push((i + 1) as u8);
+    }
+    let cipher = aes256_ige(data, key, iv, false).unwrap();
+    let expected_cipher: Vec<u8> = [87, 25, 72, 147, 135, 55, 217, 202, 134, 206, 131, 12, 246, 209, 60, 88, 30, 202, 30, 139, 3, 237, 79, 138, 190, 130, 98, 218, 104, 97, 8, 183];
+    for (i in 0..expected_cipher.len()) {
+        check(cipher[i] == expected_cipher[i], 41);
+    }
+    let plain = aes256_ige(cipher, key, iv, true).unwrap();
+    check(plain.len() == 512, 35);
+    for (i in 0..plain.len()) {
+        check(plain[i] == data[i], 36);
+    }
+    check(random_bytes(0).unwrap().is_empty(), 37);
+    let a = random_bytes(64).unwrap();
+    let b = random_bytes(64).unwrap();
+    let mut different = false;
+    for (i in 0..64) {
+        if (a[i as usize] != b[i as usize]) {
+            different = true;
+        }
+    }
+    check(different, 38);
+    // Full Telegram password-derivation work factor, with bounded device work.
+    let start = monotonic_millis().unwrap();
+    let derived = pbkdf2_sha512([112, 97, 115, 115, 119, 111, 114, 100], [115, 97, 108, 116], 100000).unwrap();
+    let expected: Vec<u8> = [245, 209, 112, 34, 201, 106, 244, 108, 10, 29, 196, 154, 88, 187, 230, 84, 162, 142, 152, 16, 72, 131, 228, 175, 77, 233, 116, 205, 162, 199, 65, 34, 221, 8, 47, 65, 5, 169, 63, 200, 6, 146, 202, 78, 177, 167, 132, 207, 237, 168, 27, 250, 163, 63, 81, 146, 204, 145, 67, 216, 24, 189, 117, 129];
+    check(derived.len() == 64, 39);
+    for (i in 0..expected.len()) {
+        check(derived[i] == expected[i], 40);
+    }
+    println("PBKDF2_100000_MS");
+    println(monotonic_millis().unwrap() - start);
+    println("RFL_GUEST_CRYPTO_OK");
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    if (args.len() > 1 && args[1] == "crypto") {
+        crypto();
+        return 0;
+    }
+    let result = if (args.len() > 1 && args[1] == "network") {
+        network()
+    } else if (args.len() > 1 && args[1] == "terminal") {
+        terminal()
+    } else {
+        local()
+    };
+    match result {
+        Ok(_) => 0,
+        Err(e) => {
+            println("GUEST_SERVICE_ERROR");
+            match e {
+                SocketOsError(n) => println(n),
+                _ => {}
+            };
+            1
+        }
+    }
+}

@@ -1,6 +1,8 @@
 //! Trait registration, coherence, and static dispatch. No trait metadata reaches IR.
 use super::*;
 mod coherence;
+pub(super) mod contracts;
+mod copy;
 mod dispatch;
 mod generics;
 use super::projections::{contains_projection, depends_on_self, qualify_impl_type};
@@ -39,6 +41,13 @@ impl Checker<'_> {
             }
         }
         for item in &mut module.impls {
+            if let Some(param) = item.type_params.iter().find(|p| p.arity > 0) {
+                return Err(CompileError::at(
+                    self.source,
+                    param.span.start,
+                    "constructor parameters in impl blocks are not supported yet",
+                ));
+            }
             if let Some((bound, _)) = &mut item.trait_name {
                 if let Some(name) = self.trait_name(bound) {
                     *bound = name;
@@ -76,6 +85,13 @@ impl Checker<'_> {
                     variant: false,
                 });
             }
+            if tr.arity > 0 && !tr.associated_types.is_empty() {
+                return Err(CompileError::at(
+                    self.source,
+                    tr.name_span.start,
+                    "associated types on constructor traits are not supported yet",
+                ));
+            }
             self.validate_associated_declarations(tr)?;
             let mut names = HashSet::new();
             for method in &tr.methods {
@@ -107,6 +123,13 @@ impl Checker<'_> {
                     format!("unknown trait `{name}`"),
                 ));
             };
+            if self.is_copy_trait(name) {
+                return Err(CompileError::at(
+                    self.source,
+                    span.start,
+                    "Copy is derived by the compiler and cannot be implemented manually",
+                ));
+            }
             self.uses.push(NameUse {
                 span: *span,
                 def: tr.name_span,
@@ -199,7 +222,6 @@ impl Checker<'_> {
                     ));
                 };
                 if method.receiver != required.receiver
-                    || !method.type_params.is_empty()
                     || method.params.len() != required.params.len()
                 {
                     return Err(CompileError::at(
@@ -211,6 +233,7 @@ impl Checker<'_> {
                         ),
                     ));
                 }
+                self.validate_method_generics(item, method, required)?;
                 self.uses.push(NameUse {
                     span: method.name_span,
                     def: required.name_span,
@@ -218,17 +241,7 @@ impl Checker<'_> {
                     ty: trait_method_signature(required),
                 });
                 let func = format!("{name}${outer}$impl{index}${}", method.name);
-                let receiver = receiver_ty(&item.ty, method.receiver.unwrap(), method.name_span);
-                let mut params = vec![Param {
-                    name: "self".into(),
-                    name_span: method.name_span,
-                    ty: Some(receiver),
-                    pat: Pat::Name {
-                        name: "self".into(),
-                        span: method.name_span,
-                    },
-                }];
-                params.extend(method.params.clone());
+                let mut params = contracts::method_params(&item.ty, method);
                 for param in &mut params {
                     if let Some(ty) = &mut param.ty {
                         qualify_impl_type(ty, &item.ty, name);
@@ -236,12 +249,15 @@ impl Checker<'_> {
                 }
                 let mut ret = method.ret.clone().unwrap_or_else(unit);
                 qualify_impl_type(&mut ret, &item.ty, name);
-                self.impl_contexts.insert(func.clone(), name.clone());
+                self.impl_contexts
+                    .insert(func.clone(), (name.clone(), item.ty.clone()));
+                let mut type_params = item.type_params.clone();
+                type_params.extend(method.type_params.clone());
                 module.functions.push(Function {
                     is_async: false,
                     name: func.clone(),
                     name_span: method.name_span,
-                    type_params: item.type_params.clone(),
+                    type_params,
                     params,
                     ret: Some(ret),
                     body: method.body.clone(),
@@ -264,19 +280,49 @@ impl Checker<'_> {
                 methods,
             }));
         }
+        for tr in self.traits.clone() {
+            for method in &tr.methods {
+                if tr.arity > 0 || !method.type_params.is_empty() {
+                    let function = contracts::method_function(&tr, method);
+                    self.signature_only.insert(function.name.clone());
+                    module.functions.push(function);
+                }
+            }
+        }
         Ok(())
     }
 
     pub(super) fn register_trait_signatures(&mut self) -> Result<(), CompileError> {
         for tr in self.traits.clone() {
             for method in tr.methods {
+                let mut parameters = vec![TypeParam {
+                    name: "Self".into(),
+                    arity: tr.arity,
+                    bounds: Vec::new(),
+                    span: tr.name_span,
+                }];
+                parameters.extend(method.type_params.clone());
+                let mut seen = HashSet::new();
+                for param in &parameters {
+                    if !seen.insert(&param.name) {
+                        return Err(CompileError::at(
+                            self.source,
+                            param.span.start,
+                            "duplicate method type parameter",
+                        ));
+                    }
+                }
+                self.validate_bounds(&method.type_params)?;
                 for p in &method.params {
                     if let Some(ty) = &p.ty {
-                        self.validate_ty(ty, &["Self".into()])?;
+                        self.validate_ty(ty, &parameters)?;
                     }
                 }
                 if let Some(ty) = &method.ret {
-                    self.validate_ty(ty, &["Self".into()])?;
+                    self.validate_ty(ty, &parameters)?;
+                }
+                if tr.arity > 0 || !method.type_params.is_empty() {
+                    continue;
                 }
                 if method
                     .params
@@ -301,8 +347,14 @@ impl Checker<'_> {
                 let parsed_ret = method.ret.clone().unwrap_or_else(unit);
                 self.validate_ty(&parsed_ret, &[])?;
                 let ret = self.apply(&parsed_ret, &HashMap::new())?;
-                self.trait_sigs
-                    .insert((tr.name.clone(), method.name), FuncSig { params, ret });
+                self.trait_sigs.insert(
+                    (tr.name.clone(), method.name),
+                    FuncSig {
+                        once: false,
+                        params,
+                        ret,
+                    },
+                );
             }
         }
         Ok(())
@@ -319,8 +371,6 @@ impl Checker<'_> {
         }
         for implementation in self.trait_impls.clone() {
             let item = &implementation.item;
-            let names: Vec<_> = item.type_params.iter().map(|p| p.name.clone()).collect();
-            self.validate_ty(&item.ty, &names)?;
             let mut subst = HashMap::new();
             for p in &item.type_params {
                 let ty = self.rigid(p)?;
@@ -332,7 +382,8 @@ impl Checker<'_> {
                 .find(|t| t.name == item.trait_name.as_ref().unwrap().0)
                 .unwrap()
                 .clone();
-            let self_ty = self.apply(&item.ty, &subst)?;
+            self.validate_argument(&item.ty, tr.arity, &item.type_params)?;
+            let self_ty = self.apply_argument(&item.ty, tr.arity, &subst)?;
             let saved_self = self.assoc_self.replace((tr.name.clone(), self_ty));
             self.validate_associated_values(&tr, item, self_ty, &subst)?;
             let mut contract_subst = HashMap::from([("Self".into(), self_ty)]);
@@ -340,8 +391,15 @@ impl Checker<'_> {
             contract_subst.extend(subst.clone());
             for method in &item.items {
                 let required = tr.methods.iter().find(|m| m.name == method.name).unwrap();
+                let mut implementation_subst = subst.clone();
+                let mut contract_subst = contract_subst.clone();
+                for (have, want) in method.type_params.iter().zip(&required.type_params) {
+                    let ty = self.rigid(want)?;
+                    implementation_subst.insert(have.name.clone(), ty);
+                    contract_subst.insert(want.name.clone(), ty);
+                }
                 for (have, want) in method.params.iter().zip(&required.params) {
-                    let have = self.apply(have.ty.as_ref().unwrap(), &subst)?;
+                    let have = self.apply(have.ty.as_ref().unwrap(), &implementation_subst)?;
                     let want = self.apply(want.ty.as_ref().unwrap(), &contract_subst)?;
                     if have != want {
                         return Err(CompileError::at(
@@ -354,7 +412,10 @@ impl Checker<'_> {
                         ));
                     }
                 }
-                let have = self.apply(&method.ret.clone().unwrap_or_else(unit), &subst)?;
+                let have = self.apply(
+                    &method.ret.clone().unwrap_or_else(unit),
+                    &implementation_subst,
+                )?;
                 let want =
                     self.apply(&required.ret.clone().unwrap_or_else(unit), &contract_subst)?;
                 if have != want {

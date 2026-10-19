@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "Global union callback table preserves nested struct fields and function-pointer relocations"
+}

@@ -12,7 +12,7 @@ These are separate mechanisms:
 - The existing DEVICE host monotonic clock supplies a timestamp and resolution;
   both runtimes currently report 1 ms resolution.
 - `ripple/deadline.c` maintains a sorted queue with one timer per process slot,
-  up to 32. A clock update compares the head first, so it does not scan all
+  up to 64. A clock update compares the head first, so it does not scan all
   processes when nothing is due. No active timers means a constant-time exit.
 - Both platforms pass their existing host-clock sample to `ripple_select_clock`
   before doing coarse accounting. Expired timers wake their sleeping owners;
@@ -22,6 +22,10 @@ These are separate mechanisms:
   No interrupt-frequency or ISA change is required. Idle device polling remains
   bounded by the existing 1 ms host idle request, which is skipped when polling
   has already made a process runnable.
+
+The RVM kernel's runnable/event queues and elapsed-time scheduling budget are
+described in [SCHEDULER.md](SCHEDULER.md). Its IRQ interval remains unchanged;
+the normal slice is now based on elapsed time rather than counting IRQs alone.
 
 This is a fine-resolution deadline mechanism, not a hard real-time guarantee.
 Host scheduling, VM execution/JIT cost, disabled interrupts and guest scheduling
@@ -92,10 +96,10 @@ prerequisites. The deadline probe is also part of both normal regression suites.
 All tests use disposable disks; the select network fixture uses a local Ethernet
 peer and needs no Internet access.
 
-`finecheck.c` passes 287 parent-process assertions on each target, plus child
+`finecheck.c` passes 369 parent-process assertions on each target, plus child
 checks and host-side assertions. It exercises actual guest syscalls and tests
 the same deadline queue core with synthetic timestamps: nanosecond carry,
-32-bit seconds rollover, very long waits, equal deadlines, all 32 slots,
+32-bit seconds rollover, very long waits, equal deadlines, all 64 slots,
 head/middle/tail cancellation, rearming, exact-boundary expiry, clock failure,
 64-bit overflow and reuse. Guest checks cover the clock payload/canaries,
 resolution and errors, 1/5/10/20/50 ms waits, no early expiry, unchanged timeout

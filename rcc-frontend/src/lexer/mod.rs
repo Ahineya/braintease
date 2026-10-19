@@ -6,6 +6,7 @@
 pub mod token;
 pub mod literals;
 pub mod operators;
+mod hex_float;
 
 pub use token::{FloatSuffix, IntegerSuffix, Token, TokenType};
 

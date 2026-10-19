@@ -1,0 +1,357 @@
+import { DirEntry, Metadata, IoError, read_dir, DIRECTORY, SYMLINK } from "std/posix";
+import { normalize, joined, parent, basename } from "lib/path";
+import { Selection, selection } from "lib/tui_list";
+import { Canvas, Rect, fitted, number } from "lib/tui";
+import { HLINE } from "std/curses";
+
+/// Reusable directory model. Listings always contain a synthetic parent row.
+/// Refresh/navigation replace state only after a complete successful read.
+export struct FilePanel {
+    path: String,
+    entries: Vec<DirEntry>,
+    cursor: Selection,
+    show_hidden: bool,
+    generation: u32
+}
+
+fn before(a: &DirEntry, b: &DirEntry) -> bool {
+    if (a.name == "..") {
+        return b.name != "..";
+    }
+    if (b.name == "..") {
+        return false;
+    }
+    if (a.info.kind == DIRECTORY && b.info.kind != DIRECTORY) {
+        return true;
+    }
+    if (b.info.kind == DIRECTORY && a.info.kind != DIRECTORY) {
+        return false;
+    }
+    let length = if (a.name.len() < b.name.len()) {
+        a.name.len()
+    } else {
+        b.name.len()
+    };
+    for (i in 0..length) {
+        if (a.name[i] != b.name[i]) {
+            return a.name[i] < b.name[i];
+        }
+    }
+    a.name.len() < b.name.len()
+}
+
+fn sorted(entries: Vec<DirEntry>) -> Vec<DirEntry> {
+    let mut result = entries;
+    let mut gap = result.len() / 2;
+    while (gap > 0) {
+        for (i in gap..result.len()) {
+            let value = result[i];
+            let mut j = i;
+            while (j >= gap && before(&value, &result[j - gap])) {
+                result[j] = result[j - gap];
+                j -= gap;
+            }
+            result[j] = value;
+        }
+        gap /= 2;
+    }
+    result
+}
+
+/// Builds a directory panel with directories first and bytewise name sorting.
+/// Hidden entries can be excluded; '..' is always first, including at root.
+export fn file_panel(path: String, show_hidden: bool) -> Result<FilePanel, IoError> {
+    let path = normalize(path);
+    let source = read_dir(path)?;
+    let mut entries: Vec<DirEntry> = [];
+    for (i in 0..source.len()) {
+        let entry = source[i];
+        if (show_hidden || entry.name.is_empty() || entry.name[0] != '.') {
+            entries.push(entry);
+        }
+    }
+    entries.push(DirEntry { name: "..", info: Metadata { kind: DIRECTORY, size: 0, device: 0, inode: 0, mode: 0 } });
+    Ok(FilePanel { path: path, entries: sorted(entries), cursor: selection(), show_hidden: show_hidden, generation: 1 })
+}
+
+impl FilePanel {
+    /// Reuses a freshly read snapshot for the same directory, retaining this
+    /// panel's independent selection/viewport. Entries remain copy-on-write.
+    export fn share_listing(&mut self, source: &FilePanel) {
+        let name = self.entries[self.cursor.selected].name;
+        self.entries = source.entries;
+        self.show_hidden = source.show_hidden;
+        self.generation += 1;
+        if (self.cursor.selected >= self.entries.len()) {
+            self.cursor.selected = self.entries.len() - 1;
+        }
+        if (self.cursor.top >= self.entries.len()) {
+            self.cursor.top = self.cursor.selected;
+        }
+        self.select_name(name);
+    }
+    /// Absolute selected path. Does not change the process working directory.
+    export fn selected_path(&self) -> String {
+        joined(self.path, self.entries[self.cursor.selected].name)
+    }
+    /// Selects a name if present. Call reveal after changing viewport dimensions.
+    export fn select_name(&mut self, name: String) -> bool {
+        for (i in 0..self.entries.len()) {
+            if (self.entries[i].name == name) {
+                self.cursor.selected = i;
+                return true;
+            }
+        }
+        false
+    }
+    /// Retains selected name and viewport when refreshing or changing hidden-file policy.
+    export fn refresh(&mut self, show_hidden: bool) -> Result<unit, IoError> {
+        let name = self.entries[self.cursor.selected].name;
+        let next = file_panel(self.path, show_hidden)?;
+        self.entries = next.entries;
+        self.generation += 1;
+        self.show_hidden = show_hidden;
+        if (self.cursor.selected >= self.entries.len()) {
+            self.cursor.selected = self.entries.len() - 1;
+        }
+        if (self.cursor.top >= self.entries.len()) {
+            self.cursor.top = self.cursor.selected;
+        }
+        self.select_name(name);
+        Ok({})
+    }
+    /// Navigates on success. Going up reselects the directory just left.
+    export fn enter(&mut self, path: String) -> Result<unit, IoError> {
+        let path = joined(self.path, path);
+        let old = self.path;
+        let mut next = file_panel(path, self.show_hidden)?;
+        if (path == parent(old) && path != old) {
+            next.select_name(basename(old));
+        };
+        next.generation = self.generation + 1;
+        *self = next;
+        Ok({})
+    }
+    /// Keeps the current selection visible after navigation, refresh or resize.
+    export fn reveal(&mut self, rows: usize) {
+        let count = self.entries.len();
+        self.cursor.reveal(count, rows);
+    }
+    /// Moves selection by a signed number of rows, clamped at either end.
+    export fn step(&mut self, distance: i16, rows: usize) {
+        let count = self.entries.len();
+        self.cursor.step(distance, count, rows);
+    }
+    /// Handles the standard list movement keys. Enter/parent/focus are caller policy.
+    export fn key(&mut self, key: i16, rows: usize) -> bool {
+        let count = self.entries.len();
+        self.cursor.key(key, count, rows)
+    }
+    /// Case-insensitive ASCII prefix search, without filtering or another filesystem read.
+    export fn find_prefix(&mut self, prefix: String, rows: usize) -> bool {
+        for (i in 1..self.entries.len()) {
+            let name = self.entries[i].name;
+            if (name.len() < prefix.len()) {
+                continue;
+            }
+            let mut same = true;
+            for (j in 0..prefix.len()) {
+                let a = name[j] as u32;
+                let b = prefix[j] as u32;
+                let a = if (a >= 65 && a <= 90) {
+                    a + 32
+                } else {
+                    a
+                };
+                let b = if (b >= 65 && b <= 90) {
+                    b + 32
+                } else {
+                    b
+                };
+                if (a != b) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same) {
+                let count = self.entries.len();
+                self.cursor.select(i, count, rows);
+                return true;
+            }
+        }
+        false
+    }
+}
+
+/// Semantic panel styles supplied by the application; no palette/configuration globals.
+export struct PanelPalette {
+    body: u32,
+    directory: u32,
+    selected: u32,
+    inactive: u32,
+    frame: u32,
+    title: u32,
+    muted: u32
+}
+
+/// Number of file rows inside a framed panel with title, heading and separator.
+export fn visible_rows(area: Rect) -> usize {
+    if (area.rows < 5) {
+        0 as usize
+    } else {
+        (area.rows - 4) as usize
+    }
+}
+
+/// Paints a panel into either Screen or Window. The caller reveals selection,
+/// stages layers and presents once. No I/O, allocation of windows, or input waits.
+export fn draw<T: Canvas>(target: &T, data: &FilePanel, area: Rect, colors: PanelPalette, focused: bool, lines: bool) {
+    if (area.rows < 5 || area.columns < 20) {
+        return;
+    }
+    let x = area.column;
+    let y = area.row;
+    let width = area.columns;
+    let bottom = y + area.rows - 1;
+    let rows = visible_rows(area);
+    for (row in 0..area.rows as usize) {
+        target.fill(y + row as i16, x, width, ' ', colors.body);
+    }
+    target.frame(area, if (focused) {
+        colors.title
+    } else {
+        colors.frame
+    });
+    let title = if (focused) {
+        "[ " + data.path + " ]"
+    } else {
+        "  " + data.path + "  "
+    };
+    target.text(y, x + 2, fitted(title, width - 4), if (focused) {
+        colors.title
+    } else {
+        colors.frame
+    });
+    target.text(y + 1, x + 2, "Name", colors.muted);
+    target.text(y + 1, x + width - 10, "Size", colors.muted);
+    if (lines) {
+        target.glyphs(y + 2, x + 1, width - 2, HLINE, colors.frame);
+    } else {
+        target.fill(y + 2, x + 1, width - 2, '-', colors.frame);
+    }
+    for (row in 0..rows) {
+        draw_row(target, data, area, colors, focused, row);
+    }
+    if (data.entries.len() > rows) {
+        let thumb = data.cursor.selected * (rows - 1) / (data.entries.len() - 1);
+        for (row in 0..rows) {
+            target.text(y + 3 + row as i16, x + width - 2, if (row == thumb) {
+                "#"
+            } else {
+                ":"
+            }, colors.muted);
+        }
+    }
+    let count = number(data.cursor.selected + 1) + "/" + number(data.entries.len());
+    target.text(bottom, x + width - count.len() as i16 - 3, count, colors.frame);
+}
+
+fn draw_row<T: Canvas>(target: &T, data: &FilePanel, area: Rect, colors: PanelPalette, focused: bool, row: usize) {
+    let x = area.column;
+    let y = area.row;
+    let width = area.columns;
+    let i = data.cursor.top + row;
+    if (i >= data.entries.len()) {
+        return;
+    }
+    let entry = data.entries[i];
+    let selected = i == data.cursor.selected;
+    let style = if (selected) {
+        if (focused) {
+            colors.selected
+        } else {
+            colors.inactive
+        }
+    } else if (entry.info.kind == DIRECTORY) {
+        colors.directory
+    } else {
+        colors.body
+    };
+    target.fill(y + 3 + row as i16, x + 1, width - 3, ' ', style);
+    let mark = if (selected) {
+        ">"
+    } else if (entry.info.kind == DIRECTORY) {
+        "/"
+    } else if (entry.info.kind == SYMLINK) {
+        "@"
+    } else {
+        " "
+    };
+    target.text(y + 3 + row as i16, x + 1, mark + fitted(entry.name, width - 14), style);
+    let size = if (entry.info.kind == DIRECTORY) {
+        "<DIR>"
+    } else {
+        number(entry.info.size as usize)
+    };
+    target.text(y + 3 + row as i16, x + width - 12, fitted(size, 9), style);
+}
+
+/// Retained panel state. Invalidate after drawing over this surface, or replacing
+/// entries directly. FilePanel refresh/enter advance the listing generation.
+export struct PanelPaint {
+    valid: bool,
+    area: Rect,
+    colors: PanelPalette,
+    lines: bool,
+    focused: bool,
+    path: String,
+    generation: u32,
+    top: usize,
+    selected: usize,
+    count: usize
+}
+
+export fn panel_paint() -> PanelPaint {
+    PanelPaint { valid: false, area: Rect { row: 0, column: 0, rows: 0, columns: 0 }, colors: PanelPalette { body: 0, directory: 0, selected: 0, inactive: 0, frame: 0, title: 0, muted: 0 }, lines: false, focused: false, path: "", generation: 0, top: 0, selected: 0, count: 0 }
+}
+
+/// Draws only changed selection rows when the listing and viewport are retained.
+export fn draw_cached<T: Canvas>(target: &T, data: &FilePanel, area: Rect, colors: PanelPalette, focused: bool, lines: bool, old: &mut PanelPaint) {
+    let full = !old.valid || old.area.row != area.row || old.area.column != area.column || old.area.rows != area.rows || old.area.columns != area.columns || old.path != data.path || old.generation != data.generation || old.top != data.cursor.top || old.count != data.entries.len() || (old.focused && !focused || !old.focused && focused) || (old.lines && !lines || !old.lines && lines) || old.colors.body != colors.body || old.colors.directory != colors.directory || old.colors.selected != colors.selected || old.colors.inactive != colors.inactive || old.colors.frame != colors.frame || old.colors.title != colors.title || old.colors.muted != colors.muted;
+    let rows = visible_rows(area);
+    if (area.columns < 20 || rows == 0) {
+        old.valid = false;
+        return;
+    }
+    if (full) {
+        draw(target, data, area, colors, focused, lines);
+    } else if (old.selected != data.cursor.selected) {
+        if (old.selected >= data.cursor.top && old.selected - data.cursor.top < rows) {
+            draw_row(target, data, area, colors, focused, old.selected - data.cursor.top);
+        }
+        draw_row(target, data, area, colors, focused, data.cursor.selected - data.cursor.top);
+        if (data.entries.len() > rows) {
+            let prior = old.selected * (rows - 1) / (data.entries.len() - 1);
+            let next = data.cursor.selected * (rows - 1) / (data.entries.len() - 1);
+            if (prior != next) {
+                target.text(area.row + 3 + prior as i16, area.column + area.columns - 2, ":", colors.muted);
+                target.text(area.row + 3 + next as i16, area.column + area.columns - 2, "#", colors.muted);
+            }
+        }
+        // Restore the old count, including when the replacement is shorter.
+        let bottom = area.row + area.rows - 1;
+        let border_style = if (focused) {
+            colors.title
+        } else {
+            colors.frame
+        };
+        if (lines) {
+            target.glyphs(bottom, area.column + 1, area.columns - 2, HLINE, border_style);
+        } else {
+            target.fill(bottom, area.column + 1, area.columns - 2, '-', border_style);
+        }
+        let count = number(data.cursor.selected + 1) + "/" + number(data.entries.len());
+        target.text(bottom, area.column + area.columns - count.len() as i16 - 3, count, colors.frame);
+    };
+    *old = PanelPaint { valid: true, area: area, colors: colors, lines: lines, focused: focused, path: data.path, generation: data.generation, top: data.cursor.top, selected: data.cursor.selected, count: data.entries.len() };
+}

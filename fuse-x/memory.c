@@ -3,8 +3,9 @@
 #include <kdata.h>
 #include <string.h>
 
-/* Small/legacy globals use bank 1; large images use 32..47. Frames use 2..4. The heap window
- * starts at 8 and argv/env live in 31. Kernel globals at 240 are never user-copy
+/* Small/legacy globals use bank 1; large images use 32..47. Frames use 2..4.
+ * The heap uses 48..239 and argv/env live in 31. The bootstrap scratch window
+ * at 8..30 remains valid. Kernel globals at 240 are never user-copy
  * destinations. This software contract is not a host privilege boundary. */
 usize_t valaddr(const uint8_t *base, usize_t size, usize_t need, uint_fast8_t write) {
     unsigned long ptr = (unsigned long)base;
@@ -14,9 +15,10 @@ usize_t valaddr(const uint8_t *base, usize_t size, usize_t need, uint_fast8_t wr
     if (off >= 64000 || !ptr) size = 0;
     else {
         if (bank >= 1 && bank <= 4) end = 5UL * 64000;
-        else if (bank >= 8 && bank <= 23) end = 24UL * 64000;
+        else if (bank >= 8 && bank <= 30) end = 31UL * 64000;
         else if (bank == 31) end = 32UL * 64000;
         else if (bank >= 32 && bank <= 47) end = 48UL * 64000;
+        else if (bank >= FUSE_HEAP_FIRST_BANK && bank < FUSE_HEAP_END_BANK) end = FUSE_HEAP_END_BANK * 64000UL;
         else { end = 0; size = 0; }
         ptr = bank * 64000UL + off;
         if (size && size > end - ptr) size = end - ptr;
@@ -40,12 +42,24 @@ void *ripple_buffer_copy(void *to, const void *from, usize_t n) { return memcpy(
 void ripple_buffer_zero(void *p) { memset(p,0,BLKSIZE); }
 static unsigned long dense(unsigned long ptr) { return (ptr >> 16) * 64000UL + (unsigned)ptr; }
 arg_t brk_extend(uaddr_t ptr) {
-    return (ptr >> 16) < 8 || (ptr >> 16) > 23 || (unsigned)ptr >= 64000 || ptr < PROGBASE ? ENOMEM : 0;
+    if (udata.u_break < FUSE_HEAP_BASE) {
+        if (ptr == FUSE_HEAP_BASE || ptr == (31UL << 16)) return 0;
+        return (ptr >> 16) < 8 || (ptr >> 16) > 30 || (unsigned)ptr >= 64000 ||
+            ptr < PROGBASE ? ENOMEM : 0;
+    }
+    /* A break is an exclusive endpoint; the first kernel address is a valid
+     * sentinel, but no allocation or user-copy may include kernel cells. */
+    if (ptr == ((unsigned long)FUSE_HEAP_END_BANK << 16)) return 0;
+    return (ptr >> 16) < FUSE_HEAP_FIRST_BANK || (ptr >> 16) >= FUSE_HEAP_END_BANK ||
+        (unsigned)ptr >= 64000 ? ENOMEM : 0;
 }
 arg_t _brk(void) {
     unsigned long next = udata.u_argn, old = udata.u_break;
     if ((udata.u_error=brk_extend(next))) return -1;
-    if (next > old) memset((void *)old,0,dense(next)-dense(old));
+    /* Changing arenas is explicit and must not clear arguments/globals in
+     * the banks between them. Subsequent heap growth is zeroed normally. */
+    if (next > old && !(old < FUSE_HEAP_BASE && next == FUSE_HEAP_BASE))
+        memset((void *)old,0,dense(next)-dense(old));
     udata.u_break=next;
     return 0;
 }

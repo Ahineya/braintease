@@ -1,0 +1,175 @@
+// Compiler syntax API, protocol 2. Opaque metadata is validated on receipt.
+/// One lossless token or compiler syntax-construction operation.
+export struct Token {
+    /// 1 identifier, 2 literal, 3 punctuation, 4 trivia, 5 open, 6 close,
+    /// 7 raw Unicode text, 8 joint punctuation; construction operations use 10+.
+    kind: i16,
+    /// Original spelling. Open/Close tokens contain their actual delimiter.
+    text: String,
+    /// Opaque source-span handle. Preserve it; never interpret or manufacture it.
+    origin: String,
+    /// Opaque binding context, independent of the source-span handle.
+    syntax: String,
+}
+
+/// A compiler-provided, explicitly declared UTF-8 build dependency.
+export struct Dependency {
+    /// Module-relative name written in the implementation's .rfl.inputs manifest.
+    path: String,
+    /// Exact UTF-8 contents, supplied without giving macros filesystem access.
+    text: String,
+    /// Versioned stable content fingerprint; not a security/authentication digest.
+    hash: String,
+}
+
+/// Balanced token-tree storage, flattened with paired Open/Close tokens.
+export struct TokenStream {
+    /// Lossless input tokens, or structured output/construction operations.
+    tokens: Vec<Token>,
+    /// Caller target, independent of the native macro execution target.
+    target: String,
+    /// Declared compiler inputs. Output builders do not require these fields.
+    dependencies: Vec<Dependency>,
+}
+
+/// Construct an empty syntax stream.
+export fn empty() -> TokenStream {
+    TokenStream { tokens: [], target: "", dependencies: [] }
+}
+
+/// Concatenate complete syntax streams; preserves the left stream's context data.
+export fn concat(left: TokenStream, right: TokenStream) -> TokenStream {
+    let mut tokens = left.tokens;
+    for (token in right.tokens) {
+        tokens.push(token);
+    }
+    TokenStream { tokens: tokens, target: left.target, dependencies: left.dependencies }
+}
+
+/// Construct definition-site syntax. The compiler parses the quotation.
+export fn quote(text: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 10, text: text, origin: "call", syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Splice complete token streams at $0, $1, ... outside literals/comments.
+/// Spliced tokens retain their binding identities and source positions.
+export fn splice(template: String, values: Vec<TokenStream>) -> TokenStream {
+    let mut tokens: Vec<Token> = [Token { kind: 11, text: template, origin: "call", syntax: "definition" }];
+    for (value in values) {
+        tokens.push(Token { kind: 12, text: "", origin: "call", syntax: "definition" });
+        for (token in value.tokens) {
+            tokens.push(token);
+        }
+        tokens.push(Token { kind: 13, text: "", origin: "call", syntax: "definition" });
+    }
+    TokenStream { tokens: tokens, target: "", dependencies: [] }
+}
+
+/// Construct an identifier in this expansion's definition-site binding context.
+export fn ident(name: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 1, text: name, origin: "call", syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Deliberately resolve an identifier in caller scope, including public item names.
+export fn call_site_ident(name: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 1, text: name, origin: "call", syntax: "call" }], target: "", dependencies: [] }
+}
+
+/// Construct a literal from its complete RFL spelling, including quotes/escapes.
+export fn literal(spelling: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 2, text: spelling, origin: "call", syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Construct punctuation separated from any subsequent punctuation token.
+export fn punctuation(spelling: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 3, text: spelling, origin: "call", syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Construct punctuation joined to the following punctuation token.
+export fn joint_punctuation(spelling: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 8, text: spelling, origin: "call", syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Wrap a stream in one matched delimiter pair. Use "(", "[", or "{".
+export fn group(delimiter: String, value: TokenStream) -> TokenStream {
+    let close = if (delimiter == "(") {
+        ")"
+    } else if (delimiter == "[") {
+        "]"
+    } else {
+        "}"
+    };
+    concat(concat(TokenStream { tokens: [Token { kind: 5, text: delimiter, origin: "call", syntax: "definition" }], target: "", dependencies: [] }, value), TokenStream { tokens: [Token { kind: 6, text: close, origin: "call", syntax: "definition" }], target: "", dependencies: [] })
+}
+
+/// Return the caller's requested compilation target (ripple, native, or wasm).
+export fn caller_target(input: TokenStream) -> String {
+    input.target
+}
+
+/// Opaque source-location identity, independent of identifier binding identity.
+export struct Span {
+    /// Valid only for the current invocation; pass through without interpretation.
+    handle: String,
+}
+
+/// Opaque identifier binding context.
+export struct SyntaxContext {
+    /// Valid only for the current invocation; pass through without interpretation.
+    handle: String,
+}
+
+/// Obtain the original location of a token.
+export fn span_of(token: Token) -> Span {
+    Span { handle: token.origin }
+}
+
+/// Obtain the binding identity carried by a token.
+export fn context_of(token: Token) -> SyntaxContext {
+    SyntaxContext { handle: token.syntax }
+}
+
+/// Give syntax a diagnostic location without changing any binding identities.
+export fn with_span(value: TokenStream, span: Span) -> TokenStream {
+    let mut tokens: Vec<Token> = [];
+    for (token in value.tokens) {
+        tokens.push(Token { kind: token.kind, text: token.text, origin: span.handle, syntax: token.syntax });
+    }
+    TokenStream { tokens: tokens, target: value.target, dependencies: value.dependencies }
+}
+
+/// Construct a fresh identifier family. Equal labels share a context within one
+/// expansion; different labels and different expansions have distinct identities.
+export fn fresh_ident(name: String, label: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 1, text: name, origin: "call", syntax: "fresh:" + label }], target: "", dependencies: [] }
+}
+
+/// Fail this expansion with an error at the supplied primary span.
+export fn diagnostic(span: Span, message: String) -> TokenStream {
+    TokenStream { tokens: [Token { kind: 20, text: message, origin: span.handle, syntax: "definition" }], target: "", dependencies: [] }
+}
+
+/// Fail this expansion with a primary error and up to sixteen explanatory notes.
+export fn diagnostic_notes(span: Span, message: String, notes: Vec<String>) -> TokenStream {
+    let mut result = diagnostic(span, message);
+    for (note in notes) {
+        result.tokens.push(Token { kind: 21, text: note, origin: span.handle, syntax: "definition" });
+    }
+    result
+}
+
+/// Obtain the current macro invocation's location.
+export fn call_span() -> Span {
+    Span { handle: "call" }
+}
+
+/// Read an explicitly declared input from the implementation's .rfl.inputs
+/// manifest. Undeclared names return Err, never perform host I/O.
+export fn declared_input(input: TokenStream, path: String) -> Result<Dependency, String> {
+    for (dependency in input.dependencies) {
+        if (dependency.path == path) {
+            return Ok(dependency);
+        }
+    }
+    Err("undeclared macro input: " + path)
+}

@@ -10,6 +10,8 @@ Reports memory in KiB (1024 physical octets). Ripple C characters contain
 Mem includes the reserved kernel and platform area. User pool reports the
 physical memory available to processes. Shared pages count once in used
 memory, while process mappings count every reference to a shared page.
+Pinned supervisor network allocations also count in pool usage, but do not
+count as process mappings or shared COW pages.
 The reserved area is unavailable to the user allocator; it is not a measurement
 of the kernel's live allocations. Swap is not implemented.
 .PP

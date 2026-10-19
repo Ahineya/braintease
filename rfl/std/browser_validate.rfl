@@ -1,0 +1,143 @@
+import { Html, Prop, HtmlText, HtmlElement, HtmlFragment, Attr, Value, Checked, Disabled, Listener, Key, Focus, flatten, identity } from "std/html";
+import { html_tag, svg_tag, attribute_name, input_type, value_tag, disabled_tag, hash_href } from "std/html_schema";
+import { key_index } from "std/browser_keys";
+
+// Normalize public constructors as well as builder output. Bound recursive
+// fragments before flattening, and validate keys after flattening sibling lists.
+/// Normalizes fragments and validates a complete view before any patches are emitted.
+export fn prepare<M>(view: Html<M>) -> Result<Vec<Html<M>>, String> {
+    let mut count: usize = 0;
+    let views = normalize([view], 0, &mut count)?;
+    count = 0;
+    children(views, 0, &mut count)?;
+    Ok(views)
+}
+
+/// Validates supported nodes, properties, sibling keys and bounded tree sizes.
+export fn validate<M>(views: Vec<Html<M>>) -> Result<unit, String> {
+    let mut count: usize = 0;
+    let views = normalize(views, 0, &mut count)?;
+    count = 0;
+    children(views, 0, &mut count)
+}
+
+fn normalize<M>(views: Vec<Html<M>>, depth: usize, count: &mut usize) -> Result<Vec<Html<M>>, String> {
+    if (depth > 64) {
+        return Err("UI tree exceeds 64 levels");
+    }
+    let mut out: Vec<Html<M>> = [];
+    for (view in views) {
+        *count += 1;
+        if (*count > 4096) {
+            return Err("UI tree exceeds 4096 nodes");
+        }
+        match view {
+            HtmlFragment(nested) => {
+                for (child in normalize(nested, depth + 1, count)?) {
+                    out.push(child);
+                }
+            },
+            HtmlElement(ns, tag, props, nested) => {
+                out.push(HtmlElement(ns, tag, props, normalize(nested, depth + 1, count)?));
+            },
+            other => {
+                out.push(other);
+            },
+        }
+    }
+    Ok(out)
+}
+
+fn children<M>(views: Vec<Html<M>>, depth: usize, count: &mut usize) -> Result<unit, String> {
+    if (depth > 64) {
+        return Err("UI tree exceeds 64 levels");
+    }
+    let mut keys = key_index(views.len());
+    for (view in views) {
+        *count += 1;
+        if (*count > 4096) {
+            return Err("UI tree exceeds 4096 nodes");
+        }
+        match identity(view) {
+            Some(key) => {
+                if (!keys.insert(key, 0)) {
+                    return Err("duplicate sibling key: " + key);
+                }
+            },
+            None => {}
+        }
+        match view {
+            HtmlText(text) => {
+                if (text.len() > 8190) {
+                    return Err("UI text exceeds 8190 octets");
+                }
+            },
+            HtmlFragment(nested) => {
+                return Err("internal UI fragment was not normalized");
+            },
+            HtmlElement(ns, tag, props, nested) => {
+                if (ns > 1 || (ns == 0 && !html_tag(tag)) || (ns == 1 && !svg_tag(tag))) {
+                    return Err("unsupported UI tag: " + tag);
+                }
+                if (props.len() > 64) {
+                    return Err("UI element exceeds 64 properties");
+                }
+                let mut names = key_index(props.len());
+                let mut seen: [bool; 11] = [false, false, false, false, false, false, false, false, false, false, false];
+                let mut has_key = false;
+                for (prop in props) {
+                    match prop {
+                        Attr(name, value) => {
+                            if (!attribute_name(name) || (name == "type" && !input_type(value)) || (name == "href" && (ns != 0 || tag != "a" || !hash_href(value)))) {
+                                return Err("unsupported UI attribute: " + name);
+                            }
+                            if (name.len() + value.len() + 2 > 8192) {
+                                return Err("UI attribute exceeds 8190 octets");
+                            }
+                            if (!names.insert(name, 0)) {
+                                return Err("duplicate UI attribute: " + name);
+                            }
+                        },
+                        Focus(_) => {
+                            if (ns != 0 || !(tag == "input" || tag == "textarea" || tag == "button" || tag == "select" || tag == "a") || !names.insert("$focus", 0)) {
+                                return Err("invalid focus request");
+                            }
+                        },
+                        Key(_) => {
+                            if (has_key) {
+                                return Err("duplicate UI key property");
+                            }
+                            has_key = true;
+                        },
+                        Listener(kind, flags, _) => {
+                            if (kind == 0 || kind > 10 || flags > 3) {
+                                return Err("invalid UI event binding");
+                            }
+                            if (seen[kind as usize]) {
+                                return Err("duplicate UI event binding");
+                            }
+                            seen[kind as usize] = true;
+                        },
+                        Value(text) => {
+                            if (ns != 0 || !value_tag(tag) || text.len() > 8190 || !names.insert("$value", 0)) {
+                                return Err("invalid controlled value");
+                            }
+                        },
+                        Checked(_) => {
+                            if (ns != 0 || tag != "input" || !names.insert("$checked", 0)) {
+                                return Err("invalid checked property");
+                            }
+                        },
+                        Disabled(_) => {
+                            if (ns != 0 || !disabled_tag(tag) || !names.insert("$disabled", 0)) {
+                                return Err("invalid disabled property");
+                            }
+                        },
+                    }
+                }
+                children(nested, depth + 1, count)?;
+            },
+        }
+    }
+    Ok({})
+}

@@ -1,0 +1,17 @@
+{
+  "project": "wolfSSL",
+  "version": "5.9.4",
+  "tag": "v5.9.4-stable",
+  "source_url": "https://api.github.com/repos/wolfSSL/wolfssl/tarball/v5.9.4-stable",
+  "archive_sha256": "6db67538fba8a2599fcac699659df159b082204b3555f2d3dd4708b25d6f8904",
+  "license": "GPL-3.0 with upstream listed exceptions or commercial license",
+  "files": {
+    "wolfssl/version.h": "b880b725dce4886daad3f9586b53fde28120d3157764058acde3a4068cfe3cc7",
+    "wolfssl/wolfcrypt/types.h": "4070901fd074f77cc49c3a208a072459d0fb3e70012aa37d0854f777c6d099be",
+    "wolfssl/wolfcrypt/wc_port.h": "286648fe9d9f3c89303f9941b3bd8e5e980ff85080e4e54af13a68a56ab776c5",
+    "wolfcrypt/src/sha256.c": "fd2bf9b9c69e3f7b0c07ee78dfcd322ed25283e03c16ec682aed96a78b722a11",
+    "wolfcrypt/src/misc.c": "e04fb28868f6dfba27cf92aff23870992b9ffc7df413d037420f59fd31cebdc6",
+    "src/tls.c": "a2b913d3ebb85da6e5146f2ef75498f73a46e80d8b1f37cee9554c54effffe6c",
+    "wolfcrypt/src/asn.c": "6a8416de6d06e805ca49ba3933df48752ff30688fbc1e451a62aa2bb8a500c78"
+  }
+}

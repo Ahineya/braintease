@@ -67,14 +67,29 @@ pub fn store_initializer(
         | (Type::Struct { fields, .. }, TypedExpr::CompoundLiteral { initializer: elements, .. }) => {
             let layout = crate::semantic::struct_layout::calculate_struct_layout(fields, loc())
                 .map_err(|e| intern_err(format!("Failed to calculate struct layout: {e}")))?;
-            for (i, field) in layout.fields.iter().enumerate() {
-                let qualified_field = dest_type.qualify_member(&field.field_type);
-                let field_ptr = field_gep(gen, dest.clone(), dest_type, &field.field_type, field.offset as i64)?;
-                if i < elements.len() {
-                    store_initializer(gen, field_ptr, &qualified_field, &elements[i])?;
-                } else {
-                    store_initializer(gen, field_ptr, &qualified_field, &zero_typed(&field.field_type))?;
+            for field in &layout.fields {
+                if field.bit_width.is_some() {
+                    let ptr = field_gep(gen, dest.clone(), dest_type, &field.field_type, field.offset as i64)?;
+                    gen.builder.build_store_volatile(Value::Constant(0), ptr, convert_type_default(&field.field_type)?, dest_type.is_volatile())?;
                 }
+            }
+            let mut layouts = layout.fields.iter();
+            for (i, declared) in fields.iter().enumerate() {
+                if declared.bit_width == Some(0) { continue; }
+                let field = layouts.next().unwrap();
+                let qualified_field = dest_type.qualify_member(&field.field_type);
+                let ptr = field_gep(gen, dest.clone(), dest_type, &field.field_type, field.offset as i64)?;
+                let zero = zero_typed(&field.field_type);
+                let init = elements.get(i).unwrap_or(&zero);
+                if let Some(width) = field.bit_width {
+                    if !field.name.is_empty() {
+                        let raw = gen.generate(init)?;
+                        let val = if matches!(field.field_type.unqualified(), Type::Bool) {
+                            super::conversions::convert_to_bool(gen, raw, init.get_type())?
+                        } else { super::conversions::convert_integer(gen, raw, init.get_type(), &field.field_type)? };
+                        super::bit_fields::store_unit(gen, ptr, &qualified_field, width, field.bit_offset, val, None)?;
+                    }
+                } else { store_initializer(gen, ptr, &qualified_field, init)?; }
             }
             Ok(())
         }

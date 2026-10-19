@@ -1,0 +1,9 @@
+{
+  "source": "Existing pinned Microwindows import, ports/nanox/upstream/src/demos/nanox/picojpeg.{c,h}",
+  "upstream": "https://github.com/richgel999/picojpeg",
+  "license": "Public domain (source notices retained)",
+  "files": {
+    "picojpeg.c": "1f773666b0f5b973769e1c211149f22d7ab8b9594d0b9a02165ad79124ea425a",
+    "picojpeg.h": "58e2a0f28f64d292d6e01f06ab582139933a95aed39df731c3d5804752d3ef11"
+  }
+}

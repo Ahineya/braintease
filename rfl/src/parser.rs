@@ -1,5 +1,6 @@
 mod associated;
 mod cfg;
+mod comprehension;
 
 use crate::ast::*;
 use crate::error::CompileError;
@@ -28,8 +29,35 @@ pub fn parse_for_target(
         pending_lt: false,
         tolerant: false,
         errors: Vec::new(),
+        comprehension_helpers: [false; 4],
     };
     parser.parse_module()
+}
+
+pub(crate) fn parse_expression(
+    source: &str,
+    tokens: &[Token],
+    target: rcc_ir::target::Target,
+) -> Result<(Expr, Vec<Import>), CompileError> {
+    let mut parser = Parser {
+        target,
+        source,
+        tokens,
+        index: 0,
+        pending_gt: false,
+        pending_lt: false,
+        tolerant: false,
+        errors: Vec::new(),
+        comprehension_helpers: [false; 4],
+    };
+    let expression = parser.parse_expr()?;
+    parser.expect(
+        &TokenKind::Eof,
+        "end of macro expression (trailing tokens are not allowed)",
+    )?;
+    let mut imports = Vec::new();
+    parser.add_comprehension_import(&mut imports);
+    Ok((expression, imports))
 }
 
 /// Parse for the language server. A missing name after `.`, or a missing `;`
@@ -44,6 +72,7 @@ pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileErro
         pending_lt: false,
         tolerant: true,
         errors: Vec::new(),
+        comprehension_helpers: [false; 4],
     };
     match parser.parse_module() {
         Ok(module) => (module, parser.errors),
@@ -60,6 +89,11 @@ pub fn parse_for_ide(source: &str, tokens: &[Token]) -> (Module, Vec<CompileErro
                     functions: Vec::new(),
                     externs: Vec::new(),
                     imports: Vec::new(),
+                    macro_imports: Vec::new(),
+                    macro_exports: Vec::new(),
+                    item_macros: Vec::new(),
+                    proc_macros: Vec::new(),
+                    macro_expansion: None,
                 },
                 parser.errors,
             )
@@ -79,6 +113,8 @@ struct Parser<'a> {
     /// Keep going after a missing member name or semicolon. The compiler does not.
     tolerant: bool,
     errors: Vec<CompileError>,
+    /// Hygienic std/fp imports required by parsed comprehension expansions.
+    comprehension_helpers: [bool; 4],
 }
 
 impl<'a> Parser<'a> {
@@ -91,14 +127,41 @@ impl<'a> Parser<'a> {
         let mut functions = Vec::new();
         let mut externs = Vec::new();
         let mut imports = Vec::new();
+        let mut macro_imports = Vec::new();
+        let mut macro_exports = Vec::new();
+        let mut item_macros = Vec::new();
+        let mut proc_macros = Vec::new();
         let mut parsed_any = false;
         while !self.is(&TokenKind::Eof) {
             let mut enabled = true;
             let mut repr_c = false;
+            let mut proc_macro = false;
+            let macro_counts = (
+                macro_imports.len(),
+                item_macros.len(),
+                proc_macros.len(),
+                macro_exports.len(),
+            );
             while self.is(&TokenKind::Hash) {
                 let before = self.index;
                 enabled &= self.cfg_attributes()?;
                 if self.index == before {
+                    if matches!(self.tokens.get(self.index + 2).map(|t| &t.kind), Some(TokenKind::Ident(n)) if n == "proc_macro")
+                    {
+                        if proc_macro {
+                            return Err(CompileError::at(
+                                self.source,
+                                self.current().span.start,
+                                "duplicate proc_macro attribute",
+                            ));
+                        }
+                        self.expect(&TokenKind::Hash, "'#'")?;
+                        self.expect(&TokenKind::LBracket, "'['")?;
+                        self.expect_ident()?;
+                        self.expect(&TokenKind::RBracket, "']'")?;
+                        proc_macro = true;
+                        continue;
+                    }
                     if repr_c {
                         return Err(CompileError::at(
                             self.source,
@@ -111,6 +174,7 @@ impl<'a> Parser<'a> {
                 }
             }
             let trait_count = traits.len();
+            let saved_helpers = self.comprehension_helpers;
             let counts = (
                 adts.len(),
                 structs.len(),
@@ -137,6 +201,24 @@ impl<'a> Parser<'a> {
                 impls.push(self.parse_impl()?);
             } else if self.is(&TokenKind::Const) {
                 consts.push(self.parse_const()?);
+            } else if self.is(&TokenKind::Export)
+                && self
+                    .tokens
+                    .get(self.index + 1)
+                    .is_some_and(|t| t.kind == TokenKind::Import)
+            {
+                self.bump();
+                if !matches!(self.tokens.get(self.index+1).map(|t|&t.kind),Some(TokenKind::Ident(n)) if n=="macro")
+                {
+                    return Err(CompileError::at(
+                        self.source,
+                        self.current().span.start,
+                        "only macro reexports are supported here",
+                    ));
+                }
+                let import = self.parse_import()?;
+                macro_exports.extend(import.names.iter().map(|n| n.alias.clone()));
+                macro_imports.push(import);
             } else if self.is(&TokenKind::Export) {
                 if self
                     .tokens
@@ -153,7 +235,22 @@ impl<'a> Parser<'a> {
             } else if self.is(&TokenKind::Fn) || self.is(&TokenKind::Async) {
                 functions.push(self.parse_function()?);
             } else if self.is(&TokenKind::Import) {
-                imports.push(self.parse_import()?);
+                let is_macro = matches!(self.tokens.get(self.index + 1).map(|t| &t.kind), Some(TokenKind::Ident(n)) if n == "macro");
+                let import = self.parse_import()?;
+                if is_macro {
+                    macro_imports.push(import);
+                } else {
+                    imports.push(import);
+                }
+            } else if matches!(&self.current().kind, TokenKind::Ident(_))
+                && self
+                    .tokens
+                    .get(self.index + 1)
+                    .is_some_and(|t| t.kind == TokenKind::Not)
+            {
+                let (name, name_span) = self.expect_ident()?;
+                item_macros.push(self.parse_macro_invocation(name, name_span)?);
+                self.eat(&TokenKind::Semi);
             } else {
                 let token = self.bump();
                 return Err(CompileError::at(
@@ -162,7 +259,22 @@ impl<'a> Parser<'a> {
                     "expected `fn`, `type`, `struct`, `trait`, `impl`, or `const`",
                 ));
             }
+            if proc_macro {
+                if repr_c || functions.len() != counts.4 + 1 {
+                    return Err(CompileError::at(
+                        self.source,
+                        self.current().span.start,
+                        "proc_macro requires a function",
+                    ));
+                }
+                proc_macros.push(functions.last().unwrap().name.clone());
+            }
             if !enabled {
+                macro_exports.truncate(macro_counts.3);
+                macro_imports.truncate(macro_counts.0);
+                item_macros.truncate(macro_counts.1);
+                proc_macros.truncate(macro_counts.2);
+                self.comprehension_helpers = saved_helpers;
                 traits.truncate(trait_count);
                 adts.truncate(counts.0);
                 structs.truncate(counts.1);
@@ -184,6 +296,7 @@ impl<'a> Parser<'a> {
         {
             return Err(CompileError::at(self.source, 0, "expected a function"));
         }
+        self.add_comprehension_import(&mut imports);
         Ok(Module {
             adts,
             structs,
@@ -194,6 +307,11 @@ impl<'a> Parser<'a> {
             functions,
             externs,
             imports,
+            macro_imports,
+            macro_exports,
+            item_macros,
+            proc_macros,
+            macro_expansion: None,
         })
     }
 
@@ -330,6 +448,9 @@ impl<'a> Parser<'a> {
 
     fn parse_import(&mut self) -> Result<Import, CompileError> {
         let start = self.expect(&TokenKind::Import, "import")?;
+        if matches!(&self.current().kind, TokenKind::Ident(n) if n == "macro") {
+            self.bump();
+        }
         self.expect(&TokenKind::LBrace, "'{'")?;
         let mut names = Vec::new();
         if !self.is(&TokenKind::RBrace) {
@@ -469,10 +590,25 @@ impl<'a> Parser<'a> {
                 "Self is reserved for the implementing type",
             ));
         }
-        self.expect(
-            &TokenKind::LBrace,
-            "'{' (trait parameters are not supported)",
-        )?;
+        let mut arity = 0;
+        if self.eat_lt() {
+            loop {
+                let (slot, span) = self.expect_ident()?;
+                if slot != "_" {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "trait parameters are not supported; use `_` slots for a constructor trait",
+                    ));
+                }
+                arity += 1;
+                if !self.eat(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.expect_gt()?;
+        }
+        self.expect(&TokenKind::LBrace, "'{'")?;
         let mut methods = Vec::new();
         let mut associated_types = Vec::new();
         while !self.is(&TokenKind::RBrace) && !self.is(&TokenKind::Eof) {
@@ -485,18 +621,18 @@ impl<'a> Parser<'a> {
                 continue;
             }
             let method = self.parse_method(true)?;
-            if method.receiver.is_none() {
+            if arity == 0 && method.receiver.is_none() {
                 return Err(CompileError::at(
                     self.source,
                     method.name_span.start,
                     "a trait method needs self, &self, or &mut self",
                 ));
             }
-            if !method.type_params.is_empty() {
+            if arity > 0 && method.receiver.is_some() {
                 return Err(CompileError::at(
                     self.source,
                     method.name_span.start,
-                    "generic trait methods are not supported",
+                    "constructor trait operations take applied values, not a self receiver",
                 ));
             }
             if enabled {
@@ -505,6 +641,7 @@ impl<'a> Parser<'a> {
         }
         let end = self.expect(&TokenKind::RBrace, "'}'")?.span;
         Ok(Trait {
+            arity,
             span: start.to(end),
             name,
             name_span,
@@ -704,6 +841,24 @@ impl<'a> Parser<'a> {
                     "Self is reserved for the implementing type",
                 ));
             }
+            let mut arity = 0;
+            if self.eat_lt() {
+                loop {
+                    let (slot, slot_span) = self.expect_ident()?;
+                    if slot != "_" {
+                        return Err(CompileError::at(
+                            self.source,
+                            slot_span.start,
+                            "constructor parameters require `_` slots, such as F<_>",
+                        ));
+                    }
+                    arity += 1;
+                    if !self.eat(&TokenKind::Comma) {
+                        break;
+                    }
+                }
+                self.expect_gt()?;
+            }
             let mut bounds = Vec::new();
             if self.eat(&TokenKind::Colon) {
                 loop {
@@ -716,7 +871,12 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
-            params.push(TypeParam { name, span, bounds });
+            params.push(TypeParam {
+                name,
+                span,
+                bounds,
+                arity,
+            });
             if self.eat(&TokenKind::Comma) {
                 continue;
             }
@@ -1005,6 +1165,14 @@ impl<'a> Parser<'a> {
                 inner: Box::new(inner),
             });
         }
+        let once = matches!(&self.current().kind, TokenKind::Ident(name) if name == "once")
+            && self
+                .tokens
+                .get(self.index + 1)
+                .is_some_and(|t| t.kind == TokenKind::Fn);
+        if once {
+            self.bump();
+        }
         if self.eat(&TokenKind::Fn) {
             let span = self.prev_span();
             self.expect(&TokenKind::LParen, "'('")?;
@@ -1029,14 +1197,28 @@ impl<'a> Parser<'a> {
                 }
             };
             return Ok(ParsedTy::Func {
+                once,
                 span,
                 params,
                 ret: Box::new(ret),
             });
         }
         let (name, span) = self.expect_ident()?;
+        if self.is(&TokenKind::Not) {
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "macros are not supported in type positions",
+            ));
+        }
         let mut args = Vec::new();
-        if self.eat_lt() {
+        // A comprehension annotation can be followed by its binding arrow.
+        // `<-` remains two tokens so comparisons such as `x<-1` keep working.
+        let binding_arrow = self.is(&TokenKind::Lt)
+            && self.tokens.get(self.index + 1).is_some_and(|t| {
+                t.kind == TokenKind::Minus && self.current().span.end == t.span.start
+            });
+        if !binding_arrow && self.eat_lt() {
             loop {
                 args.push(self.parse_type()?);
                 if self.eat(&TokenKind::Comma) {
@@ -1049,7 +1231,7 @@ impl<'a> Parser<'a> {
         Ok(ParsedTy::Named { name, span, args })
     }
 
-    fn parse_lambda(&mut self, span: Span) -> Result<Expr, CompileError> {
+    fn parse_lambda(&mut self, span: Span, once: bool) -> Result<Expr, CompileError> {
         if self.is(&TokenKind::Lt) {
             return Err(CompileError::at(
                 self.source,
@@ -1081,6 +1263,7 @@ impl<'a> Parser<'a> {
         Ok(Expr {
             span: span.to(body.span),
             kind: ExprKind::Lambda {
+                once,
                 params,
                 body: Box::new(body),
             },
@@ -1112,7 +1295,22 @@ impl<'a> Parser<'a> {
                 stmts.push(self.parse_assign()?);
                 continue;
             }
-            let expr = self.parse_expr()?;
+            // A bare block-shaped statement ends before the next statement's
+            // unary prefix (`*ptr`, `&value`, `-value`). Parenthesized block
+            // expressions still enter the normal binary-expression parser.
+            let expr = if matches!(
+                self.current().kind,
+                TokenKind::If
+                    | TokenKind::While
+                    | TokenKind::For
+                    | TokenKind::Match
+                    | TokenKind::LBrace
+                    | TokenKind::Unsafe
+            ) {
+                self.parse_postfix()?
+            } else {
+                self.parse_expr()?
+            };
             if self.is_assign_op() {
                 stmts.push(self.finish_place_assign(expr)?);
                 continue;
@@ -1203,6 +1401,20 @@ impl<'a> Parser<'a> {
             );
             return Ok(Stmt::DerefAssign { ptr: *inner, value });
         }
+        // Keep the direct named-field/index paths. More deeply projected places
+        // use the same COW-safe address calculation as an explicit mutable borrow.
+        if matches!(&expr.kind, ExprKind::Field { .. } | ExprKind::Index { .. }) {
+            let mut base = match &expr.kind {
+                ExprKind::Index { base, .. } => base.as_ref(),
+                _ => &expr,
+            };
+            while let ExprKind::Field { base: parent, .. } = &base.kind {
+                base = parent;
+            }
+            if !matches!(base.kind, ExprKind::Name(_)) {
+                return self.finish_projected_assign(expr);
+            }
+        }
         if let ExprKind::Field { .. } = &expr.kind {
             let lhs = expr.clone();
             let mut fields = Vec::new();
@@ -1236,6 +1448,53 @@ impl<'a> Parser<'a> {
             });
         }
         self.finish_index_assign(expr)
+    }
+
+    fn finish_projected_assign(&mut self, lhs: Expr) -> Result<Stmt, CompileError> {
+        let op = self.compound_op()?;
+        let rhs = self.parse_expr()?;
+        let end = self.expect(&TokenKind::Semi, "';'")?.span;
+        let span = lhs.span.to(end);
+        let name = format!("$place${}", span.start);
+        let pointer = Expr {
+            span: lhs.span,
+            kind: ExprKind::Name(name.clone()),
+        };
+        let read = Expr {
+            span: lhs.span,
+            kind: ExprKind::Deref(Box::new(pointer.clone())),
+        };
+        let value = self.compound_value(op, read, rhs);
+        Ok(Stmt::Expr(Expr {
+            span,
+            kind: ExprKind::Block(Box::new(Block {
+                span,
+                stmts: vec![
+                    Stmt::Let {
+                        span: lhs.span,
+                        mutable: false,
+                        pattern: Pat::Name {
+                            name,
+                            span: Span::empty(),
+                        },
+                        ty: None,
+                        init: Expr {
+                            span: lhs.span,
+                            kind: ExprKind::Borrow {
+                                mutable: true,
+                                temporary: false,
+                                expr: Box::new(lhs),
+                            },
+                        },
+                    },
+                    Stmt::DerefAssign {
+                        ptr: pointer,
+                        value,
+                    },
+                ],
+                tail: None,
+            })),
+        }))
     }
 
     fn finish_index_assign(&mut self, expr: Expr) -> Result<Stmt, CompileError> {
@@ -1540,9 +1799,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_postfix(&mut self) -> Result<Expr, CompileError> {
+        // Parentheses explicitly make a block/if/match into a receiver. Keep
+        // the bare-block statement boundary for unparenthesized expressions.
+        let grouped = self.is(&TokenKind::LParen);
         let mut expr = self.parse_primary()?;
         loop {
-            if expr.ends_with_block() {
+            if expr.ends_with_block() && !grouped {
                 break;
             }
             if let ExprKind::Name(name) = expr.kind.clone() {
@@ -1777,11 +2039,22 @@ impl<'a> Parser<'a> {
                 span: token.span,
                 kind: ExprKind::Bool(false),
             }),
+            TokenKind::Ident(name) if name == "once" && self.is(&TokenKind::Fn) => {
+                self.bump();
+                self.parse_lambda(token.span, true)
+            }
+            TokenKind::Ident(name) if self.is(&TokenKind::Not) => {
+                let invocation = self.parse_macro_invocation(name, token.span)?;
+                Ok(Expr {
+                    span: invocation.span,
+                    kind: ExprKind::Macro(invocation),
+                })
+            }
             TokenKind::Ident(name) => Ok(Expr {
                 span: token.span,
                 kind: ExprKind::Name(name),
             }),
-            TokenKind::Fn => self.parse_lambda(token.span),
+            TokenKind::Fn => self.parse_lambda(token.span, false),
             TokenKind::If => self.parse_if(token.span),
             TokenKind::While => self.parse_while(token.span),
             TokenKind::Match => self.parse_match(token.span),
@@ -1805,6 +2078,29 @@ impl<'a> Parser<'a> {
             }
             other => Err(self.unexpected(&token, &other)),
         }
+    }
+
+    fn parse_macro_invocation(
+        &mut self,
+        name: String,
+        name_span: Span,
+    ) -> Result<crate::macros::syntax::Invocation, CompileError> {
+        self.expect(&TokenKind::Not, "'!'")?;
+        let token = self.bump();
+        let TokenKind::MacroBody(group) = token.kind else {
+            return Err(CompileError::at(
+                self.source,
+                token.span.start,
+                "expected a delimited macro body",
+            ));
+        };
+        Ok(crate::macros::syntax::Invocation {
+            name,
+            name_span,
+            span: name_span.to(token.span),
+            group,
+            input: None,
+        })
     }
 
     fn parse_array(&mut self, span: Span) -> Result<Expr, CompileError> {
@@ -1961,6 +2257,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_for(&mut self, span: Span) -> Result<Expr, CompileError> {
+        if self.is(&TokenKind::LBrace)
+            || self.is(&TokenKind::Lt)
+            || self.is(&TokenKind::Shl)
+            || matches!(&self.current().kind, TokenKind::Ident(name) if name == "once")
+        {
+            return self.parse_comprehension(span);
+        }
         self.expect(&TokenKind::LParen, "'('")?;
         let pat = self.parse_pat()?;
         self.expect(&TokenKind::In, "`in`")?;
@@ -2000,6 +2303,13 @@ impl<'a> Parser<'a> {
             return Ok(Pat::Char { scalar, span });
         }
         let (name, span) = self.expect_ident()?;
+        if self.is(&TokenKind::Not) {
+            return Err(CompileError::at(
+                self.source,
+                span.start,
+                "macros are not supported in pattern positions",
+            ));
+        }
         if self.eat(&TokenKind::LBrace) {
             return self.parse_struct_pat(name, span);
         }
@@ -2251,8 +2561,9 @@ impl<'a> Parser<'a> {
 }
 
 fn decode_path(chars: &[u16]) -> String {
-    chars
-        .iter()
-        .map(|cell| char::from_u32(u32::from(*cell)).unwrap_or('\u{FFFD}'))
-        .collect()
+    String::from_utf16_lossy(chars)
+}
+
+pub(crate) fn validate_continuation(source: &str, expr: &Expr) -> Result<(), CompileError> {
+    comprehension::validate_expanded(source, expr)
 }

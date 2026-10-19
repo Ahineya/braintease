@@ -1,0 +1,61 @@
+// Hash navigation works with static serving and real browser back/forward.
+import { BrowserEffects, BrowserEffectError, InvalidRequest, platform_request, LocationSubscription, watch_location } from "std/browser_effects";
+import { hash_href } from "std/html_schema";
+import { Future } from "std/future";
+import { OwnedFuture } from "std/future_owned";
+/// Invalid hash grammar or an application route not recognized by its parser.
+export type RouteError = InvalidHash | UnknownRoute;
+/// Converts an initial/changed hash to a path. Empty hash means root. Version one
+/// accepts literal ASCII paths only; query strings and percent escapes are errors.
+export fn hash_path(hash: String) -> Result<String, RouteError> {
+    if (hash == "") {
+        return Ok("/");
+    }
+    if (!hash_href(hash)) {
+        return Err(InvalidHash);
+    }
+    Ok(hash[1..hash.len()])
+}
+
+/// Maps a valid path through an application's typed route parser.
+export fn parse_route<R>(hash: String, parse: fn(String) -> Option<R>) -> Result<R, RouteError> {
+    let path = hash_path(hash)?;
+    match parse(path) {
+        Some(route) => Ok(move(route)),
+        None => Err(UnknownRoute)
+    }
+}
+
+/// Creates a validated native anchor href from an application's typed route.
+export fn route_href<R>(route: R, path: fn(R) -> String) -> Result<String, RouteError> {
+    let hash = "#" + path(move(route));
+    if (hash_href(hash)) {
+        Ok(hash)
+    } else {
+        Err(InvalidHash)
+    }
+}
+
+/// Pushes or replaces a hash history entry. Owned location subscriptions receive
+/// deduplicated notifications; this function never dispatches a UI message itself.
+export async fn navigate(effects: BrowserEffects, hash: String, replace: bool) -> Result<unit, BrowserEffectError> {
+    if (!hash_href(hash)) {
+        return Err(InvalidRequest);
+    }
+    let work = platform_request(effects, 5, if (replace) {
+        1
+    } else {
+        0
+    }, hash);
+    move(work).await?;
+    Ok({})
+}
+
+/// Owns an initial/changed typed route subscription. Matching stays in Wasm;
+/// unknown or malformed routes reach the callback as Err. Drop/cancel revokes it.
+export fn watch_routes<R>(effects: BrowserEffects, parse: fn(String) -> Option<R>, notify: fn(Result<R, RouteError>) -> unit) -> OwnedFuture<LocationSubscription> {
+    watch_location(effects, fn(hash: String) => {
+        let result = parse_route(hash, parse);
+        notify(move(result));
+    })
+}

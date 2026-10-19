@@ -130,6 +130,7 @@ pub(super) fn walk_expr(
     found: &mut HashSet<usize>,
 ) {
     match &expr.kind {
+        ExprKind::Macro(_) => {}
         ExprKind::Int(_)
         | ExprKind::Float(_)
         | ExprKind::Bool(_)
@@ -214,7 +215,13 @@ pub(super) fn walk_expr(
         }
         ExprKind::Field { base, .. } => walk_expr(base, scopes, depth, found),
         ExprKind::Cast { expr, .. } => walk_expr(expr, scopes, depth, found),
-        ExprKind::Lambda { params, body } => {
+        ExprKind::Lambda { once, params, body } => {
+            // A consuming environment owns its unshared bindings. Mutations
+            // below that boundary must not box the original outer binding.
+            // Its body is scanned separately when checking the lifted function.
+            if *once {
+                return;
+            }
             scopes.push(HashMap::new());
             for param in params {
                 bind_pat(&param.pat, false, depth + 1, scopes);

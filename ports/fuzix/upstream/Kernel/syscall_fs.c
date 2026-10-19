@@ -1,3 +1,4 @@
+/* Ripple modifications, 2026-10-19: kernel IO/cache integration. */
 #include <kernel.h>
 #include <version.h>
 #include <kdata.h>
@@ -108,6 +109,34 @@ arg_t _stat(void)
 	err = stcpy(ino, buf);
 	i_deref(ino);
 	return err;
+}
+
+arg_t _lstat(void)
+{
+    inoptr ino = n_open_flags(path, NULL, N_NOFOLLOW);
+    int err;
+    if (!ino) return -1;
+    err = stcpy(ino, buf);
+    i_deref(ino);
+    return err;
+}
+
+/* readlink deliberately does not append a NUL, and permits truncation. */
+arg_t _readlink(void)
+{
+    uint8_t target[512];
+    inoptr ino;
+    int len;
+    usize_t count = (usize_t)udata.u_argn2;
+    if (!count || (susize_t)count < 0) { udata.u_error = EINVAL; return -1; }
+    ino = n_open_flags(path, NULL, N_NOFOLLOW);
+    if (!ino) return -1;
+    len = readlinki(ino, target);
+    i_deref(ino);
+    if (len < 0) return -1;
+    if (count > (usize_t)len) count = len;
+    if (uput(target, buf, count)) return -1;
+    return count;
 }
 
 #undef path
@@ -292,6 +321,7 @@ arg_t _pipe(void)
 	register inoptr ino;
 	register struct oft *oftp;
 
+    if (!valaddr_w((void *)fildes, 2*sizeof(int), 2*sizeof(int))) return -1;
 	if ((u1 = uf_alloc()) == -1)
 		goto nogood;
 	if ((oft1 = oft_alloc()) == -1)
@@ -303,7 +333,12 @@ arg_t _pipe(void)
 	if ((oft2 = oft_alloc()) == -1)
 		goto nogood2;
 
-	if (!(ino = i_open(root_dev, 0))) {
+#ifdef CONFIG_RIPPLE_IO
+    ino = ripple_pipe_new();
+#else
+    ino = i_open(root_dev, 0);
+#endif
+	if (!ino) {
 		oft_deref(oft2);
 		goto nogood2;
 	}
@@ -331,8 +366,14 @@ arg_t _pipe(void)
 	ino->c_readers++;
 	ino->c_writers++;
 
-	// write results to userspace
-	return uputi(u1, fildes) | uputi(u2, fildes + 1);
+    /* Validation happened before allocation; still unwind both descriptors if
+     * a platform copy reports a late error. */
+    if (uputi(u1,fildes) || uputi(u2,fildes+1)) {
+        unsigned error=udata.u_error;
+        doclose(u1); doclose(u2); udata.u_error=error;
+        return -1;
+    }
+    return 0;
 
       nogood3:
 	i_deref(ino);
@@ -358,7 +399,7 @@ arg_t _unlink(void)
 	inoptr pino;
 	int r;
 
-	ino = n_open(path, &pino);
+	ino = n_open_flags(path, &pino, N_NOFOLLOW | N_NODEREF);
 
 	/* Node must exist and have a parent */
 	if (!(pino && ino)) {
@@ -444,7 +485,11 @@ arg_t _getdirent(void)
                 udata.u_error = ENOSPC;
                 return -1;
         }
+#ifdef CONFIG_RIPPLE_IO
+        nbytes -= nbytes % DIR_LEN;
+#else
         nbytes = DIR_LEN;
+#endif
         return _read();
 }
 

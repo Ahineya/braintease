@@ -28,6 +28,8 @@ static inline void __ripple_mmio_write(unsigned short addr, unsigned short value
 
 // TTY functions
 void tty_putchar(unsigned char c);
+/* Bulk raw output, with a scalar fallback on older device hosts. */
+void tty_write_bytes(const char *data, unsigned short count);
 
 // RNG functions
 unsigned short rng_get(void);

@@ -4,8 +4,8 @@
  * Gunnar Ritter, Freiburg i. Br., Germany, July 2002.
  *
  * Then somewhat altered and beaten up for Fuzix by Alan Cox 2019. In particular
- * all the support for symlinks that made the stat handling so horrible has
- * been removed along with handling for weirdnesses like AF_UNIX sockets.
+ * symlink support was removed upstream. Ripple restores guest symbolic links,
+ * including preserving them for recursive copies and cross-device moves.
  */
 /*
  * Copyright (c) 2003 Gunnar Ritter
@@ -75,6 +75,7 @@ static long bflag;		/* buffer size */
 static int dflag;		/* preserve hard links */
 static int fflag;		/* force */
 static int iflag;		/* ask before overwriting */
+static int sflag;             /* ln: symbolic link */
 static int nflag;		/* ln: do not remove links */
 static int pflag;		/* preserve owner and times */
 static int rflag;		/* recursive, read FIFOs */
@@ -155,9 +156,9 @@ Usage: %s [-f] [-i] f1 f2\n\
 			const char *nstr = "[-n] ";
 #endif				/* !SUS */
 			fprintf(stderr, "\
-Usage: %s [-f] %s f1 f2\n\
-       %s [-f] %s f1 ... fn d1\n\
-       %s [-f] %s d1 d2\n", progname, nstr, progname, nstr, progname, nstr);
+Usage: %s [-fs] %s f1 f2\n\
+       %s [-fs] %s f1 ... fn d1\n\
+       %s [-fs] %s d1 d2\n", progname, nstr, progname, nstr, progname, nstr);
 		}
 		break;
 	}
@@ -456,6 +457,22 @@ specialcopy(const char *src, const struct stat *ssp,
 	    const char *tgt, const struct stat *dsp)
 {
 	switch (ssp->st_mode & S_IFMT) {
+    case S_IFLNK: {
+        char target[512];
+        int len = readlink(src, target, sizeof(target) - 1);
+        if (len < 0) {
+            fprintf(stderr, "%s: %s: %s\n", progname, src, strerror(errno));
+            errcnt |= 01;
+            break;
+        }
+        target[len] = 0;
+        if (do_unlink(tgt, dsp) != OKAY) break;
+        if (symlink(target, tgt) < 0) {
+            fprintf(stderr, "%s: %s: %s\n", progname, tgt, strerror(errno));
+            errcnt |= 01;
+        }
+        break;
+    }
 	case S_IFIFO:
 	case S_IFCHR:
 	case S_IFBLK:
@@ -611,13 +628,19 @@ tryrename(const char *src, const struct stat *ssp,
 
 static enum okay
 commoncheck(const char *src, const char *tgt, const struct stat *dsp,
-	    struct stat *ssp)
+	    struct stat *ssp, int level)
 {
-	if (stat(src, ssp) < 0) {
+    struct stat followed;
+    int follow = pers == PERS_CP &&
+        (HLPflag == 'L' || (HLPflag == 'H' && level == 0) ||
+         (!rflag && HLPflag != 'P'));
+	if ((follow ? stat(src, ssp) : lstat(src, ssp)) < 0) {
 		fprintf(stderr, "%s: cannot access %s\n", progname, src);
 		errcnt |= 01;
 		return STOP;
 	}
+    if (pers == PERS_CP && !S_ISLNK(ssp->st_mode) && dsp &&
+        S_ISLNK(dsp->st_mode) && stat(tgt, &followed) == 0) dsp = &followed;
 	if (dsp
 	    && (ssp->st_dev == dsp->st_dev
 		&& ssp->st_ino == dsp->st_ino)) {
@@ -633,8 +656,13 @@ static void
 cpmv(const char *src, const char *tgt, struct stat *dsp, int level)
 {
 	struct stat sst;
+    if (level >= 128) {
+        fprintf(stderr, "%s: directory nesting too deep: %s\n", progname, src);
+        errcnt |= 01;
+        return;
+    }
 
-	if (commoncheck(src, tgt, dsp, &sst) != OKAY)
+	if (commoncheck(src, tgt, dsp, &sst, level) != OKAY)
 		return;
 	if (pers == PERS_MV && level == 0) {
 		if (tryrename(src, &sst, tgt, dsp) == STOP)
@@ -696,7 +724,7 @@ cpmv(const char *src, const char *tgt, struct stat *dsp, int level)
 				continue;
 			setpath(dp->d_name, &scp, &send, slen, &ssz, &sss);
 			setpath(dp->d_name, &dcp, &dend, dlen, &dsz, &dss);
-			go(scp, dcp, stat(dcp, &xst) < 0 ? NULL : &xst,
+			go(scp, dcp, lstat(dcp, &xst) < 0 ? NULL : &xst,
 			   level + 1);
 		}
 		free(scp);
@@ -715,7 +743,9 @@ cpmv(const char *src, const char *tgt, struct stat *dsp, int level)
 			if (canlink(tgt, &sst))
 				return;
 		}
-		if ((sst.st_mode & S_IFMT) == S_IFREG || Rflag == 0)
+		if (S_ISLNK(sst.st_mode))
+            specialcopy(src, &sst, tgt, dsp);
+        else if ((sst.st_mode & S_IFMT) == S_IFREG || Rflag == 0)
 			filecopy(src, &sst, tgt, dsp);
 		else
 			specialcopy(src, &sst, tgt, dsp);
@@ -731,11 +761,11 @@ static void
 ln(const char *src, const char *tgt, struct stat *dsp, int level)
 {
 	struct stat sst;
-	int (*how) (const char *, const char *) = link;
+	int (*how) (const char *, const char *) = sflag ? symlink : link;
 
-	if (commoncheck(src, tgt, dsp, &sst) != OKAY)
+	if (!sflag && commoncheck(src, tgt, dsp, &sst, level) != OKAY)
 		return;
-	if ((sst.st_mode & S_IFMT) == S_IFDIR) {
+	if (!sflag && (sst.st_mode & S_IFMT) == S_IFDIR) {
 		fprintf(stderr, "%s: <%s> directory\n", progname, src);
 		errcnt |= 01;
 		return;
@@ -784,7 +814,8 @@ static const char *getfl(void)
 		go = cpmv;
 	} else if (progname[0] == 'l' && progname[1] == 'n') {
 		pers = PERS_LN;
-		optstring = "fn";
+		optstring = "fns";
+        nflag = 1;
 #if defined (SUS)
 		nflag = 1;
 #endif				/* SUS */
@@ -835,6 +866,10 @@ int main(int argc, char **argv)
 				fflag = 0;
 #endif				/* SUS */
 			break;
+		case 's':
+            if (pers != PERS_LN) { illegal = 1; break; }
+            sflag = 1;
+            break;
 		case 'n':
 			nflag = 1;
 			break;
@@ -881,7 +916,7 @@ int main(int argc, char **argv)
 	inull = scalloc(1, sizeof *inull);
 	inull->i_lln = inull->i_rln = inull;
 
-	if (stat(argv[argc - 1], &dst) == 0) {
+	if (lstat(argv[argc - 1], &dst) == 0) {
 		if ((dst.st_mode & S_IFMT) != S_IFLNK ||
 		    stat(argv[argc - 1], &ust) < 0)
 			memcpy(&ust, &dst, sizeof(ust));
@@ -895,7 +930,7 @@ int main(int argc, char **argv)
 				errcnt = 0;
 				setpath(basename(argv[i]), &copy, &cend,
 					slen, &sz, &ss);
-				go(argv[i], copy, stat(copy, &dst) < 0 ?
+				go(argv[i], copy, lstat(copy, &dst) < 0 ?
 				   NULL : &dst, 0);
 				saverrs |= errcnt;
 			}
@@ -905,7 +940,7 @@ int main(int argc, char **argv)
 				progname);
 			usage();
 		} else
-			go(argv[0], argv[1], pers == PERS_CP ? &ust : &dst,
+			go(argv[0], argv[1], &dst,
 			   0);
 	} else if (argc > 2) {
 		fprintf(stderr, "%s: %s not found\n", progname,

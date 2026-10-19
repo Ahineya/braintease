@@ -178,6 +178,18 @@ unsafe extern "C" fn rcc_native_load(ctx: *mut Runtime, ptr: u64, words: u64) ->
         fatal("native load out of bounds");
     }
     let mut value = 0u64;
+    if start >= address_space::KERNEL_START {
+        // Shared kernel RAM is not MMIO. Acquire its mutex once per scalar,
+        // preserving the lock and device semantics for all other accesses.
+        let mut cells = [0; 4];
+        runtime
+            .memory
+            .read_into(start, &mut cells[..words as usize]);
+        for (i, cell) in cells[..words as usize].iter().enumerate() {
+            value |= u64::from(*cell) << (16 * i);
+        }
+        return value;
+    }
     for i in 0..words as usize {
         value |= u64::from(runtime.read(start + i)) << (16 * i);
     }
@@ -197,8 +209,18 @@ unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, w
     {
         fatal("native store out of bounds");
     }
-    for i in 0..words as usize {
-        runtime.write(start + i, (value >> (16 * i)) as u16);
+    if start >= address_space::KERNEL_START {
+        let cells = [
+            value as u16,
+            (value >> 16) as u16,
+            (value >> 32) as u16,
+            (value >> 48) as u16,
+        ];
+        runtime.memory.write_from(start, &cells[..words as usize]);
+    } else {
+        for i in 0..words as usize {
+            runtime.write(start + i, (value >> (16 * i)) as u16);
+        }
     }
     0
 }
@@ -271,6 +293,23 @@ unsafe extern "C" fn rcc_native_poll(ctx: *mut Runtime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wide_shared_kernel_scalars_cross_bank_boundaries() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let other = rt.memory.clone();
+        let at = address_space::KERNEL_START + BANK - 1;
+        let value = 0xfedc_ba98_7654_3210;
+        unsafe {
+            rcc_native_store(&mut rt, pointer(at), value, 4);
+            assert_eq!(rcc_native_load(&mut rt, pointer(at), 4), value);
+        }
+        assert_eq!(
+            other.cells(at..at + 4).collect::<Vec<_>>(),
+            vec![0x3210, 0x7654, 0xba98, 0xfedc]
+        );
+        assert_eq!(other.read(BANK + 1), 0);
+    }
     #[test]
     fn allocator_reuses_and_coalesces_without_zero_offset_allocations() {
         let mut runtime = Runtime::new();

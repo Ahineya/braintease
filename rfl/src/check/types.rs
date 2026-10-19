@@ -3,7 +3,11 @@
 use super::*;
 
 impl<'a> Checker<'a> {
-    pub(super) fn validate_ty(&self, ty: &ParsedTy, params: &[String]) -> Result<(), CompileError> {
+    pub(super) fn validate_ty(
+        &self,
+        ty: &ParsedTy,
+        params: &[TypeParam],
+    ) -> Result<(), CompileError> {
         match ty {
             ParsedTy::Projection {
                 base, trait_name, ..
@@ -45,13 +49,49 @@ impl<'a> Checker<'a> {
                 Ok(())
             }
             ParsedTy::Named { span, name, args } => {
+                if name == "_" {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "a `_` placeholder is only valid as an open slot in a constructor argument",
+                    ));
+                }
                 if name == "Self" && self.assoc_self.is_some() {
-                    if !args.is_empty() {
-                        return Err(self.arity_error(span.start, name, 0, args.len()));
+                    let ty = self.assoc_self.as_ref().unwrap().1;
+                    let arity = match ty {
+                        Ty::Constructor(id) => self.constructors[id as usize].arity,
+                        _ => 0,
+                    };
+                    if args.len() != arity {
+                        return Err(self.arity_error(span.start, name, arity, args.len()));
+                    }
+                    for arg in args {
+                        self.validate_ty(arg, params)?;
                     }
                     return Ok(());
                 }
-                if params.iter().any(|param| param == name) {
+                if let Some(param) = params.iter().find(|param| param.name == *name) {
+                    if param.arity > 0 {
+                        if args.len() != param.arity {
+                            if args.is_empty() {
+                                return Err(CompileError::at(
+                                    self.source,
+                                    span.start,
+                                    format!("type constructor `{name}` needs arguments"),
+                                ));
+                            }
+                            return Err(self.arity_error(
+                                span.start,
+                                name,
+                                param.arity,
+                                args.len(),
+                            ));
+                        }
+                        for arg in args {
+                            self.validate_ty(arg, params)?;
+                        }
+                        return Ok(());
+                    }
                     if !args.is_empty() {
                         return Err(CompileError::at(
                             self.source,
@@ -102,8 +142,8 @@ impl<'a> Checker<'a> {
                         args.len(),
                     ));
                 }
-                for arg in args {
-                    self.validate_ty(arg, params)?;
+                for (arg, param) in args.iter().zip(&schema.type_params) {
+                    self.validate_argument(arg, param.arity, params)?;
                 }
                 Ok(())
             }
@@ -158,7 +198,17 @@ impl<'a> Checker<'a> {
         for ctor in ctors {
             let mut fields = Vec::new();
             for field in &ctor {
-                fields.push(self.apply(field, &subst)?);
+                let ty = self.apply(field, &subst)?;
+                // Substitution can introduce a reference even when the declared
+                // field is just T. Such a payload would outlive its local loan.
+                if escaped_ref(&self.ty_to_parsed(ty)) {
+                    return Err(CompileError::at(
+                        self.source,
+                        field.span().start,
+                        "a reference cannot be stored in a type",
+                    ));
+                }
+                fields.push(ty);
             }
             self.adts[id as usize].ctors.push(CtorDef { fields });
         }
@@ -200,13 +250,15 @@ impl<'a> Checker<'a> {
                     trait_name.as_ref().map(|(_, s)| *s),
                 )
             }
-            ParsedTy::Func { params, ret, .. } => {
+            ParsedTy::Func {
+                once, params, ret, ..
+            } => {
                 let mut fn_params = Vec::new();
                 for param in params {
                     fn_params.push(self.apply(param, subst)?);
                 }
                 let fn_ret = self.apply(ret, subst)?;
-                Ok(self.intern_func(fn_params, fn_ret))
+                Ok(self.intern_func_mode(fn_params, fn_ret, *once))
             }
             ParsedTy::CFn { span, params, ret } => {
                 let mut fn_params = Vec::new();
@@ -259,12 +311,41 @@ impl<'a> Checker<'a> {
                 self.intern_tuple(span.start, typed)
             }
             ParsedTy::Named { span, name, args } => {
-                if name == "Self" && args.is_empty() {
-                    if let Some((_, ty)) = &self.assoc_self {
-                        return Ok(*ty);
+                if name == "_" {
+                    return Err(CompileError::at(
+                        self.source,
+                        span.start,
+                        "a `_` placeholder is only valid as an open slot in a constructor argument",
+                    ));
+                }
+                if name == "Self" {
+                    if let Some(ty) = subst
+                        .get("Self")
+                        .copied()
+                        .or_else(|| self.assoc_self.as_ref().map(|(_, ty)| *ty))
+                    {
+                        if args.is_empty() {
+                            self.check_kind(ty, 0, span.start)?;
+                            return Ok(ty);
+                        }
+                        let mut applied = Vec::new();
+                        for arg in args {
+                            applied.push(self.apply(arg, subst)?);
+                        }
+                        return self.apply_constructor(ty, applied, span.start);
                     }
                 }
-                if let Some(found) = subst.get(name).or_else(|| self.subst.get(name)) {
+                if let Some(found) = subst.get(name).or_else(|| self.subst.get(name)).copied() {
+                    if matches!(found, Ty::Constructor(_)) {
+                        if args.is_empty() {
+                            self.check_kind(found, 0, span.start)?;
+                        }
+                        let mut applied = Vec::new();
+                        for arg in args {
+                            applied.push(self.apply(arg, subst)?);
+                        }
+                        return self.apply_constructor(found, applied, span.start);
+                    }
                     if !args.is_empty() {
                         return Err(CompileError::at(
                             self.source,
@@ -272,7 +353,7 @@ impl<'a> Checker<'a> {
                             format!("type parameter `{name}` does not take arguments"),
                         ));
                     }
-                    return Ok(*found);
+                    return Ok(found);
                 }
                 if let Some(prim) = Ty::parse_name(name) {
                     if !args.is_empty() {
@@ -326,8 +407,9 @@ impl<'a> Checker<'a> {
                     return Err(self.arity_error(span.start, name, expect, args.len()));
                 }
                 let mut applied = Vec::new();
-                for arg in args {
-                    applied.push(self.apply(arg, subst)?);
+                let type_params = self.schemas[schema].type_params.clone();
+                for (arg, param) in args.iter().zip(&type_params) {
+                    applied.push(self.apply_argument(arg, param.arity, subst)?);
                 }
                 let id = self.monomorphize(schema, &applied)?;
                 Ok(Ty::Adt(id))
@@ -436,20 +518,36 @@ impl<'a> Checker<'a> {
             return Ty::CFn(index as u32);
         }
         let id = self.cfns.len() as u32;
-        self.cfns.push(FuncSig { params, ret });
+        self.cfns.push(FuncSig {
+            once: false,
+            params,
+            ret,
+        });
         Ty::CFn(id)
     }
 
+    pub(super) fn once_function_ids(&self) -> Vec<u32> {
+        self.funcs
+            .iter()
+            .enumerate()
+            .filter_map(|(id, sig)| sig.once.then_some(id as u32))
+            .collect()
+    }
+
     pub(super) fn intern_func(&mut self, params: Vec<Ty>, ret: Ty) -> Ty {
+        self.intern_func_mode(params, ret, false)
+    }
+
+    pub(super) fn intern_func_mode(&mut self, params: Vec<Ty>, ret: Ty, once: bool) -> Ty {
         if let Some(index) = self
             .funcs
             .iter()
-            .position(|sig| sig.params == params && sig.ret == ret)
+            .position(|sig| sig.once == once && sig.params == params && sig.ret == ret)
         {
             return Ty::Func(index as u32);
         }
         let id = self.funcs.len() as u32;
-        self.funcs.push(FuncSig { params, ret });
+        self.funcs.push(FuncSig { once, params, ret });
         Ty::Func(id)
     }
 }

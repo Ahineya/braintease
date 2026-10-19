@@ -22,12 +22,14 @@ pub const CAP_INPUT_POLL: u16 = 0x0010;
 pub const CAP_HOST_CLOCK: u16 = 0x1000;
 pub const CAP_HOST_IDLE: u16 = 0x2000;
 pub const CAP_HOST_TERMINAL: u16 = 0x4000;
+pub const CAP_HOST_RANDOM: u16 = 0x8000;
 pub const CAPABILITIES: u16 = 15
     | crate::bulk::CAP_MEMORY
     | CAP_INPUT_POLL
     | CAP_HOST_CLOCK
     | CAP_HOST_IDLE
     | CAP_HOST_TERMINAL
+    | CAP_HOST_RANDOM
     | crate::network::CAP_NETWORK
     | 0x0040
     | crate::audio::CAP_PCM
@@ -46,6 +48,8 @@ pub const COMMAND_HOST_MONOTONIC: u16 = 8;
 pub const COMMAND_HOST_REALTIME: u16 = 9;
 pub const COMMAND_HOST_IDLE: u16 = 10;
 pub const COMMAND_HOST_TERMINAL: u16 = 11;
+pub const COMMAND_HOST_RANDOM: u16 = 12;
+pub const COMMAND_TTY_WRITE: u16 = crate::terminal::COMMAND;
 /// Short, synchronous host waits keep cooperative reactors responsive.
 pub const HOST_IDLE_MAX_MS: u16 = 10;
 
@@ -283,6 +287,11 @@ pub trait GuestMemory {
     fn len(&self) -> usize;
     fn read(&self, index: usize) -> u16;
     fn write(&mut self, index: usize, value: u16);
+    /// Optional runner transcript of raw bytes accepted by console DMA.
+    fn record_console_output(&mut self, _bytes: &[u8]) {}
+    /// A runner which owns console delivery may accept the entire batch here.
+    /// Returning false must have no effects; the device then writes stdout.
+    fn buffer_console_output(&mut self, _bytes: &[u8]) -> bool { false }
     /// Separate Harvard instruction space. Zero means this adapter cannot upload code.
     fn code_capacity(&self, _bank_size: u16) -> usize {
         0
@@ -516,7 +525,8 @@ impl DeviceState {
     }
 
     /// Start a command. Errors are reported in STATUS and never partially write
-    /// a descriptor or present a frame. STATUS and VERSION are read-only.
+    /// a descriptor or present a frame, except irreversible TTY I/O reports its
+    /// completed count on STATUS_IO. STATUS and VERSION are read-only.
     pub fn write_register(
         &mut self,
         address: usize,
@@ -599,13 +609,15 @@ impl DeviceState {
         storage: Option<&mut crate::vm::Storage>,
     ) -> Result<Option<PresentFrame>, u16> {
         let length = match command {
-            COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME => 8,
+            COMMAND_PRESENT | COMMAND_NEXT_TICK | COMMAND_GET_TIME | COMMAND_TTY_WRITE => 8,
             COMMAND_INPUT_READ => 10,
             COMMAND_HOST_MONOTONIC | COMMAND_HOST_REALTIME => 10,
             COMMAND_INPUT_CONFIGURE => 4,
             COMMAND_HOST_IDLE => 4,
             COMMAND_HOST_TERMINAL => 4,
+            COMMAND_HOST_RANDOM | crate::crypto::COMMAND => 6,
             COMMAND_CAPABILITIES => 4,
+            crate::float::COMMAND => crate::float::CELLS,
             COMMAND_INPUT_STATE => STATE_CELLS,
             _ => crate::network::descriptor_length(command)
                 .or_else(|| crate::audio::descriptor_length(command))
@@ -638,6 +650,11 @@ impl DeviceState {
         let descriptor = &mut words[..length];
         self.status = STATUS_OK;
         match command {
+            crate::float::COMMAND => crate::float::execute(descriptor)?,
+            COMMAND_TTY_WRITE => {
+                crate::terminal::execute(memory, bank_size, range, descriptor)?;
+                return Ok(None);
+            }
             COMMAND_PRESENT => {
                 if display_mode != DISPLAY_MODE_EXTENDED {
                     return Err(STATUS_DISPLAY_MODE);
@@ -689,12 +706,18 @@ impl DeviceState {
                 crate::host_clock::write_time(descriptor, self.host_clock.monotonic());
             }
             COMMAND_HOST_REALTIME => {
-                crate::host_clock::write_time(descriptor, crate::host_clock::HostClock::realtime()?);
+                crate::host_clock::write_time(
+                    descriptor,
+                    crate::host_clock::HostClock::realtime()?,
+                );
             }
             COMMAND_HOST_IDLE => {
                 if descriptor[2] > HOST_IDLE_MAX_MS || descriptor[3] != 0 {
                     return Err(STATUS_BAD_DESCRIPTOR);
                 }
+                #[cfg(target_arch = "wasm32")]
+                crate::web::idle(descriptor[2]);
+                #[cfg(not(target_arch = "wasm32"))]
                 if descriptor[2] == 0 {
                     std::thread::yield_now();
                 } else {
@@ -704,12 +727,27 @@ impl DeviceState {
                 // to write the same descriptor back after every idle turn.
                 return Ok(None);
             }
+            crate::crypto::COMMAND => {
+                crate::crypto::execute(memory, bank_size, range, descriptor)?;
+                return Ok(None);
+            }
+            COMMAND_HOST_RANDOM => {
+                crate::entropy::execute(memory, bank_size, range, descriptor, |output| {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    { getrandom::fill(output).map_err(|_| ()) }
+                    #[cfg(target_arch = "wasm32")]
+                    { crate::web::random(output) }
+                })?;
+                return Ok(None);
+            }
             COMMAND_HOST_TERMINAL => {
                 if descriptor[2] != 0 || descriptor[3] != 0 {
                     return Err(STATUS_BAD_DESCRIPTOR);
                 }
-                let (columns, rows) = crossterm::terminal::size()
-                    .map_err(|_| STATUS_UNSUPPORTED)?;
+                #[cfg(not(target_arch = "wasm32"))]
+                let (columns, rows) = crossterm::terminal::size().map_err(|_| STATUS_UNSUPPORTED)?;
+                #[cfg(target_arch = "wasm32")]
+                let (columns, rows) = (80, 30);
                 if rows == 0 || columns == 0 {
                     return Err(STATUS_UNSUPPORTED);
                 }
@@ -855,6 +893,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn host_random_is_an_octet_service_independent_of_guest_time() {
+        let mut state = DeviceState::default();
+        let mut ram = vec![0xaaaa; 256];
+        command(&mut state, &mut ram, COMMAND_CAPABILITIES, 4);
+        assert_ne!(ram[42] & CAP_HOST_RANDOM, 0);
+        ram[42..46].copy_from_slice(&[2, 0, 32, 0]);
+        command(&mut state, &mut ram, COMMAND_HOST_RANDOM, 6);
+        assert_eq!(state.status(), STATUS_OK);
+        assert!(ram[128..160].iter().all(|&n| n <= 255));
+        assert_eq!(ram[127], 0xaaaa);
+        assert_eq!(ram[160], 0xaaaa);
+        assert_eq!(state.tick(), 0);
+        assert!(!state.has_pending_tick());
+        let before = ram.clone();
+        ram[45] = 1;
+        let invalid = ram.clone();
+        command(&mut state, &mut ram, COMMAND_HOST_RANDOM, 6);
+        assert_eq!(state.status(), STATUS_BAD_DESCRIPTOR);
+        assert_eq!(ram, invalid);
+        assert_eq!(&ram[128..160], &before[128..160]);
+    }
+
+    #[test]
     fn host_terminal_size_validates_without_advancing_guest_time() {
         let mut state = DeviceState::default();
         let mut ram = vec![0u16; 256];
@@ -892,10 +953,9 @@ mod tests {
         command(&mut state, &mut ram, COMMAND_CAPABILITIES, 4);
         assert_ne!(ram[42] & CAP_HOST_CLOCK, 0);
         for request in [COMMAND_HOST_MONOTONIC, COMMAND_HOST_REALTIME] {
-            for (version, length, expected) in [
-                (2, 10, STATUS_VERSION),
-                (1, 9, STATUS_BAD_DESCRIPTOR),
-            ] {
+            for (version, length, expected) in
+                [(2, 10, STATUS_VERSION), (1, 9, STATUS_BAD_DESCRIPTOR)]
+            {
                 ram[40..50].copy_from_slice(&[version, length, 7, 7, 7, 7, 7, 7, 7, 7]);
                 let before = ram.clone();
                 state.write_register(REGISTER_COMMAND, request, &mut ram, 64, 4);
@@ -923,7 +983,8 @@ mod tests {
         // Restore an old checkpoint which predates the host-clock extension.
         let mut old = serde_json::to_value(DeviceState::default().checkpoint()).unwrap();
         old.as_object_mut().unwrap().remove("host_clock");
-        let mut restored = DeviceState::restore_checkpoint(serde_json::from_value(old).unwrap()).unwrap();
+        let mut restored =
+            DeviceState::restore_checkpoint(serde_json::from_value(old).unwrap()).unwrap();
         command(&mut restored, &mut ram, COMMAND_HOST_MONOTONIC, 10);
         assert_eq!(restored.status(), STATUS_OK);
         restored.reset();

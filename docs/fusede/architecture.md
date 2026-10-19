@@ -38,12 +38,12 @@ reproducible source baseline unless deliberately updated.
 | Applications | File manager, editor, image viewer, calculator, games and preferences |
 | Fuse-X host integration | Native top-level windows, macOS chrome, Window/Dock menus and session controls |
 
-Evolve NanoWM for the RVM role. The shell needs a bounded interface for
-enumerating windows, observing titles and focus, activating/restoring windows
-and reserving panel space. The dock must distinguish launching an app from
-activating an existing window. Minimized windows need a reliable restore path.
-These capabilities are planned additions, not assumptions about today's
-launcher.
+NanoWM now uses Slate frames and the bounded [workspace service](workspace.md)
+for stable client identities, enumeration, title/focus/state notifications,
+activation/restoration and panel reservations. The server maintains the registry
+and applies workspace operations to NanoWM's registered frames; NanoWM owns
+decoration and pointer interaction. A future dock can distinguish launching an
+app from activating an existing window without duplicating window state.
 
 ## Shared widgets and Nuklear evaluation
 
@@ -80,6 +80,13 @@ Avoid exposing toolkit-specific structures in desktop service protocols.
 
 ## Theme and graphics assets
 
+The [implementation plan](implementation-plan.md) records the asset-kit research
+and original Slate foundation in [ports/fusede](../../ports/fusede/README.md).
+Its C nine-slice planner and rasterizer are toolkit-independent. The
+[colour-resource milestone](colour-resources.md) connects RGB565/mask assets to
+guest drawing and a real `fdeshowcase` client on both targets. The browser study
+remains separate from this guest implementation.
+
 Use a shared dark palette with charcoal frames, inset fields, subtle bevels,
 illustrated icons and glossy accents for active controls. Bitmap artwork should
 support resizing through nine-slice rendering: fixed corners, scalable or tiled
@@ -91,6 +98,12 @@ Decode file octets explicitly into C16 pixel storage. Cache RGB565 assets and
 use masks or color keys where appropriate. The existing monochrome bitmap
 path is useful groundwork, but it is not a general color image API. Preserve
 resource quotas, ownership and disconnect cleanup for every added operation.
+
+This initial path is now implemented as the versioned private C16 image-resource
+extension, with sequential immutable uploads, copy/masked/tinted drawing and
+up-to-nine-rectangle batches. Optional upstream image codecs remain off. Lucide
+icons are pre-rasterized named masks, independent of Unicode codepoints or host
+fonts. See the [resource contract](colour-resources.md).
 
 DMA accelerates movement of prepared pixels into RVM scanout. It does not
 decode images or supply alpha composition. Start with opaque/precomposed
@@ -120,6 +133,20 @@ menus. Clipboard, file associations and drag-and-drop are separate service
 contracts; drawing matching controls does not implement those behaviors.
 
 ## Platform behavior
+
+Window roles are separate from decoration. Normal windows, modeless dialogs
+and panels now have a [workspace contract](workspace.md). RVM panels are
+borderless, stack above applications, reserve an edge and preserve pointer-driven
+typing focus. Popup capture and modal input rules remain planned. Native
+borderless style, shape, transparency and click-through are separate Fuse-X
+capabilities; hosted panels currently use ordinary native chrome with no guest
+reservation. See the [window-role plan](implementation-plan.md#b-window-roles-borderless-panels-and-a-usable-workspace).
+
+The dock is an independent application with one item model and orientation-aware
+layout. Build it for RVM as a borderless workspace panel and for Fuse-X as a
+horizontal or vertical applications bar in its own native window. Hosted mode
+uses native activation and has no guest work-area reservation. Its lifecycle is
+independent of launched clients. The shell background/top bar remain RVM policy.
 
 RVM runs NXDSKTOP or the custom shell with a guest window manager inside its
 single host display. The shell reserves room for the top bar and dock. Closing

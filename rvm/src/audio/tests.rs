@@ -16,6 +16,53 @@ fn configured() -> (DeviceState, Vec<u16>) {
     (d, ram)
 }
 #[test]
+fn stateless_mixer_preserves_signed_samples_resampling_panning_and_atomic_errors() {
+    let (mut d,mut ram)=configured();
+    ram[254..258].copy_from_slice(&[0,64,128,255]);
+    let voice=[62,3,4,0,0,0,0,0,32768,0,127,0];
+    ram[128..140].copy_from_slice(&voice);
+    let desc=[1,10,2,0,1,16,0,8,0,0];
+    assert_eq!(command(&mut d,&mut ram,MIX,&desc),0);
+    let expected=[-32768i16,-32768,-16384,-16384,0,0,32512,32512];
+    for (i,value) in expected.iter().enumerate(){assert_eq!(ram[1024+i*2],*value as u16);assert_eq!(ram[1025+i*2],0);}
+    assert_eq!(ram[132],4);assert_eq!(ram[134],0);
+    assert_eq!(d.audio.state.position,0);assert!(d.audio.state.queue.is_empty());
+    let before=ram[1024..1040].to_vec();
+    ram[128..140].copy_from_slice(&voice);ram[138]=128;
+    let invalid=ram[128..140].to_vec();
+    assert_eq!(command(&mut d,&mut ram,MIX,&desc),STATUS_BAD_DESCRIPTOR);
+    assert_eq!(&ram[1024..1040],&before);assert_eq!(&ram[128..140],&invalid);
+    ram[128..140].copy_from_slice(&voice);
+    let mut alias=desc;alias[5]=0;alias[6]=40;
+    assert_eq!(command(&mut d,&mut ram,MIX,&alias),STATUS_BAD_DESCRIPTOR);
+    for i in 0..3{ram[128+i*12..140+i*12].copy_from_slice(&voice);}
+    let mut poly=desc;poly[4]=3;
+    assert_eq!(command(&mut d,&mut ram,MIX,&poly),0);
+    assert_eq!(ram[1024],(-32768i16)as u16);assert_eq!(ram[1036],32767);
+    let mut quiet=voice;quiet[10]=32;quiet[11]=32;
+    ram[128..140].copy_from_slice(&quiet);
+    assert_eq!(command(&mut d,&mut ram,MIX,&desc),0);
+    assert_eq!(&ram[1024..1028],&[(-8256i16)as u16;4]);
+    assert_eq!(&ram[1036..1040],&[8192;4]);
+}
+#[test]
+fn output_backlog_query_is_available_without_hardware_and_does_not_advance_time() {
+    let (mut device, mut ram) = configured();
+    command(&mut device, &mut ram, CONTROL, &[1, 4, START, 0]);
+    assert_eq!(
+        command(&mut device, &mut ram, OUTPUT_STATE, &[1, 6, 99, 99, 99, 99]),
+        0
+    );
+    assert_eq!(&ram[42..46], &[0, 0, 0, 0]);
+    assert_eq!(device.audio.state.position, 0);
+    assert!(device.audio.state.running);
+    device.audio.disable();
+    assert_eq!(
+        command(&mut device, &mut ram, OUTPUT_STATE, &[1, 6, 0, 0, 0, 0]),
+        STATUS_UNSUPPORTED
+    );
+}
+#[test]
 fn submission_is_copied_atomic_and_crosses_banks() {
     let (mut d, mut ram) = configured();
     ram[126..130].copy_from_slice(&[0x8000, 0x7fff, 0xffff, 1]);
@@ -169,4 +216,16 @@ fn music_mailbox_copies_validated_octets_and_rejects_invalid_state_atomically() 
         0
     );
     assert_eq!(ram[43], 64);
+}
+
+#[test]
+fn physical_output_stats_are_ephemeral_and_do_not_advance_the_pcm_clock() {
+    let (mut d, mut ram) = configured();
+    assert_eq!(command(&mut d, &mut ram, OUTPUT_STATS, &[1,12,99,99,99,99,99,99,99,99,99,99]), 0);
+    assert_eq!(&ram[42..52], &[0;10]);
+    assert_eq!(d.audio.state.position, 0);
+    let serialized = serde_json::to_string(&d.audio).unwrap();
+    assert!(!serialized.contains("missing_frames"));
+    d.audio.disable();
+    assert_eq!(command(&mut d, &mut ram, OUTPUT_STATS, &[1,12,0,0,0,0,0,0,0,0,0,0]), STATUS_UNSUPPORTED);
 }

@@ -1,11 +1,14 @@
 import { Buffer, Bounds, octets } from "lib/text";
 import { Settings } from "./config";
-import { UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
+import { UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE, InputEvent } from "std/curses";
+// Recording uses a separate text range: Unicode U+0102 is not the Down key.
+const TEXT: i32 = 1114112;
 export struct View {
     cursor: usize,
     goal: usize,
     top: usize,
-    left: usize
+    left: usize,
+    columns: u16
 }
 
 export struct Vi {
@@ -19,17 +22,17 @@ export struct Vi {
     linewise: bool,
     search: String,
     backward: bool,
-    find: i16,
+    find: u32,
     find_kind: i16,
     status: String,
-    record: Vec<i16>,
-    last: Vec<i16>,
+    record: Vec<i32>,
+    last: Vec<i32>,
     revision: u32,
     overflow: bool
 }
 
 export fn view() -> View {
-    View { cursor: 0, goal: 0, top: 0, left: 0 }
+    View { cursor: 0, goal: 0, top: 0, left: 0, columns: 0 }
 }
 
 export fn controls() -> Vi {
@@ -64,7 +67,7 @@ export fn reset(buffer: &Buffer, v: &mut View, vi: &mut Vi) {
 }
 
 export fn clamp(b: &Buffer, v: &mut View, insert: bool) {
-    v.cursor = min(v.cursor, b.len());
+    v.cursor = b.boundary(min(v.cursor, b.len()));
     let row = b.row(v.cursor);
     let start = b.start(row);
     let end = b.endline(row);
@@ -72,7 +75,7 @@ export fn clamp(b: &Buffer, v: &mut View, insert: bool) {
         v.cursor = end;
     }
     if (!insert && end > start && v.cursor >= end) {
-        v.cursor = end - 1;
+        v.cursor = b.previous(end);
     }
 }
 
@@ -86,7 +89,7 @@ fn first(b: &Buffer, row: usize) -> usize {
 
 export fn selection(b: &Buffer, v: View, vi: &Vi) -> Bounds {
     if (vi.mode == 2) {
-        Bounds { start: min(v.cursor, vi.anchor), end: min(max(v.cursor, vi.anchor) + 1, b.len()) }
+        Bounds { start: min(v.cursor, vi.anchor), end: b.next(max(v.cursor, vi.anchor)) }
     } else if (vi.mode == 3) {
         Bounds { start: b.start(min(b.row(v.cursor), b.row(vi.anchor))), end: b.start(max(b.row(v.cursor), b.row(vi.anchor)) + 1) }
     } else {
@@ -169,11 +172,11 @@ fn apply_motion(b: &Buffer, v: &mut View, vi: &mut Vi, target: usize, inclusive:
         return lines(b, v, vi, lo, hi);
     }
     let start = min(v.cursor, target);
-    let end = min(max(v.cursor, target) + if (inclusive) {
-        1 as usize
+    let end = if (inclusive) {
+        b.next(max(v.cursor, target))
     } else {
-        0 as usize
-    }, b.len());
+        min(max(v.cursor, target), b.len())
+    };
     range(b, v, vi, start, end, false)
 }
 
@@ -198,7 +201,7 @@ fn paste(b: &Buffer, v: &mut View, vi: &mut Vi, before: bool, count: u16) -> Res
     let mut at = if (before) {
         v.cursor
     } else {
-        min(v.cursor + 1, b.endline(row))
+        min(b.next(v.cursor), b.endline(row))
     };
     if (vi.linewise) {
         at = if (before) {
@@ -239,33 +242,107 @@ fn paste(b: &Buffer, v: &mut View, vi: &mut Vi, before: bool, count: u16) -> Res
     Ok({})
 }
 
+fn encoding(value: u32) -> Result<Vec<u8>, String> {
+    if (value < 32 || value >= 127 && value < 160 || value > 1114111 || value >= 55296 && value <= 57343) {
+        return Err("Expected a printable Unicode character");
+    }
+    if (value < 127) {
+        Ok([value as u8])
+    } else {
+        octets(from_char(value as char))
+    }
+}
+
+fn insert_character(b: &Buffer, v: &mut View, value: u32) -> Result<unit, String> {
+    let bytes = encoding(value)?;
+    b.replace(v.cursor, 0, bytes)?;
+    v.cursor += bytes.len();
+    let start = b.boundary(v.cursor);
+    if (start < v.cursor) {
+        v.cursor = b.next(start);
+    }
+    Ok({})
+}
+
+fn replace_character(b: &Buffer, v: &mut View, value: u32, count: u16) -> Result<unit, String> {
+    let bytes = encoding(value)?;
+    let to = min(b.step(v.cursor, count as i16), b.endline(b.row(v.cursor)));
+    let mut data: Vec<u8> = [];
+    let mut at = v.cursor;
+    while (at < to) {
+        for (byte in bytes) {
+            data.push(byte);
+        }
+        at = b.next(at);
+    }
+    b.begin(v.cursor);
+    b.replace(v.cursor, to - v.cursor, data)?;
+    b.end(v.cursor);
+    Ok({})
+}
+
+fn find_character(b: &Buffer, v: &mut View, vi: &mut Vi, value: u32, count: u16, settings: &Settings) -> Result<unit, String> {
+    let kind = vi.pending;
+    vi.pending = 0;
+    vi.find = value;
+    vi.find_kind = kind;
+    let target = match b.find_char(v.cursor, value, kind == 70 || kind == 84, kind == 116 || kind == 84, count) {
+        Some(at) => at,
+        None => {
+            return Err("Character not found on this line");
+        }
+    };
+    apply_motion(b, v, vi, target, true, false, settings)
+}
+
+fn raw_input(b: &Buffer, v: &mut View, vi: &mut Vi, token: i32, settings: &Settings, rows: usize) -> Result<unit, String> {
+    if (token < TEXT) {
+        return raw(b, v, vi, token as i16, settings, rows);
+    }
+    let scalar = (token - TEXT) as u32;
+    if (vi.mode == 1) {
+        insert_character(b, v, scalar)?;
+        if (settings.format_text) {
+            v.cursor = b.format(v.cursor, settings.textwidth, settings.tabstop)?;
+        }
+        v.goal = b.visual(v.cursor, settings.tabstop);
+        return Ok({});
+    }
+    let count = if (vi.count > 0) {
+        vi.count
+    } else {
+        1 as u16
+    };
+    let n = min(count as usize * vi.multiplier as usize, 999) as u16;
+    vi.count = 0;
+    if (vi.pending == 114) {
+        vi.pending = 0;
+        return replace_character(b, v, scalar, n);
+    }
+    if (vi.pending == 102 || vi.pending == 70 || vi.pending == 116 || vi.pending == 84) {
+        return find_character(b, v, vi, scalar, n, settings);
+    }
+    Err("Use Insert mode to enter text")
+}
+
 fn inserted(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings) -> Result<unit, String> {
     if (key == 27 || key == 3) {
         b.end(v.cursor);
         vi.mode = 0;
         if (v.cursor > b.start(b.row(v.cursor))) {
-            v.cursor -= 1;
+            v.cursor = b.previous(v.cursor);
         }
         return Ok({});
     }
     if (key == BACKSPACE || key == 127 || key == 8) {
         if (v.cursor > 0) {
-            let n: usize = if (b.byte(v.cursor - 1) == 10 && v.cursor > 1 && b.byte(v.cursor - 2) == 13) {
-                2
-            } else {
-                1
-            };
-            b.replace(v.cursor - n, n, [])?;
-            v.cursor -= n;
+            let at = b.previous(v.cursor);
+            b.replace(at, v.cursor - at, [])?;
+            v.cursor = at;
         }
     } else if (key == 330) {
         if (v.cursor < b.len()) {
-            let n: usize = if (b.byte(v.cursor) == 13 && b.byte(v.cursor + 1) == 10) {
-                2
-            } else {
-                1
-            };
-            b.replace(v.cursor, n, [])?;
+            b.replace(v.cursor, b.next(v.cursor) - v.cursor, [])?;
         }
     } else if (key == 10 || key == 13) {
         v.cursor = b.newline(v.cursor, settings.autoindent)?;
@@ -285,20 +362,18 @@ fn inserted(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings
         let at = max(b.word(v.cursor, 98, 1), b.start(b.row(v.cursor)));
         b.replace(at, v.cursor - at, [])?;
         v.cursor = at;
-    } else if (key >= 32 && key <= 255) {
-        b.replace(v.cursor, 0, [key as u8])?;
-        v.cursor += 1;
+    } else if (key >= 32 && key < 127) {
+        insert_character(b, v, key as u32)?;
+        if (settings.format_text) {
+            v.cursor = b.format(v.cursor, settings.textwidth, settings.tabstop)?;
+        }
     } else if (key == LEFT) {
         if (v.cursor > 0) {
-            v.cursor -= 1;
+            v.cursor = b.previous(v.cursor);
         }
     } else if (key == RIGHT) {
         if (v.cursor < b.len()) {
-            v.cursor += if (b.byte(v.cursor) == 13 && b.byte(v.cursor + 1) == 10) {
-                2 as usize
-            } else {
-                1 as usize
-            };
+            v.cursor = b.next(v.cursor);
         }
     } else if (key == UP || key == DOWN) {
         let row = b.row(v.cursor);
@@ -321,6 +396,43 @@ fn inserted(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings
 }
 
 fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, rows: usize) -> Result<unit, String> {
+    if (settings.wrap && v.columns >= 2 && vi.operator == 0 && vi.pending == 0 && (key == UP || key == DOWN || key == PAGE_UP || key == PAGE_DOWN)) {
+        let current = b.wrap_at(v.cursor, v.columns, settings.tabstop);
+        let info = b.wrapped(current, v.columns, settings.tabstop);
+        let goal = if (v.goal >= info.left) {
+            v.goal - info.left
+        } else {
+            0 as usize
+        };
+        let count = if (vi.count > 0) {
+            vi.count as usize
+        } else {
+            1 as usize
+        };
+        let step = count * if (key == PAGE_UP || key == PAGE_DOWN) {
+            rows
+        } else {
+            1 as usize
+        };
+        let mut target = if (key == UP || key == PAGE_UP) {
+            if (current > step) {
+                current - step
+            } else {
+                0 as usize
+            }
+        } else {
+            current + step
+        };
+        // Probe only the requested prefix; ordinary arrows must not lay out
+        // the entire document just to discover its final visual row.
+        if (!b.wrapped(target, v.columns, settings.tabstop).present) {
+            target = b.wrap_at(b.len(), v.columns, settings.tabstop);
+        }
+        v.cursor = b.wrap_column(target, goal, v.columns, settings.tabstop)?;
+        v.goal = b.wrapped(target, v.columns, settings.tabstop).left + goal;
+        vi.count = 0;
+        return Ok({});
+    }
     if (vi.mode == 1) {
         inserted(b, v, vi, key, settings)?;
         if (key != UP && key != DOWN) {
@@ -358,10 +470,10 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
         if (vi.operator != 0) {
             range(b, v, vi, bounds.start, bounds.end, false)?;
         } else {
-            v.cursor = bounds.end - if (bounds.end > bounds.start) {
-                1 as usize
+            v.cursor = if (bounds.end > bounds.start) {
+                b.previous(bounds.end)
             } else {
-                0 as usize
+                bounds.start
             };
             vi.anchor = bounds.start;
             vi.mode = 2;
@@ -370,32 +482,16 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
     }
     if (vi.pending == 114) {
         vi.pending = 0;
-        if (key < 32 || key > 255) {
-            return Err("Replace expects a printable character");
+        if (key < 32 || key >= 127) {
+            return Err("Replace expects a text character");
         }
-        let length = min(n as usize, end - v.cursor);
-        let mut data: Vec<u8> = [];
-        for (_ in 0..length) {
-            data.push(key as u8);
-        }
-        b.begin(v.cursor);
-        b.replace(v.cursor, length, data)?;
-        b.end(v.cursor);
-        return Ok({});
+        return replace_character(b, v, key as u32, n);
     }
     if (vi.pending == 102 || vi.pending == 70 || vi.pending == 116 || vi.pending == 84) {
-        let kind = vi.pending;
-        vi.pending = 0;
-        vi.find = key;
-        vi.find_kind = kind;
-        let target = match b.find_char(v.cursor, key, kind == 70 || kind == 84, kind == 116 || kind == 84, n) {
-            Some(at) => at,
-            None => {
-                return Err("Character not found on this line");
-            }
-        };
-        apply_motion(b, v, vi, target, true, false, settings)?;
-        return Ok({});
+        if (key < 32 || key >= 127) {
+            return Err("Find expects a text character");
+        }
+        return find_character(b, v, vi, key as u32, n, settings);
     }
     if (vi.pending == 103) {
         vi.pending = 0;
@@ -417,7 +513,7 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
         }
         begin_insert(b, &*v, vi);
         if (key == 97) {
-            v.cursor = min(v.cursor + 1, end);
+            v.cursor = min(b.next(v.cursor), end);
         }
         return Ok({});
     }
@@ -467,14 +563,10 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
         return Ok({});
     }
     if (key == 104 || key == LEFT || key == BACKSPACE) {
-        let at = if (v.cursor - start > n as usize) {
-            v.cursor - n as usize
-        } else {
-            start
-        };
+        let at = max(b.step(v.cursor, -(n as i16)), start);
         apply_motion(b, v, vi, at, false, false, settings)?;
     } else if (key == 108 || key == RIGHT) {
-        let at = min(v.cursor + n as usize, end);
+        let at = min(b.step(v.cursor, n as i16), end);
         apply_motion(b, v, vi, at, false, false, settings)?;
     } else if (key == 106 || key == DOWN || key == 10 || key == 13) {
         vertical(b, v, vi, n as i32, settings)?;
@@ -519,7 +611,7 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
         let at = if (vi.operator != 0) {
             target
         } else if (target > b.start(b.row(target))) {
-            target - 1
+            b.previous(target)
         } else {
             target
         };
@@ -608,18 +700,14 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
             range(b, v, vi, bounds.start, bounds.end, linewise)?;
         } else {
             let at = if (key == 88) {
-                if (v.cursor - start > n as usize) {
-                    v.cursor - n as usize
-                } else {
-                    start
-                }
+                max(b.step(v.cursor, -(n as i16)), start)
             } else {
                 v.cursor
             };
             let to = if (key == 88) {
                 v.cursor
             } else {
-                min(v.cursor + n as usize, end)
+                min(b.step(v.cursor, n as i16), end)
             };
             vi.operator = if (key == 115) {
                 99
@@ -679,8 +767,7 @@ fn raw(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, row
     Ok({})
 }
 
-/// Routes a vi keystroke. Dot replays the last completed change, including insert text.
-export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, rows: usize) {
+fn input(b: &Buffer, v: &mut View, vi: &mut Vi, key: i32, settings: &Settings, rows: usize) {
     if (key == 46 && vi.mode == 0 && vi.operator == 0 && vi.pending == 0) {
         if (vi.last.is_empty()) {
             vi.status = "No change to repeat";
@@ -695,7 +782,7 @@ export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settin
         let keys = vi.last;
         for (_ in 0..count as usize) {
             for (i in 0..keys.len()) {
-                match raw(b, v, vi, keys[i], settings, rows) {
+                match raw_input(b, v, vi, keys[i], settings, rows) {
                     Ok(_) => {},
                     Err(error) => {
                         vi.status = error;
@@ -717,7 +804,7 @@ export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settin
     } else {
         vi.overflow = true;
     }
-    match raw(b, v, vi, key, settings, rows) {
+    match raw_input(b, v, vi, key, settings, rows) {
         Ok(_) => {},
         Err(error) => {
             vi.status = error;
@@ -735,5 +822,19 @@ export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settin
             }
         }
         vi.record.clear();
+    }
+}
+
+/// Routes a legacy ASCII/function key. Unicode input uses event().
+export fn key(b: &Buffer, v: &mut View, vi: &mut Vi, key: i16, settings: &Settings, rows: usize) {
+    input(b, v, vi, key as i32, settings, rows);
+}
+
+/// Routes a decoded Unicode text/function event, preserving scalars in dot replay.
+export fn event(b: &Buffer, v: &mut View, vi: &mut Vi, event: InputEvent, settings: &Settings, rows: usize) {
+    if (event.kind == 0 && event.value >= 128) {
+        input(b, v, vi, TEXT + event.value as i32, settings, rows);
+    } else if (event.kind >= 0) {
+        key(b, v, vi, event.key(), settings, rows);
     }
 }

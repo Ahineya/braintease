@@ -43,7 +43,7 @@ int tcp_send(NetTcp *tcp, unsigned long sequence, unsigned short flags,
     p = net->tx + 34; memset(p, 0, header);
     net_write16(p, tcp->local_port); net_write16(p + 2, tcp->remote_port);
     tcp_write32(p + 4, sequence); if (flags & TCP_ACK) tcp_write32(p + 8, tcp->rcv_nxt);
-    p[12] = header * 4; p[13] = flags; net_write16(p + 14, NET_TCP_BUFFER - tcp->rx_used);
+    p[12] = header * 4; p[13] = flags; net_write16(p + 14, NET_TCP_RX_BUFFER - tcp->rx_used);
     if (flags & TCP_SYN) { p[20] = 2; p[21] = 4; net_write16(p + 22, NET_TCP_MSS); }
     if (length) memcpy(p + header, data, length);
     net_write16(p + 16, net_l4_checksum(net->config.address, tcp->peer, 6, p, header + length));

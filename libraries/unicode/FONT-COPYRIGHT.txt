@@ -1,0 +1,19 @@
+Ripple terminal bitmap subset, derived from GNU Unifont 16.0.04.
+
+Copyright © 1998-2025 Roman Czyborra, Paul Hardy,
+Qianqian Fang, Andrew Miller, Johnnie Weaver, David Corbett,
+Nils Moskopp, Rebecca Bettencourt, Ho-Seok Ee, et al.
+
+This subset is distributed under the SIL Open Font License, version 1.1.
+See FONT-LICENSE.txt. The original font is dual-licensed under OFL 1.1
+and GPL version 2 or later with the GNU font embedding exception.
+
+Original source:
+https://unifoundry.com/pub/unifont/unifont-16.0.04/
+Copyright notice: font/ttfsrc/Makefile in unifont-16.0.04.tar.gz.
+Font license grant: COPYING in the same archive.
+
+Changes: selected 2,256 glyphs for terminal Latin, Greek, Cyrillic,
+combining marks, punctuation, arrows, box drawing and replacement;
+converted hexadecimal bitmap data to C arrays. No glyphs were redrawn.
+The subset name is Ripple terminal bitmap subset.

@@ -1,0 +1,134 @@
+import { playlist, MAX_TRACKS, NO_TRACK } from "../../../rfl/apps/music/playlist";
+import { defaults, persist, restore } from "../../../rfl/apps/music/storage";
+import { create, create_new, remove_file, metadata, process_id } from "std/posix";
+import { number } from "lib/tui";
+import {} from "std/result";
+import {} from "std/option";
+
+fn require(ok: bool, message: String) -> Result<unit, String> {
+    if (ok) {
+        Ok({})
+    } else {
+        Err(message)
+    }
+}
+
+fn same(left: Vec<String>, right: Vec<String>) -> bool {
+    if (left.len() != right.len()) {
+        return false;
+    }
+    for (i in 0..left.len()) {
+        if (left[i] != right[i]) {
+            return false;
+        }
+    }
+    true
+}
+
+fn checks() -> Result<unit, String> {
+    let mut q = playlist(42);
+    require(q.next().is_none() && q.previous().is_none(), "empty navigation")?;
+    for (path in ["/library/a.wav", "/library/b.wav", "/library/c.WAV", "/library/d.wav"]) {
+        q.add(path)?;
+    }
+    let duplicate = q.add("/library/../library/a.wav")?;
+    require(duplicate == 0 && q.tracks.len() == 4, "deduplication")?;
+    require(q.add("relative.wav").is_err() && q.add("/file.mp3").is_err(), "invalid additions")?;
+    require(q.begin(0).unwrap() == (0 as usize) && q.next().unwrap() == (1 as usize), "sequential order")?;
+    require(q.previous().unwrap() == (0 as usize) && q.next().unwrap() == (1 as usize), "previous history")?;
+    require(q.next().unwrap() == (2 as usize) && q.next().unwrap() == (3 as usize) && q.next().is_none(), "sequential stop")?;
+    q.shuffle = true;
+    let mut seen: Vec<bool> = [false, false, false, false];
+    let mut last = NO_TRACK;
+    for (step in 0..1600) {
+        if (step % 4 == 0) {
+            seen = [false, false, false, false];
+        }
+        let index = if (step == 0) {
+            q.begin(0).unwrap()
+        } else {
+            q.next().unwrap()
+        };
+        require(!seen[index] && index != last, "shuffle repetition / cycle boundary")?;
+        seen[index] = true;
+        last = index;
+        require(q.history.len() <= MAX_TRACKS, "unbounded history")?;
+    }
+    q.begin(2);
+    q.remove(0);
+    require(q.current == 1 && q.history[0] == 1 && q.tracks[1] == "/library/c.WAV", "removal index repair")?;
+    q.remove(1);
+    require(q.current == NO_TRACK, "removing current")?;
+    let mut single = playlist(1);
+    single.shuffle = true;
+    single.add("/single.wav")?;
+    single.begin(0);
+    for (i in 0..600) {
+        require(single.next().unwrap() == (0 as usize), "single-track continuous shuffle")?;
+    }
+    single.add("/new.wav")?;
+    require(single.next().unwrap() == (1 as usize), "new track ignored by shuffle")?;
+    println("PLAYLIST_ORDER_OK");
+
+    let path = "/music-state";
+    let mut saved = defaults("/folder with spaces", 100);
+    saved.volume = 20;
+    saved.queue.shuffle = true;
+    saved.queue.add("/library/semi; quote\" slash\\ newline\n.wav")?;
+    saved.queue.add("/library/two words.wav")?;
+    saved.selected = 1;
+    persist(path, &saved)?;
+    let mut loaded = defaults("/", 77);
+    restore(path, &mut loaded)?;
+    require(loaded.volume == 20 && loaded.queue.shuffle && loaded.selected == 1 && loaded.folder == saved.folder && same(loaded.queue.tracks, saved.queue.tracks), "state round trip")?;
+    require(loaded.queue.current == NO_TRACK && loaded.queue.history.is_empty(), "restore started playback")?;
+    require(metadata(path).unwrap().mode == (384 as u16), "state permissions")?;
+    saved.volume = 15;
+    persist(path, &saved)?;
+    restore(path, &mut loaded)?;
+    require(loaded.volume == 15, "replace existing state")?;
+    let temporary = path + ".tmp-" + number(process_id() as usize);
+    let collision = create_new(temporary).unwrap();
+    require(persist(path, &saved).is_err(), "exclusive temporary collision")?;
+    move(collision).close().unwrap();
+    remove_file(temporary).unwrap();
+    restore(path, &mut loaded)?;
+    require(loaded.volume == 15, "failed save damaged state")?;
+    let bad = create("/bad-music-state").unwrap();
+    bad.write_text("MUSIC1\n99\n9\n0\n2f\n").unwrap();
+    move(bad).close().unwrap();
+    require(restore("/bad-music-state", &mut loaded).is_err() && loaded.volume == 15 && loaded.folder == saved.folder, "partial state applied")?;
+    let bad = create("/bad-music-state").unwrap();
+    bad.write_text("MUSIC1\n25\n1\n0\n2f").unwrap();
+    move(bad).close().unwrap();
+    require(restore("/bad-music-state", &mut loaded).is_err(), "truncated state accepted")?;
+    println("PLAYLIST_STORAGE_OK");
+
+    let mut full = defaults("/", 10);
+    let mut prefix = "/";
+    for (i in 0..220) {
+        prefix = prefix + "x";
+    }
+    for (i in 0..MAX_TRACKS) {
+        full.queue.add(prefix + number(i) + ".wav")?;
+    }
+    require(full.queue.add("/overflow.wav").is_err(), "playlist bound")?;
+    persist(path, &full)?;
+    restore(path, &mut loaded)?;
+    require(same(loaded.queue.tracks, full.queue.tracks), "large multi-buffer state round trip")?;
+    println("PLAYLIST_LIMITS_OK");
+    Ok({})
+}
+
+fn main() -> i16 {
+    match checks() {
+        Ok(_) => {
+            println("PLAYLIST_CHECKS_PASSED");
+            0
+        },
+        Err(error) => {
+            println(error);
+            1
+        }
+    }
+}

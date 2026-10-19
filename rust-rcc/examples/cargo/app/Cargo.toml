@@ -1,0 +1,12 @@
+[package]
+name = "cell-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+cell-math = { path = "../math" }
+cell-macros = { path = "../macros" }
+
+[features]
+loud = ["cell-math/loud"]

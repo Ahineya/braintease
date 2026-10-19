@@ -12,6 +12,10 @@ pub(super) struct Syntax {
     pub generic_commas: HashSet<usize>,
     pub inline_braces: HashSet<usize>,
     pub lines: HashSet<usize>,
+    pub joined: HashSet<usize>,
+    pub html_bodies: HashSet<usize>,
+    pub html_names: HashSet<String>,
+    opaque_macros: HashSet<String>,
 }
 
 impl Syntax {
@@ -39,11 +43,35 @@ impl Syntax {
                 _ => {}
             }
         }
+        for pair in tokens.windows(2) {
+            if matches!(pair[0].kind, K::Ident(_)) && pair[1].kind == K::Not {
+                result.joined.insert(pair[1].span.start);
+            }
+        }
         result.module(&module, tokens);
-        // Include target-specific declarations discarded by the default parser.
-        let native =
-            crate::parser::parse_for_target(source, &code, rcc_ir::target::Target::Native)?;
-        result.module(&native, tokens);
+        // Include declarations/imports discarded by the default target. Layout
+        // is source-only, including browser-only imports and their aliases.
+        for target in [rcc_ir::target::Target::Native, rcc_ir::target::Target::Wasm] {
+            let module = crate::parser::parse_for_target(source, &code, target)?;
+            result.module(&module, tokens);
+        }
+        result
+            .html_names
+            .retain(|name| !result.opaque_macros.contains(name));
+        let code: Vec<_> = tokens
+            .iter()
+            .filter(|t| !matches!(t.kind, K::LineComment | K::BlockComment))
+            .collect();
+        for call in code.windows(3) {
+            if let K::Ident(name) = &call[0].kind {
+                if result.html_names.contains(name)
+                    && call[1].kind == K::Not
+                    && matches!(call[2].kind, K::MacroBody(_))
+                {
+                    result.html_bodies.insert(call[2].span.start);
+                }
+            }
+        }
         Ok(result)
     }
 
@@ -166,8 +194,21 @@ impl Syntax {
     }
 
     fn module(&mut self, module: &Module, tokens: &[Token]) {
-        for import in &module.imports {
-            self.inline(tokens, import.span.start);
+        for import in &module.macro_imports {
+            for name in &import.names {
+                if import.path.trim_end_matches(".rfl") == "std/html_macro" && name.name == "html" {
+                    self.html_names.insert(name.alias.clone());
+                } else {
+                    // One spelling may select a different DSL under another
+                    // target cfg. Never impose standard HTML whitespace there.
+                    self.opaque_macros.insert(name.alias.clone());
+                }
+            }
+        }
+        for import in module.imports.iter().chain(&module.macro_imports) {
+            if !import.is_implicit() {
+                self.inline(tokens, import.span.start);
+            }
         }
         for item in &module.adts {
             self.generic(tokens, item.name_span.end);
@@ -215,6 +256,7 @@ impl Syntax {
             }
         }
         for item in &module.traits {
+            self.generic(tokens, item.name_span.end);
             for method in &item.methods {
                 self.method(method, tokens);
             }
@@ -301,7 +343,7 @@ impl Syntax {
                 args,
                 ..
             } => {
-                if !type_args.is_empty() {
+                if !type_args.is_empty() && callee_span.end > callee_span.start {
                     self.generic(tokens, callee_span.end);
                 }
                 for ty in type_args {
@@ -328,7 +370,23 @@ impl Syntax {
                     self.expr(other, tokens);
                 }
             }
-            ExprKind::Block(block) | ExprKind::Unsafe(block) => self.block(block, tokens),
+            ExprKind::Block(block) | ExprKind::Unsafe(block) => {
+                let i = tokens.partition_point(|t| t.span.start < expr.span.start);
+                if tokens.get(i).is_some_and(|t| t.kind == K::For) {
+                    let next = if tokens
+                        .get(i + 1)
+                        .is_some_and(|t| matches!(&t.kind, K::Ident(n) if n == "once"))
+                    {
+                        i + 2
+                    } else {
+                        i + 1
+                    };
+                    if let Some(token) = tokens.get(next) {
+                        self.generic(tokens, token.span.start);
+                    }
+                }
+                self.block(block, tokens);
+            }
             ExprKind::While { cond, body } => {
                 self.expr(cond, tokens);
                 self.block(body, tokens);
@@ -369,7 +427,16 @@ impl Syntax {
                 self.expr(expr, tokens);
                 self.ty(ty, tokens);
             }
-            ExprKind::Lambda { params, body } => {
+            ExprKind::Lambda { params, body, .. } => {
+                // Generated continuation spans retain their original `<-`.
+                let i = tokens.partition_point(|t| t.span.start < expr.span.start);
+                if tokens.get(i).is_some_and(|t| t.kind == K::Lt)
+                    && tokens
+                        .get(i + 1)
+                        .is_some_and(|t| t.kind == K::Minus && tokens[i].span.end == t.span.start)
+                {
+                    self.joined.insert(tokens[i + 1].span.start);
+                }
                 self.params(params, tokens);
                 self.expr(body, tokens);
             }

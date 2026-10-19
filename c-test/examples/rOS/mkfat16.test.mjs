@@ -220,7 +220,8 @@ test('CLI updates atomically with backups and skips unchanged disks', () => {
     assert.deepEqual(fs.readFileSync(disk), beforeFailure);
     fs.writeFileSync(code, Buffer.from('another revision'));
     assert.equal(update().status, 0);
-    assert.deepEqual(fs.readFileSync(`${disk}.bak.1`), beforeFailure);
+    assert.deepEqual(fs.readFileSync(`${disk}.bak`), beforeFailure);
+    assert.ok(!fs.existsSync(`${disk}.bak.1`));
     assert.ok(!fs.readdirSync(directory).some(name => name.includes('.tmp-')));
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

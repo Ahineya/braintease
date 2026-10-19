@@ -1,0 +1,49 @@
+import { map_with, flat_map_with, transform } from "std/fp";
+import { map as option_map, and_then as option_bind } from "std/option";
+
+// The same generic helper accepts core containers and our own ADT.
+type Boxed<T> = Boxed(T);
+fn box_map<A, B>(value: Boxed<A>, f: fn(A) -> B) -> Boxed<B> {
+    match move(value) {
+        Boxed(a) => Boxed(f(move(a)))
+    }
+}
+
+fn vec_map<A, B>(values: Vec<A>, f: fn(A) -> B) -> Vec<B> {
+    let mut result: Vec<B> = [];
+    for (value in values) {
+        result.push(f(value));
+    }
+    result
+}
+
+fn option_to_vec<A>(value: Option<A>) -> Vec<A> {
+    match move(value) {
+        Some(a) => [move(a)],
+        None => []
+    }
+}
+
+fn plus_one(value: i16) -> i16 {
+    value + 1
+}
+
+fn positive(value: i16) -> Option<i16> {
+    if (value > 0) {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn main() {
+    println(map_with(Some(41), plus_one, option_map));
+    println(map_with([19, 21], plus_one, vec_map));
+    match map_with(Boxed(41), plus_one, box_map) {
+        Boxed(value) => println(value),
+    };
+    println(flat_map_with(Some(42), positive, option_bind));
+    println(flat_map_with(Some(-1), positive, option_bind));
+    let converted: Vec<i16> = transform(Some(42), option_to_vec);
+    println(converted);
+}

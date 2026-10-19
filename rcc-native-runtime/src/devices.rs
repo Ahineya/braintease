@@ -81,6 +81,11 @@ impl Runtime {
                     fatal("native v1 interrupts are unavailable")
                 }
                 27..=31 => {
+                    // Raw DMA shares stdout with the legacy buffered console.
+                    if index == rvm::devices::REGISTER_COMMAND
+                        && value == rvm::terminal::COMMAND && !self.output.is_empty() {
+                        self.flush();
+                    }
                     if self.devices.is_input_request(index, value) {
                         self.poll_device_input();
                     }

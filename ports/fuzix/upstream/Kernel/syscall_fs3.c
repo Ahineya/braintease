@@ -40,7 +40,8 @@ arg_t _open(void)
 	if ((oftindex = oft_alloc()) == -1)
 		goto nooft;
 
-	ino = n_open(name, &parent);
+	ino = n_open_flags(name, &parent,
+            (flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL) ? N_NOFOLLOW : 0);
 	if (ino) {
 		/* We hold a reference to the found inode. but we don't need
 		   one to the parent as we have nothing to create */
@@ -206,7 +207,7 @@ arg_t _link(void)
 	inoptr ino2;
 	inoptr parent2;
 
-	if (!(ino = n_open_argn()))
+	if (!(ino = n_open_flags(name1, NULL, N_NOFOLLOW)))
 		return (-1);
 
 	if (getmode(ino) == MODE_R(F_DIR)) {
@@ -220,7 +221,7 @@ arg_t _link(void)
 	}
 
 	/* Make sure file2 doesn't exist, and get its parent */
-	if ((ino2 = n_open(name2, &parent2)) != NULL) {
+	if ((ino2 = n_open_flags(name2, &parent2, N_NOFOLLOW | N_NODEREF)) != NULL) {
 		i_deref(ino2);
 		i_deref(parent2);
 		udata.u_error = EEXIST;
@@ -337,6 +338,7 @@ arg_t _uname(void)
 }
 
 #undef buf
+#undef len
 
 /**************************************
 flock(fd, lockop)	    Function 60
@@ -499,3 +501,48 @@ arg_t _ftruncate(void)
 #undef file
 #undef offset
 #undef flag
+
+/* symlink(target, pathname), syscall 68. Targets need not exist. */
+arg_t _symlink(void)
+{
+    uint8_t target[512];
+    usize_t available, len;
+    inoptr parent, ino;
+    int error;
+    available = valaddr_r((uint8_t *)udata.u_argn, 512, 1);
+    if (!available || _uget((uint8_t *)udata.u_argn, target, available)) return -1;
+    for (len = 0; len < available && target[len]; len++);
+    if (len == available) { udata.u_error = ENAMETOOLONG; return -1; }
+    if (!len) { udata.u_error = ENOENT; return -1; }
+    ino = n_open_flags((uint8_t *)udata.u_argn1, &parent, N_NOFOLLOW | N_NODEREF);
+    if (ino) {
+        i_deref(ino);
+        i_deref(parent);
+        udata.u_error = EEXIST;
+        return -1;
+    }
+    if (!parent) return -1;
+    i_ref(parent); /* Retain for rollback if writing the target fails. */
+    ino = newfile(parent, lastname);
+    if (!ino) { i_deref(parent); return -1; }
+    udata.u_base = target;
+    udata.u_count = len;
+    udata.u_offset = 0;
+    udata.u_sysio = true;
+    writei(ino, 0); /* newfile initially gives us an ordinary disk file. */
+    if (udata.u_error || udata.u_done != len) {
+        error = udata.u_error ? udata.u_error : EIO;
+        udata.u_error = 0;
+        unlinki(ino, parent, lastname);
+        i_deref(parent);
+        i_deref(ino);
+        udata.u_error = error;
+        return -1;
+    }
+    ino->c_node.i_mode = F_LNK | 0777;
+    setftime(ino, A_TIME | M_TIME | C_TIME);
+    wr_inode(ino);
+    i_deref(parent);
+    i_deref(ino);
+    return 0;
+}

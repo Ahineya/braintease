@@ -11,6 +11,7 @@ void werase(WINDOW *win)
   chtype *end, *start, blank;
   int y;
 
+  win->_last_valid = 0;
   blank = ' ' | (win->_attrs & ATR_MSK);
 
   for (y = win->_regtop; y <= win->_regbottom; y++) {	/* clear all lines */

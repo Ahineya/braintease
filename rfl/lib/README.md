@@ -10,6 +10,25 @@ A `.rfl` suffix is optional. Parent-directory components in library imports are 
 
 Current modules:
 
+- [`lib/music`](music.rfl): owned guest WAV player with a C streaming engine,
+  pause/resume, relative seeking, volume and playback status. Built for both
+  Unix targets; see [music usage and device details](../../ports/music/README.md).
+
+- [`lib/qr`](qr.rfl): owned C QR encoder, byte payloads up to 84 octets,
+  medium error correction, complete quiet zone and two module rows per curses
+  cell. At most 45 columns by 23 terminal rows; generation needs no OS services.
+
+- [`lib/tui`](tui.rfl): `Rect` and a statically dispatched `Canvas` drawing
+  contract implemented for curses `Screen` and `Window`.
+- [`lib/tui_list`](tui_list.rfl): item-independent `Selection`, with clamped
+  movement, paging and viewport repair after list changes/resizes.
+- [`lib/tui_input`](tui_input.rfl): `LineEdit`, shared by prompts and file
+  dialogs; cursor movement, editing and horizontal scrolling.
+- [`lib/tui_files`](tui_files.rfl): Commander's extracted `FilePanel` model and
+  renderer, directory-first sorting, refresh, hidden files and prefix search.
+- [`lib/tui_file_dialog`](tui_file_dialog.rfl): an Open dialog composed from
+  `FilePanel`, `LineEdit` and owned popup layers. Used by Rift.
+
 - [`lib/text`](text.rfl): owned C gap buffer, indexed lines, grouped undo/redo,
   search/text objects and incremental syntax cells. Independent of curses and
   filesystem policy; works with standalone and both OS targets.
@@ -53,3 +72,92 @@ screen.text(0, 0, "Selected item", styles[1]);
 A failed load preserves the loader's current values; `config()` returns an
 independent value snapshot. The RFL APIs use `Result`, owned cleanup and `///`
 documentation, so IntelliJ can navigate imports and show help through the LSP.
+
+## Composing TUI widgets
+
+Widget state, drawing and the application event loop are separate. `Selection`
+and `LineEdit` retain their state across repaints. `FilePanel` owns a directory
+snapshot and a selection/viewport; movement does not read the directory again.
+The Open dialog retains its file rows while editing the filename and does not
+redraw on input timeouts.
+Its `refresh`/`enter` methods commit a new listing only on success. The generic
+renderer borrows any `Canvas`: Commander draws into `Screen`, while Rift's
+picker draws into a floating `Window`. It allocates no windows and does not
+present, block on keys, change the working directory or choose a global palette.
+
+Pass a local `Rect` and semantic `PanelPalette`, then compose with the existing
+`Screen.stage`, `Window.stage`, `Screen.present` boundary. `visible_rows(area)`
+provides the viewport height; call `panel.reveal(rows)` after resize or changing
+a selection. `panel.key(key, rows)` reports whether it consumed a standard list
+navigation key; applications retain Enter, shortcuts, focus and file-operation
+policy. `Canvas` uses static trait dispatch, so this API requires neither a
+runtime widget tree nor per-cell dynamic dispatch.
+
+```rfl
+import { Rect } from "lib/tui";
+import { file_panel, draw, visible_rows, PanelPalette } from "lib/tui_files";
+
+// Once, with an active curses session and an application-supplied palette:
+let mut panel = file_panel("/", false)?;
+let area = Rect { row: 1, column: 0, rows: 20, columns: 40 };
+let rows = visible_rows(area);
+panel.reveal(rows);
+draw(screen, &panel, area, colors, true, true);
+// In the application's event loop: panel.key(key, rows).
+```
+
+For a complete Open dialog:
+
+```rfl
+import { open_file, OpenOptions } from "lib/tui_file_dialog";
+
+let options = OpenOptions {
+    directory: "/", selected_name: "", allow_new: false, show_hidden: false, lines: true
+};
+match open_file(screen, palette, options)? {
+    Some(path) => { /* application opens this absolute guest path */ },
+    None => { /* cancelled; existing application state is intact */ }
+}
+```
+
+The filename starts empty and focused, so callers can type an absolute or
+relative path immediately. Tab switches between filename and list. Enter opens
+an existing regular file or enters a directory; Right enters directories only.
+Arrows, Home/End and Page Up/Down navigate. Typing in the list searches an ASCII
+prefix; `/` returns to absolute-path entry. Ctrl-B goes to the parent and
+reselects the directory just left, Ctrl-T toggles hidden entries, and Ctrl-R
+refreshes the listing. Esc/Ctrl-C cancels. Directory, selection, filename and
+editing cursor survive resizing, including a temporarily undersized terminal.
+
+`allow_new` permits a typed nonexistent path to be returned without creating it;
+the caller owns creation and overwrite policy. Symlinks and special files are
+not accepted by this first picker. Listings retain the existing 4096-entry
+POSIX bound, input is limited to 255 ASCII characters, and directory order is
+bytewise with directories first. This is a bundled application library under
+`lib/`, with `///` hover documentation, not a new standard-library or packaging
+mechanism. Save As browsing, multi-selection, mouse input and tree views can be
+added above the same state/drawing contracts.
+
+## Retained panels and reusable I/O
+
+`lib/tui_files` also provides `panel_paint()` and `draw_cached(...)`. Keep one
+`PanelPaint` per surface/rectangle, and set `valid = false` after an overlay or
+other drawing replaces its cells. Geometry, palette, focus, viewport and listing
+changes trigger a full panel repaint; selection-only movement redraws the old/new
+rows, count and scrollbar. `FilePanel.refresh` and `enter` advance `generation`.
+Code that directly replaces entries must also advance that token. The original
+`draw` remains an unconditional renderer. `Canvas.glyphs` batches a repeated glyph
+run into one drawing call.
+
+`std/posix.read_into` / `File.read_into` fill an initialized reusable `Vec<u8>`
+and return its valid prefix length without changing its size. `write_prefix`
+writes that prefix; `lib/text.hash_prefix`, `Buffer.append_prefix` and
+`Buffer.copy_into` consume or produce ranges without temporary slices. Initialize
+fixed buffers once, keep the returned length, and never treat an unused tail as
+file data. The allocating `read` and `write_all` APIs remain available.
+
+`Buffer.damage()` consumes all accumulated edit damage, including syntax
+propagation, before painting a frame. It has one rendering consumer per buffer;
+newlines invalidate the suffix, and untouched uncached syntax stays lazy.
+`lib/text_curses.paint_line` returns -1 on error, 0 for a fitting line or 1 for
+right overflow. The boolean `paint` wrapper remains available.

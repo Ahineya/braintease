@@ -27,6 +27,9 @@ fn to_lower(value: String) -> String {
 
 export fn detect(path: String) -> Language {
     let name = to_lower(basename(path));
+    if (ends_with(name, ".bas")) {
+        return language("basic", 13, "basic", "BASIC", "{file}");
+    }
     if (ends_with(name, ".bf") || ends_with(name, ".b")) {
         return language("brainfuck", 8, "bf", "BF", "{file}");
     }
@@ -60,8 +63,8 @@ export fn detect(path: String) -> Language {
     if (ends_with(name, ".lisp") || ends_with(name, ".scm")) {
         return language("lisp", 11, "", "", "");
     }
-    if (ends_with(name, ".js")) {
-        return language("javascript", 1, "node", "NODE", "{file}");
+    if (ends_with(name, ".js") || ends_with(name, ".mjs") || ends_with(name, ".cjs")) {
+        return language("javascript", 14, "js", "JS", "{file}");
     }
     if (ends_with(name, ".pas") || ends_with(name, ".pp")) {
         return language("pascal", 4, "fpc", "FPC", "{file} -o{output} && {output}");

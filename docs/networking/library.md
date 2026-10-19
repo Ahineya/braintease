@@ -194,7 +194,10 @@ IPv4 reassembly, multicast and DNS-over-TCP fallback remain separate work.
 
 See the [TCP client guide](tcp.md) for the API, partial reads/writes, EOF,
 half-close, timeouts and connection ownership. Each caller-owned `NetTcp` has
-512-octet TX/RX buffers; a context can register four connections. Drive the
+512-octet TX/RX buffers in the standalone profile; a context can register four
+connections. The Unix kernel profile uses a 4096-octet RX ring, a 1460-octet
+advertised MSS and larger connection tables, while retaining a 512-octet TX
+buffer. Drive the
 network poll and then each active TCP connection. TCP does not receive NIC
 frames independently.
 
@@ -208,11 +211,11 @@ code call an optional internal driver rather than directly referencing TCP.
 `net_tcp_listen`, `net_tcp_listener_poll`, `net_tcp_accept` and
 `net_tcp_release` expose caller-owned bounded pools over the same stream core.
 Standalone contexts support two listeners and four live connections. The FUZIX
-and Fuse-X kernel profile selects four listeners and sixteen live connections
+and Fuse-X kernel profile selects sixteen listeners and sixty-four live connections
 consistently across all network units; see [local IPC and capacity](local-ipc.md).
 Accepted pointers
 remain claimed through failure/close until explicit release. An optional
-caller-owned `NetTcpWaitTable` preserves 32 compact old tuples while releasing
+caller-owned `NetTcpWaitTable` preserves 32 compact old tuples (128 in the kernel profile) while releasing
 large TIME_WAIT buffers; no ordinary ping/DNS application allocates that table.
 See [TCP ownership](tcp.md#listen-and-accept) for backpressure and teardown.
 

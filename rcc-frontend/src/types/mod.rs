@@ -118,15 +118,10 @@ impl Type {
             Type::Array { element_type, .. } => element_type.size_in_words()
                 .is_some_and(|size| size != 0 && element_type.volatile_at_offset(offset % size)),
             Type::Struct { fields, .. } => {
-                let mut base = 0;
-                for field in fields {
-                    let size = field.field_type.size_in_words().unwrap_or(0);
-                    if offset >= base && offset - base < size {
-                        return field.field_type.volatile_at_offset(offset - base);
-                    }
-                    base += size;
-                }
-                false
+                crate::semantic::struct_layout::calculate_struct_layout(fields,
+                    rcc_common::SourceLocation::new_simple(0, 0)).ok().is_some_and(|layout|
+                        layout.fields.iter().any(|field| offset >= field.offset && offset - field.offset < field.size
+                            && field.field_type.volatile_at_offset(offset - field.offset)))
             }
             Type::Union { fields, .. } => fields.iter().any(|field|
                 field.field_type.size_in_words().is_some_and(|size| offset < size)
@@ -231,20 +226,27 @@ impl Type {
             Type::Array { size: None, .. } => None, // Incomplete type
             Type::Function { .. } => None, // Functions don't have size
             Type::Struct { fields, .. } => {
+                // Size queries are hot during expression analysis. Do not
+                // materialize/clones every field type merely to count cells.
                 let mut total = 0;
+                let mut unit: Option<(u64, u8)> = None;
                 for field in fields {
-                    if matches!(field.field_type, Type::Array { size: None, .. }) {
-                        continue; // Flexible array member: not included in sizeof
-                    }
-                    total += field.field_type.size_in_words()?;
+                    if matches!(field.field_type, Type::Array { size: None, .. }) { continue; }
+                    let size = field.field_type.size_in_words()?;
+                    if let Some(width) = field.bit_width {
+                        if width == 0 { unit = None; continue; }
+                        let used = match unit {
+                            Some((previous, used)) if previous == size && used as u64 + width as u64 <= size * 16 => used,
+                            _ => { total += size; 0 }
+                        };
+                        unit = Some((size, used + width));
+                    } else { total += size; unit = None; }
                 }
                 Some(total)
             }
-            Type::Union { fields, .. } => {
-                fields.iter()
-                    .filter_map(|f| f.field_type.size_in_words())
-                    .max()
-            }
+            Type::Union { fields, .. } => fields.iter()
+                .filter(|f| f.bit_width != Some(0))
+                .filter_map(|f| f.field_type.size_in_words()).max(),
             Type::Enum { .. } => Some(1), // Enum is like int
             Type::Typedef(_) | Type::Error => None,
         }
@@ -331,6 +333,8 @@ pub struct StructField {
     pub name: String,
     pub field_type: Type,
     pub offset: Option<u64>, // Computed during semantic analysis
+    #[serde(default)]
+    pub bit_width: Option<u8>,
 }
 
 /// Enum variant
@@ -436,6 +440,7 @@ mod tests {
                     name: "n".to_string(),
                     field_type: Type::Int,
                     offset: None,
+                    bit_width: None,
                 },
                 StructField {
                     name: "data".to_string(),
@@ -444,6 +449,7 @@ mod tests {
                         size: None,
                     },
                     offset: None,
+                    bit_width: None,
                 },
             ],
         };

@@ -44,6 +44,7 @@ impl<'a> Checker<'a> {
                 self.type_defs.insert(adt.name.clone(), adt.name_span);
             }
         }
+        self.register_constructors();
         for (index, adt) in module.adts.iter().enumerate() {
             for ctor in &adt.ctors {
                 if is_builtin(&ctor.name) {
@@ -68,7 +69,7 @@ impl<'a> Checker<'a> {
                             "a reference cannot be stored in a type",
                         ));
                     }
-                    self.validate_ty(field, &self.schemas[index].params.clone())?;
+                    self.validate_ty(field, &self.schemas[index].type_params.clone())?;
                 }
                 let tag = self.schemas[index].ctors.len() as u16;
                 self.schemas[index].ctors.push(ctor.fields.clone());
@@ -181,7 +182,7 @@ impl<'a> Checker<'a> {
                         format!("parameter `{}` needs a type", param.name),
                     ));
                 };
-                self.validate_ty(ty, &type_params)?;
+                self.validate_ty(ty, &func.type_params)?;
             }
             if let Some(ret) = &func.ret {
                 if escaped_ref(ret) {
@@ -191,7 +192,7 @@ impl<'a> Checker<'a> {
                         "a function cannot return a reference",
                     ));
                 }
-                self.validate_ty(ret, &type_params)?;
+                self.validate_ty(ret, &func.type_params)?;
             }
             if func.c_export {
                 if !type_params.is_empty() {
@@ -252,7 +253,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn note_fn_fact(&mut self, func: &Function) {
-        if func.name_span.end <= func.name_span.start {
+        if self.signature_only.contains(&func.name) || func.name_span.end <= func.name_span.start {
             return;
         }
         let written = self

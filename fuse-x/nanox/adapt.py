@@ -46,10 +46,17 @@ def adapt(dest):
         text=path.read_text()
         text='#include "native.h"\n'+text
         if name=='srvfunc':
+            text=function(text,'GrQueryPointer',lambda s:replace(s,'\tSERVER_LOCK();',
+                '\tSERVER_LOCK();\n\tif(nxh_query_pointer(mwin,x,y,bmask)){SERVER_UNLOCK();return;}'))
             text=function(text,'NewWindow',lambda s:replace(replace(s,'wp->psd = rootwp->psd;', 'wp->psd = pwp->psd;'),
                 '\tpwp->children = wp;', '\tif(!nxh_new(wp)){free(wp);GsError(GR_ERROR_MALLOC_FAILED,0);return NULL;}\n\tpwp->children = wp;'))
-            text=function(text,'GrResizeWindow',lambda s:replace(s,'\t/* possibly reallocate buffered window',
-                '\tif(!nxh_resize(wp,width,height)){GsError(GR_ERROR_MALLOC_FAILED,wid);SERVER_UNLOCK();return;}\n\tclipwp=NULL;\n\t/* possibly reallocate buffered window'))
+            text=function(text,'GrResizeWindow',lambda s:replace(replace(s,'\t/* possibly reallocate buffered window',
+                '\tif(!nxh_resize(wp,width,height)){if(!nxh_host_resizing())GsError(GR_ERROR_MALLOC_FAILED,wid);SERVER_UNLOCK();return;}\n\tclipwp=NULL;\n\t/* possibly reallocate buffered window'),
+                'if (wp->props & GR_WM_PROPS_BUFFERED)',
+                'if (wp->parent != rootwp && (wp->props & GR_WM_PROPS_BUFFERED))'))
+            text=function(text,'GrResizeWindow',lambda s:replace(s,
+                'if (width < oldw || height < oldh)',
+                'if (wp->parent != rootwp && (width < oldw || height < oldh))'))
             text=function(text,'GrMoveWindow',lambda s:"""
 
     GR_WINDOW *wp;SERVER_LOCK();wp=GsFindWindow(wid);
@@ -86,6 +93,16 @@ def adapt(dest):
         '      GdOffsetRegion(pwp->clipregion,pwp->x,pwp->y);GdIntersectRegion(vis,vis,pwp->clipregion);\n'
         '      GdOffsetRegion(pwp->clipregion,-pwp->x,-pwp->y);}')
     path.write_text(text)
+    # Root mouse events cover only guest surfaces in hosted mode. Eyes polls
+    # the read-only native pointer query as well, without requesting capture.
+    path=dest/'demos/nanox/nxeyes.c';text=path.read_text()
+    text=function(text,'main',lambda s:replace(replace(s,
+        'GrGetNextEvent(&event);','GrGetNextEventTimeout(&event,50);'),
+        '\t\tif(state->mouse_moved) {',
+        '\t\t{GR_WINDOW_ID w;GR_COORD x,y;GR_BUTTON b;GrQueryPointer(&w,&x,&y,&b);\n'
+        '\t\t if(x!=state->mousex||y!=state->mousey){state->mousex=x;state->mousey=y;state->mouse_moved=1;}}\n'
+        '\t\tif(state->mouse_moved) {'))
+    path.write_text(text)
 
     text=(NX/'ripple/screen.c').read_text()
     text='#include "native.h"\n'+text
@@ -97,7 +114,9 @@ def adapt(dest):
     text=function(text,'screen_open',lambda s:'''\n
     if(fd>=0)return NULL;
     fd=open("/dev/gfx",O_RDWR|O_CLOEXEC);if(fd<0)return NULL;
-    allocation=calloc(3,sizeof(*allocation));if(!allocation){close(fd);fd=-1;return NULL;}
+    {struct gx_info info;memset(&info,0,sizeof(info));info.version=GX_VERSION;if(ioctl(fd,GX_INFO,&info)<0){close(fd);fd=-1;return NULL;}raster_caps=info.flags;}
+    allocation=calloc(3+GX_HOSTED_MAX_WIDTH*16UL,sizeof(*allocation));if(!allocation){close(fd);fd=-1;return NULL;}
+    blit_scratch=allocation+3;
     psd->flags=PSF_SCREEN;psd->xres=psd->xvirtres=640;psd->yres=psd->yvirtres=480;
     psd->planes=1;psd->bpp=16;psd->data_format=MWIF_RGB565;psd->pitch=640;
     psd->size=1;psd->addr=(unsigned char *)(allocation+1);psd->ncolors=65536UL;
@@ -113,7 +132,7 @@ def adapt(dest):
 ''')
     text=function(text,'nxr_present',lambda s:'\n return nxh_present();\n')
     text=function(text,'nxr_event',lambda s:'\n return nxh_event(e);\n')
-    text=replace(text,'width>640||height>480','width>1024||height>768')
+    text=replace(text,'width>640||height>480','width>GX_HOSTED_MAX_WIDTH||height>GX_HOSTED_MAX_HEIGHT')
     (dest/'native-screen.c').write_text(text)
 
     text=(NX/'ripple/server.c').read_text()
@@ -125,7 +144,7 @@ def adapt(dest):
  memset(held,0,sizeof(held));modifiers=0;repeat_key=0;GsHandleMouseStatus(cursorx,cursory,0);
 }\n'''
     # Native windows may grow beyond the virtual root's default screen size.
-    text=text.replace('<=640','<=1024').replace('<=480','<=768')
+    text=text.replace('<=640','<=GX_HOSTED_MAX_WIDTH').replace('<=480','<=GX_HOSTED_MAX_HEIGHT')
     (dest/'native-server.c').write_text(text)
     # The launcher is an ordinary titled native window, not a desktop panel.
     path=dest/'demos/nanox/nxlaunch.c';text=path.read_text()

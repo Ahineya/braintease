@@ -1,0 +1,23 @@
+import {FunctorOnce, MonadOnce, map_once, flat_map_once} from "std/fp";
+
+fn main() {
+    let owner = owned(41, fn(value: &mut i16) => {
+        println("released used capture");
+    });
+    let result = map_once<Option, _, _>(Some(1), once fn(n: i16) => {
+        *owner.borrow() + n
+    });
+    println(result);
+
+    let owner = owned("unused", fn(value: &mut String) => {
+        println("released skipped capture");
+    });
+    let failed: Result<i16, String> = flat_map_once<Result<_, String>, i16, i16>(
+        Err("stopped"),
+        once fn(n: i16) => {
+            println(*owner.borrow());
+            Ok(n)
+        }
+    );
+    println(failed);
+}

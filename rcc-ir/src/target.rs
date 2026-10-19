@@ -10,6 +10,7 @@ pub enum Target {
     #[default]
     Ripple,
     Native,
+    Wasm,
 }
 
 impl Target {
@@ -17,8 +18,9 @@ impl Target {
         match name {
             "ripple" => Ok(Self::Ripple),
             "native" => Ok(Self::Native),
+            "wasm" => Ok(Self::Wasm),
             _ => Err(format!(
-                "unknown target {name:?}; expected ripple or native"
+                "unknown target {name:?}; expected ripple, native or wasm"
             )),
         }
     }
@@ -26,11 +28,13 @@ impl Target {
         match self {
             Self::Ripple => "ripple",
             Self::Native => "native",
+            Self::Wasm => "wasm",
         }
     }
     pub fn has(self, capability: &str) -> Result<bool, String> {
         match capability {
-            "host_math" | "native_float" => Ok(self == Self::Native),
+            "host_math" => Ok(self == Self::Native),
+            "native_float" => Ok(matches!(self, Self::Native | Self::Wasm)),
             _ => Err(format!("unknown target capability {capability:?}")),
         }
     }
@@ -89,6 +93,8 @@ pub const NATIVE_SERVICES: &[(&str, usize)] = &[
     ("rcc_hosted_image_begin", 1),
     ("rcc_hosted_image_append", 2),
     ("rcc_hosted_image_finish", 0),
+    ("rcc_hosted_image_prepare", 0),
+    ("rcc_hosted_image_poll", 0),
     ("rcc_hosted_image_cancel", 0),
     ("rcc_hosted_valid_function", 2),
     ("rcc_hosted_image_load", 2),
@@ -98,6 +104,8 @@ pub const NATIVE_SERVICES: &[(&str, usize)] = &[
     ("rcc_hosted_stopping", 0),
     ("rcc_hosted_lock_image", 2),
     ("rcc_hosted_sync_image", 0),
+    ("rcc_hosted_read_cells", 3),
+    ("rcc_hosted_write_cells", 3),
     ("rcc_hosted_input", 0),
     ("rcc_hosted_idle", 1),
     ("rcc_hosted_fs", 2),
@@ -145,6 +153,7 @@ pub const NATIVE_SERVICES: &[(&str, usize)] = &[
     ("mmio_write", 2),
     ("rfl_halt", 0),
     ("exit", 1),
+    ("__rcc_host_math", 3),
     ("__rfl_host_sin", 1),
     ("__rfl_host_cos", 1),
     ("__rcc_f64_floor", 1),

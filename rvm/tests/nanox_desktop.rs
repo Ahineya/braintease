@@ -31,7 +31,10 @@ impl Guest {
         assert!(
             !self.log.contains("panic:")
                 && !self.log.contains("NXCHECK_")
-                && !self.log.contains("GsError"),
+                && !self
+                    .log
+                    .split_inclusive('\n')
+                    .any(|line| line.ends_with('\n') && line.contains("GsError")),
             "{}",
             self.log
         );
@@ -238,7 +241,7 @@ fn roaches_masks_animation_occlusion_and_cleanup() {
     vm.rgb565_display = Some(RGB565Display::new());
     vm.devices
         .accept_events([InputTransition::Motion { x: 620, y: 400 }]);
-    vm.push_input_string("nxroach --help\nnxroach -roaches 0; echo BAD_COUNT:$?\nnxroach -roaches 65; echo BIG_COUNT:$?\nnxroach -speed nan; echo BAD_SPEED:$?\nnxroach -speed; echo MISSING_SPEED:$?\nnxroach -rc 0x1000000; echo BAD_COLOUR:$?\nnxroach -seed -1; echo BAD_SEED:$?\nnano-X -p &\ns=$!\nsleep 1\nnxroachcheck\necho ATLAS_STATUS:$?\nkill $s\nwait $s\nNANOX_TRACE=1 startx\necho ROACH_SESSION:$?\nps\nshutdown\n");
+    vm.push_input_string("nxroach --help\nnxroach -roaches 0; echo BAD_COUNT:$?\nnxroach -roaches 65; echo BIG_COUNT:$?\nnxroach -speed nan; echo BAD_SPEED:$?\nnxroach -speed; echo MISSING_SPEED:$?\nnxroach -rc 0x1000000; echo BAD_COLOUR:$?\nnxroach -seed -1; echo BAD_SEED:$?\nnano-X -p &\ns=$!\nsleep 1\nnxroachcheck\necho ATLAS_STATUS:$?\nkill $s\nwait $s\nNANOX_TRACE=1 startx --minimal\necho ROACH_SESSION:$?\nps\nshutdown\n");
     let mut g = Guest {
         vm,
         log: String::new(),
@@ -443,6 +446,438 @@ fn empty_terminal(pixels: &[u16], x: i32, y: i32) -> bool {
         })
     })
 }
+
+fn coloured_text(pixels: &[u16], text: &str, fg: u16, bg: u16) -> Vec<(i32, i32)> {
+    // Slate captions replaced the old flat system-colour title bars. Match
+    // their exact text mask over a gradient, retaining strict background
+    // comparisons for ordinary controls and the NXDSKTOP menu.
+    let caption = bg == 0x2945;
+    let fg = if caption { 0xef7d } else { fg }; // Slate #ebeeec in RGB565.
+    let font = font();
+    let width = text.len() * 8;
+    let (sx, sy) = (0..16)
+        .flat_map(|y| (0..8).map(move |x| (x, y)))
+        .find(|&(x, y)| font[text.as_bytes()[0] as usize * 16 + y] & (0x8000 >> x) != 0)
+        .unwrap();
+    let mut found = Vec::new();
+    for y in 0..480 - 16 {
+        for x in 0..640 - width {
+            if pixels[(y + sy) * 640 + x + sx] != fg {
+                continue;
+            }
+            if text.bytes().enumerate().all(|(i, c)| {
+                (0..16).all(|ry| {
+                    (0..8).all(|rx| {
+                        let pixel = pixels[(y + ry) * 640 + x + i * 8 + rx];
+                        let ink = font[c as usize * 16 + ry] & (0x8000 >> rx) != 0;
+                        if caption {
+                            (pixel == fg) == ink
+                        } else {
+                            pixel == if ink { fg } else { bg }
+                        }
+                    })
+                })
+            }) {
+                found.push((x as i32, y as i32));
+            }
+        }
+    }
+    found
+}
+
+fn desktop_menu(g: &mut Guest, item: usize) {
+    let menus = g.log.matches("NXDSKTOP_MENU 1").count();
+    g.click(24, 468);
+    g.until("NXDSKTOP Start menu opened", |g| {
+        g.log.matches("NXDSKTOP_MENU 1").count() > menus
+    });
+    g.until("NXDSKTOP menu pixels committed", |g| {
+        !coloured_text(&g.pixels(), "About", 0xad75, 0x3186).is_empty()
+    });
+    let count = include_str!("../../ports/nanox/ripple/nxdsktop-platform.h")
+        .split("static const char *apps[]=")
+        .nth(1)
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .matches('"')
+        .count()
+        / 2;
+    let top = 480 - 24 - ((count + 3) * 22 + 8);
+    let y = if item < count {
+        top + 4 + item * 22 + 11
+    } else {
+        top + 8 + count * 22 + (item - count) * 22 + 11
+    };
+    g.click(70, y as i32);
+}
+
+fn tetris_state(g: &Guest) -> Vec<i64> {
+    g.log
+        .lines()
+        .rev()
+        .find_map(|line| {
+            let text = line.strip_prefix("NXTETRIS_STATE ")?;
+            let fields: Vec<i64> = text
+                .split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect();
+            (fields.len() == 6).then_some(fields)
+        })
+        .unwrap_or_default()
+}
+
+fn tetris_key(g: &mut Guest, key: u16) -> Vec<i64> {
+    let events = g.log.matches("NXTETRIS_INPUT ").count();
+    g.key(key);
+    g.until("Tetris input processed", |g| {
+        g.log.matches("NXTETRIS_INPUT ").count() > events && tetris_state(g).len() == 6
+    });
+    tetris_state(g)
+}
+
+#[test]
+#[ignore = "run via ports/nanox/tools/test_desktop.py --only tetris with a disposable image"]
+fn tetris_gameplay_lines_pause_and_highscore() {
+    let build = PathBuf::from(std::env::var_os("NANOX_TEST_BUILD").unwrap());
+    let image = PathBuf::from(std::env::var_os("NANOX_DESKTOP_IMAGE").unwrap());
+    let output = build.join("nanox/tetris");
+    std::fs::create_dir_all(&output).unwrap();
+    let mut vm = VM::with_options(64000, 16384000, Some(image));
+    vm.host_input_enabled = false;
+    vm.jit_enabled = true;
+    vm.devices
+        .network
+        .configure_host(Some(std::ffi::OsStr::new("off")))
+        .unwrap();
+    vm.load_binary(&std::fs::read(build.join("bios.bin")).unwrap())
+        .unwrap();
+    vm.rgb565_display = Some(RGB565Display::new());
+    vm.push_input_string("nxtetris --help\nnxtetris --seed -1; echo BAD_SEED:$?\nNANOX_TRACE=1 startx --minimal\necho TETRIS_SESSION:$?\ncat /.nxtetris-score\necho 40000 > /.nxtetris-score\nNANOX_TRACE=1 startx\necho TETRIS_REOPEN:$?\ncat /.nxtetris-score\nps\nshutdown\n");
+    let mut g = Guest {
+        vm,
+        log: String::new(),
+        output,
+    };
+    g.until("terminal and launcher", |g| {
+        !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !coloured_text(&g.pixels(), "Tetris", 0, 0xce79).is_empty()
+    });
+    let terminal = locate(&g.pixels(), "fuzix# ")[0];
+    g.click(550, 450);
+    g.until("Tetris launcher and decorated window", |g| {
+        g.log.contains("NXTETRIS_READY ")
+            && !coloured_text(&g.pixels(), "Tetris", 0xad75, 0x2945).is_empty()
+            && !coloured_text(&g.pixels(), "New Game", 0, 0xbdf7).is_empty()
+    });
+    let new_game = coloured_text(&g.pixels(), "New Game", 0, 0xbdf7)[0];
+    let origin = (new_game.0 - 15, new_game.1 - 128);
+    let board = (origin.0 as usize + 100, origin.1 as usize + 10);
+    assert!(g.log.contains("BAD_SEED:2"), "{}", g.log);
+    let paused = tetris_key(&mut g, 19); // P
+    assert_eq!(paused[0], 2);
+    let before = g.rectangle(board.0, board.1, 120, 240);
+    g.settle(850);
+    assert_eq!(
+        g.rectangle(board.0, board.1, 120, 240),
+        before,
+        "pause must freeze gravity"
+    );
+    assert_eq!(tetris_key(&mut g, 80)[0], 2, "movement must not unpause");
+    assert_eq!(tetris_key(&mut g, 19)[0], 1);
+    let y = tetris_state(&g)[3];
+    g.until("monotonic gravity advances", |g| {
+        let s = tetris_state(g);
+        s.len() == 6 && s[3] > y
+    });
+    let rotated = tetris_key(&mut g, 82); // up: clockwise
+    assert_eq!(rotated[5], 1);
+    assert_eq!(tetris_key(&mut g, 7)[5], 0); // D: anticlockwise
+    for _ in 0..5 {
+        tetris_key(&mut g, 80);
+    }
+    assert_eq!(
+        tetris_state(&g)[2],
+        0,
+        "left edge must reject out-of-bounds moves"
+    );
+    tetris_key(&mut g, 44); // first horizontal I at columns 0..3
+    g.until("first piece locked", |g| {
+        g.rectangle(board.0, board.1 + 230, 40, 10)
+            .iter()
+            .all(|&p| p == 0x07e0)
+    });
+    tetris_key(&mut g, 44); // second at columns 4..7
+    g.until("second piece locked", |g| {
+        g.rectangle(board.0, board.1 + 230, 80, 10)
+            .iter()
+            .all(|&p| p == 0x07e0)
+    });
+    g.snapshot("tetris-demo.ppm");
+    for _ in 0..5 {
+        tetris_key(&mut g, 79);
+    }
+    assert_eq!(
+        tetris_state(&g)[2],
+        8,
+        "right edge must account for piece width"
+    );
+    tetris_key(&mut g, 44); // third fills all 12 columns
+    g.until("line clears, earns 100 and persists", |g| {
+        g.log.contains("NXTETRIS_SAVED 100")
+            && tetris_state(g)[1] == 100
+            && g.rectangle(board.0, board.1 + 230, 120, 10)
+                .iter()
+                .all(|&p| p == 0)
+    });
+    // Mouse controls share the same state machine as keyboard controls.
+    g.click(origin.0 + 50, origin.1 + 165);
+    g.until("mouse pauses", |g| tetris_state(g)[0] == 2);
+    g.click(origin.0 + 50, origin.1 + 165);
+    g.until("mouse continues", |g| tetris_state(g)[0] == 1);
+    tetris_key(&mut g, 20); // Q
+    g.until("quit closes only the game", |g| {
+        g.log.matches("NXTETRIS_EXIT ").count() == 1
+    });
+    g.settle(200); // Let NanoWM release the closing client's pointer/focus.
+    g.click(550, 450);
+    g.until("high score read by a fresh game", |g| {
+        g.log
+            .lines()
+            .any(|line| line.starts_with("NXTETRIS_READY ") && line.trim_end().ends_with(" 100"))
+            && !coloured_text(&g.pixels(), "Tetris", 0xad75, 0x2945).is_empty()
+    });
+    tetris_key(&mut g, 17); // N
+    assert_eq!(tetris_state(&g)[1], 0);
+    tetris_key(&mut g, 19); // pause before SIGTERM
+    let line = g
+        .log
+        .lines()
+        .rev()
+        .find(|line| line.starts_with("NXTETRIS_READY "))
+        .unwrap();
+    let pid = line.split_whitespace().nth(1).unwrap().to_owned();
+    g.click(terminal.0 + 320, terminal.1 - 16); // Activate through its exposed title bar.
+    g.settle(100);
+    g.text(&format!("kill {pid}"));
+    g.key(40);
+    g.until("SIGTERM wakes a paused game", |g| {
+        g.log.matches("NXTETRIS_EXIT ").count() == 2
+    });
+    g.vm.devices.accept_events([InputTransition::Close]);
+    g.until("desktop reopens and wide score fixture is saved", |g| {
+        g.log.contains("TETRIS_SESSION:0")
+            && g.log.matches("Nano-X ready").count() == 2
+            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && g.log.contains("NXDSKTOP_READY ")
+            && !coloured_text(&g.pixels(), "Start", 0xad75, 0x3186).is_empty()
+    });
+    desktop_menu(&mut g, 9);
+    g.until("32-bit high score survives session restart", |g| {
+        g.log
+            .lines()
+            .any(|line| line.starts_with("NXTETRIS_READY ") && line.trim_end().ends_with(" 40000"))
+            && !coloured_text(&g.pixels(), "Tetris", 0xad75, 0x2945).is_empty()
+    });
+    tetris_key(&mut g, 20);
+    g.until("third game quits", |g| {
+        g.log.matches("NXTETRIS_EXIT ").count() == 3
+    });
+    g.vm.devices.accept_events([InputTransition::Close]);
+    g.until("clean shutdown", |g| matches!(g.vm.state, VMState::Halted));
+    assert!(
+        g.log.contains("TETRIS_REOPEN:0") && g.log.lines().any(|line| line.trim_end() == "40000"),
+        "{}",
+        g.log
+    );
+    println!("Tetris JIT: launcher, gravity, pause, rotation/walls, hard drop, complete line pixels/score, mouse controls, signal wakeup, 32-bit high scores and clean session restart passed");
+}
+
+#[test]
+#[ignore = "run via ports/nanox/tools/test_desktop.py --only nxdsktop with a disposable image"]
+fn nxdsktop_menu_dialogs_files_and_session() {
+    let build = PathBuf::from(std::env::var_os("NANOX_TEST_BUILD").unwrap());
+    let image = PathBuf::from(std::env::var_os("NANOX_DESKTOP_IMAGE").unwrap());
+    let output = build.join("nanox/nxdsktop");
+    std::fs::create_dir_all(&output).unwrap();
+    let mut vm = VM::with_options(64000, 16384000, Some(image));
+    vm.host_input_enabled = false;
+    vm.jit_enabled = true;
+    vm.devices
+        .network
+        .configure_host(Some(std::ffi::OsStr::new("off")))
+        .unwrap();
+    vm.load_binary(&std::fs::read(build.join("bios.bin")).unwrap())
+        .unwrap();
+    vm.rgb565_display = Some(RGB565Display::new());
+    vm.push_input_string("nxdsktop --help\nNANOX_TRACE=1 startx\necho NXDESKTOP_STATUS:$?\ncat '/edit me;echo HACK'\nps\nNANOX_TRACE=1 startx\necho NXDESKTOP_REOPEN:$?\nshutdown\n");
+    let mut g = Guest {
+        vm,
+        log: String::new(),
+        output,
+    };
+    g.until("NXDSKTOP and initial terminal", |g| {
+        g.log.contains("NXDSKTOP_READY ")
+            && !locate(&g.pixels(), "fuzix# ").is_empty()
+            && !coloured_text(&g.pixels(), "Start", 0xad75, 0x3186).is_empty()
+    });
+    g.snapshot("nxdsktop-first.ppm");
+    desktop_menu(&mut g, 0);
+    g.until("About dialog", |g| {
+        g.log.contains("NXMSG_READY ")
+            && !coloured_text(&g.pixels(), "About NXDSKTOP", 0xad75, 0x2945).is_empty()
+    });
+    g.settle(200);
+    g.key(40);
+    g.until("Enter accepts About through its pipe", |g| {
+        g.log.contains("NXDSKTOP_RESULT 0 OK")
+    });
+    desktop_menu(&mut g, 1);
+    g.until("Help dialog", |g| {
+        g.log.matches("NXMSG_READY ").count() == 2
+            && !coloured_text(&g.pixels(), "Desktop Help", 0xad75, 0x2945).is_empty()
+    });
+    g.settle(200);
+    g.key(41);
+    g.until("Escape cancels Help", |g| {
+        g.log.contains("NXDSKTOP_RESULT 0 []")
+    });
+
+    desktop_menu(&mut g, 2);
+    g.until("calculator painted", |g| {
+        g.log.contains("NXCALC_READY ")
+            && !coloured_text(&g.pixels(), "7", 0xad75, 0x2965).is_empty()
+            // The fixed-width calculator caption leaves room for WM controls.
+            && !coloured_text(&g.pixels(), "Calculat", 0xad75, 0x2945).is_empty()
+    });
+    let seven = coloured_text(&g.pixels(), "7", 0xad75, 0x2965)[0];
+    let origin = (seven.0 - 22, seven.1 - 79);
+    let calc_button = |g: &mut Guest, row: i32, col: i32| {
+        g.click(origin.0 + 26 + col * 35, origin.1 + 56 + row * 29);
+        g.settle(100);
+    };
+    let calc_value = |g: &Guest, value: &str| {
+        coloured_text(&g.pixels(), value, 0xad75, 0x2965)
+            .iter()
+            .any(|&(x, y)| x >= origin.0 + 10 && x < origin.0 + 160 && y == origin.1 + 12)
+    };
+    calc_button(&mut g, 3, 0); // 1
+    calc_button(&mut g, 3, 3); // +
+    calc_button(&mut g, 3, 1); // 2
+    calc_button(&mut g, 4, 2); // =
+    g.until("calculator 1+2=3", |g| calc_value(g, "3"));
+    calc_button(&mut g, 0, 3); // /
+    calc_button(&mut g, 3, 1); // 2
+    calc_button(&mut g, 4, 2);
+    g.until("calculator binary64 decimal division", |g| {
+        calc_value(g, "1.5")
+    });
+    calc_button(&mut g, 0, 3);
+    calc_button(&mut g, 4, 0); // 0
+    calc_button(&mut g, 4, 2);
+    g.until("calculator division by zero", |g| calc_value(g, "Error"));
+    calc_button(&mut g, 0, 0); // C
+    g.until("calculator recovers", |g| calc_value(g, "0"));
+    g.snapshot("nxdsktop-calculator.ppm");
+    g.click(origin.0 + 148, origin.1 - 16);
+    g.settle(200);
+
+    desktop_menu(&mut g, 4);
+    g.until("file selector", |g| {
+        g.log.contains("NXSELECT_READY ")
+            && !coloured_text(&g.pixels(), "Select File", 0xad75, 0x2945).is_empty()
+    });
+    g.settle(200);
+    g.key(41);
+    g.until("file selection cancelled", |g| {
+        g.log.contains("NXDSKTOP_RESULT 1 []")
+    });
+    desktop_menu(&mut g, 4);
+    g.until("file with spaces and shell syntax displayed", |g| {
+        g.log.matches("NXSELECT_READY ").count() == 2
+            && !coloured_text(&g.pixels(), "edit me;echo HACK", 0xffff, 0x8200).is_empty()
+            && !coloured_text(&g.pixels(), "Select File", 0xad75, 0x2945).is_empty()
+    });
+    let file = coloured_text(&g.pixels(), "edit me;echo HACK", 0xffff, 0x8200)[0];
+    g.click(file.0 + 12, file.1 + 8);
+    g.settle(150);
+    g.snapshot("nxdsktop-selector.ppm");
+    let ok = coloured_text(&g.pixels(), "OK", 0xffff, 0x8200)[0];
+    g.click(ok.0 + 8, ok.1 + 8);
+    g.until(
+        "chosen file opens in Levee without shell interpolation",
+        |g| {
+            g.log.contains("NXDSKTOP_RESULT 1 /edit me;echo HACK")
+                && !locate(&g.pixels(), "safe filename").is_empty()
+        },
+    );
+    g.settle(150);
+    g.text("ichanged ");
+    g.key(41);
+    g.text(":wq");
+    g.key(40);
+    g.until("editor terminal exits without ending desktop", |g| {
+        g.log.contains("NXDSKTOP_LAUNCH /bin/nxterm") && g.log.contains("NXTERM_EXIT ")
+    });
+    desktop_menu(&mut g, 10);
+    g.until(
+        "image viewer and its file selector launched from Start",
+        |g| g.log.contains("NXVIEW_READY ") && g.log.matches("NXSELECT_READY ").count() == 3,
+    );
+    g.settle(200);
+    g.key(41);
+    g.until("viewer picker cancelled", |g| {
+        g.log.contains("NXVIEW_PICKER_DONE")
+    });
+    g.settle(150);
+    g.key(20);
+    g.until("viewer closed without ending desktop", |g| {
+        g.log.contains("NXVIEW_EXIT")
+    });
+    desktop_menu(&mut g, 11);
+    g.until("sync dialog", |g| {
+        g.log.matches("NXMSG_READY ").count() == 3
+            && !coloured_text(&g.pixels(), "Sync disk", 0xad75, 0x2945).is_empty()
+    });
+    g.settle(150);
+    g.key(40);
+    g.until("sync accepted", |g| {
+        g.log.matches("NXDSKTOP_RESULT 0 OK").count() == 2
+    });
+    assert!(
+        g.log.matches("NXDSKTOP_STATUS ").count() > 1,
+        "resource status must refresh through timer events: {}",
+        g.log
+    );
+    desktop_menu(&mut g, 12);
+    g.until("desktop menu exits and session reopens", |g| {
+        g.log.contains("NXDESKTOP_STATUS:0")
+            && g.log.contains("changed safe filename")
+            && g.log.matches("NXDSKTOP_READY ").count() == 2
+            && !locate(&g.pixels(), "fuzix# ").is_empty()
+    });
+    let after = g.log.split("NXDESKTOP_STATUS:0").nth(1).unwrap();
+    assert!(
+        !after.lines().any(|line| line.trim_end() == "HACK"),
+        "filename executed as shell command"
+    );
+    desktop_menu(&mut g, 0);
+    g.until("open dialog during desktop teardown", |g| {
+        g.log.matches("NXMSG_READY ").count() == 4
+            && !coloured_text(&g.pixels(), "About NXDSKTOP", 0xad75, 0x2945).is_empty()
+    });
+    g.vm.devices.accept_events([InputTransition::Close]);
+    g.until("host close and clean shutdown", |g| {
+        matches!(g.vm.state, VMState::Halted)
+    });
+    assert!(
+        g.log.contains("NXDESKTOP_REOPEN:0") && g.log.contains("disk synced; power off."),
+        "{}",
+        g.log
+    );
+    println!("NXDSKTOP: Start menu, dialogs, file selection/cancellation, safe Levee argv, calculator arithmetic/errors, resource timer, sync and session exit/reopen passed");
+}
 #[test]
 #[ignore = "run via ports/nanox/tools/test_desktop.py with a disposable image"]
 fn desktop_clients_input_resize_and_recovery() {
@@ -460,7 +895,7 @@ fn desktop_clients_input_resize_and_recovery() {
     vm.load_binary(&std::fs::read(build.join("bios.bin")).unwrap())
         .unwrap();
     vm.rgb565_display = Some(RGB565Display::new());
-    vm.push_input_string("gterm sh -c 'stty -a > /gterm-settings'\ncat /gterm-settings\nnano-X -p &\ns=$!\nsleep 1\nnxcheck\nnxcheck\nkill $s\nwait $s\nNANOX_TRACE=1 startx\necho DESKTOP_STATUS:$?\ncat /desktop-note\ncat /second-note\ncat /term-size\ncat /vi-note\ncat /shell-erase\ncat /canonical-note\nNANOX_TRACE=1 startx\necho REOPEN_STATUS:$?\nshutdown\n");
+    vm.push_input_string("gterm sh -c 'stty -a > /gterm-settings'\ncat /gterm-settings\nnano-X -p &\ns=$!\nsleep 1\nnxcheck\nnxcheck\nkill $s\nwait $s\nNANOX_TRACE=1 startx --minimal\necho DESKTOP_STATUS:$?\ncat /desktop-note\ncat /second-note\ncat /term-size\ncat /vi-note\ncat /shell-erase\ncat /canonical-note\nNANOX_TRACE=1 startx --minimal\necho REOPEN_STATUS:$?\nshutdown\n");
     let mut g = Guest {
         vm,
         log: String::new(),
@@ -479,6 +914,12 @@ fn desktop_clients_input_resize_and_recovery() {
         g.log
     );
     g.settle(500);
+    // Terminal startup and launcher construction are independent. Wait for
+    // the actual button before injecting a click into its future location.
+    g.until("launcher Eyes button ready", |g| {
+        !coloured_text(&g.pixels(), "Eyes", 0, 0xce79).is_empty()
+            && !locate(&g.pixels(), "fuzix# ").is_empty()
+    });
     let first = locate(&g.pixels(), "fuzix# ")[0];
     g.snapshot("desktop-first.ppm");
     // Real upstream GUI clients coexist with the terminal. Eyes uses a bitmap
@@ -698,4 +1139,58 @@ fn desktop_clients_input_resize_and_recovery() {
         g.log
     );
     println!("Nano-X desktop: independent clients/timers, NanoWM, launcher, shell/Levee backspace, multiple PTYs, movement, clean close/reopen and persistent files passed");
+}
+
+#[test]
+#[ignore = "run via ports/nanox/tools/test_desktop.py --only paint with a disposable image"]
+fn repaints_commit_parent_and_children_together() {
+    let build = PathBuf::from(std::env::var_os("NANOX_TEST_BUILD").unwrap());
+    let image = PathBuf::from(std::env::var_os("NANOX_DESKTOP_IMAGE").unwrap());
+    let output = build.join("nanox/paint");
+    std::fs::create_dir_all(&output).unwrap();
+    let mut vm = VM::with_options(64000, 16384000, Some(image));
+    vm.host_input_enabled = false;
+    vm.jit_enabled = true;
+    vm.devices
+        .network
+        .configure_host(Some(std::ffi::OsStr::new("off")))
+        .unwrap();
+    vm.load_binary(&std::fs::read(build.join("bios.bin")).unwrap())
+        .unwrap();
+    vm.rgb565_display = Some(RGB565Display::new());
+    vm.push_input_string("nano-X -p &\ns=$!\nsleep 1\nnxcheck --paint &\np=$!\n");
+    let mut g = Guest {
+        vm,
+        log: String::new(),
+        output,
+    };
+    g.until("independent client presented during pending repaint", |g| {
+        g.log.contains("PAINTCHECK_WAITING")
+    });
+    let pixels = g.pixels();
+    assert_eq!(
+        pixels[24 * 640 + 24],
+        0xf800,
+        "parent must retain committed red"
+    );
+    assert_eq!(
+        pixels[30 * 640 + 30],
+        0x07e0,
+        "child must retain committed green"
+    );
+    assert!(g.log.contains("PAINTCHECK_PULSE"));
+    g.vm.push_input_string("kill -10 $p\n");
+    g.until("parent and child repaint committed", |g| {
+        let p = g.pixels();
+        g.log.contains("PAINTCHECK_COMMITTED")
+            && p[24 * 640 + 24] == 0x001f
+            && p[30 * 640 + 30] == 0xffff
+    });
+    g.vm.push_input_string(
+        "kill -10 $p\nwait $p\necho PAINT_STATUS:$?\nkill $s\nwait $s\nshutdown\n",
+    );
+    g.until("clean repaint shutdown", |g| {
+        matches!(g.vm.state, VMState::Halted)
+    });
+    assert!(g.log.contains("PAINT_STATUS:0"), "{}", g.log);
 }

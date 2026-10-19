@@ -1,10 +1,18 @@
-//! Scalar values needed after a resumable call. A temporary consumed before the
-//! call must not be copied to the heap at every later suspension point.
+//! Scalar values needed across resumable entries. Locally defined temporaries
+//! need neither an initial heap read nor publication at every later call.
 use std::collections::HashSet;
 
 use super::*;
 
-pub(super) fn live_at_resume(proc: &Proc) -> Vec<HashSet<usize>> {
+pub(super) struct FrameLiveness {
+    /// Existing values that the caller must publish before storing a resume ID.
+    pub at_resume: Vec<HashSet<usize>>,
+    /// Values read before definition at each segment. Unlike
+    /// publication, this includes results written into the frame by a callee.
+    pub at_entry: Vec<HashSet<usize>>,
+}
+
+pub(super) fn frame_liveness(proc: &Proc) -> FrameLiveness {
     let mut uses = vec![HashSet::new(); proc.segs.len()];
     let mut defs = uses.clone();
     let mut successors = vec![Vec::new(); proc.segs.len()];
@@ -12,14 +20,6 @@ pub(super) fn live_at_resume(proc: &Proc) -> Vec<HashSet<usize>> {
         for insn in &seg.insns {
             for slot in operands(insn) {
                 read(slot, &defs[index], &mut uses[index]);
-            }
-            if matches!(insn, Insn::Closure { .. }) {
-                // Closure environments read parent bindings through lifted
-                // metadata. Keep every scalar here until captures are explicit
-                // instruction operands; never infer their absence from operands().
-                for slot in 0..proc.slots.len() {
-                    read(slot, &defs[index], &mut uses[index]);
-                }
             }
             for slot in destinations(insn) {
                 defs[index].insert(slot);
@@ -118,7 +118,10 @@ pub(super) fn live_at_resume(proc: &Proc) -> Vec<HashSet<usize>> {
             at_resume[*next].extend(live[*next].iter().filter(|slot| *slot != dest).copied());
         }
     }
-    at_resume
+    FrameLiveness {
+        at_resume,
+        at_entry: live,
+    }
 }
 
 fn read(slot: usize, defs: &HashSet<usize>, uses: &mut HashSet<usize>) {

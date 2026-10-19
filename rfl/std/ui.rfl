@@ -1,0 +1,164 @@
+// Model/Msg/update/view application layer. Models, messages, rendering and task
+// ownership all stay in Wasm. The sender never retains the model or renderer.
+import { Html, flatten } from "std/html";
+import { BrowserEvent } from "std/browser";
+import { BrowserApp, mount_app_with_lifecycle } from "std/browser_app";
+import { Renderer, renderer } from "std/browser_render";
+import { validate } from "std/browser_validate";
+import { Shared, share, shared, with_shared } from "std/shared";
+import { take, replace } from "std/mem";
+import { Option } from "std/option";
+import { Result } from "std/result";
+/// An enqueue failure caused by disposal or the bounded mailbox being full.
+export type SendError = UiClosed | UiQueueFull;
+/// Internal mailbox state: closed flag and pending owned messages.
+export type Mailbox<M> = Mailbox(bool, Vec<Option<M>>);
+/// A clonable application capability for sending messages and spawning owned tasks.
+export type Ui<M> = Ui(BrowserApp, Shared<Mailbox<M>>);
+/// Internal mounted model, renderer, update/view callbacks and sender.
+export type UiState<Model, M> = UiState(Model, Renderer<M>, fn(Model, M, Ui<M>) -> Model, fn(&Model) -> Html<M>, Ui<M>);
+
+impl<M> Ui<M> {
+    /// Enqueue one message. Up to 256 messages are processed per bounded turn.
+    /// A rejected message drops outside the mailbox borrow; errors are explicit.
+    export fn send(&self, message: M) -> Result<unit, SendError> {
+        let Ui(_, mailbox) = *self;
+        let allowed: Result<unit, SendError> = with_shared(mailbox, once fn(box: &mut Mailbox<M>) => {
+            match &*box {
+                Mailbox(closed, messages) => {
+                    if (*closed) {
+                        Err(UiClosed)
+                    } else if (messages.len() == 256) {
+                        Err(UiQueueFull)
+                    } else {
+                        Ok({})
+                    }
+                }
+            }
+        });
+        allowed?;
+        with_shared(mailbox, once fn(box: &mut Mailbox<M>) => {
+            let Mailbox(closed, messages) = replace(box, Mailbox(false, []));
+            let mut messages = move(messages);
+            messages.push(Some(move(message)));
+            *box = Mailbox(closed, move(messages));
+        });
+        Ok({})
+    }
+    /// Returns the mounted task owner; disposal cancels its outstanding futures.
+    export fn app(&self) -> BrowserApp {
+        let Ui(app, _) = *self;
+        app
+    }
+}
+
+fn pending<M>(mailbox: Shared<Mailbox<M>>) -> bool {
+    with_shared(mailbox, once fn(box: &mut Mailbox<M>) => {
+        match &*box {
+            Mailbox(_, messages) => !messages.is_empty()
+        }
+    })
+}
+
+fn close_mailbox<M>(mailbox: Shared<Mailbox<M>>) -> unit {
+    let messages = with_shared(mailbox, once fn(box: &mut Mailbox<M>) => {
+        let Mailbox(_, messages) = replace(box, Mailbox(true, []));
+        move(messages)
+    });
+    drop(move(messages));
+}
+
+fn receive<Model, M>(storage: Shared<Option<UiState<Model, M>>>, events: Vec<BrowserEvent>) -> unit {
+    let state = with_shared(storage, once fn(slot: &mut Option<UiState<Model, M>>) => take(slot));
+    match move(state) {
+        Some(state) => {
+            let UiState(model, render, update, view, ui) = move(state);
+            let mut render = move(render);
+            let mut messages = queued(render.messages(events));
+            for (i in 0..messages.len()) {
+                let message = take(&mut messages[i]).unwrap();
+                ui.send(move(message)).expect("UI message queue exhausted");
+            }
+            with_shared(storage, once fn(slot: &mut Option<UiState<Model, M>>) => {
+                *slot = Some(UiState(move(model), move(render), update, view, ui));
+            });
+        },
+        None => {}
+    }
+}
+
+fn flush<Model, M>(storage: Shared<Option<UiState<Model, M>>>, mailbox: Shared<Mailbox<M>>) -> bool {
+    let state = with_shared(storage, once fn(slot: &mut Option<UiState<Model, M>>) => take(slot));
+    match move(state) {
+        Some(state) => {
+            let UiState(model, render, update, view, ui) = move(state);
+            let mut model = move(model);
+            let mut render = move(render);
+            let mut messages = with_shared(mailbox, once fn(box: &mut Mailbox<M>) => {
+                let Mailbox(closed, messages) = replace(box, Mailbox(false, []));
+                *box = Mailbox(closed, []);
+                move(messages)
+            });
+            let redraw = !messages.is_empty() || render.needs_sync();
+            for (i in 0..messages.len()) {
+                let message = take(&mut messages[i]).unwrap();
+                model = update(move(model), move(message), ui);
+            }
+            if (redraw) {
+                render.render(view(&model)).expect("invalid UI view");
+            }
+            with_shared(storage, once fn(slot: &mut Option<UiState<Model, M>>) => {
+                *slot = Some(UiState(move(model), move(render), update, view, ui));
+            });
+        },
+        None => {}
+    }
+    pending(mailbox)
+}
+
+/// Mount a typed application. Updates consume/return the model and may spawn
+/// owned futures using ui.app(); those futures send results with ui.send().
+/// Event messages are snapshotted before updates; one view follows each batch.
+export fn mount_ui<Model, M>(model: Model, update: fn(Model, M, Ui<M>) -> Model, view: fn(&Model) -> Html<M>, capacity: usize) -> Result<Ui<M>, String> {
+    let initial = view(&model);
+    validate([initial])?;
+    let mailbox: Shared<Mailbox<M>> = share(Mailbox(false, []));
+    let empty: Option<UiState<Model, M>> = None;
+    let storage = shared(move(empty), fn(slot: &mut Option<UiState<Model, M>>) => {
+        close_mailbox(mailbox);
+    });
+    let app = match mount_app_with_lifecycle(capacity, fn(events: Vec<BrowserEvent>, app: BrowserApp) => {
+        receive(storage, events);
+    }, fn(app: BrowserApp) => flush(storage, mailbox), fn(app: BrowserApp) => {
+        close_mailbox(mailbox);
+    }) {
+        Ok(app) => app,
+        Err(_) => {
+            return Err("UI task capacity must be 1..64");
+        },
+    };
+    let ui = Ui(app, mailbox);
+    let mut render: Renderer<M> = renderer();
+    render.render(initial).expect("invalid initial UI view");
+    let result = ui;
+    with_shared(storage, once fn(slot: &mut Option<UiState<Model, M>>) => {
+        *slot = Some(UiState(move(model), move(render), update, view, ui));
+    });
+    Ok(result)
+}
+
+// Internal FIFO transfer for collections containing move-only values. Vec's
+// ordinary for iteration copies elements; pop/take transfer each owner once.
+/// Transfers owned collection elements into optional FIFO slots without copying owners.
+export fn queued<T>(items: Vec<T>) -> Vec<Option<T>> {
+    let mut items = move(items);
+    let mut reverse: Vec<T> = [];
+    while (!items.is_empty()) {
+        reverse.push(items.pop().unwrap());
+    }
+    let mut out: Vec<Option<T>> = [];
+    while (!reverse.is_empty()) {
+        out.push(Some(reverse.pop().unwrap()));
+    }
+    move(out)
+}

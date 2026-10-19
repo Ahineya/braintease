@@ -6,7 +6,14 @@
 #include "graphics.h"
 #include <gx.h>
 #define QS 512
+#ifdef CONFIG_FUSE_X
+#include <native_process.h>
+/* Queues are shared kernel storage, not private/COW userspace heap. Keep the
+ * larger pool out of the hosted kernel's single static-global bank. */
+static uint8_t (*input)[QS], (*output)[QS];
+#else
 static uint8_t input[RIPPLE_PTY_COUNT][QS], output[RIPPLE_PTY_COUNT][QS];
+#endif
 static struct s_queue outq[RIPPLE_PTY_COUNT];
 static uint8_t masters[RIPPLE_PTY_COUNT], opened[RIPPLE_PTY_COUNT];
 static struct termios defaults;
@@ -28,6 +35,11 @@ static void queue_init(struct s_queue *q, uint8_t *buf) {
 }
 void ripple_pty_init(void) {
     unsigned i;
+#ifdef CONFIG_FUSE_X
+    input = rcc_process_kernel_alloc(2UL * RIPPLE_PTY_COUNT * QS);
+    if (!input) panic("PTY queues");
+    output = input + RIPPLE_PTY_COUNT;
+#endif
     defaults = ttydata[1].termios;
     for (i = 0; i < RIPPLE_PTY_COUNT; i++) {
         queue_init(&ttyinq[i + 2], input[i]);
@@ -42,10 +54,25 @@ int ripple_pty_ready(unsigned m) {
 void ripple_pty_putc(unsigned m, unsigned c) {
     if (masters[m - 2]) {
         insq(&outq[m - 2], c & 255);
-        wakeup(&outq[m - 2]);
-        ripple_gfx_wakeup();
-        if(outq[m-2].q_count==1)selwake_dev(3,m-2,SELECT_IN);
+        if(outq[m-2].q_count==1) {
+            wakeup(&outq[m-2]); ripple_gfx_wakeup();
+            selwake_dev(3,m-2,SELECT_IN);
+        }
     }
+}
+/* Called only after foreground/STOP/DEAD checks in tty_write. */
+int ripple_pty_write_run(unsigned minor, const uint8_t *data, unsigned n, unsigned sysio)
+{
+    unsigned m=minor-2, empty;
+    int result;
+    irqflags_t irq=di();
+    if (!masters[m]) { irqrestore(irq); return 0; }
+    empty=!outq[m].q_count;
+    result=ripple_queue_write(&outq[m],data,n,sysio);
+    if (result>0 && empty) {
+        wakeup(&outq[m]); ripple_gfx_wakeup(); selwake_dev(3,m,SELECT_IN);
+    }
+    irqrestore(irq); return result;
 }
 int ripple_slave_open(uint_fast8_t m, uint16_t f) {
     int r;
@@ -88,18 +115,18 @@ int ripple_pty_close(uint_fast8_t m) {
 }
 int ripple_pty_read(uint_fast8_t m, uint_fast8_t raw, uint_fast8_t f) {
     unsigned n = 0, limit = udata.u_count > 32767UL ? 32767 : udata.u_count;
-    uint_fast8_t c;
     struct s_queue *q = &outq[m];
     irqflags_t irq;
     used(raw);
     irq = di();
     while (n < limit) {
-        if (remq(q, &c)) {
-            if (udata.u_sysio) udata.u_base[n] = c;
-            else if (uputc(c, udata.u_base + n)) break;
-            ++n;
+        if (q->q_count) {
+            unsigned was_full=q->q_count==QS;
+            int got=ripple_queue_read(q,udata.u_base+n,limit-n,udata.u_sysio);
+            if (got<0) break;
+            n+=got;
             wakeup(&ttydata[m + 2]);
-            if(q->q_count==QS-1)selwake_dev(2,m+2,SELECT_OUT);
+            if(was_full)selwake_dev(2,m+2,SELECT_OUT);
         } else {
             if (n || (opened[m] && !ttydata[m + 2].users)) break;
             if (psleep_flags(q, f)) break;
@@ -120,6 +147,14 @@ int ripple_pty_write(uint_fast8_t m, uint_fast8_t raw, uint_fast8_t f) {
         if (opened[m] && !ttydata[m + 2].users) { udata.u_error = EIO; break; }
         if (q->q_count == q->q_size) {
             if (psleep_flags(&q->q_count, f)) break;
+            continue;
+        }
+        if (!(ttydata[m+2].termios.c_lflag & (ICANON|ISIG|ECHO)) &&
+            !(ttydata[m+2].termios.c_iflag & (ISTRIP|IGNCR|ICRNL|INLCR|IXON))) {
+            int got=ripple_queue_write(q,udata.u_base+n,limit-n,udata.u_sysio);
+            if (got<0) break;
+            n+=got;
+            wakeup(q);selwake_dev(2,m+2,SELECT_IN);
             continue;
         }
         c = udata.u_sysio ? udata.u_base[n] : _ugetc(udata.u_base + n);

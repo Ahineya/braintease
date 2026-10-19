@@ -63,7 +63,7 @@ int ripple_copy(void *dest, const void *source, usize_t count) {
     return 0;
 }
 
-int ripple_zero(void *dest, usize_t count) {
+int ripple_fill(void *dest,unsigned value,usize_t count) {
 #if RIPPLE_BULK_IO
     uint8_t *d=dest;usize_t remaining=count;
     if(count>=BULK_THRESHOLD) {
@@ -75,7 +75,7 @@ int ripple_zero(void *dest, usize_t count) {
             irqflags_t flags;
             unsigned run;
             if(user_span(d)){if(ripple_mmu_span(ptr,1,&bank,&off,&run))return -1;if(n>run)n=run;}
-            flags=di();status=vm_bulk_fill(bank,off,n,0);irqrestore(flags);
+            flags=di();status=vm_bulk_fill(bank,off,n,value);irqrestore(flags);
             if(status==VM_DEVICE_UNKNOWN_COMMAND||status==VM_DEVICE_UNSUPPORTED)break;
             if(status!=VM_DEVICE_OK){udata.u_error=EIO;return -1;}
             d+=n;remaining-=n;
@@ -83,8 +83,10 @@ int ripple_zero(void *dest, usize_t count) {
         if(!remaining)return 0;
     }
 #endif
-    memset(dest,0,count);return 0;
+    memset(dest,value,count);return 0;
 }
+
+int ripple_zero(void *dest,usize_t count){return ripple_fill(dest,0,count);}
 
 void *ripple_buffer_copy(void *dest, const void *source, usize_t count) {
     if (ripple_copy(dest, source, count)) panic("kernel buffer transfer");

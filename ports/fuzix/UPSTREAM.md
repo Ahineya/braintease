@@ -22,6 +22,14 @@ layout, scalar user-memory validation, integer formatting, durable sync/error
 handling, panic shutdown, the complete 32-bit `sbrk` return value, and clearing
 recycled inodes before a pipe can reinterpret a deleted device number as a block.
 
+The MWC Make adaptations add phony targets, optional includes, `?=`/`+=`, `$^`,
+first-prerequisite `$<`, epoch-zero file detection and `.DELETE_ON_ERROR`.
+Picol uses port-local `picol-extra.inc` and `picol-build.inc` for the documented
+Tcl build subset, with environment variables, argument expansion and bounded
+lists/output. Ripple exec argument buffers use private kernel stack storage
+with a shared 4,096-character argument/environment budget instead of temporary
+disk-block buffers; other upstream platforms retain their original limit.
+
 `Library/libs/qsort.c` selects its specialized element paths using C `sizeof`
 instead of physical-octet constants. Utility changes add bounded recursive
 `mkdir`/`rm`, standard `cut` option parsing, error statuses, trailing-word counts,
@@ -50,6 +58,10 @@ come from the same pinned archive. The clients retain their upstream command
 roles, with substantial C16 adaptations: DNS and NTP fields are explicit wire
 octets rather than native C structure overlays; HTTP is parsed incrementally,
 with partial I/O, chunked bodies, redirects and temporary-file replacement.
+`htget` additionally uses the shared guest wolfSSL client in `ports/tls` for
+verified HTTPS, with an explicit guest trust store and downgrade rejection.
+`Library/include/arpa/inet.h` includes `netinet/in.h` so its address types do
+not depend on the consumer's include order.
 Queries and downloads use monotonic deadlines rather than replacing process
 alarm handlers. NTP validates its peer and request timestamp before exposing
 an optional UTC guest-clock update. The original netdb license notice remains.
@@ -110,15 +122,15 @@ marker bytes to the terminal. The same module is built for Fuse-X.
 
 `Applications/levee/` is imported from the same pinned archive. Levee was
 developed by David L Parsons; its redistribution notice remains in each source
-and `levee.h`. The ANSI/Unix build is installed as `levee` and the default `vi`
-(hard links on disk); VILE remains separately available. Adaptations provide
+and `levee.h`. The ANSI/Unix build is installed as `levee`; the default `vi` is a relative
+symbolic link to Rift. VILE remains separately available. Adaptations provide
 explicit C99 return types for legacy implicit-int functions, native-size undo
 packing, bounded file/terminal input, checked record I/O and replacement saves,
 16-bit character display, names retained after an unnamed buffer is saved,
 terminal setup/restoration and window dimensions.
 The port uses a 30,000-character core, with one character reserved by the
 upstream read/insert algorithms. Unused platform backends remain unmodified.
-FUZIX/Ripple now requires the MMU on RVM, with 32 process slots, selected page
+FUZIX/Ripple now requires the MMU on RVM, with 64 process slots, selected page
 maps, and COW user memory. One extra code-image record supports replacement
 execs. The compiler ABI is unchanged. The old non-MMU/RBF build, bank snapshots,
 one-bank allocator, and physical code-base relocations are retired; only the
@@ -141,7 +153,7 @@ statuses. `ripple/picol-extra.inc` adds the CLI/REPL, checked 32-bit expressions
 lists, control flow, file channels, source/eval/catch and direct argv subprocess
 execution. The interpreter deliberately remains a documented Tcl subset, built
 with RCC's existing C16 ABI and no GNU C additions. `picol`, `tcl`, and `tclsh`
-are hard links to one managed image. The original build/package files are
+use relative symbolic links to one managed image. The original build/package files are
 retained for provenance. `/hello.tcl` is a port-local example seeded from
 `examples/hello.tcl`, preserving existing user edits on upgrades.
 
@@ -338,8 +350,8 @@ is retained for provenance but is no longer the selected build source. Resource
 counts distinguish private and multiply referenced data/heap/stack pages.
 
 
-The graphics foundation raises the protected profile to 32 process slots,
-32 descriptors per process, 128 open-file objects/inodes and eight PTY pairs.
+The graphics foundation raises the protected profile to 64 process slots,
+32 descriptors per process, 192 open-file objects and 128 cached inodes, and eight PTY pairs.
 Kernel close-on-exec masks are conditionally 32 bits and descriptor shifts use
 wide operands. Legacy profiles retain their smaller tables. Saved task data and
 MMU metadata are relocated to reserved banks; the process page pool is unchanged.
@@ -374,13 +386,24 @@ The superseded upstream routines remain available for provenance but are not
 linked. See [CURSES.md](CURSES.md) for the API subset and native/RVM tests.
 
 The color/window extension widens imported cell pointers and cell temporaries
-to `chtype`, preserving legacy attribute bits while adding color-pair bits.
+to `chtype`, preserving attributes while adding color-pair bits.
 Those mechanical edits are in `curses.patch`. `ripple/curses/color.c` and
 `render.c` replace termcap-dependent attribute output and the old refresh path
 with ANSI color/DEC line output and clipped, complete-layer composition. The
 old `doupdt`, `refresh` and `winscrol` units remain as provenance and are excluded
 from both userspace builds. Local scrolling copies cells so derived windows
 retain aliases; color-pair changes and terminal restoration invalidate output.
+
+The Unicode extension repacks `chtype` into 21 glyph bits, five attribute bits
+and six color-pair bits, retaining its two-C16-character size. Imported curses
+movement/edit routines invalidate the preceding grapheme, and ACS/box glyph
+carriers are wide. Port-local `characters.c` replaces upstream `waddch` and
+`waddstr`; input/rendering use the shared Unicode 16 library. The Bourne shell
+reserves bit eight for quote marking so every UTF-8 octet remains data; ASCII
+classification guards its legacy tables, and glob placeholders use `QUOTE`.
+Its interactive hook edits graphemes and measures display columns. Original
+upstream platforms retain their existing quote encoding. These adaptations
+remain in `curses.patch` and `upstream.patch` respectively.
 
 The fine-deadline work adds port-local `ripple/deadline.c` and `ripple/clock.c`
 on both targets. The original `_time` in `syscall_proc.c` is compiled as
@@ -397,3 +420,66 @@ and passed a marked argv[0] to scripts. Dequoting after expansion preserves
 literal glob characters while fixing quoted builtin names and executable paths.
 `tools/test_shell_paths.py` covers both kernels, including single/double quotes,
 variables, spaces, punctuation, relative commands, script $0 and exit status.
+
+The 64-process profile packs multiple MMU tables into each reserved physical
+bank and passes both bank and offset when selecting roots. Kernel stacks use
+banks 32–95; the default table layout uses 96–111. Metadata and graphics follow
+below the unchanged 128–255 user page pool. Both hosted and Ripple kernels use
+the shared process-limit header. Timeout readiness has two 32-bit words, and
+ps/top snapshot buffers cover all 64 slots. Process exhaustion/reuse and
+high-slot select timers are covered by `tools/test_process_capacity.py`; deadline
+queue tests include expiration and clock-error delivery for slots 32 and 63.
+
+The main RVM and native Fuse-X kernels enable `CONFIG_RIPPLE_SCHED`: shared process transitions
+maintain a port-local FIFO and hashed event wait queues, with monotonic slice
+budgets (20 ms RVM, 5 ms native) and RVM's existing instruction-count ceiling as a fallback. Other profiles
+retain their original state/counting and scheduling paths through
+`Kernel/include/process-state.h`. RVM and Fuse-X exit no longer force a global sync;
+explicit sync and shutdown keep their barriers. The shared select path tracks
+registered inode indices for bounded cleanup and skips empty notification maps.
+The port also bounds MMU walks by populated bank prefixes and clones only live
+kernel stack cells. See [SCHEDULER.md](SCHEDULER.md) for invariants and validation.
+
+The diff3 batch imports `Applications/V7/cmd/diff3.c` from the same archive,
+retaining its V7 range-coalescing algorithm and parent copyright. Adaptations
+add the three-file command front end, argv-based diff subprocesses, private
+cleaned temporary reports, stdin spooling, checked dynamic change tables,
+32-bit offsets, streaming lines, correct empty/deletion handling and escaped
+single-dot ed text. `diff.c` gains option termination/separate groups, wide
+long-line/sort arithmetic, geometrically grown line/candidate tables, candidate
+bounds, checked output and safe ed text.
+`tools/test_diff.py` compares reports with host reference ranges, applies scripts
+with both host and guest ed, and tests both executable backends on private disks.
+
+The guest symlink extension restores `ln -s` and link-preserving recursive
+copy/move, fixes directory-listing readlink paths, and makes find/tar traversal
+inspect link inodes. Tar supports USTAR links while rejecting extraction through
+symlink parents. Shared kernel changes add bounded iterative pathname expansion,
+no-follow namespace operations, link block reclamation and syscalls 68–70.
+The public headers expose `symlink`, `lstat`, `readlink` and `ELOOP`; managed
+executable aliases now use guest symlinks. Host exports retain their separate
+no-host-symlinks policy. See the C16 filesystem specification and
+`tools/test_symlinks.py` for the contract and both-target acceptance coverage.
+
+Directory rename is supported in the shared kernel on both FUZIX/Ripple and
+Fuse-X. Same-filesystem moves retain the tree's inodes, update `..` and parent
+link counts, and permit replacement of an empty directory. Destination ancestry
+is checked from the resolved parent to reject cycles even with relative paths.
+A kernel-only parent-link helper updates `..` without requiring write permission
+on the moved directory itself; both containing directories must be writable.
+Simple renames reuse the existing entry, including in a full directory block.
+Commander F6 Move and Rename use this syscall without an application workaround.
+Cross-filesystem directory moves remain unsupported in Commander.
+`tools/test_directory_moves.py --os both` checks the syscall and live Commander
+operations, then reboots and runs filesystem consistency checks on private roots.
+
+The full RVM and Fuse-X profiles select `CONFIG_RIPPLE_IO`: cache-only anonymous
+pipe inodes route to port-local supervisor rings, while named FIFOs retain their
+existing disk path. Directory reads support ABI-compatible batches; lookup and
+inode/buffer indexes are bounded, with namespace invalidation and verified
+mutation offsets. Free-inode refill uses a cursor and device-local inode
+writeback. Block sync groups device barriers without delaying ordinary inode
+writes. PTY/TTY hooks use wrap-aware raw queue transfers, preserving canonical
+processing and octet conversion. Original notices remain, and modified kernel
+units carry a dated Ripple adaptation notice. See [KERNEL-IO.md](KERNEL-IO.md)
+for storage bounds, host-folder durability, compatibility and validation.

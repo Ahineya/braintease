@@ -1,0 +1,35 @@
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.TH LN 1 "FUZIX" "Ripple"
+.SH NAME
+ln \- create hard or symbolic links
+.SH SYNOPSIS
+.nf
+ln [-fsn] target linkname
+ln [-fsn] target ... directory
+.fi
+.SH DESCRIPTION
+Without -s, create another directory entry for the same inode. Hard links
+require the same filesystem and cannot link a directory.
+.PP
+With -s, store target as a symbolic link. The target need not exist. Relative
+targets are interpreted from the directory containing the link, not the
+working directory in which ln was run. A symbolic link can name a directory
+or cross a guest mount point.
+.PP
+Existing destination entries are preserved unless -f is given. -n explicitly
+selects this default. If the last operand is a directory, create links there
+using the basenames of the target operands.
+.PP
+ls -l displays symbolic link targets. Removing or renaming a link changes the
+link itself. Plain cp follows source links; cp -P and recursive cp preserve
+links unless -L (follow all) or -H (follow command-line links) is selected.
+.PP
+Targets hold at most 511 native characters, and pathname resolution follows
+at most 40 symbolic links before returning ELOOP. Fuse-X hides host symlinks
+under /mnt/host and rejects creating symbolic links in that mount.
+.SH EXAMPLES
+.nf
+ln -s rift /bin/vi
+ln -s /usr/man /manuals
+ln -sf new-target old-link
+.fi

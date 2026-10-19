@@ -15,6 +15,7 @@ int wdelch(WINDOW *win)
   int x = win->_curx;
   int maxx = win->_maxx;
 
+  win->_last_valid = 0;
   end = &win->_line[y][maxx];
   temp1 = &win->_line[y][x];
   temp2 = temp1 + 1;

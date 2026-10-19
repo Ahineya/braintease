@@ -1,0 +1,25 @@
+// Pure RFL computation, allocation and callbacks stay inside Wasm.
+// Run: rfl run rfl/examples/wasm.rfl --target wasm
+import { sqrt, sin } from "std/math";
+
+fn main() {
+    println("Hello from RFL + Wasm 🌍");
+    let names: Vec<String> = ["Ada", "Ripple"];
+    let prefix = "Hello, ";
+    let greet = fn(name: String) => prefix + name + "!";
+    for (name in names) {
+        println(greet(name));
+    }
+    println(for {
+        a <- Some(20);
+        b <- Some(22);
+        yield a + b
+    });
+    println(for {
+        a <- [1, 2];
+        b <- [3, 4];
+        yield a * 10 + b
+    });
+    println(sqrt(9.0));
+    println(sin(0.5));
+}

@@ -1,0 +1,17 @@
+import macro { html } from "./html_macro.rfl";
+import { Node, Prop, render, events, node, text, attribute } from "./tree.rfl";
+type Msg = Click;
+fn Badge(label: String, children: Vec<Node<Msg>>) -> Node<Msg> {
+    let mut content: Vec<Node<Msg>> = [text(label)];
+    for (child in children) {
+        content.push(child);
+    }
+    node("strong", [attribute("class", "badge")], content)
+}
+
+fn main() {
+    let name = "Ripple";
+    let view: Node<Msg> = html!{<div class="demo">isn't it fun? 🙂<button on_click={Click}>{text(name)}</button><Badge label={"typed"}/><br/></div>};
+    println(render(view));
+    println(events(view).len());
+}

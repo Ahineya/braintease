@@ -1,0 +1,217 @@
+import { Model, Todo, Msg, Ignore, NewTitle, Add, Toggle, ToggleAll, Delete, ClearCompleted, BeginEdit, EditTitle, CommitEdit, BlurEdit, CancelEdit, HashChanged, RouteFailed, Loaded, Saved, RetryLoad, RetrySave, StartEmpty, All, route } from "./model";
+import { Cmd } from "std/ui_command";
+import { read_command, write_command, fallback_command } from "./commands";
+import { parse_route } from "std/router";
+import { trim } from "std/string";
+fn editing(model: &Model, id: u32) -> bool {
+    match model.editing {
+        Some(current) => current == id,
+        None => false
+    }
+}
+
+fn commit(model: &mut Model, id: u32, title: String) -> bool {
+    if (!editing(&*model, id)) {
+        return false;
+    }
+    let title = trim(title);
+    if (title.len() > 256) {
+        model.notice = "Titles must fit 256 UTF-8 bytes.";
+        return false;
+    }
+    model.editing = None;
+    model.edit_title = "";
+    let mut todos: Vec<Todo> = [];
+    let mut changed = false;
+    for (todo in model.todos) {
+        let mut todo = todo;
+        if (todo.id == id) {
+            changed = todo.title != title;
+            todo.title = title;
+        }
+        if (todo.title != "") {
+            todos.push(todo);
+        }
+    }
+    model.todos = todos;
+    changed
+}
+
+fn save(model: &mut Model, commands: &mut Vec<Cmd<Msg>>) -> unit {
+    if (model.loaded && !model.saving && model.revision != model.saved) {
+        model.saving = true;
+        commands.push(write_command(model.todos, model.revision));
+    }
+}
+
+export fn update(model: Model, msg: Msg) -> (Model, Vec<Cmd<Msg>>) {
+    let mut model = model;
+    let mut commands: Vec<Cmd<Msg>> = [];
+    let mut changed = false;
+    match msg {
+        HashChanged(hash) => {
+            model.route_ready = true;
+            match parse_route(hash, route) {
+                Ok(filter) => {
+                    model.filter = filter;
+                },
+                Err(_) => {
+                    model.filter = All;
+                    model.notice = "Unknown route. Showing all todos.";
+                    commands.push(fallback_command());
+                }
+            }
+        },
+        RouteFailed(error) => {
+            model.route_ready = true;
+            model.notice = error;
+        },
+        Loaded(result) => {
+            model.loading = false;
+            match result {
+                Ok(todos) => {
+                    model.todos = todos;
+                    model.loaded = true;
+                    model.load_error = "";
+                    model.next_id = 1;
+                    for (todo in todos) {
+                        if (todo.id >= model.next_id) {
+                            model.next_id = todo.id + 1;
+                        }
+                    }
+                },
+                Err(error) => {
+                    model.load_error = error;
+                }
+            }
+        },
+        RetryLoad => {
+            if (!model.loading && !model.loaded) {
+                model.loading = true;
+                model.load_error = "";
+                commands.push(read_command());
+            }
+        },
+        StartEmpty => {
+            if (!model.loaded && !model.loading) {
+                model.todos = [];
+                model.loaded = true;
+                model.load_error = "";
+                changed = true;
+            }
+        },
+        Saved(revision, result) => {
+            model.saving = false;
+            match result {
+                Ok(_) => {
+                    model.saved = revision;
+                    model.save_error = "";
+                    save(&mut model, &mut commands);
+                },
+                Err(error) => {
+                    model.save_error = error;
+                    if (model.revision != revision) {
+                        save(&mut model, &mut commands);
+                    }
+                }
+            }
+        },
+        RetrySave => {
+            save(&mut model, &mut commands);
+        },
+        _ => {
+            if (model.loaded) {
+                match msg {
+                    NewTitle(title) => {
+                        model.draft = title;
+                    },
+                    Add => {
+                        let title = trim(model.draft);
+                        if (title.len() > 256 || model.todos.len() == 128 || model.next_id == 4294967295) {
+                            model.notice = "Limit reached: 128 todos, 256 UTF-8 bytes per title.";
+                        } else if (title != "") {
+                            model.todos.push(Todo { id: model.next_id, title: title, completed: false });
+                            model.next_id += 1;
+                            model.draft = "";
+                            model.notice = "";
+                            changed = true;
+                        }
+                    },
+                    Toggle(id, value) => {
+                        for (i in 0..model.todos.len()) {
+                            if (model.todos[i].id == id && model.todos[i].completed != value) {
+                                model.todos[i].completed = value;
+                                changed = true;
+                            }
+                        }
+                    },
+                    ToggleAll(value) => {
+                        for (i in 0..model.todos.len()) {
+                            if (model.todos[i].completed != value) {
+                                model.todos[i].completed = value;
+                                changed = true;
+                            }
+                        }
+                    },
+                    Delete(id) => {
+                        let mut todos: Vec<Todo> = [];
+                        for (todo in model.todos) {
+                            if (todo.id != id) {
+                                todos.push(todo);
+                            } else {
+                                changed = true;
+                            }
+                        }
+                        model.todos = todos;
+                        if (editing(&model, id)) {
+                            model.editing = None;
+                        }
+                    },
+                    ClearCompleted => {
+                        let mut todos: Vec<Todo> = [];
+                        for (todo in model.todos) {
+                            if (!todo.completed) {
+                                todos.push(todo);
+                            } else {
+                                changed = true;
+                            }
+                        }
+                        model.todos = todos;
+                        model.editing = None;
+                    },
+                    BeginEdit(id) => {
+                        for (todo in model.todos) {
+                            if (todo.id == id) {
+                                model.editing = Some(id);
+                                model.edit_title = todo.title;
+                            }
+                        }
+                    },
+                    EditTitle(id, title) => {
+                        if (editing(&model, id)) {
+                            model.edit_title = title;
+                        }
+                    },
+                    CommitEdit(id) => {
+                        let title = model.edit_title;
+                        changed = commit(&mut model, id, title);
+                    },
+                    BlurEdit(id, title) => {
+                        changed = commit(&mut model, id, title);
+                    },
+                    CancelEdit(id) => {
+                        if (editing(&model, id)) {
+                            model.editing = None;
+                            model.edit_title = "";
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+    if (changed) {
+        model.revision += 1;
+        save(&mut model, &mut commands);
+    } (model, move(commands))
+}

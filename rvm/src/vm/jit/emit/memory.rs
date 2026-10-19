@@ -133,6 +133,11 @@ impl Cg<'_> {
             std::mem::offset_of!(TlbEntry, tag) as i32,
         );
         let mut valid = self.b.ins().icmp(IntCC::Equal, tag, cached_tag);
+        let zero_bank = self.b.ins().icmp_imm_s(IntCC::Equal, bank, 0);
+        let math_offset = self.b.ins().icmp_imm_s(IntCC::Equal, addr, crate::constants::HDR_MATH_STACK as i64);
+        let math = self.b.ins().band(zero_bank, math_offset);
+        let ram = self.b.ins().bnot(math);
+        valid = self.b.ins().band(valid, ram);
         let epoch = self.b.ins().load(
             types::I32,
             self.flags,
@@ -210,6 +215,8 @@ impl Cg<'_> {
         self.b.ins().jump(join, &[BlockArg::Value(result)]);
         self.b.switch_to_block(slow);
         let result = if store {
+            let sb = self.reg(Register::Sb as usize);
+            self.store16(self.off.regs + Register::Sb as i32 * 2, sb);
             self.call_i32(
                 self.store,
                 &[self.vm, bank, addr, value.expect("store value")],
@@ -291,6 +298,8 @@ impl Cg<'_> {
         self.b.ins().jump(join, &[BlockArg::Value(result)]);
         self.b.switch_to_block(slow);
         let result = if store {
+            let sb = self.reg(Register::Sb as usize);
+            self.store16(self.off.regs + Register::Sb as i32 * 2, sb);
             self.call_i32(
                 self.store,
                 &[self.vm, bank, addr, value.expect("store value")],

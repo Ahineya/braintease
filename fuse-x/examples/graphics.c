@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <sys/select.h>
 #include <gx.h>
+#include "../../ports/graphics/raster-check.inc"
 #define C(x) do {if(!(x)){printf("gxcheck failed line %u errno %d\n",__LINE__,errno);return 1;}}while(0)
 int main(int argc,char **argv) {
     int fd=open("/dev/gfx",O_RDWR),pid,status;unsigned i;
@@ -23,7 +24,8 @@ int main(int argc,char **argv) {
         C(ioctl(fd,GX_PRESENT,&h)<0&&errno==EINVAL);
         puts("gxcheck exec passed");return 0;
     }
-    C(ioctl(fd,GX_INFO,&info)==0&&(info.flags&GX_CAP_MULTIWINDOW));
+    C(ioctl(fd,GX_INFO,&info)==0&&(info.flags&GX_CAP_MULTIWINDOW)&&(info.flags&GX_CAP_RASTER));
+    C(raster_checks(fd)==0);
     memset(w,0,sizeof(w));
     for(i=0;i<2;i++) {
         w[i].version=GX_VERSION;w[i].width=320;w[i].height=240;w[i].format=GX_RGB565;

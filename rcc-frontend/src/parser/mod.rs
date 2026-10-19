@@ -12,20 +12,49 @@ pub mod expressions;
 use crate::ast::*;
 use crate::lexer::{Token, TokenType};
 use rcc_common::{CompilerError, SourceLocation, SourceSpan};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub use errors::ParseError;
 use crate::Type;
 
+/// Immutable tokens with a cheap, independent cursor for speculative parsing.
+/// A cast/sizeof checkpoint must not clone the remaining translation unit.
+#[derive(Clone)]
+pub(crate) struct TokenStream {
+    storage: Arc<[Token]>,
+    next: usize,
+}
+
+impl TokenStream {
+    fn new(tokens: Vec<Token>) -> Self {
+        Self { storage: tokens.into(), next: 0 }
+    }
+
+    fn front(&self) -> Option<&Token> { self.get(0) }
+
+    fn get(&self, offset: usize) -> Option<&Token> {
+        self.storage.get(self.next.checked_add(offset)?)
+    }
+
+    fn pop_front(&mut self) -> Option<Token> {
+        let token = self.front()?.clone();
+        self.next += 1;
+        Some(token)
+    }
+}
+
 /// C99 Parser
 pub struct Parser {
-    pub(crate) tokens: VecDeque<Token>,
+    pub(crate) tokens: TokenStream,
     pub(crate) node_id_gen: NodeIdGenerator,
     pub(crate) last_function_params: Option<Vec<(Option<String>, Type, SourceSpan)>>, // Temporary storage for function parameters
     // None marks an ordinary identifier hiding an outer enumeration constant.
     pub(crate) constant_scopes: Vec<HashMap<String, Option<i64>>>,
     pub(crate) typedef_names: HashMap<String, Type>, // Typedef name -> type, for parsing and sizeof
     pub(crate) pending_volatile: bool,
+    pub(crate) parsing_parameter_declarator: bool,
+    pub(crate) object_scopes: Vec<HashMap<String, Type>>,
     pub(crate) tag_scopes: Vec<HashMap<String, Type>>,
 }
 
@@ -43,22 +72,88 @@ impl Parser {
             .collect();
             
         Self {
-            tokens: filtered_tokens.into(),
+            tokens: TokenStream::new(filtered_tokens),
             node_id_gen: NodeIdGenerator::new(),
             last_function_params: None,
             typedef_names: HashMap::new(),
             pending_volatile: false,
+            parsing_parameter_declarator: false,
             constant_scopes: vec![HashMap::new()],
+            object_scopes: vec![HashMap::new()],
             tag_scopes: vec![HashMap::new()],
         }
     }
     
     pub(crate) fn declare_constant_name(&mut self, name: String, value: Option<i64>) {
+        self.object_scopes.last_mut().unwrap().insert(name.clone(), Type::Error);
         self.constant_scopes.last_mut().unwrap().insert(name, value);
     }
 
     pub(crate) fn eval_parser_constant(&self, expr: &Expression) -> Result<i64, crate::ast::const_eval::ConstEvalError> {
-        crate::ast::const_eval::eval_integer_constant_with(expr, &|name| self.lookup_parser_constant(name))
+        let mut expr = expr.clone();
+        self.fold_parser_sizeof(&mut expr);
+        crate::ast::const_eval::eval_integer_constant_with(&expr, &|name| self.lookup_parser_constant(name))
+    }
+
+    fn record_object_type(&mut self, name: &str, ty: &Type, init: Option<&Initializer>) {
+        let mut ty = self.resolve_known_typedefs(ty);
+        if let Type::Array { element_type, size } = &mut ty {
+            if size.is_none() {
+                if let Some(text) = init.and_then(|init| {
+                    crate::semantic::expressions::initializers::character_array_string(init, element_type)
+                }) {
+                    *size = Some(text.len() as u64 + 1);
+                } else if let Some(Initializer { kind: InitializerKind::List(items), .. }) = init {
+                    let mut next = 0;
+                    let mut bound = 0;
+                    for item in items {
+                        if let InitializerKind::Designated { designator: Designator::Index(index), .. } = &item.kind {
+                            if let Ok(n) = self.eval_parser_constant(index) { next = n.max(0) as u64; }
+                        }
+                        next += 1; bound = bound.max(next);
+                    }
+                    *size = Some(bound);
+                }
+            }
+        }
+        self.object_scopes.last_mut().unwrap().insert(name.to_owned(), ty);
+    }
+
+    fn parser_expression_type(&self, expr: &Expression) -> Option<Type> {
+        match &expr.kind {
+            ExpressionKind::Identifier { name, .. } => self.object_scopes.iter().rev().find_map(|scope| scope.get(name)).cloned(),
+            ExpressionKind::Cast { target_type, .. } => Some(self.resolve_known_typedefs(target_type)),
+            ExpressionKind::Binary { op: BinaryOp::Index, left, .. } => self.parser_expression_type(left)?.pointer_target().cloned(),
+            ExpressionKind::Unary { op: UnaryOp::Dereference, operand } => self.parser_expression_type(operand)?.pointer_target().cloned(),
+            ExpressionKind::Member { object, member, is_pointer } => {
+                let ty = self.parser_expression_type(object)?;
+                let ty = if *is_pointer { self.resolve_known_typedefs(ty.pointer_target()?) } else { self.resolve_known_typedefs(&ty) };
+                let layout = match ty.unqualified() {
+                    Type::Struct { fields, .. } => crate::semantic::struct_layout::calculate_struct_layout(fields, expr.span.start.clone()).ok()?,
+                    Type::Union { fields, .. } => crate::semantic::struct_layout::calculate_union_layout_with_defs(fields, expr.span.start.clone(), None).ok()?,
+                    _ => return None,
+                };
+                let field = crate::semantic::struct_layout::find_field(&layout, member)?;
+                if field.bit_width.is_some() { None } else { Some(field.field_type) }
+            }
+            _ => expr.expr_type.clone(),
+        }
+    }
+
+    fn fold_parser_sizeof(&self, expr: &mut Expression) {
+        match &mut expr.kind {
+            ExpressionKind::SizeofExpr(operand) => {
+                if let Some(ty) = self.parser_expression_type(operand) {
+                    expr.kind = ExpressionKind::SizeofType(self.resolve_known_typedefs(&ty));
+                }
+            }
+            ExpressionKind::Unary { operand, .. } | ExpressionKind::Cast { operand, .. } => self.fold_parser_sizeof(operand),
+            ExpressionKind::Binary { left, right, .. } => { self.fold_parser_sizeof(left); self.fold_parser_sizeof(right); }
+            ExpressionKind::Conditional { condition, then_expr, else_expr } => {
+                self.fold_parser_sizeof(condition); self.fold_parser_sizeof(then_expr); self.fold_parser_sizeof(else_expr);
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn lookup_parser_constant(&self, name: &str) -> Option<i64> {
@@ -136,6 +231,12 @@ impl Parser {
         
         // Parse all top-level items until EOF
         while !self.check(&TokenType::EndOfFile) {
+            // Compatibility with definition-generating macros commonly
+            // invoked with a trailing semicolon (e.g. LibDOM accessors).
+            // An empty external declaration has no AST or storage effect.
+            if self.match_token(&TokenType::Semicolon) {
+                continue;
+            }
             items.push(self.parse_top_level_item()?);
         }
         
@@ -153,6 +254,41 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
+
+    #[test]
+    fn string_initializer_bounds_are_visible_to_later_sizeof() {
+        let ast = crate::Frontend::parse_source(
+            "typedef const char Character; \
+             static Character text[] = \"abc\"; char a[sizeof(text)]; \
+             char braced[] = {\"xy\"}; char b[sizeof(braced)]; \
+             char empty[] = \"\"; char c[sizeof(empty)]; \
+             char nul[] = \"a\\0b\"; char d[sizeof(nul)]; \
+             char explicit[8] = \"abc\"; char e[sizeof(explicit)];"
+        ).unwrap();
+        for (item, expected) in ast.items.iter().skip(2).step_by(2).zip([4, 3, 1, 4, 8]) {
+            let TopLevelItem::Declarations(decls) = item else { panic!("expected array") };
+            assert!(matches!(decls[0].decl_type,
+                Type::Array { size: Some(n), .. } if n == expected),
+                "{}: expected {expected}, got {:?}", decls[0].name, decls[0].decl_type);
+        }
+        crate::Frontend::parse_source(
+            "char text[] = \"abc\"; void f(void) { \
+             { char text[] = \"xy\"; char inner[sizeof(text)]; } \
+             char outer[sizeof(text)]; }"
+        ).unwrap();
+    }
+
+    #[test]
+    fn empty_external_declarations_do_not_create_items() {
+        let ast = crate::Frontend::parse_source(
+            ";; int first(void) { return 1; }; ; int second; ;;"
+        ).unwrap();
+        assert_eq!(ast.items.len(), 2);
+        assert!(matches!(&ast.items[0], TopLevelItem::Function(f) if f.name == "first"));
+        assert!(matches!(&ast.items[1], TopLevelItem::Declarations(d) if d[0].name == "second"));
+        assert!(crate::Frontend::parse_source(";;;").unwrap().items.is_empty());
+        assert!(crate::Frontend::parse_source("; int broken = ;").is_err());
+    }
 
     #[test]
     fn aggregate_sizeof_array_bounds_use_visible_definitions() {

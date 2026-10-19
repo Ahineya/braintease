@@ -315,6 +315,7 @@ impl VM {
                     code: &mut self.instructions,
                     changed: None,
                     code_limit: self.code_memory_limit,
+                    output: &mut self.output_buffer,
                 };
                 let frame = self.devices.write_register_with_storage(
                     addr,

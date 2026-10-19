@@ -1,0 +1,57 @@
+import { mount_app, BrowserApp, BrowserTask } from "std/browser_app";
+import { BrowserEvent, patch, CLICK } from "std/browser";
+import { BrowserEffects, get, sleep } from "std/browser_effects";
+import { Future } from "std/future";
+import { share, with_shared } from "std/shared";
+async fn request(effects: BrowserEffects) {
+    let response = get(effects, "./body", 16).unwrap().await.unwrap();
+    println(response.status);
+    println(response.body);
+}
+
+async fn slow(effects: BrowserEffects) {
+    let guard = owned(0, fn(n: &mut i16) => {
+        println("timer cleanup");
+    });
+    sleep(effects, 1000).unwrap().await.unwrap();
+    println("BAD: cancelled timer resumed");
+}
+
+fn main() {
+    let handle: Option<BrowserTask> = None;
+    let slot = share(handle);
+    let owner = share(owned(0, fn(n: &mut i16) => {
+        println("app dropped");
+    }));
+    let events = fn(events: Vec<BrowserEvent>, app: BrowserApp) => {
+        drop(owner);
+        for (event in events) {
+            if (event.listener == 1) {
+                app.spawn(request(app.effects())).unwrap();
+            }
+            if (event.listener == 2) {
+                with_shared(slot, once fn(handle: &mut Option<BrowserTask>) => {
+                    match &*handle {
+                        Some(task) => println(task.cancel()),
+                        None => {}
+                    }
+                });
+            }
+        }
+    };
+    let app = mount_app(8, events).unwrap();
+    let task = app.spawn(slow(app.effects())).unwrap();
+    with_shared(slot, once fn(handle: &mut Option<BrowserTask>) => {
+        *handle = Some(task);
+    });
+    app.spawn(request(app.effects())).unwrap();
+    let mut dom = patch();
+    let button = dom.string("button");
+    dom.element(1, button);
+    dom.insert(0, 1, 0);
+    dom.listen(1, CLICK, 1, 0);
+    dom.element(2, button);
+    dom.insert(0, 2, 0);
+    dom.listen(2, CLICK, 2, 0);
+    move(dom).commit();
+}

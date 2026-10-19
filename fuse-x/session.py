@@ -74,11 +74,26 @@ def serve(state, command):
         incoming = bytearray()
         replay = bytearray()
         previous_cr = False
-        log = (state / 'console.log').open('wb', buffering=0)
+        stopping = False
+        # Keep the previous session's evidence, using the existing bounded
+        # rotation slot rather than creating one backup per launch.
+        console = state / 'console.log'
+        if console.exists() and console.stat().st_size:
+            os.replace(console, state / 'console.log.1')
+        log = console.open('wb', buffering=0)
         log_bytes = 0
         (state / 'exit.json').unlink(missing_ok=True)
 
-        def stop(_number, _frame):
+        def event(message):
+            stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            print(f'{stamp} Fuse-X broker: {message}', flush=True)
+
+        def stop(number, _frame):
+            nonlocal stopping
+            if not stopping:
+                source = 'console stop request (--stop)' if number is None else 'host ' + signal.Signals(number).name
+                event(f'{source}; terminating kernel pid={child.pid if child else "not-started"}')
+            stopping = True
             if child is not None and child.poll() is None:
                 child.terminate()
 
@@ -106,19 +121,25 @@ def serve(state, command):
             del replay[:-REPLAY]
             if attached is not None:
                 outgoing.extend(data)
-                if len(outgoing) > BACKPRESSURE:
+                # A live child is throttled below, never disconnected for
+                # producing output. During shutdown, do not let an unread console
+                # prevent the broker from reaping the child and shutting down.
+                if len(outgoing) > BACKPRESSURE and (stopping or child.poll() is not None):
                     detach()
 
         try:
             child = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=subprocess.PIPE,
                                      env=environment, preexec_fn=terminal)
+            event(f'kernel started pid={child.pid}')
             os.close(slave)
             slave = None
             os.set_blocking(master, False)
             os.set_blocking(child.stderr.fileno(), False)
             readers = {master, child.stderr.fileno()}
             while readers or child.poll() is None:
-                readable = [server, *readers, *clients]
+                throttled = (attached is not None and not stopping and child.poll() is None
+                             and len(outgoing) >= BACKPRESSURE - 1)
+                readable = [server, *([] if throttled else readers), *clients]
                 if attached is not None and len(incoming) < REPLAY:
                     readable.append(attached)
                 writable = ([master] if incoming and master in readers else [])
@@ -180,8 +201,17 @@ def serve(state, command):
                         except OSError:
                             detach()
                     else:
+                        # stderr's LF conversion can double the output size.
+                        # Recheck per descriptor: another ready reader may have
+                        # filled the queue since select(). Keep input and the
+                        # control socket responsive while output is blocked.
+                        count = 4096
+                        if attached is not None and not stopping and child.poll() is None:
+                            count = min(count, (BACKPRESSURE - len(outgoing)) // 2)
+                            if count <= 0:
+                                continue
                         try:
-                            data = os.read(descriptor, 4096)
+                            data = os.read(descriptor, count)
                         except OSError as error:
                             if error.errno not in (errno.EIO, errno.EBADF):
                                 raise
@@ -218,6 +248,7 @@ def serve(state, command):
                         del clients[connection]
                         del requests[connection]
             result = child.wait()
+            event(f'kernel exited pid={child.pid} status={result}; broker_stop_requested={stopping}')
             (state / 'exit.json').write_text(json.dumps({'status': result}) + '\n')
             # Flush the last shutdown message before closing the client stream.
             if attached is not None:
@@ -351,7 +382,10 @@ def main():
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
         parser.error('start requires a native kernel command after --')
-    with (state / 'supervisor.log').open('ab', buffering=0) as log:
+    supervisor = state / 'supervisor.log'
+    if supervisor.exists() and supervisor.stat().st_size >= LOG_LIMIT:
+        os.replace(supervisor, state / 'supervisor.log.1')
+    with supervisor.open('ab', buffering=0) as log:
         server = subprocess.Popen([sys.executable, str(Path(__file__).resolve()),
                                    'serve', '--state', str(state), '--', *command],
                                   stdin=subprocess.DEVNULL, stdout=log, stderr=log,

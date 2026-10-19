@@ -30,6 +30,16 @@ static void attributes(chtype cell) {
     }
     if (attrs & A_ALTCHARSET) fputs("\033(0", stdout);
 }
+static void character(chtype cell) {
+    uint32_t glyph = cell & A_CHARTEXT;
+    unsigned i, j, n; unsigned char bytes[4];
+    if (glyph == RU_CONTINUATION) return;
+    if (glyph < 128) { putchar((unsigned)glyph); return; }
+    for (i = 0; i < ru_scalar_count(glyph); ++i) {
+        n = ru_encode(ru_scalar(glyph, i), bytes);
+        for (j = 0; j < n; ++j) putchar(bytes[j]);
+    }
+}
 void wnoutrefresh(WINDOW *win) {
     WINDOW *pending = _cursvar.tmpwin;
     int y, sy, sx, first, count;
@@ -57,6 +67,17 @@ void wnoutrefresh(WINDOW *win) {
         pending->_curx = min(COLS - 1, win->_begx + win->_curx);
     }
 }
+/* Overlays and old column-oriented operations can clip half of a wide glyph.
+ * Repair the final composed layer, preserving the one-head/one-tail invariant. */
+static void repair(chtype *row) {
+    int x,wide=0;uint32_t cp;
+    for(x=0;x<COLS;x++){
+        cp=row[x]&A_CHARTEXT;
+        if(cp==RU_CONTINUATION){if(!wide)row[x]=(row[x]&A_ATTRIBUTES)|' ';wide=0;}
+        else{wide=cp>=128&&ru_glyph_width(cp)==2;
+            if(wide&&(x+1==COLS||(row[x+1]&A_CHARTEXT)!=RU_CONTINUATION)){row[x]=(row[x]&A_ATTRIBUTES)|RU_REPLACEMENT;wide=0;}}
+    }
+}
 void doupdate(void) {
     WINDOW *pending = _cursvar.tmpwin;
     int y, x, forced, written = 0;
@@ -71,6 +92,7 @@ void doupdate(void) {
     }
     for (y = 0; y < LINES; ++y) {
         if (!forced && pending->_minchng[y] == _NO_CHANGE) continue;
+        repair(pending->_line[y]);
         x = 0;
         while (x < COLS) {
             if (!forced && pending->_line[y][x] == curscr->_line[y][x]) { ++x; continue; }
@@ -78,7 +100,8 @@ void doupdate(void) {
             written = 1;
             while (x < COLS && (forced || pending->_line[y][x] != curscr->_line[y][x])) {
                 chtype cell = pending->_line[y][x];
-                attributes(cell); putchar(cell & A_CHARTEXT);
+                attributes(cell);
+                character(cell);
                 curscr->_line[y][x++] = cell;
             }
         }

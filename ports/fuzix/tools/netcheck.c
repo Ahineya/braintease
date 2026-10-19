@@ -14,7 +14,7 @@ static unsigned char data[900],reply[900];
 static int bad(int n){printf("netcheck FAILED %d errno %d\n",n,errno);return n;}
 int main(void) {
     struct sockaddr_in local,peer,source;
-    int sockets[20],count=0,fd,other,n,i,status,child;
+    int sockets[40],count=0,fd,other,n,i,status,child;
     unsigned sent=0,received=0;
     socklen_t length;
     unsigned long value=0x11223344UL;
@@ -23,13 +23,9 @@ int main(void) {
     if(inet_pton(AF_INET,"256.0.0.1",&peer.sin_addr)!=0||inet_pton(AF_INET,"1.2.3.4.5",&peer.sin_addr)!=0)return bad(3);
     errno=0;if(socket(99,SOCK_STREAM,0)!=-1||errno!=EAFNOSUPPORT)return bad(4);
     errno=0;if(socket(AF_INET,SOCK_STREAM,IPPROTO_UDP)!=-1||errno!=EPROTONOSUPPORT)return bad(5);
-    while(count<20&&(fd=socket(AF_INET,SOCK_DGRAM,0))>=0)sockets[count++]=fd;
-#ifdef NETCHECK_NATIVE
-    /* Native's 16 per-process FDs fill before the system socket pool. */
-    if(count!=13||errno!=EMFILE)return bad(6);
-#else
-    if(count!=16||errno!=ENOBUFS)return bad(6);
-#endif
+    while(count<40&&(fd=socket(AF_INET,SOCK_DGRAM,0))>=0)sockets[count++]=fd;
+    /* Both kernels have 32 FDs and a larger system-wide socket pool. */
+    if(count!=29||errno!=EMFILE)return bad(6);
     for(i=0;i<count;i++)close(sockets[i]);
     fd=socket(AF_INET,SOCK_DGRAM,0);other=socket(AF_INET,SOCK_DGRAM,0);
     if(fd<0||other<0)return bad(7);

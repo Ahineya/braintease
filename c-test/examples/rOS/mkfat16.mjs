@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {backupImage, pruneImageBackups} from '../../../ports/fuzix/tools/image-backup.mjs';
 
 const BPS = 512;
 const SPC = 4;
@@ -243,19 +244,8 @@ function main(args) {
   }
   fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
   if (existing && backup) {
-    let suffix = 0;
-    let saved;
-    for (;;) {
-      saved = `${output}.bak${suffix ? `.${suffix}` : ''}`;
-      try {
-        fs.copyFileSync(output, saved, fs.constants.COPYFILE_EXCL);
-        break;
-      } catch (error) {
-        if (error.code !== 'EEXIST') throw error;
-        ++suffix;
-      }
-    }
-    console.log(`saved previous disk to ${saved}`);
+    const saved = backupImage(output, existing);
+    if (saved) console.log(`saved previous disk to ${saved}`);
   }
   const temporary = `${output}.tmp-${process.pid}`;
   const descriptor = fs.openSync(temporary, 'wx', existing ? fs.statSync(output).mode : 0o666);
@@ -270,6 +260,7 @@ function main(args) {
   } finally {
     if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
   }
+  if (existing && backup) pruneImageBackups(output);
   console.log(`wrote ${output} files ${files.length}`);
 }
 

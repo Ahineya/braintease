@@ -1,0 +1,146 @@
+import { FromFactory } from "std/fp";
+import { Copy } from "std/value";
+
+/// Sequential combination without copying either success value. Together with
+/// FromFactory this supplies factory-based Applicative operations. Implementations
+/// preserve left-to-right order and skip successful combination on empty/error paths.
+export trait Apply<_> {
+    /// Combines two success values. Inputs are already constructed; lazy
+    /// computations start the right only after the left succeeds.
+    fn map2<A, B, C>(left: Self<A>, right: Self<B>, f: fn(A, B) -> C) -> Self<C>;
+}
+
+/// Sequential combination with a callback that can own exclusive captures.
+/// Implementations invoke it at most once, or release it unused.
+export trait ApplyOnce<_> {
+    /// Transfers both successes into f, consuming the callback at most once.
+    fn map2_once<A, B, C>(left: Self<A>, right: Self<B>, f: once fn(A, B) -> C) -> Self<C>;
+}
+
+/// Combines success values using the constructor's sequential Apply policy.
+export fn map2<F<_>: Apply, A, B, C>(left: F<A>, right: F<B>, f: fn(A, B) -> C) -> F<C> {
+    F::map2(move(left), move(right), f)
+}
+
+/// Sequentially collects two successes into a tuple, transferring their ownership.
+export fn zip<F<_>: Apply, A, B>(left: F<A>, right: F<B>) -> F<(A, B)> {
+    F::map2(move(left), move(right), fn(a: A, b: B) => (move(a), move(b)))
+}
+
+/// Sequentially obtains a reusable function, then its argument, and applies it.
+export fn ap<F<_>: Apply, A, B>(functions: F<fn(A) -> B>, values: F<A>) -> F<B> {
+    F::map2(move(functions), move(values), fn(f: fn(A) -> B, a: A) => f(move(a)))
+}
+
+/// Applies a freshly produced consuming function to a success value. Reusable
+/// effects can create a new resource-owning function during each execution.
+export fn ap_owned<F<_>: Apply, A, B>(functions: F<once fn(A) -> B>, values: F<A>) -> F<B> {
+    F::map2(move(functions), move(values), fn(f: once fn(A) -> B, a: A) => f(move(a)))
+}
+
+/// Combines at most one pair with a callback that owns exclusive captures.
+export fn map2_once<F<_>: ApplyOnce, A, B, C>(left: F<A>, right: F<B>, f: once fn(A, B) -> C) -> F<C> {
+    F::map2_once(move(left), move(right), move(f))
+}
+
+/// Collects at most one pair while consuming the input computations.
+export fn zip_once<F<_>: ApplyOnce, A, B>(left: F<A>, right: F<B>) -> F<(A, B)> {
+    F::map2_once(move(left), move(right), once fn(a: A, b: B) => (move(a), move(b)))
+}
+
+/// Sequences already-constructed computations from left to right. Empty input
+/// uses a fresh empty vector. Errors/empty results skip later execution, while
+/// ordinary argument and program construction has already happened.
+export fn sequence<F<_>: Apply + FromFactory, A>(programs: Vec<F<A>>) -> F<Vec<A>> {
+    let mut input = move(programs);
+    let mut reversed: Vec<F<A>> = [];
+    while (!input.is_empty()) {
+        match input.pop() {
+            Some(p) => reversed.push(move(p)),
+            None => {}
+        };
+    }
+    let mut result: F<Vec<A>> = F::pure_with(fn() => {
+        let empty: Vec<A> = [];
+        move(empty)
+    });
+    while (!reversed.is_empty()) {
+        match reversed.pop() {
+            Some(p) => {
+                result = F::map2(move(result), move(p), fn(values: Vec<A>, a: A) => {
+                    let mut values = move(values);
+                    values.push(move(a));
+                    move(values)
+                });
+            },
+            None => {}
+        };
+    }
+    move(result)
+}
+
+impl Apply for Option {
+    fn map2<A, B, C>(left: Self<A>, right: Self<B>, f: fn(A, B) -> C) -> Self<C> {
+        match move(left) {
+            Some(a) => match move(right) {
+                Some(b) => Some(f(move(a), move(b))),
+                None => None
+            },
+            None => None
+        }
+    }
+}
+
+impl<E> Apply for Result<_, E> {
+    fn map2<A, B, C>(left: Self<A>, right: Self<B>, f: fn(A, B) -> C) -> Self<C> {
+        match move(left) {
+            Ok(a) => match move(right) {
+                Ok(b) => Ok(f(move(a), move(b))),
+                Err(e) => Err(move(e))
+            },
+            Err(e) => Err(move(e))
+        }
+    }
+}
+
+impl ApplyOnce for Option {
+    fn map2_once<A, B, C>(left: Self<A>, right: Self<B>, f: once fn(A, B) -> C) -> Self<C> {
+        match move(left) {
+            Some(a) => match move(right) {
+                Some(b) => Some(f(move(a), move(b))),
+                None => None
+            },
+            None => None
+        }
+    }
+}
+
+impl<E> ApplyOnce for Result<_, E> {
+    fn map2_once<A, B, C>(left: Self<A>, right: Self<B>, f: once fn(A, B) -> C) -> Self<C> {
+        match move(left) {
+            Ok(a) => match move(right) {
+                Ok(b) => Ok(f(move(a), move(b))),
+                Err(e) => Err(move(e))
+            },
+            Err(e) => Err(move(e))
+        }
+    }
+}
+
+/// Cartesian Vec combination in left-major order. Every pair gets copies of
+/// its inputs and a fresh result; explicit Copy bounds prevent resource cloning.
+/// Vec intentionally has no unrestricted Apply instance.
+export fn cartesian_map2<A: Copy, B: Copy, C>(left: Vec<A>, right: Vec<B>, f: fn(A, B) -> C) -> Vec<C> {
+    let mut out: Vec<C> = [];
+    for (i in 0..left.len()) {
+        for (j in 0..right.len()) {
+            out.push(f(left[i], right[j]));
+        }
+    }
+    move(out)
+}
+
+/// Copies every Cartesian pair into a tuple, in left-major order.
+export fn cartesian_zip<A: Copy, B: Copy>(left: Vec<A>, right: Vec<B>) -> Vec<(A, B)> {
+    cartesian_map2(left, right, fn(a: A, b: B) => (a, b))
+}

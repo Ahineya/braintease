@@ -1,0 +1,101 @@
+import { Copy } from "std/value";
+
+/// A destination constructor that sequentially traverses a Vec. Eager
+/// constructors call make now; reusable effects call it once per execution.
+/// f is called left-to-right and stops after the first empty/error result.
+export trait TraverseVec<_> {
+    /// Acquires fresh, possibly exclusive inputs according to the constructor's
+    /// execution policy, then transfers each element into f exactly once.
+    fn traverse_with<A, B>(make: fn() -> Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>>;
+}
+
+/// A consuming traversal that can take an already-owned vector. Eager
+/// constructors traverse now; consuming effects do so on their first execution.
+export trait TraverseVecOnce<_> {
+    /// Transfers inputs into sequential work, stopping after the first failure.
+    fn traverse_once<A, B>(values: Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>>;
+}
+
+/// Traverses fresh inputs left-to-right. Resource-producing factories work with
+/// reusable effects without copying exclusive inputs between executions.
+export fn traverse_with<F<_>: TraverseVec, A, B>(make: fn() -> Vec<A>, f: fn(A) -> F<B>) -> F<Vec<B>> {
+    F::traverse_with(make, f)
+}
+
+/// Captures copyable inputs and traverses in order. Effects defer both f and
+/// copying the inputs until execution. Use traverse_with for exclusive inputs.
+export fn traverse<F<_>: TraverseVec, A: Copy, B>(values: Vec<A>, f: fn(A) -> F<B>) -> F<Vec<B>> {
+    F::traverse_with(fn() => values, f)
+}
+
+/// Traverses an already-owned vector once; f may be invoked for many elements
+/// and therefore remains reusable. Unvisited inputs release on failure/cancellation.
+export fn traverse_once<F<_>: TraverseVecOnce, A, B>(values: Vec<A>, f: fn(A) -> F<B>) -> F<Vec<B>> {
+    F::traverse_once(move(values), f)
+}
+
+// Pop transfers values, unlike indexing/for iteration. Reverse one time to
+// preserve source order without repeatedly rebuilding or copying the vector.
+fn reverse<A>(values: Vec<A>) -> Vec<A> {
+    let mut values = move(values);
+    let mut out: Vec<A> = [];
+    while (!values.is_empty()) {
+        match values.pop() {
+            Some(a) => out.push(move(a)),
+            None => {}
+        };
+    }
+    move(out)
+}
+
+fn option_traverse<A, B>(values: Vec<A>, f: fn(A) -> Option<B>) -> Option<Vec<B>> {
+    let mut values = reverse(move(values));
+    let mut out: Vec<B> = [];
+    while (!values.is_empty()) {
+        match values.pop() {
+            Some(a) => {
+                out.push(f(move(a))?);
+            },
+            None => {}
+        };
+    }
+    Some(move(out))
+}
+
+fn result_traverse<A, B, E>(values: Vec<A>, f: fn(A) -> Result<B, E>) -> Result<Vec<B>, E> {
+    let mut values = reverse(move(values));
+    let mut out: Vec<B> = [];
+    while (!values.is_empty()) {
+        match values.pop() {
+            Some(a) => {
+                out.push(f(move(a))?);
+            },
+            None => {}
+        };
+    }
+    Ok(move(out))
+}
+
+impl TraverseVec for Option {
+    fn traverse_with<A, B>(make: fn() -> Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        option_traverse(make(), f)
+    }
+}
+
+impl TraverseVecOnce for Option {
+    fn traverse_once<A, B>(values: Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        option_traverse(move(values), f)
+    }
+}
+
+impl<E> TraverseVec for Result<_, E> {
+    fn traverse_with<A, B>(make: fn() -> Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        result_traverse(make(), f)
+    }
+}
+
+impl<E> TraverseVecOnce for Result<_, E> {
+    fn traverse_once<A, B>(values: Vec<A>, f: fn(A) -> Self<B>) -> Self<Vec<B>> {
+        result_traverse(move(values), f)
+    }
+}

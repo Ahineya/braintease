@@ -71,9 +71,9 @@ const char *syscall_name[NR_SYSCALL] = {
 	"memfree",
 	"__netcall",
 	"_ftruncate",
-	"_nosys68",
-	"_nosys69",
-	"_nosys70",
+	"symlink",
+	"readlink",
+	"_lstat",
 	"_nosys71",
 	"_select",
 	"setgroups",
@@ -154,9 +154,9 @@ int syscall_args[NR_SYSCALL] = {
 	1, //memfree
 	1, //netcall
 	2, //ftruncate
-	0, //nosys 68
-	0, //nosys 69
-	0, //nosys 70
+	2, //symlink
+	3, //readlink
+	2, //_lstat
 	0, //nosys 71
 	2, //_select
 	2, //setgroups

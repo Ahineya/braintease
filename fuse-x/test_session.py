@@ -23,7 +23,7 @@ def main():
     environment = dict(os.environ, RCC_NATIVE_HEADLESS='1', RCC_NATIVE_NET='off',
                        RCC_NATIVE_TIMEOUT='20')
 
-    def run(image, commands, *, limit='16'):
+    def run(image, commands, *, limit='64'):
         result = subprocess.run([str(executable), '--run', str(image), '--one-shot'], input=commands,
                                 capture_output=True, text=True, timeout=25,
                                 env=dict(environment, RCC_NATIVE_MAX_PROCESSES=limit))

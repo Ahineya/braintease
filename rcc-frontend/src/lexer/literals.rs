@@ -8,10 +8,16 @@ use rcc_common::CompilerError;
 impl Lexer {
     /// Tokenize an integer or floating literal starting at a digit.
     pub fn tokenize_number(&mut self) -> Result<TokenType, CompilerError> {
-        // Hex is always integer (hex floats are not supported yet).
         if self.current_char() == Some('0')
             && matches!(self.peek_char(1), Some('x') | Some('X'))
         {
+            let mut offset = 2;
+            while self.peek_char(offset).is_some_and(|c| c.is_ascii_hexdigit()) {
+                offset += 1;
+            }
+            if matches!(self.peek_char(offset), Some('.' | 'p' | 'P')) {
+                return self.tokenize_hex_float();
+            }
             return self.tokenize_integer();
         }
 
@@ -35,6 +41,60 @@ impl Lexer {
         }
 
         self.finish_integer(number)
+    }
+
+    /// C99 hexadecimal constants require a binary exponent even when a
+    /// fractional point is present. Convert directly to the suffix precision
+    /// instead of rounding to f64 first and double-rounding an f32 constant.
+    fn tokenize_hex_float(&mut self) -> Result<TokenType, CompilerError> {
+        use super::token::FloatSuffix;
+        let start = self.current_location();
+        let invalid = || CompilerError::lexer_error("Invalid hexadecimal floating literal".into(), start.clone());
+        self.advance(); // 0
+        self.advance(); // x / X
+        let mut digits = Vec::new();
+        while let Some(digit) = self.current_char().and_then(|c| c.to_digit(16)) {
+            digits.push(digit as u8);
+            self.advance();
+        }
+        let integer_digits = digits.len();
+        if self.current_char() == Some('.') {
+            self.advance();
+            while let Some(digit) = self.current_char().and_then(|c| c.to_digit(16)) {
+                digits.push(digit as u8);
+                self.advance();
+            }
+        }
+        let fractional_digits = digits.len() - integer_digits;
+        if digits.is_empty() || !matches!(self.current_char(), Some('p' | 'P')) {
+            return Err(invalid());
+        }
+        self.advance();
+        let negative = self.current_char() == Some('-');
+        if matches!(self.current_char(), Some('+' | '-')) {
+            self.advance();
+        }
+        let mut exponent = 0i128;
+        let mut exponent_digits = false;
+        while let Some(ch @ '0'..='9') = self.current_char() {
+            exponent_digits = true;
+            // Exponents beyond i128 cannot cancel the significand's scale:
+            // even a usize::MAX-length input has fewer than 2^67 bits.
+            exponent = exponent.saturating_mul(10).saturating_add((ch as u8 - b'0') as i128);
+            self.advance();
+        }
+        if !exponent_digits { return Err(invalid()); }
+        if negative { exponent = -exponent; }
+        let suffix = match self.current_char() {
+            Some('f' | 'F') => { self.advance(); FloatSuffix::Float }
+            Some('l' | 'L') => { self.advance(); FloatSuffix::LongDouble }
+            _ => FloatSuffix::None,
+        };
+        if self.current_char().is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+            return Err(invalid());
+        }
+        let bits = super::hex_float::bits(&digits, fractional_digits, exponent, suffix);
+        Ok(TokenType::FloatLiteral { bits, suffix })
     }
 
     /// Tokenize an integer literal

@@ -27,14 +27,12 @@ void selrmwait(struct selmap *s)
 
 void selwake(struct selmap *s)
 {
-	ptptr p = ptab;
-	uint16_t i;
-
-	for (i = 0; i < maxproc; i++) {
-		if (s->map[i >> 3] & (1 << (i & 7)))
-			pwake(p);
-		p++;
-	}
+    unsigned base, bit, pending;
+    for (base=0; base<maxproc; base+=8) {
+        pending=s->map[base>>3];
+        for (bit=0; pending && base+bit<maxproc; ++bit,pending>>=1)
+            if (pending&1) pwake(&ptab[base+bit]);
+    }
 }
 
 /* Set our select bits on the inode */
@@ -59,6 +57,9 @@ void selwait_inode(inoptr i, uint_fast8_t smask, uint_fast8_t setit)
 /* Wake an inode for select */
 void selwake_inode(inoptr i, uint16_t mask)
 {
+#ifdef CONFIG_SELECT
+    if (!ripple_select_active) return;
+#endif
 	struct selmap *s = i->c_select;
 	irqflags_t irq = di();
 	if (mask & SELECT_IN)

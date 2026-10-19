@@ -158,6 +158,15 @@ Later NIC commands use the existing synchronous queue/copy contract. Startup
 failure is logged once, leaves the link down and increments `backend_errors`;
 ordinary polling does not repeatedly prompt or restart the connection.
 
+If an attachment that previously worked loses its worker/helper, a later
+`NET_INFO` first reports link-down, then schedules background reconnection.
+Retries back off to a thirty-second maximum interval. Recovery discards queued
+packets from the old attachment and preserves error counters. The guest's link
+lifecycle invalidates existing connections; applications must open new ones.
+On macOS recovery uses only noninteractive `sudo -n`: expired authorization is
+reported in the host log, never requested through an active guest console.
+External socket helpers can also reconnect after they become available again.
+
 For an already built monitor, simply run:
 
 ```sh

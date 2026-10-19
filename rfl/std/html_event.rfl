@@ -1,0 +1,43 @@
+// Pure owned UI payload; independent of the low-level browser FFI module.
+/// Click event kind.
+export const CLICK: u16 = 1;
+/// Input event kind, including current text and composition state.
+export const INPUT: u16 = 2;
+/// Change event kind, including current value and checked state.
+export const CHANGE: u16 = 3;
+/// Key-down event kind.
+export const KEYDOWN: u16 = 4;
+/// Key-up event kind.
+export const KEYUP: u16 = 5;
+/// Composition-start event kind.
+export const COMPOSITION_START: u16 = 6;
+/// Composition-end event kind.
+export const COMPOSITION_END: u16 = 7;
+/// Double-click event kind.
+export const DOUBLE_CLICK: u16 = 8;
+/// Blur event kind, including the control's current value.
+export const BLUR: u16 = 9;
+/// Focus event kind.
+export const FOCUS: u16 = 10;
+/// Synchronous browser preventDefault listener policy.
+export const PREVENT_DEFAULT: u16 = 1;
+/// Synchronous browser stopPropagation listener policy.
+export const STOP_PROPAGATION: u16 = 2;
+
+/// An owned snapshot of a DOM event passed to a typed view handler.
+export struct Event {
+    /// Listener identity supplied by the guest renderer.
+    listener: u16,
+    /// Stable guest node identity.
+    node: u16,
+    /// One of the event constants above.
+    kind: u16,
+    /// Shift=1, Ctrl=2, Alt=4, Meta=8, composing=16.
+    modifiers: u16,
+    /// Keyboard event.key as UTF-8 octets.
+    key: String,
+    /// Current input value as UTF-8 octets.
+    value: String,
+    /// Current input checked state.
+    checked: bool
+}

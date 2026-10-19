@@ -1,0 +1,5 @@
+{
+  "description": "C hexadecimal escapes denote individual execution character cells, not UTF-8 reencoding",
+  "expected": "YY\n",
+  "use_runtime": true
+}

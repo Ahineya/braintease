@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "Nested struct/union static initializer retains string pointer relocations"
+}

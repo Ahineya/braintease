@@ -2,7 +2,7 @@
 #include "doom_build_config.h"
 #include <stdlib.h>
 
-#ifdef RIPPLE
+#if defined(RIPPLE) && !defined(DOOM_GUEST)
 #include <mmio.h>
 /* The leaf copies an already selected disk span and returns the advanced
  * canonical destination. It retains the cursor across all words in registers. */
@@ -53,7 +53,7 @@ int wad_read_words(WadFile *wad, uint32_t offset, uint16_t *dest, uint32_t count
         return wad_fail(wad, "read outside asset image");
     if (count == 0) return 1;
     if (!dest) return wad_fail(wad, "null asset destination");
-#ifdef RIPPLE
+#if defined(RIPPLE) && !defined(DOOM_GUEST)
     /* Disk addresses count words. Split at each 32,768-word block boundary;
      * the leaf handles RAM boundaries without any per-word bit operations. */
     while (count != 0) {
@@ -101,7 +101,7 @@ int wad_read(WadFile *wad, uint32_t offset, WadOctet *dest, uint32_t count) {
     if (!wad_range(wad->length, offset, count)) return wad_fail(wad, "read outside WAD");
     if (count == 0) return 1;
     if (!dest) return wad_fail(wad, "null read destination");
-#ifdef RIPPLE
+#if defined(RIPPLE) && !defined(DOOM_GUEST)
 #if DOOM_WAD_MODE != 0
     /* Each serialized octet already occupies a complete disk word, exactly
      * matching a Ripple C byte. Native validation still reads the source WAD. */
@@ -157,7 +157,7 @@ int wad_read_lump(WadFile *wad, const WadLump *lump, uint32_t offset,
 void wad_close(WadFile *wad) {
     if (wad->lumps) free(wad->lumps);
     wad->lumps = NULL;
-#ifndef RIPPLE
+#if !defined(RIPPLE) || defined(DOOM_GUEST)
     if (wad->host_file) fclose((FILE *)wad->host_file);
     if (wad->asset_file) fclose((FILE *)wad->asset_file);
 #endif
@@ -177,7 +177,7 @@ int wad_open_stream(WadFile *wad, const char *path, uint32_t expected_octet_leng
     wad->directory_offset = 0;
     wad->error = NULL;
     if (expected_octet_length < 12UL) return wad_fail(wad, "WAD header is truncated");
-#ifndef RIPPLE
+#if !defined(RIPPLE) || defined(DOOM_GUEST)
     {
         FILE *file = fopen(path, "rb");
         long length;

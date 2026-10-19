@@ -1,0 +1,211 @@
+.TH CHAT 1
+.SH NAME
+chat \- Fuse Chat terminal client for ChatGPT
+.SH SYNOPSIS
+.B chat
+.br
+.B chat --probe
+.br
+.B chat --login-request FILE
+.br
+.B chat --import FILE
+.br
+.B chat --instructions FILE
+.br
+.B chat --ask TEXT
+.br
+.B chat --list
+.br
+.B chat --history
+.br
+.B chat --history-full
+.br
+.B chat --workspace DIR
+.br
+.B chat --workspace DIR --ask TEXT
+.SH DESCRIPTION
+Fuse Chat runs on both FUZIX/RVM and native Fuse-X. It starts with empty,
+independent local history. GPT-6.1 Sol Light uses model gpt-6.1-sol with
+low reasoning effort. It does not import existing ChatGPT conversations.
+.PP
+DNS, TCP, certificate-verified TLS, token refresh, HTTP and streaming run
+inside the guest. Inference is provided by OpenAI using your authorized
+ChatGPT plan. A Mac helper completes initial browser sign-in. No API key
+or Codex credential file is used.
+.SH KEYS
+Enter sends. Ctrl-O inserts a newline. Ctrl-N creates a conversation.
+Tab switches between the composer and conversation list; arrows choose a
+conversation and Enter opens it. F3 (or Ctrl-B) hides or shows the list and saves that
+preference. Tab temporarily reveals a hidden list to choose a conversation.
+By default, narrow terminals hide the list automatically; F3 can show it
+explicitly. The minimum size is 32x14.
+Page Up and Page Down scroll the reply.
+F3 passes directly through mux; Ctrl-B requires the mux prefix twice.
+F4 toggles compact/full tool details without discarding a streamed reply.
+Ctrl-R retries an unanswered message. Escape cancels an active reply.
+F2 imports /mnt/host/chat-login.json. F10 or Ctrl-D exits. Bracketed paste
+inserts newlines without sending the pasted message.
+.SH COMPOSER
+Left/Right move by Unicode grapheme. Up/Down move through wrapped input rows.
+Home/End or Ctrl-A/E move to the beginning/end of the current logical line.
+Ctrl-W deletes the previous whitespace-delimited word. Alt-B/F move by word;
+Alt-D deletes the next word and Alt-Backspace deletes the previous word.
+Ctrl-U cuts everything before the cursor; Ctrl-K cuts to the end of the line
+(or joins lines when already at the end). Ctrl-Y restores the last cut.
+Ctrl-L redraws the screen. Alt shortcuts can also be entered as Escape then
+the letter, with no pause. Bracketed paste does not execute these shortcuts.
+.PP
+In a workspace, type @ to browse files and folders. Filter by typing a prefix;
+Up/Down select, Tab or Enter completes, and Escape dismisses the chooser
+without stopping a running reply. Selecting a folder continues into that
+directory. Paths containing spaces, quotes or backslashes are quoted and
+escaped automatically. Enter accepts a completion before a subsequent Enter
+sends the message. Emails are not treated as file mentions.
+.PP
+Relative references such as @docs/readme.txt resolve from the conversation's
+workspace; absolute guest paths are also accepted. Dotfiles are shown when
+the current name prefix starts with a dot. Completion scans one directory
+level, with bounded results; it does not recursively crawl or attach contents.
+The model receives the reference as text and reads the file with its tools
+when needed. Plain chats do not provide workspace file completion.
+.SH CUSTOM INSTRUCTIONS
+$HOME/.chat/.instructions is an optional UTF-8 text dotfile (up to 16 KiB).
+With CHAT_HOME, it is $CHAT_HOME/.instructions. Its contents are added to the
+model instructions for every conversation, including workspace chats and
+--ask. The file is read for each model request, so editing it takes effect
+without restarting the app. Conversation histories are not rewritten.
+.PP
+chat --instructions FILE validates and copies a file into this private
+location with mode 0600. Edit the dotfile directly with any guest editor,
+or import an updated copy. Empty or remove it to disable custom instructions.
+An unreadable, invalid UTF-8, binary or oversized file stops the request with
+an error instead of silently dropping preferences. No personal instructions
+are built into the executable or shipped in the source tree.
+.SH WORKSPACES AND TOOLS
+Enter /workspace DIR in the composer to create a workspace conversation,
+or launch chat --workspace DIR. The directory must exist. Its absolute guest
+path is saved with that conversation and shown above the messages. Reopening
+or selecting the conversation restores its workspace. /chat or Ctrl-N creates
+a plain chat without tools.
+.PP
+Workspace conversations let the assistant list directories, read UTF-8 files,
+write files, replace one exact text occurrence, and run commands through the
+guest's /bin/sh. Calls and results appear in the transcript and are replayed
+to the model until it produces its answer. Calls run automatically in the
+workspace using the guest user's permissions. The workspace is a working
+directory, not a filesystem sandbox: absolute paths and shell commands can
+access anything permitted to that guest user, including writable Mac mounts.
+Plain chats do not advertise or execute tools.
+.PP
+The transcript shows a compact operation/path or command, result status and
+a preview of at most 192 octets/three lines. Long file reads and generated
+source are folded. F4 expands or collapses tool details. Full results remain
+in the saved history and model context; folding only changes their display.
+--history prints the compact view; --history-full includes full tool details
+within the existing 128 KiB display window.
+.PP
+Commands have /dev/null stdin, merged stdout/stderr, an exit status, and a
+1-600 second deadline selected by the assistant. Output is limited to 32 KiB
+per command. Background descendants are stopped on completion, timeout or
+Escape; persistent interactive sessions are not supported. File reads are
+paged by guest octet offset with a 32 KiB maximum; file writes and exact edits
+are limited to 64 KiB and preserve existing regular-file permissions. Writes
+use a same-directory temporary and rename; final symlinks are refused.
+.PP
+Escape stops the turn and its command group. Effects already performed are
+not rolled back. Calls are saved before execution and results afterward.
+An interrupted call without a saved result receives an explicit interrupted
+receipt when the conversation is reopened; it is never automatically run
+again. Ctrl-R continues an unfinished tool turn from saved results. A turn
+stops after 32 tool rounds; a conversation supports 512 call records within
+the existing 4 MiB history limit. Start a new workspace conversation as needed.
+.PP
+The tools use installed guest programs. Guest cc currently emits Ripple RXE
+executables on both platforms: FUZIX/RVM can execute those, while Fuse-X still
+needs the Mac-side compiler for native FXE output. Shell scripts and existing
+guest interpreters/programs run on either platform. No Mac command bridge or
+additional compiler backend is introduced by chat.
+.SH SIGN IN ON FUSE-X
+In the guest:
+.nf
+chat --login-request /mnt/host/chat-request.json
+.fi
+On the Mac, from the repository root:
+.nf
+python3 ports/chat/login.py \
+  --request fuse-x-shared/chat-request.json \
+  --output fuse-x-shared/chat-login.json
+.fi
+Complete Continue with ChatGPT in the browser, then in the guest:
+.nf
+chat --import /mnt/host/chat-login.json
+chat
+.fi
+Delete the transfer file on the Mac after successful import. The guest owns
+refresh from then on. Do not import the same rotating refresh token into
+several guests. Each guest has its own persisted host ID and registration.
+.SH SIGN IN ON RVM
+Run chat once, exit, then shut down the guest. On the Mac:
+.nf
+python3 ports/chat/disk.py request build/fuzix/fuzix.img /tmp/chat-request.json
+python3 ports/chat/login.py --request /tmp/chat-request.json --output /tmp/chat-login.json
+python3 ports/chat/disk.py credentials build/fuzix/fuzix.img /tmp/chat-login.json
+.fi
+Substitute the actual guest disk path. disk.py recognizes both RVM FAT-wrapped
+and Fuse-X raw C16 disks and refuses a locked, open or dirty image. Boot and run chat.
+Delete the transfer file after verifying sign-in. --state selects a nondefault
+guest history directory for disk transfers.
+.SH STORAGE
+$HOME/.chat contains mode-0600 credentials and conversation JSONL files in a
+mode-0700 directory. CHAT_HOME overrides that directory. A per-directory lock
+prevents simultaneous writers and refresh-token rotation races.
+.PP
+Full assistant output items, phases and encrypted reasoning are replayed on
+subsequent turns. Requests set store=false. Only a completed response received
+over a completely framed HTTP message is committed. Failed, incomplete or
+cancelled replies preserve the user's message for explicit retry.
+.PP
+Completed output-item events are retained when the final response snapshot
+omits its messages. If necessary, confirmed-complete streamed text is saved
+as an assistant message. Empty responses report an error rather than success.
+.PP
+The first release supports 128 conversations, 4 MiB per conversation, an 8 KiB
+composer, 128 KiB display/reply text and 512 KiB streaming events with 4096 JSON
+tokens per event. Context-limit errors require a new conversation; no silent
+summarization or model fallback occurs. Replies render as wrapped plain text.
+Attachments and chat deletion are not included.
+.SH OPTIONS
+--probe tests public OpenAI HTTPS without credentials or inference charges.
+--ask sends TEXT in the latest conversation and streams to stdout. --list
+lists stored conversations; --history prints the latest conversation's text.
+An empty --ask argument retries an unanswered last message.
+.PP
+--instructions FILE installs custom instructions for all chats. The chat-list
+visibility preference is saved separately as $CHAT_HOME/.sidebar (or
+$HOME/.chat/.sidebar).
+.PP
+--login-request writes a public host-ID request. --import validates the
+registration's host ID and required scopes and copies credentials into private
+storage. The input file must be owned by the guest user and mode 0600.
+.PP
+login.py --reauthorize FILE reuses this app's existing registration for the
+same guest/account. Never supply another application's credentials. Reexport
+this guest's current account.json first; an old transfer copy can hold a
+previously rotated refresh token. Sign-in and inference availability depend
+on the ChatGPT account and workspace permissions.
+.SH ENVIRONMENT
+CHAT_API_ORIGIN and CHAT_AUTH_ORIGIN override HTTPS origins for development
+fixtures. CHAT_CA overrides /etc/ssl/cert.pem. Plain HTTP, redirects and
+certificate-verification bypasses are not supported. The browser callback uses
+HTTP only on the Mac's loopback interface for OAuth.
+.SH IMPLEMENTATION
+ports/chat contains the shared C16 client, build driver, browser sign-in helper
+and independent tests. The UI uses the existing guest Unicode/curses library;
+TLS uses the existing guest wolfSSL library. A forked guest worker performs
+network requests while the terminal remains responsive.
+.SH REFERENCES
+https://developers.openai.com/siwc/token-sharing-open-source/sign-in
+.br
+https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference
+.br
+https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms

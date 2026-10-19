@@ -99,6 +99,7 @@ int *member;			/*will be overlaid on file[1] */
 int *klist;			/*will be overlaid on file[0] after class */
 struct cand *clist;		/* merely a free storage pot for candidates */
 int clen = 0;
+int candidate_capacity = 32;
 int *J;				/*will be overlaid on class */
 long *ixold;			/*will be overlaid on klist */
 long *ixnew;			/*will be overlaid on file[1] */
@@ -117,6 +118,8 @@ void done(void)
 {
 	if (made_temp)
         unlink(tempfilebuf);
+    if (fflush(stdout) || ferror(stdout))
+        status = 2;
     exit(status);
 }
 
@@ -160,9 +163,10 @@ void sort(struct line *a, int n)
 	struct line *ai;
 	register struct line *aim;
 	int k;
+	long step;
 	m = 1;		/* else m /= 2 below reads garbage when n == 0 */
-	for (j = 1; j <= n; j *= 2)
-		m = 2 * j - 1;
+	for (step = 1; step <= n; step *= 2)
+		m = 2 * step - 1;
 	for (m /= 2; m != 0; m /= 2) {
 		k = n - m;
 		for (j = 1; j <= k; j++) {
@@ -197,7 +201,7 @@ void unsort(struct line *f, int l, int *b)
 	free((char *) a);
 }
 
-int skipline(int f)
+long skipline(int f)
 {
     int c;
     long n = 0;
@@ -206,8 +210,7 @@ int skipline(int f)
         if (c == '\n')
             break;
     }
-    if (n > 32767)
-        noroom();
+    if (ferror(input[f])) { mesg("cannot read input", empty); done(); }
     return n;
 }
 
@@ -258,7 +261,7 @@ void filename(char **pa1, char **pa2)
 
 int readhash(FILE * f)
 {
-	long sum;
+	unsigned long sum;
 	register unsigned shift;
     int have = 0;
 	register int space;
@@ -269,7 +272,7 @@ int readhash(FILE * f)
 		for (shift = 0; (t = getc(f)) != '\n'; shift += 7) {
 			if (t == EOF) { if (!have) return 0; break; }
             have = 1;
-			sum += (long) t << (shift %= HALFLONG);
+			sum += (unsigned long) t << (shift %= HALFLONG);
 	} else
 		for (shift = 0;;) {
 			switch (t = getc(f)) {
@@ -287,7 +290,7 @@ int readhash(FILE * f)
 					shift += 7;
 					space = 0;
 				}
-				sum += (long) t << (shift %= HALFLONG);
+				sum += (unsigned long) t << (shift %= HALFLONG);
 				shift += 7;
 				continue;
 			case '\n':
@@ -297,7 +300,7 @@ int readhash(FILE * f)
 		}
 hash_done:
     sum = low(sum) + high(sum);
-    t = (short)low(sum) + (short)high(sum);
+    t = (short)((unsigned short)low(sum) + (unsigned short)high(sum));
     return t ? t : 1;
 }
 
@@ -305,18 +308,29 @@ void prepare(int i, const char *arg)
 {
 	register struct line *p;
 	register int j, h;
+	int capacity = 32;
 	if ((input[i] = fopen(arg, "r")) == NULL) {
 		mesg("cannot open ", arg);
 		done();
 	}
-	p = (struct line *) talloc(3 * sizeof(line));
+	p = (struct line *) talloc((size_t)capacity * sizeof(line));
 	for (j = 0; (h = readhash(input[i])) != 0;) {
 		if (j >= 30000) noroom();
-        p = (struct line *) ralloc((char *)p, (++j + 3) * sizeof(line));
-		p[j].value = h;
+        if (j + 3 >= capacity) {
+            capacity = capacity > 15000 ? 30003 : capacity * 2;
+            p = (struct line *) ralloc((char *)p, (size_t)capacity * sizeof(line));
+        }
+		p[++j].value = h;
 	}
 	len[i] = j;
 	file[i] = p;
+	if (ferror(input[i])) { mesg("cannot read ", arg); done(); }
+	if (opt && ftell(input[i]) > 0) {
+        if (fseek(input[i], -1L, SEEK_END) || getc(input[i]) != '\n') {
+            mesg("editor scripts require newline-terminated input", empty);
+            done();
+        }
+    }
 	fclose(input[i]);
 }
 
@@ -365,9 +379,12 @@ void equiv(struct line *a, int n, struct line *b, int m, int *c)
 int newcand(int x, int y, int pred)
 {
 	register struct cand *q;
-	clist =
-	    (struct cand *) ralloc((char *) clist, ++clen * sizeof(cand));
-	q = clist + clen - 1;
+	if (clen >= 32766) noroom();
+    if (clen == candidate_capacity) {
+        candidate_capacity = candidate_capacity > 16383 ? 32766 : candidate_capacity * 2;
+        clist = (struct cand *) ralloc((char *)clist, (size_t)candidate_capacity * sizeof(cand));
+    }
+	q = clist + clen++;
 	q->x = x;
 	q->y = y;
 	q->pred = pred;
@@ -382,7 +399,7 @@ int search(int *c, int k, int y)
 		return (k + 1);
 	i = 0;
 	j = k + 1;
-	while ((l = (i + j) / 2) > i) {
+	while ((l = i + (j - i) / 2) > i) {
 		t = clist[c[l]].y;
 		if (t > y)
 			j = l;
@@ -457,6 +474,7 @@ void check(char *argv[])
 	int c, d;
 	input[0] = fopen(argv[1], "r");
 	input[1] = fopen(argv[2], "r");
+    if (!input[0] || !input[1]) { mesg("cannot reopen input", empty); done(); }
 	j = 1;
 	ixold[0] = ixnew[0] = 0;
 	jackpot = 0;
@@ -508,6 +526,7 @@ void check(char *argv[])
 	for (; j <= len[1]; j++) {
 		ixnew[j] = ctnew += skipline(1);
 	}
+    if (ferror(input[0]) || ferror(input[1])) { mesg("cannot read input", empty); done(); }
 	fclose(input[0]);
 	fclose(input[1]);
 /*
@@ -524,16 +543,27 @@ void range(int a, int b, char *separator)
 	}
 }
 
+int dotline(long *offset, int line, FILE *file)
+{
+    if (offset[line] - offset[line - 1] != 2) return 0;
+    if (fseek(file, offset[line - 1], SEEK_SET)) { mesg("cannot seek input", empty); done(); }
+    return getc(file) == '.' && getc(file) == '\n';
+}
+
 void fetch(long *f, int a, int b, FILE * lb, char *s)
 {
 	register int i;
     long j, nc;
 	for (i = a; i <= b; i++) {
-		fseek(lb, f[i - 1], 0);
+        int dot = opt && dotline(f, i, lb);
+        if (dot && opt == 1) { mesg("-f cannot represent a single-dot line; use -e", empty); done(); }
+		if (fseek(lb, f[i - 1], 0)) { mesg("cannot seek input", empty); done(); }
 		nc = f[i] - f[i - 1];
 		prints(s);
+        if (dot) putchar('.');
 		for (j = 0; j < nc; j++)
             putchar(getc(lb));
+        if (ferror(lb) || feof(lb)) { mesg("cannot read input", empty); done(); }
         if (nc && fseek(lb, f[i]-1, SEEK_SET) == 0 && getc(lb) != '\n')
             prints("\n\\ No newline at end of file\n");
 	}
@@ -541,6 +571,7 @@ void fetch(long *f, int a, int b, FILE * lb, char *s)
 
 void change(int a, int b, int c, int d)
 {
+	int i;
 	if (a > b && c > d)
 		return;
 	anychange = 1;
@@ -562,6 +593,10 @@ void change(int a, int b, int c, int d)
 	fetch(ixnew, c, d, input[1], opt == 0 ? "> " : empty);
 	if (opt != 0 && c <= d)
 		prints(".\n");
+    if (opt == -1)
+        for (i = c; i <= d; i++)
+            if (dotline(ixnew, i, input[1]))
+                printf("%lds/.././\n", (long)a + i - c);
 }
 
 void output(char *argv[])
@@ -571,6 +606,7 @@ void output(char *argv[])
 	int j0;
 	input[0] = fopen(argv[1], "r");
 	input[1] = fopen(argv[2], "r");
+    if (!input[0] || !input[1]) { mesg("cannot reopen input", empty); done(); }
 	m = len[0];
 	J[0] = 0;
 	J[m + 1] = len[1] + 1;
@@ -605,14 +641,12 @@ void output(char *argv[])
 int main(int argc,  char *argv[])
 {
 	register int k;
-	char **args;
-
-	args = argv;
-	if (argc > 3 && *argv[1] == '-') {
-		argc--;
-		argv++;
-		for (k = 1; argv[0][k]; k++) {
-			switch (argv[0][k]) {
+	int first = 1, heuristic = 0;
+    char *heuristic_args[5];
+	while (first < argc && argv[first][0] == '-' && argv[first][1]) {
+        if (!strcmp(argv[first], "--")) { first++; break; }
+		for (k = 1; argv[first][k]; k++) {
+			switch (argv[first][k]) {
 			case 'e':
 				opt = -1;
 				break;
@@ -623,19 +657,29 @@ int main(int argc,  char *argv[])
 				bflag = 1;
 				break;
 			case 'h':
-				execv("/bin/diffh", (char**)args);
-                mesg("cannot find diffh", empty);
-                done();
+                heuristic = 1;
+                break;
             default:
                 mesg("unsupported option", empty);
                 done();
 			}
 		}
+		first++;
 	}
-	if (argc != 3) {
+	if (argc - first != 2) {
 		mesg("arg count", empty);
 		done();
 	}
+    if (heuristic) {
+        if (opt) { mesg("-h cannot generate editor scripts", empty); done(); }
+        heuristic_args[0] = "diffh";
+        heuristic_args[1] = bflag ? "-b" : "-h";
+        heuristic_args[2] = argv[first]; heuristic_args[3] = argv[first + 1];
+        heuristic_args[4] = NULL;
+        execv("/bin/diffh", heuristic_args);
+        mesg("cannot find diffh", empty); done();
+    }
+    argv += first - 1;
 
 	if (!strcmp(argv[1], "-") && !strcmp(argv[2], "-")) {
         mesg("cannot compare stdin with itself", empty);
@@ -660,7 +704,7 @@ int main(int argc,  char *argv[])
 	    (int *) ralloc((char *) class, (slen[0] + 2) * sizeof(int));
 
 	klist = (int *) talloc((slen[0] + 2) * sizeof(int));
-	clist = (struct cand *) talloc(sizeof(cand));
+	clist = (struct cand *) talloc((size_t)candidate_capacity * sizeof(cand));
 	k = stone(class, slen[0], member, klist);
 	free((char *) member);
 	free((char *) class);

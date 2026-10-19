@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <syscalls.h>
 #include "resources.h"
+#include "process-limits.h"
 static int value=7;
 
 static int infofd;
@@ -50,6 +51,14 @@ static void heap_edges(void) {
     if(brk(base))_exit(41);
     shrunk=info();
     if(shrunk.mapped_kib!=before.mapped_kib)_exit(42);
+    /* Backing surfaces use the formerly unmapped heap gap below stack 31. */
+    if(brk((void *)0x1e0200UL))_exit(91);
+    *(volatile unsigned short *)0x1e0000UL=0x5aa5;
+    {int child=fork(),status;if(child<0)_exit(92);
+     if(!child){*(volatile unsigned short *)0x1e0000UL=0x1234;_exit(0);}
+     if(waitpid(child,&status,0)!=child||status||*(volatile unsigned short *)0x1e0000UL!=0x5aa5)_exit(93);}
+    if(brk(base))_exit(94);
+    if(info().mapped_kib!=before.mapped_kib)_exit(95);
     a=malloc(180000UL); b=malloc(70000UL);
     if(!a||!b)_exit(78);
     memset(a,0xdead,180000UL);memset(b,0xbeef,70000UL);
@@ -67,11 +76,11 @@ static void heap_edges(void) {
     _exit(0);
 }
 static void capacity(void) {
-    int gate[2], children[32], count=0, pid, status, i;
+    int gate[2], children[RIPPLE_PROCESS_SLOTS], count=0, pid, status, i;
     char c;
     struct ripple_sysinfo before=info(), after;
     if(pipe(gate))exit(43);
-    while(count<32) {
+    while(count<RIPPLE_PROCESS_SLOTS) {
         pid=fork();
         if(pid<0)break;
         if(!pid) {

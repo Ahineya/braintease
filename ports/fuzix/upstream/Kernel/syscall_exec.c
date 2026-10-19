@@ -8,14 +8,12 @@
 #include <printf.h>
 #include <exec.h>
 
-/* This is hardcoded as we use disk buffers as scratch for the arguments
-   on most platforms */
+/* Most platforms use disk buffers for scratch; Ripple uses private kernel
+   stack storage and a larger, shared argument/environment budget. */
 #ifdef CONFIG_RIPPLE
-/* Larger filesystem buffers must not expand argv into the single user bank.
-   Retain the port's existing argument limit independently of disk geometry. */
-#define ARGBUF_SIZE 256
+#define ARGCHARS RIPPLE_ARG_MAX
 #else
-#define ARGBUF_SIZE	BLKSIZE
+#define ARGCHARS (BLKSIZE - 12)
 #endif
 
 bool rargs(uint8_t **userspace_argv, struct s_argblk * argbuf)
@@ -24,20 +22,25 @@ bool rargs(uint8_t **userspace_argv, struct s_argblk * argbuf)
 	register uint8_t *up = (uint8_t *)userspace_argv;
 	register uint8_t c;
 	register uint8_t *bufp;
-	uint8_t *ep = argbuf->a_buf + ARGBUF_SIZE - 12;
+	uint8_t *ep = argbuf->a_buf + ARGCHARS;
 
 	argbuf->a_argc = 0;	/* Store argc in argbuf */
 	bufp = argbuf->a_buf;
 
-	while ((ptr = (uint8_t *) ugetp(up)) != NULL) {
+	for (;;) {
+        ptr = (uint8_t *) ugetp(up);
+        if (udata.u_error) return true;
+        if (!ptr) break;
 		up += sizeof(uptr_t);
 		++(argbuf->a_argc);	/* Store argc in argbuf. */
 		do {
-			*bufp++ = c = ugetc(ptr++);
-			if (bufp > ep) {
+			if (bufp == ep) {
 				udata.u_error = E2BIG;
 				return true;	// failed
 			}
+            c = ugetc(ptr++);
+            if (udata.u_error) return true;
+            *bufp++ = c;
 		}
 		while (c);
 	}

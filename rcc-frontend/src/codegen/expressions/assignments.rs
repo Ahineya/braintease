@@ -70,7 +70,7 @@ pub fn generate_assignment(
     rhs: &TypedExpr,
 ) -> Result<Value, CompilerError> {
     let lhs_addr = generate_lvalue_address(gen, lhs)?;
-    let lhs_type = lhs.get_type();
+    let lhs_type = lhs.get_declared_type().unqualified();
     let rhs_type = rhs.get_type();
     
     // Struct and union assignment copies the object word-by-word.
@@ -90,8 +90,6 @@ pub fn generate_assignment(
         } else {
             rhs_val
         };
-        let ir_type = super::convert_type_default(lhs_type)?;
-        gen.builder.build_store_volatile(stored.clone(), lhs_addr, ir_type, lhs.get_declared_type().is_volatile())?;
-        Ok(stored)
+        super::bit_fields::store(gen, lhs, lhs_addr, stored, None)
     }
 }

@@ -102,10 +102,9 @@ fn import_edit(
     } else {
         "\n"
     };
-    if let Some(import) = imports
-        .iter()
-        .find(|import| import.path.strip_suffix(".rfl").unwrap_or(&import.path) == module)
-    {
+    if let Some(import) = imports.iter().find(|import| {
+        !import.is_implicit() && import.path.strip_suffix(".rfl").unwrap_or(&import.path) == module
+    }) {
         if let Some(first) = import.names.first() {
             let before = &source[import.span.start..first.span.start];
             let addition = if before.contains('\n') {

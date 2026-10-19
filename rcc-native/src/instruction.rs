@@ -56,10 +56,16 @@ impl Cg<'_, '_> {
                 }
                 let pointer = self.value(ptr)?;
                 let index = self.value(&indices[0])?;
+                let bits = self.width_of(&indices[0]);
                 let index = if matches!(indices[0], Value::Constant(_)) {
                     index
+                } else if bits <= 16 {
+                    // Shared GEP narrowing removes ZExt to I32 for native-word
+                    // indices. These retain unsigned semantics; signed C indices
+                    // keep their explicit SExt to I32 in the IR.
+                    self.mask(index, bits)
                 } else {
-                    self.signed(index, self.width_of(&indices[0]))
+                    self.signed(index, bits)
                 };
                 let size = if *is_struct_field { 1 } else {
                     Target::Native.layout().size_in_cells(source_element_type)?
@@ -108,7 +114,9 @@ impl Cg<'_, '_> {
             }
             I::Return(value) => {
                 let value = if let Some(value) = value { self.value(value)? } else { self.k(0) };
-                self.runtime("rcc_native_stack_restore", &[self.mark])?;
+                if self.owns_stack {
+                    self.runtime("rcc_native_stack_restore", &[self.mark])?;
+                }
                 self.b.ins().return_(&[value]);
             }
             I::Branch(to) => {

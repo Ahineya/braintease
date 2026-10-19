@@ -1,0 +1,22 @@
+import { greeting } from "./console_program";
+import { RecordingConsole, recording_console } from "std/console_test";
+import { run } from "std/effect";
+import { block_on } from "std/executor";
+import { host_reactor } from "std/host";
+import { write_text } from "std/io";
+import { Result } from "std/result";
+
+fn main() -> i16 {
+    let program = greeting<RecordingConsole>();
+    let console = recording_console(["Ada", "Ripple"]);
+    let mut reactor = host_reactor().unwrap();
+    for (i in 0..2) {
+        let mut future = run(program, console);
+        block_on(&mut future, &mut reactor).unwrap().unwrap();
+    }
+    let log = console.output();
+    for (i in 0..log.len()) {
+        write_text(log[i]);
+    }
+    0
+}

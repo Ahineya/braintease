@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Ripple · RVM in your browser</title>
+    <meta name="description"
+          content="Explore the Ripple computer architecture through RVM, running FUZIX and a graphical desktop locally in your browser.">
+    <link rel="stylesheet" href="vendor/xterm.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+    <header>
+        <div><span class="eyebrow">RVM · RIPPLE VIRTUAL MACHINE</span>
+            <p class="intro">Explore the Ripple computer architecture through RVM. Run FUZIX, use its Unix shell, and
+                launch a graphical desktop — all on a virtual CPU running locally in your browser.</p></div>
+        <span id="status" role="status">Starting…</span></header>
+    <nav aria-label="Machine controls">
+        <div class="views">
+            <button id="console-tab" class="selected">Console</button>
+            <button id="desktop-tab" disabled>Desktop</button>
+        </div>
+        <div>
+            <button id="pause" disabled>Pause</button>
+            <button id="import" disabled>Import disk</button>
+            <button id="export" disabled>Export disk</button>
+            <button id="reset">Reset disk</button>
+        </div>
+    </nav>
+    <input id="disk-file" type="file" accept=".img,application/octet-stream"
+           aria-label="Choose a Ripple/FUZIX disk image" hidden>
+    <p id="disk-error" role="alert" hidden></p>
+    <section id="console-view" aria-label="FUZIX console">
+        <div id="terminal"></div>
+    </section>
+    <section id="desktop-view" hidden aria-label="FUZIX desktop">
+        <canvas id="desktop" width="640" height="480" tabindex="0"
+                aria-label="NanoWM desktop. Click to focus keyboard input."></canvas>
+    </section>
+    <footer><p>Type <code>startx</code> to open the desktop. <code>vi</code> opens the Rift text editor.</p>
+        <p>Run <code>shutdown</code>, then export the disk to keep your files. Import a saved <code>.img</code> disk to
+            continue later (up to 256 MiB). Reset starts over with a fresh disk.</p>
+    </footer>
+    <details>
+        <summary>About Ripple and RVM</summary>
+        <p>Ripple is the computer architecture. RVM is its virtual machine: it executes Ripple instructions and provides
+            the memory and devices that let a complete operating system run. Here, RVM runs as WebAssembly inside your
+            browser.</p>
+        <p>FUZIX provides the Unix environment. Nano-X, NanoWM, and NXDSKTOP provide the graphical desktop. The
+            operating system and its applications execute on the virtual Ripple CPU.</p>
+        <p><a href="vendor/xterm.LICENSE">Terminal license</a></p></details>
+</main>
+<script src="vendor/xterm.js"></script>
+<script type="module" src="page.mjs"></script>
+</body>
+</html>

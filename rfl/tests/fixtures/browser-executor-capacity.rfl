@@ -1,0 +1,60 @@
+import { mount_app, BrowserApp, BrowserTask } from "std/browser_app";
+import { BrowserEvent, patch, CLICK } from "std/browser";
+import { Future, sleep } from "std/future";
+import { TaskLimit, ScopeClosed } from "std/scope";
+import { share, with_shared } from "std/shared";
+async fn noop() {
+    println("BAD: rejected task ran");
+}
+
+async fn unpolled(guard: Owned<i16>) {
+    println("BAD: queued cancellation ran");
+}
+
+async fn active(app: BrowserApp) {
+    let guard = owned(0, fn(n: &mut i16) => {
+        match app.spawn(noop()) {
+            Err(ScopeClosed) => println("cleanup closed"),
+            _ => println("BAD")
+        };
+    });
+    sleep(100).unwrap().await;
+    println("BAD: disposed task resumed");
+}
+
+fn main() {
+    let initial: Option<BrowserTask> = None;
+    let slot = share(initial);
+    let app = mount_app(1, fn(events: Vec<BrowserEvent>, app: BrowserApp) => {
+        with_shared(slot, once fn(value: &mut Option<BrowserTask>) => {
+            match &*value {
+                Some(task) => println(task.is_finished()),
+                None => {}
+            }
+        });
+        app.spawn(active(app)).unwrap();
+    }).unwrap();
+    let task = app.spawn(unpolled(owned(0, fn(n: &mut i16) => {
+        println("queued dropped");
+    }))).unwrap();
+    task.cancel();
+    with_shared(slot, once fn(value: &mut Option<BrowserTask>) => {
+        *value = Some(task);
+    });
+    let rejected = owned(1, fn(n: &mut i16) => {
+        match app.spawn(noop()) {
+            Err(TaskLimit) => println("cleanup full"),
+            _ => println("BAD")
+        };
+    });
+    match app.spawn(unpolled(move(rejected))) {
+        Err(TaskLimit) => println("full"),
+        _ => println("BAD")
+    };
+    let mut dom = patch();
+    let button = dom.string("button");
+    dom.element(1, button);
+    dom.insert(0, 1, 0);
+    dom.listen(1, CLICK, 1, 0);
+    move(dom).commit();
+}

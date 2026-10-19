@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <termios.h>
 extern int _argc;
 extern char **_argv;
 #undef putchar
@@ -85,6 +86,7 @@ const unsigned char *rfl_posix_cwd(void) {
 static long foreground(const char *program, char **argv, unsigned count) {
     pid_t child;
     int status, saved, i;
+    pid_t terminal_group = tcgetpgrp(STDIN_FILENO);
     sighandler_t interrupt = signal(SIGINT, SIG_IGN), quit = signal(SIGQUIT, SIG_IGN);
     fflush(NULL);
     child = fork();
@@ -107,6 +109,14 @@ static long foreground(const char *program, char **argv, unsigned count) {
         }
     }
     saved = errno;
+    /* An interactive subshell creates its own foreground process group. Take
+     * the terminal back before curses resumes, even though we are temporarily
+     * a background group while making this ioctl. */
+    if (terminal_group > 0) {
+        sighandler_t output = signal(SIGTTOU, SIG_IGN);
+        tcsetpgrp(STDIN_FILENO, terminal_group);
+        signal(SIGTTOU, output);
+    }
     signal(SIGINT, interrupt); signal(SIGQUIT, quit);
     errno = saved;
     return status == -1 ? -1L : (unsigned)status;

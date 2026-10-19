@@ -59,6 +59,18 @@ class LauncherTests(unittest.TestCase):
         command = launch.host_command(args, "disk")
         self.assertNotIn("--guest-window-close", command)
 
+    def test_unix_audio_policy(self):
+        args = argparse.Namespace(build=self.build, vm='/host', backend='rvm', vm_args=[])
+        command = launch.host_command(args, 'disk')
+        self.assertEqual(command[command.index('--audio') + 1], 'on')
+        args.vm_args = ['--headless']
+        command = launch.host_command(args, 'disk')
+        self.assertEqual(command[command.index('--audio') + 1], 'auto')
+        args.vm_args = ['--audio=off']
+        command = launch.host_command(args, 'disk')
+        self.assertIn('--audio=off', command)
+        self.assertNotIn('--audio', command)
+
     def test_rvm_arguments_and_overrides(self):
         args = argparse.Namespace(build=self.build, vm='/host', backend='rvm',
                                   vm_args=['--', '--jit', '--headless'])

@@ -1,0 +1,104 @@
+import { UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN } from "std/curses";
+
+/// Selection and viewport, independent of item type, drawing and filesystem I/O.
+/// Empty lists use selected=top=0; callers must check their item count before indexing.
+export struct Selection {
+    selected: usize,
+    top: usize
+}
+
+/// An empty/default list cursor.
+export fn selection() -> Selection {
+    Selection { selected: 0, top: 0 }
+}
+
+impl Selection {
+    /// Clamps stale indices after list replacement or resize and reveals selection.
+    export fn reveal(&mut self, count: usize, rows: usize) {
+        if (count == 0) {
+            self.selected = 0;
+            self.top = 0;
+            return;
+        }
+        if (self.selected >= count) {
+            self.selected = count - 1;
+        }
+        if (rows == 0) {
+            self.top = self.selected;
+            return;
+        }
+        let last = if (count > rows) {
+            count - rows
+        } else {
+            0 as usize
+        };
+        if (self.top > last) {
+            self.top = last;
+        }
+        if (self.selected < self.top) {
+            self.top = self.selected;
+        }
+        if (self.selected - self.top >= rows) {
+            self.top = self.selected - rows + 1;
+        }
+    }
+    /// Selects an index, clamped to the current list, and makes it visible.
+    export fn select(&mut self, index: usize, count: usize, rows: usize) {
+        self.selected = index;
+        self.reveal(count, rows);
+    }
+    /// Moves by a signed distance without wrapping, including the i16 minimum.
+    export fn step(&mut self, distance: i16, count: usize, rows: usize) {
+        self.reveal(count, rows);
+        if (count == 0) {
+            return;
+        }
+        if (distance < 0) {
+            let n = (-(distance as i32)) as usize;
+            self.selected = if (n > self.selected) {
+                0 as usize
+            } else {
+                self.selected - n
+            };
+        } else {
+            let n = distance as usize;
+            self.selected += if (n > count - 1 - self.selected) {
+                count - 1 - self.selected
+            } else {
+                n
+            };
+        }
+        self.reveal(count, rows);
+    }
+    /// Handles arrows, Home/End and page keys. Returns whether the key was consumed.
+    /// Printable keys and vi bindings belong to the containing widget/application.
+    export fn key(&mut self, key: i16, count: usize, rows: usize) -> bool {
+        let page = if (rows > 32767) {
+            32767 as i16
+        } else if (rows == 0) {
+            1 as i16
+        } else {
+            rows as i16
+        };
+        if (key == UP) {
+            self.step(-1, count, rows);
+        } else if (key == DOWN) {
+            self.step(1, count, rows);
+        } else if (key == PAGE_UP) {
+            self.step(-page, count, rows);
+        } else if (key == PAGE_DOWN) {
+            self.step(page, count, rows);
+        } else if (key == HOME) {
+            self.select(0, count, rows);
+        } else if (key == END) {
+            self.select(if (count == 0) {
+                0 as usize
+            } else {
+                count - 1
+            }, count, rows);
+        } else {
+            return false;
+        }
+        true
+    }
+}

@@ -1,0 +1,42 @@
+import { Result } from "std/result";
+fn number(data: &String, at: &mut usize, limit: u32) -> Result<u32, String> {
+    let begin = *at;
+    let mut n: u32 = 0;
+    while (*at < data.len() && data[*at] != '\n') {
+        let ch = data[*at];
+        if (ch < '0' || ch > '9') {
+            return Err("Malformed todo number.");
+        }
+        let digit = ch as u32 - 48;
+        if (digit > limit || n >(limit - digit) / 10) {
+            return Err("Todo number is out of range.");
+        }
+        n = n * 10 + digit;
+        *at += 1;
+    }
+    if (*at == begin || *at == data.len() || (*at - begin > 1 && data[begin] == '0')) {
+        return Err("Malformed todo record.");
+    } *at += 1;
+    while (false) {} *at += 0;
+    match true {
+        true => {},
+        false => {}
+    } *at += 0;
+    unsafe {} *at += 0;
+    {} *at += 0;
+    let grouped = (if (true) {
+        6
+    } else {
+        0
+    }) * 7;
+    if (grouped != 42) {
+        return Err("parenthesized block lost its operator");
+    }
+    Ok(n)
+}
+
+fn main() {
+    let data = "42\n";
+    let mut at: usize = 0;
+    println(number(&data, &mut at, 100).unwrap());
+}

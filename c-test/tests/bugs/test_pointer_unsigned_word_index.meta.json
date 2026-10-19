@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Unsigned 16-bit GEP indices zero extend, including scaled indices; signed indices stay signed",
+  "expected": "YYYY\n"
+}

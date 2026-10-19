@@ -1,0 +1,5 @@
+{
+  "description": "Definition inherits prior static prototype linkage; libc puts still calls libc putchar",
+  "use_runtime": true,
+  "expected": "Y\n"
+}

@@ -1,0 +1,366 @@
+// Owned mounted executor. This module supplies all browser lifecycle C hooks.
+import { mount, decode_events, BrowserEvent } from "std/browser";
+import { browser_effects, BrowserEffects } from "std/browser_effects";
+import { task_scope, TaskScope, SpawnError, ScopeClosed, TaskLimit } from "std/scope";
+import { JoinHandle } from "std/scope_state";
+import { Future, Poll, Pending, Ready } from "std/future";
+import { Context, Waker, TaskError, InvalidCapacity, task_set } from "std/task";
+import { Reactor } from "std/executor";
+import { Environment, share_environment, with_environment } from "std/effect_env";
+import { Shared, share, with_shared } from "std/shared";
+import { replace, take } from "std/mem";
+import { Result } from "std/result";
+extern "C" {
+    fn ripple_browser_executor();
+    fn ripple_browser_now() -> u32;
+    fn ripple_browser_event_data() -> *const u16;
+}
+
+/// Internal queued root future and cancellation gate.
+export struct QueuedBrowserTask {
+    /// Owned root future waiting to enter the task scope.
+    future: Async<unit>,
+    /// Shared cancellation and completion status callback.
+    gate: fn(u16) -> u16
+}
+
+/// Internal ingress storage; it is never borrowed while polling application code.
+export struct BrowserInbox {
+    /// Pending owned root tasks awaiting the next turn.
+    jobs: Vec<Option<QueuedBrowserTask>>,
+    /// Reserved queued and running root task slots.
+    count: usize,
+    /// Maximum number of simultaneous root tasks.
+    capacity: usize,
+    /// Whether disposal has revoked new task ingress.
+    closed: bool
+}
+
+/// A copyable application capability. It retains the ingress queue, not the
+/// mounted task scope. It is safe to capture this value in one of its tasks.
+export struct BrowserApp {
+    /// Shared ingress capability without ownership of the task scope.
+    inbox: Shared<BrowserInbox>,
+    /// Mounted host-effect and completion wake capability.
+    effects: BrowserEffects
+}
+
+/// Copyable cancellation/status handle for a root task. Dropping this handle
+/// leaves the task owned by its application's scope until completion/unmount.
+export struct BrowserTask {
+    /// Shared cancellation and completion status callback.
+    gate: fn(u16) -> u16
+}
+
+/// Internal retained join result; root jobs produce unit.
+export struct RunningBrowserTask {
+    /// Owned join handle retaining the running root task.
+    join: JoinHandle<unit>,
+    /// Shared cancellation and completion status callback.
+    gate: fn(u16) -> u16
+}
+
+/// Internal owned mount state. Only the compiler's callback root retains it.
+export struct BrowserState {
+    /// Mounted ingress and effect capability.
+    app: BrowserApp,
+    /// Owner of all running application root tasks.
+    scope: TaskScope,
+    /// Running roots awaiting completion or cancellation.
+    tasks: Vec<Option<RunningBrowserTask>>,
+    /// Wake capability used when collecting root results.
+    join_waker: Waker,
+    /// Callback receiving owned event snapshots before a turn.
+    on_events: fn(Vec<BrowserEvent>, BrowserApp) -> unit,
+    /// Post-poll callback; true requests another bounded turn.
+    on_turn: fn(BrowserApp) -> bool,
+    /// Callback revoking higher-level capabilities before task cancellation.
+    on_close: fn(BrowserApp) -> unit,
+    /// Whether application disposal has begun.
+    closed: bool
+}
+
+/// Passive reactor for one already-delivered host turn. It never blocks.
+export struct BrowserReactor {
+    /// Host clock snapshot for this bounded scheduling turn.
+    milliseconds: u32
+}
+
+impl Reactor for BrowserReactor {
+    fn now(&self) -> u32 {
+        self.milliseconds
+    }
+    fn turn(&mut self, wait: Option<u32>) -> bool {
+        true
+    }
+}
+
+fn task_gate() -> fn(u16) -> u16 {
+    let mut state: u16 = 0;
+    fn(op: u16) => {
+        if (op == 1 && state == 0) {
+            state = 1;
+        }
+        if (op == 2) {
+            state = 2;
+        }
+        state
+    }
+}
+
+impl BrowserTask {
+    /// Requests cancellation before the next bounded turn; idempotent. Returns
+    /// false after completion. Application disposal always cancels synchronously.
+    export fn cancel(&self) -> bool {
+        let gate = self.gate;
+        gate(1) != 2
+    }
+    /// True once the executor collected completion or cancellation.
+    export fn is_finished(&self) -> bool {
+        let gate = self.gate;
+        gate(0) == 2
+    }
+}
+
+impl BrowserApp {
+    /// Shared host-effect capability for lazy browser timers and fetch futures.
+    export fn effects(&self) -> BrowserEffects {
+        self.effects
+    }
+    /// Enqueues a lazy root future. Starts on a later bounded scheduling turn.
+    /// May be called from events or another task; no scope borrow is retained.
+    /// The root owns and discards the result; send messages from the future.
+    export fn spawn<F: Future>(&self, future: F) -> Result<BrowserTask, SpawnError> {
+        let reserved: Result<unit, SpawnError> = with_shared(self.inbox, once fn(inbox: &mut BrowserInbox) => {
+            if (inbox.closed) {
+                return Err(ScopeClosed);
+            }
+            if (inbox.count == inbox.capacity) {
+                return Err(TaskLimit);
+            }
+            inbox.count += 1;
+            Ok({})
+        });
+        // Reject outside the inbox borrow. Dropping a rejected future may run
+        // user cleanup which itself tries to enqueue work.
+        reserved?;
+        let future = run_root(move(future));
+        let gate = task_gate();
+        let handle = BrowserTask { gate: gate };
+        let job = QueuedBrowserTask { future: move(future), gate: gate };
+        with_shared(self.inbox, once fn(inbox: &mut BrowserInbox) => {
+            inbox.jobs.push(Some(move(job)));
+        });
+        Ok(handle)
+    }
+}
+
+async fn run_root<F: Future>(future: F) {
+    drop(move(future).await);
+}
+
+/// Mounts one application with 1..64 root tasks. The callback receives owned
+/// event snapshots and an ingress capability. No exported hooks are required
+/// in user code. Returning from main leaves the mounted application alive.
+export fn mount_app(capacity: usize, on_events: fn(Vec<BrowserEvent>, BrowserApp) -> unit) -> Result<BrowserApp, TaskError> {
+    mount_app_with_turn(capacity, on_events, fn(app: BrowserApp) => false)
+}
+
+/// Adds a post-poll callback after scope borrows end. Return true to request
+/// another bounded turn, for example when an application message queue remains.
+export fn mount_app_with_turn(capacity: usize, on_events: fn(Vec<BrowserEvent>, BrowserApp) -> unit, on_turn: fn(BrowserApp) -> bool) -> Result<BrowserApp, TaskError> {
+    mount_app_with_lifecycle(capacity, on_events, on_turn, fn(app: BrowserApp) => {})
+}
+
+/// Closes application ingress before cancelling tasks. The close callback may
+/// revoke higher-level capabilities; task cleanup then observes them as closed.
+export fn mount_app_with_lifecycle(capacity: usize, on_events: fn(Vec<BrowserEvent>, BrowserApp) -> unit, on_turn: fn(BrowserApp) -> bool, on_close: fn(BrowserApp) -> unit) -> Result<BrowserApp, TaskError> {
+    if (capacity == 0 || capacity > 64) {
+        return Err(InvalidCapacity);
+    }
+    let scope = task_scope(capacity, ripple_browser_now())?;
+    let joins = task_set(1, ripple_browser_now())?;
+    let join_waker = joins.allocate()?;
+    mount();
+    let effects = browser_effects();
+    ripple_browser_executor();
+    let app = BrowserApp { inbox: share(BrowserInbox { jobs: [], count: 0, capacity: capacity, closed: false }), effects: effects };
+    let mut tasks: Vec<Option<RunningBrowserTask>> = [];
+    for (i in 0..capacity) {
+        tasks.push(None);
+    }
+    let state = BrowserState { app: app, scope: move(scope), tasks: move(tasks), join_waker: join_waker, on_events: on_events, on_turn: on_turn, on_close: on_close, closed: false };
+    let (owner, view) = share_environment(move(state), close_state);
+    let dispatch: fn(u16, u32) -> u32 = fn(op: u16, value: u32) => {
+        // Retain the owner as part of this callback's capture environment.
+        // The host never sees the owner, frame layout or raw RFL pointers.
+        drop(owner);
+        with_environment(view, once fn(state: &mut BrowserState) => {
+            if (op == 1) {
+                close_state(state);
+                return 4294967295;
+            }
+            if (state.closed) {
+                return 4294967295;
+            }
+            if (op == 2) {
+                let events = decode_events(ripple_browser_event_data(), value).unwrap();
+                let callback = state.on_events;
+                callback(move(events), state.app);
+                return 4294967295;
+            }
+            turn_state(state, value)
+        })
+    };
+    drop(__browser_root_replace(dispatch));
+    Ok(app)
+}
+
+fn close_state(state: &mut BrowserState) {
+    if (state.closed) {
+        return;
+    }
+    state.closed = true;
+    // Mark closed/extract before any destructor: task cleanup may itself try
+    // to enqueue work. Such spawns fail without reentering an ingress borrow.
+    let queued = with_shared(state.app.inbox, once fn(inbox: &mut BrowserInbox) => {
+        inbox.closed = true;
+        inbox.count = 0;
+        replace(&mut inbox.jobs, [])
+    });
+    let closing = state.on_close;
+    closing(state.app);
+    for (i in 0..queued.len()) {
+        match &queued[i] {
+            Some(job) => {
+                let gate = job.gate;
+                gate(2);
+            },
+            None => {}
+        }
+    }
+    for (i in 0..state.tasks.len()) {
+        match &state.tasks[i] {
+            Some(task) => {
+                let gate = task.gate;
+                gate(2);
+            },
+            None => {}
+        }
+    }
+    state.scope.close();
+    drop(move(queued));
+    state.tasks.clear();
+    state.join_waker.retire();
+}
+
+fn finished(app: BrowserApp, gate: fn(u16) -> u16) {
+    gate(2);
+    with_shared(app.inbox, once fn(inbox: &mut BrowserInbox) => {
+        if (!inbox.closed) {
+            inbox.count -= 1;
+        }
+    });
+}
+
+fn collect(state: &mut BrowserState, now: u32) {
+    for (i in 0..state.tasks.len()) {
+        match take(&mut state.tasks[i]) {
+            Some(task) => {
+                let mut task = move(task);
+                let gate = task.gate;
+                if (gate(0) == 1) {
+                    finished(state.app, gate);
+                    drop(move(task));
+                } else {
+                    let mut cx = Context { waker: state.join_waker, now: now };
+                    match task.join.poll(&mut cx) {
+                        Ready(_) => {
+                            finished(state.app, gate);
+                        },
+                        Pending => {
+                            state.tasks[i] = Some(move(task));
+                        },
+                    }
+                }
+            },
+            None => {}
+        }
+    }
+}
+
+fn turn_state(state: &mut BrowserState, now: u32) -> u32 {
+    state.app.effects.wake_completed();
+    collect(state, now);
+    let mut queued = with_shared(state.app.inbox, once fn(inbox: &mut BrowserInbox) => {
+        replace(&mut inbox.jobs, [])
+    });
+    for (i in 0..queued.len()) {
+        match take(&mut queued[i]) {
+            Some(job) => {
+                let gate = job.gate;
+                if (gate(0) == 1) {
+                    finished(state.app, gate);
+                    drop(move(job));
+                } else {
+                    let QueuedBrowserTask { future, gate } = move(job);
+                    let join = state.scope.spawn(move(future)).expect("browser scope capacity disagrees with ingress count");
+                    let mut position: Option<usize> = None;
+                    for (j in 0..state.tasks.len()) {
+                        let empty = match &state.tasks[j] {
+                            None => true,
+                            Some(_) => false
+                        };
+                        let missing = match position {
+                            None => true,
+                            Some(_) => false
+                        };
+                        if (empty && missing) {
+                            position = Some(j);
+                        }
+                    }
+                    let index = position.expect("browser join registry is full");
+                    state.tasks[index] = Some(RunningBrowserTask { join: move(join), gate: gate });
+                }
+            },
+            None => {}
+        }
+    }
+    let mut reactor = BrowserReactor { milliseconds: now };
+    state.scope.turn(&mut reactor).expect("browser task scope clock failed");
+    collect(state, now);
+    let after_poll = state.on_turn;
+    let messages_pending = after_poll(state.app);
+    let queued = with_shared(state.app.inbox, once fn(inbox: &mut BrowserInbox) => {
+        !inbox.jobs.is_empty()
+    });
+    if (queued || messages_pending) {
+        return 0;
+    }
+    match state.scope.wait_hint() {
+        Some(delay) => delay,
+        None => 4294967295
+    }
+}
+
+/// Delivers the current host event batch to the mounted application.
+export extern "C" fn ripple_browser_on_events(data: *const u16, cells: u32) {
+    let dispatch = __browser_root_get();
+    dispatch(2, cells);
+}
+
+/// Receives effect completion ingress; wake collection occurs at the next turn.
+export extern "C" fn ripple_browser_on_effects() {}
+
+/// Runs a bounded application turn and returns its next scheduling delay.
+export extern "C" fn ripple_browser_on_turn() -> u32 {
+    let dispatch = __browser_root_get();
+    dispatch(0, ripple_browser_now())
+}
+
+/// Closes ingress, cancels tasks and releases the retained application callback.
+export extern "C" fn ripple_browser_on_dispose() {
+    let dispatch = __browser_root_get();
+    dispatch(1, 0);
+    drop(__browser_root_replace(fn(op: u16, value: u32) => 4294967295));
+}

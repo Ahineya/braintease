@@ -18,6 +18,7 @@ pub(super) struct Cg<'a, 'b> {
     pub(super) phis: PhiAssignments,
     pub(super) frame: ClValue,
     pub(super) mark: ClValue,
+    pub(super) owns_stack: bool,
     pub(super) allocas: BTreeMap<u32, u64>,
     pub(super) edges: Vec<(Block, u32, u32)>,
     pub(super) va_input: Option<ClValue>,
@@ -128,6 +129,13 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
     if compiler.resumable {
         return super::process::emit_function(compiler, function);
     }
+    emit_direct_function(compiler, function)
+}
+
+pub(super) fn emit_direct_function(
+    compiler: &mut Compiler,
+    function: &Function,
+) -> Result<(), String> {
     let mut context = compiler.object.make_context();
     context.func.signature =
         compiler.signature(function.parameters.len() + usize::from(function.is_vararg));
@@ -216,6 +224,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             .map(|block| (block.id, b.create_block()))
             .collect();
         let zero = b.ins().iconst(types::I64, 0);
+        let owns_stack = cells != 0 || !allocas.is_empty() || function.is_vararg;
         let mut cg = Cg {
             b,
             compiler,
@@ -226,14 +235,17 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             phis,
             frame: zero,
             mark: zero,
+            owns_stack,
             allocas,
             edges: Vec::new(),
             va_input,
             var_area,
         };
-        cg.mark = cg.runtime("rcc_native_stack_mark", &[])?;
-        let size = cg.k(i64::try_from(cells).map_err(|_| "native frame exceeds i64")?);
-        cg.frame = cg.runtime("rcc_native_stack_alloc", &[size])?;
+        if owns_stack {
+            cg.mark = cg.runtime("rcc_native_stack_mark", &[])?;
+            let size = cg.k(i64::try_from(cells).map_err(|_| "native frame exceeds i64")?);
+            cg.frame = cg.runtime("rcc_native_stack_alloc", &[size])?;
+        }
         for (index, (id, ty)) in function.parameters.iter().enumerate() {
             let value = cg.b.block_params(entry)[index + 1];
             let value = cg.mask(value, width(ty));
@@ -261,7 +273,11 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
         cg.b.seal_all_blocks();
         cg.b.finalize(cg.compiler.object.target_config());
     }
-    let id = compiler.functions[&function.name];
+    let id = compiler
+        .direct_functions
+        .get(&function.name)
+        .copied()
+        .unwrap_or(compiler.functions[&function.name]);
     compiler
         .object
         .define_function(id, &mut context)

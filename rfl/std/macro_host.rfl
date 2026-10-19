@@ -1,0 +1,214 @@
+// Private bounded bootstrap transport. This module is not a macro service.
+import { Token, TokenStream, Dependency } from "std/macro";
+import { read_byte, write_text } from "std/io";
+fn failure() -> TokenStream {
+    TokenStream { tokens: [], target: "invalid protocol", dependencies: [] }
+}
+
+fn header_number() -> u32 {
+    let mut value: u32 = 0;
+    let mut digits: usize = 0;
+    while (true) {
+        let ch = read_byte();
+        if (ch == 10 && digits > 0) {
+            return value;
+        }
+        if (ch < 48 || ch > 57 || digits >= 5) {
+            return 4294967295;
+        }
+        value = value * 10 + (ch - 48) as u32;
+        digits += 1;
+    }
+    4294967295
+}
+
+struct Frame {
+    text: String,
+    at: usize,
+    valid: bool
+}
+
+fn number(frame: &mut Frame) -> u32 {
+    let mut value: u32 = 0;
+    let mut digits: usize = 0;
+    while (frame.at < frame.text.len()) {
+        let ch = frame.text[frame.at];
+        frame.at += 1;
+        if (ch == '\n' && digits > 0) {
+            return value;
+        }
+        if (ch < '0' || ch > '9' || digits >= 5) {
+            frame.valid = false;
+            return 0;
+        }
+        value = value * 10 + (ch as u32 - 48);
+        digits += 1;
+    }
+    frame.valid = false;
+    0
+}
+
+fn field(frame: &mut Frame) -> String {
+    let length = number(frame);
+    if (!frame.valid || length > 60000 || frame.at as u32 + length >= frame.text.len() as u32) {
+        frame.valid = false;
+        return "";
+    }
+    let end = frame.at + length as usize;
+    if (frame.text[end] != '\n') {
+        frame.valid = false;
+        return "";
+    }
+    let result = frame.text[frame.at..end];
+    frame.at = end + 1;
+    result
+}
+
+fn decimal(value: u32) -> String {
+    if (value == 0) {
+        return "0";
+    }
+    let mut n = value;
+    let mut result = "";
+    while (n > 0) {
+        result = from_char((48 + n % 10) as char) + result;
+        n = n / 10;
+    }
+    result
+}
+
+fn encoded(value: String) -> String {
+    decimal(value.len() as u32) + "\n" + value + "\n"
+}
+
+/// Decode one bounded private protocol request; invalid frames never run user code.
+export fn read_request() -> TokenStream {
+    let mut magic = "";
+    let mut i: usize = 0;
+    while (i < 6) {
+        let ch = read_byte();
+        if (ch < 0) {
+            return failure();
+        }
+        magic = magic + from_byte(ch as u8);
+        i += 1;
+    }
+    if (magic != "RFLM2\n") {
+        return failure();
+    }
+    let length = header_number();
+    if (length > 60000) {
+        return failure();
+    }
+    let (body, complete) = read_part(length);
+    if (!complete) {
+        return failure();
+    }
+    let mut n: u32 = 0;
+    if (read_byte() >= 0) {
+        return failure();
+    }
+    let mut frame = Frame { text: body, at: 0, valid: true };
+    let target = field(&mut frame);
+    let dep_count = number(&mut frame);
+    if (dep_count > 32) {
+        return failure();
+    }
+    let mut dependencies: Vec<Dependency> = [];
+    n = 0;
+    while (n < dep_count) {
+        let path = field(&mut frame);
+        let text = field(&mut frame);
+        let hash = field(&mut frame);
+        dependencies.push(Dependency { path: path, text: text, hash: hash });
+        n += 1;
+    }
+    let count = number(&mut frame);
+    if (count > 10000) {
+        return failure();
+    }
+    let mut tokens: Vec<Token> = [];
+    n = 0;
+    while (n < count) {
+        let kind = number(&mut frame);
+        if (kind > 8) {
+            return failure();
+        }
+        let text = field(&mut frame);
+        let origin = field(&mut frame);
+        let syntax = field(&mut frame);
+        tokens.push(Token { kind: kind as i16, text: text, origin: origin, syntax: syntax });
+        n += 1;
+    }
+    if (!frame.valid || frame.at != frame.text.len()) {
+        return failure();
+    }
+    TokenStream { tokens: tokens, target: target, dependencies: dependencies }
+}
+
+/// Write one bounded private protocol response, rejecting oversized output.
+export fn write_response(output: TokenStream) {
+    if (output.target == "invalid protocol") {
+        write_text("invalid macro request protocol");
+        return;
+    }
+    let mut length = digits(output.tokens.len() as u32) + 1;
+    for (token in output.tokens) {
+        let a = token.text.len() as u32;
+        let b = token.origin.len() as u32;
+        let c = token.syntax.len() as u32;
+        length += digits(token.kind as u32) + 1 + digits(a) + a + 1 + digits(b) + b + 1 + digits(c) + c + 1;
+        if (length > 60000) {
+            write_response(TokenStream { tokens: [Token { kind: 20, text: "macro output exceeds protocol limit", origin: "call", syntax: "definition" }], target: "", dependencies: [] });
+            return;
+        }
+    }
+    let body = decimal(output.tokens.len() as u32) + "\n" + response_part(&output.tokens, 0, output.tokens.len());
+    write_text("RFLM2\n" + decimal(body.len() as u32) + "\n" + body);
+}
+
+fn digits(value: u32) -> u32 {
+    let mut count: u32 = 1;
+    let mut n = value;
+    while (n >= 10) {
+        n = n / 10;
+        count += 1;
+    }
+    count
+}
+
+// Bounded leaves avoid quadratic whole-frame concatenation for large requests.
+// Read the halves in order: this is still one exact, EOF-checked wire frame.
+fn read_part(length: u32) -> (String, bool) {
+    if (length > 64) {
+        let split = length / 2;
+        let (left, complete) = read_part(split);
+        if (!complete) {
+            return ("", false);
+        }
+        let (right, complete) = read_part(length - split);
+        return (left + right, complete);
+    }
+    let mut text = "";
+    let mut n: u32 = 0;
+    while (n < length) {
+        let ch = read_byte();
+        if (ch < 0) {
+            return ("", false);
+        }
+        text = text + from_byte(ch as u8);
+        n += 1;
+    } (text, true)
+}
+
+fn response_part(tokens: &Vec<Token>, begin: usize, end: usize) -> String {
+    if (begin == end) {
+        return "";
+    }
+    if (end - begin > 1) {
+        let mid = begin + (end - begin) / 2;
+        return response_part(tokens, begin, mid) + response_part(tokens, mid, end);
+    }
+    let token = tokens[begin];
+    decimal(token.kind as u32) + "\n" + encoded(token.text) + encoded(token.origin) + encoded(token.syntax)
+}

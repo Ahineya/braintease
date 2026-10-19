@@ -57,8 +57,25 @@ impl Analysis {
 
     pub fn open(path: Option<&Path>, source: &str) -> Self {
         let (parsed, parse_errors) = match lexer::tokenize(source) {
-            Ok(tokens) => parser::parse_for_ide(source, &tokens),
+            Ok(tokens) => {
+                let parsed = parser::parse_for_ide(source, &tokens);
+                if let Some(repaired) =
+                    crate::macros::editor::recover_parsed(source, &tokens, &parsed.1)
+                {
+                    let mut analysis = Self::open(path, &repaired);
+                    analysis.source = source.to_owned();
+                    analysis.diagnostics.splice(0..0, parsed.1);
+                    return analysis;
+                }
+                parsed
+            }
             Err(err) => {
+                if let Some(repaired) = crate::macros::editor::recover(source, &err) {
+                    let mut analysis = Self::open(path, &repaired);
+                    analysis.source = source.to_owned();
+                    analysis.diagnostics.insert(0, err);
+                    return analysis;
+                }
                 return Self {
                     source: source.to_string(),
                     path: path.map(|path| path.to_path_buf()),
@@ -72,7 +89,11 @@ impl Analysis {
         };
         let symbols = symbols_of(&parsed);
         let documentation = documentation::collect(source, &parsed);
-        let (info, mut diagnostics) = if !parsed.imports.is_empty() && path.is_some() {
+        let (info, mut diagnostics) = if (!parsed.imports.is_empty()
+            || !parsed.macro_imports.is_empty()
+            || !parsed.item_macros.is_empty())
+            && path.is_some()
+        {
             match crate::modules::check_root(path.unwrap(), source, parsed.clone()) {
                 Ok(checked) => checked,
                 Err(err) => {
@@ -118,7 +139,10 @@ impl Analysis {
     }
 
     fn hover_type(&self, offset: usize) -> Option<String> {
-        if let Some(name) = self.uses().find(|name| name.span.contains(offset)) {
+        if let Some(name) = self
+            .uses()
+            .find(|name| name.span.contains(offset) && !name.ty.is_empty())
+        {
             return Some(name.ty.clone());
         }
         if let Some(fact) = self.facts().find(|fact| fact.def.contains(offset)) {
@@ -132,7 +156,13 @@ impl Analysis {
     }
 
     pub fn definition(&self, offset: usize) -> Option<(Option<PathBuf>, crate::ast::Span)> {
-        for import in &self.ast.imports {
+        if let Some(name) = self.uses().find(|name| name.span.contains(offset)) {
+            return Some((
+                name.def_file.clone().or_else(|| self.path.clone()),
+                name.def,
+            ));
+        }
+        for import in self.ast.imports.iter().chain(&self.ast.macro_imports) {
             let name = import
                 .names
                 .iter()
@@ -144,6 +174,24 @@ impl Analysis {
                     name.map(|name| name.name.as_str()),
                 )?;
                 return Some((Some(path), span));
+            }
+        }
+        let identifier = ident_around(&self.source, offset);
+        if self
+            .source
+            .get(identifier.end..)
+            .is_some_and(|s| s.trim_start().starts_with('!'))
+        {
+            let name = &self.source[identifier.start..identifier.end];
+            for import in &self.ast.macro_imports {
+                if let Some(item) = import.names.iter().find(|n| n.alias == name) {
+                    let (path, span) = crate::modules::import_definition(
+                        self.path.as_deref()?,
+                        &import.path,
+                        Some(&item.name),
+                    )?;
+                    return Some((Some(path), span));
+                }
             }
         }
         if let Some(name) = self.uses().find(|name| name.span.contains(offset)) {
@@ -307,6 +355,17 @@ impl Analysis {
                 replace,
                 import_edit: None,
             });
+        }
+        for import in &self.ast.macro_imports {
+            for name in &import.names {
+                items.push(Completion {
+                    label: name.alias.clone(),
+                    kind: CompletionKind::Function,
+                    detail: "procedural macro (TokenStream) -> TokenStream".into(),
+                    replace,
+                    import_edit: None,
+                });
+            }
         }
         for word in KEYWORDS {
             if !seen.iter().any(|name| name == word) {
@@ -1318,6 +1377,11 @@ fn empty_module() -> Module {
         functions: Vec::new(),
         externs: Vec::new(),
         imports: Vec::new(),
+        macro_imports: Vec::new(),
+        macro_exports: Vec::new(),
+        item_macros: Vec::new(),
+        proc_macros: Vec::new(),
+        macro_expansion: None,
     }
 }
 

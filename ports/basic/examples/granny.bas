@@ -1,0 +1,1025 @@
+REM Granny Bingo, by Phillip Gervais. FUZIX/Fuse-X terminal port.
+DECLARE SUB BINGO (CASH, BING, BATH, BPP, health, VARD, EP, SLP2)
+RANDOMIZE TIMER
+CLS
+PRINT "Welcome to Granny Bingo"
+PRINT "Your goal is to be the best bingo player, and still stay alive."
+PRINT "You get 25 dollars welfare for a day.You have to budget in a few"
+PRINT "things with that. Its not just the bingo, but you have to be old."
+PRINT "The game ends win you become 100 years old. You are currently 99 and"
+PRINT "just got 50 bucks in birthday cash. Consider this game practicing being"
+PRINT "old, and have fun!"
+INPUT "Press Enter", GO$
+TRY:
+CLS
+INPUT "Load game or a new game(L/N)?", gam$
+IF LEFT$(UCASE$(gam$), 1) = "L" THEN
+    INPUT "What file do you want to open"; filename$
+
+    OPEN filename$ + ".sav" FOR INPUT AS #1
+    INPUT #1, version$
+    IF version$ <> "GRANNY1" THEN
+        CLOSE #1
+        PRINT "Not a Granny Bingo save file."
+        GOTO TRY
+    END IF
+    INPUT #1, health, VARD, SLP2, CASH, EP, BS, CP, VODKA, DR, WELFARE, MET, BPP, HP, MIL, CHES, BRED, GREN, MAY, BING, AGE, BATH, EPT, BHURT
+    INPUT #1, name$, BED$, FATIGUE$
+    CLOSE #1
+
+GOTO AG
+END IF
+
+NAMEASK:
+INPUT "Alright, whats your name?", name$
+IF name$ = "" THEN
+GOTO TRY
+END IF
+ARL:
+PRINT name$; " ? Kinda gay name, but then again its a pretty gay game."
+PRINT "Hehe, there was no point in telling me your name."
+PRINT "Im still gonna call you granny."
+PRINT "Alright, lets get started."
+PRINT "Dont forget you have to eat, crap, sleep, take pills, and play bingo."
+PRINT "And win you play bingo, you get addicted!"
+PRINT "Press Enter"
+SLEEP
+CASH = CASH + 50
+BATH$ = "NO NEED FOR A NEW DIAPER"
+food$ = "NOT"
+PILLSTATUS$ = "YOU FEEL GOOD AND DONT NEED PILLS"
+FATIGUE$ = "NOT"
+BINGSTATUS$ = "YOU DONT NEED TO PLAY BINGO"
+EP = 10
+BS = 2
+CP = 20
+VODKA = 3
+DR = 2
+WELFARE = 1
+MET = 1
+BPP = 5
+HP = 10
+health = 10
+health$ = "FEELIN' GOOD!"
+
+AG:
+
+HM:
+IF BATH >= 10 THEN
+CLS
+PRINT "YOU JUST CRAPPED YOUR PANTS!!!!!!"
+PRINT "SQUISHY, YOUR HEALTH ALSO JUST WENT WAY DOWN"
+health = health - 3
+INPUT "PRESS ENTER", GO$
+BATH$ = "NO NEED FOR A NEW DIAPER"
+BATH = 0
+ELSEIF BATH = 9 THEN
+BATH$ = "ITS ABOUT TO COME OUT WHERE IT WANTS!"
+ELSEIF BATH = 8 THEN
+BATH$ = "PRARIE DOGGIN' IT!"
+ELSEIF BATH = 7 THEN
+BATH$ = "NEED TO GO!"
+ELSEIF BATH = 6 THEN        '''''''''''''''''''''''''
+BATH$ = "GOING TO THE BATHROOM COULDN'T HURT"
+ELSEIF BATH = 5 THEN
+BATH$ = "NOT SO GOOD"
+ELSEIF BATH = 4 THEN
+BATH$ = "FEELIN' BLOATED"
+ELSEIF BATH = 3 THEN
+BATH$ = "NOT BAD"
+ELSEIF BATH = 2 THEN
+BATH$ = "STILL ALRIGHT"
+ELSEIF BATH = 1 THEN
+BATH$ = "YOUR OK"
+ELSEIF BATH = 0 THEN
+BATH$ = "NO NEED FOR A NEW DIAPER"
+ELSE
+END IF
+
+IF health >= 10 THEN
+health$ = "FEELIN' GOOD!"
+health = 10
+ELSEIF health = 9 THEN
+health$ = "NOT BAD!"
+ELSEIF health = 8 THEN
+health$ = "ALRIGHT"
+ELSEIF health = 7 THEN
+health$ = "YOU'VE BEEN BETTER"
+ELSEIF health = 6 THEN
+health$ = "YOUR OK"
+ELSEIF health = 5 THEN
+health$ = "NOT SO GOOD"
+ELSEIF health = 4 THEN
+health$ = "FEELIN' CRAPPY"
+ELSEIF health = 3 THEN
+health$ = "VERY LOUSY"
+ELSEIF health = 2 THEN
+health$ = "LIFE SUX"
+ELSEIF health = 1 THEN
+health$ = "NEED TO BE PUT OUT OF YOUR MISERY"
+ELSEIF health = 0 THEN
+health$ = "ABOUT TO DIE"
+ELSE
+CLS
+PRINT "DUE TO YOUR POOR HEALTH YOU DIED"
+PRINT "YOU HAVE DIED A LONELY DEATH"
+PRINT "YOU WERE NEVER HAPPY"
+PRINT "AND YOU SMELLED LIKE TACOS AND FISH"
+INPUT "GAME OVER", GO$
+END
+END IF
+
+IF BATH >= 10 THEN
+CLS
+PRINT "YOU JUST CRAPPED YOUR PANTS!!!!!!"
+PRINT "SQUISHY, YOUR HEALTH ALSO JUST WENT WAY DOWN"
+health = health - 3
+INPUT "PRESS ENTER", GO$
+BATH$ = "NO NEED FOR A NEW DIAPER"
+BATH = 0
+END IF
+
+CLS
+PRINT "1. GRANNY'S STATUS"
+PRINT "2. GRANNY'S PILLS"
+PRINT "3. GRANNY'S KITCHEN"
+PRINT "4. GRANNY'S BATHROOM"
+PRINT "5. GRANNY'S BED"
+PRINT "6. GRANNY'S TV ROOM"
+PRINT "7. GO OUT SOMEWHERE"
+PRINT "8. SAVE GAME"
+PRINT
+IF BING > 5 THEN
+PRINT "YOU NEED TO PLAY BINGO SOON!!"
+PRINT "YOU CANT RESIST!!"
+BHURT = BING - 4
+END IF
+IF VARD = 1 THEN
+VARD = 0
+PRINT "IT WAS MESSY BUT YOU MANAGED TO CLEAN YOURSELF UP."
+INPUT "YOU NEED TO MAKE SURE YOU HAVE BUTT PLUG PILLS NEXT TIME!", GO$
+END IF
+
+IF EPT = 1 THEN
+INPUT "YOUR DRUNK AND IF YOUR GOING TO STAY AWAKE YOULL NEED ENERGY PILLS", GO$
+INPUT "HOPE YOU HAVE SOME...", GO$
+IF EP >= 3 THEN
+INPUT "YOU HAD ENOUGH AND NOW YOUR AWAKE!", GO$
+EPT = 0
+EP = EP - 3
+GOTO HM
+ELSE
+INPUT "UH OH! NOT ENOUGHT PILLS, SLEEP TIME!", GO$
+EPT = 0
+GOTO SLP
+END IF
+ELSE
+INPUT "WHAT DO YOU WANT TO DO"; DOD
+END IF
+
+SELECT CASE DOD
+     CASE 1
+     CLS
+     PRINT "GRANNY'S STATUS"
+     PRINT "YOUR HEALTH IS:"; health$
+     PRINT "MONEY:"; CASH
+     PRINT "YOU ARE 99 YEARS AND"; AGE; "DAYS OLD"
+     PRINT "YOUR BATHROOM STATUS IS:"; BATH$
+     PRINT "ITS BEEN"; BING; "DAYS SINCE YOU PLAYED BINGO"
+     PRINT
+     PRINT "Press Enter"
+     SLEEP
+     GOTO AG
+     CASE 2
+     CLS
+     PRINT "ENERGY PILLS:"; EP
+     PRINT "CRACK PILLS:"; CP
+     PRINT "BUTT PLUG PILLS:"; BPP
+     PRINT "HAPPY PILLS:"; HP
+     INPUT "TYPE (A) TO FIND OUT WHAT THOSE PILLS ARE ABOUT", ASK$
+      IF LEFT$(UCASE$(ASK$), 1) = "A" THEN
+      CLS
+      PRINT "ENERGY PILLS: GIVE YOU ENERGY, INCASE YOU PLAY BINGO ALL NIGHT"
+      PRINT "              AND DONT FEEL LIKE SLEEPING.TAKE 3 PER NIGHT YOU"
+      PRINT "              STAY UP."
+      PRINT "CRACK PILLS: NO MY FRIEND, JUST THE OPPOSITE. THEY PREVENT YOU"
+      PRINT "             FROM TAKING CRACK. DONT TAKE 2 OF THESE A DAY AND"
+      PRINT "             YOUR HEALTH WONT GO DOWN"
+      PRINT "BUTT PLUG PILLS: IF YOU THINK YOUR ABOUT TO HAVE A LOAD IN YOUR"
+      PRINT "             PANTS, TAKE ONE OF THESE AND CLOG IT UP! IF YOU"
+      PRINT "             DONT YOU LOOSE YOUR HEALTH AND DIGNITY.TAKES 2."
+      PRINT "             USE THESE WHILE OUT PLAYING BINGO."
+      PRINT "HAPPY PILLS: TAKE ONE A DAY OR YOU WILL FEEL LIKE CRAP"
+      PRINT
+      INPUT "PRESS ENTER", GO$
+     END IF
+     GOTO AG
+     CASE 3
+     CLS
+     PRINT "GRANNY'S KITCHEN"
+     PRINT "YOU OPEN THE FRIDGE AND YOU HAVE"
+    
+     PRINT "1."; VODKA; "BOTTLES OF VODKA"
+     PRINT "2."; DR; "BOTTLES OF HEALTH DRINKS"
+     PRINT "3."; MIL; "GALLONS OF MILK"
+     PRINT "4."; CHES; "SLICES OF CHEESE"
+     PRINT "5."; BRED; "SLICES OF BREAD"
+     PRINT "6."; MET; "SLICES OF MEAT"
+     PRINT "7."; GREN; "GREEN STUFF"
+     PRINT "8."; BS; "CARTONS OF BAKING SODA"
+     PRINT "9."; MAY; "BOTTLES OF MAYONASE"
+     PRINT "ANYTHING ELSE TO EXIT"
+     INPUT "WHAT DO YOU WANT TO EAT"; EAT
+     IF EAT = 1 AND VODKA > 0 THEN
+     VODKA = VODKA - 1
+     INPUT "YOUR NOW WASTED AND FEEL LIKE SLEEPING", GO$
+     BATH = BATH + 1
+     health = health - 1
+     FATIGUE$ = "DRUNK AND"
+     EPT = 1
+    
+     ELSEIF EAT = 2 AND DR > 0 THEN
+     INPUT "TASTE LIKE CRAP BUT YOU FEEL BETTER", GO$
+     health = health + 1
+     DR = DR - 1
+    
+     ELSEIF EAT = 3 AND MIL > 0 THEN
+     INPUT "LITTLE CHUNKY BUT NOT BAD", GO$
+     BATH = BATH + 1
+     MIL = MIL - 1
+     health = health + 1
+     ELSEIF EAT = 4 AND CHES > 0 THEN
+     INPUT "YOU SCRAPED THE MOLD OF FIRST SO YOU SHOULD BE OKAY", GO$
+    CHES = CHES - 1
+     BATH = BATH + 1
+    
+     health = health + 1
+     ELSEIF EAT = 5 AND BRED > 0 THEN
+     PRINT "HEY ITS NOT STALE! OH, THAT WAS A SPONGE...."
+     INPUT "YEAH THE BREADS CRUNCHIER THAN A SALTINE CRACKER", GO$
+BRED = BRED - 1
+     BATH = BATH + 1
+    
+     health = health + 1
+    
+     ELSEIF EAT = 6 AND MET > 0 THEN
+     INPUT "HMMM....MAYBE YOU SHOULD HAVE COOKED THAT.", GO$
+   MET = MET - 1
+     BATH = BATH + 1
+    
+     health = health + 1
+     ELSEIF EAT = 7 AND GREN > 0 THEN
+     PRINT "99 AND YOU STILL HATE VEGETABLES!"
+     PRINT "IF THAT IS VEGETABLES...."
+     INPUT "OR WAS VEGETABLES....", GO$
+   GREN = GREN - 1
+    
+     BATH = BATH + 1
+     health = health + 1
+    
+     ELSEIF EAT = 8 AND BS > 0 THEN
+     PRINT "SENIAL OLD RETARD!"
+     INPUT "YOU DONT EAT BAKING SODA!", GO$
+     BS = BS - 1
+  
+     BATH = BATH + 1
+     health = health - 1
+
+     ELSEIF EAT = 9 AND MAY > 0 THEN
+     INPUT "HMM....MAYBE YOU SHOULD TRY IT WITH SOMETHING ELSE NEXT TIME.", GO$
+    
+     MAY = MAY - 1
+     BATH = BATH + 1
+     health = health + 1
+     ELSE
+     GOTO HM
+    
+     END IF
+    
+     EAT = 0
+     GOTO AG
+     CASE 4
+    IF BATH$ <> "NO NEED FOR A NEW DIAPER" THEN
+    PRINT "YOUR BLADDER STATUS IS:"; BATH$
+    INPUT "YOU GOTTA GO! ARE YOU GOING TO GO(YES OR NO)"; BGO$
+    IF LEFT$(UCASE$(BGO$), 1) = "Y" THEN
+    BATH$ = "NO NEED FOR A NEW DIAPER"
+    BATH = 0
+    INPUT "YOU FEEL RELIEVED, AND 10 POUNDS LIGHTER", GO$
+    ELSE
+    INPUT "OK, DONT RUIN YOUR GOOD PANTS!", GO$
+    END IF
+    ELSE
+    PRINT "NO NEED TO GO"
+    INPUT "PRESS ENTER", GO$
+    END IF
+     GOTO AG
+
+     CASE 5
+     PRINT "DONT SLEEP IF YOUR HEALTH IS TO POOR, YOU MAY NOT WAKE UP"
+     INPUT "GO TO BED"; BED$
+SLP:
+    IF LEFT$(UCASE$(BED$), 1) = "Y" THEN
+    IF HP < 1 THEN
+    PRINT "YOU DONT HAVE ENOUGH HAPPY PILLS AND JUST LOST SOME HEALTH"
+    health = health - 2
+    ELSE
+    PRINT "YOU TOOK YOUR HAPPY PILLS"
+    HP = HP - 1
+    END IF
+    IF CP < 2 THEN
+    PRINT "YOU DONT HAVE ENOUGH CRACK PILLS AND JUST LOST SOME HEALTH"
+    health = health - 2
+    ELSE
+    PRINT "YOU TOOK YOUR CRACK PILLS"
+    CP = CP - 2
+    END IF
+    PRINT "YOU ARE SLEEPING"
+    SLEEP 3
+    INPUT "YOU JUST WOKE UP WITH YOUR DOG LICKING YOUR FACE...", GO$
+    PRINT "YOU DONT HAVE A DOG!!!YOU LEFT THE WINDOW OPEN AGAIN!!!"
+    PRINT "GET OUT OF HERE STUPID MUT!"
+    INPUT "ANYWAY, TIME TO START A NEW DAY!", GO$
+    health = health - (1 + BHURT)
+    BING = BING + 1
+    WELFARE = 1
+    AGE = AGE + 1
+    BATH = BATH + 1
+     IF BATH >= 10 THEN
+     CLS
+     PRINT "EWW, THE DOG LEFT A MESS IN YOUR BED!"
+     PRINT "**SNIFF SNIFF**, NO WAIT THAT WAS YOU"
+     PRINT "NEXT TIME YOU HAVE HIGH BATHROOM, GO BEFORE"
+     PRINT "YOU SLEEP. YOUR HEALTH JUST WENT WAY DOWN."
+     INPUT "PRESS ENTER", GO$
+     BATH$ = "NO NEED FOR A NEW DIAPER"
+     BATH = 0
+     END IF
+    END IF
+   
+    IF AGE = 365 THEN
+    CLS
+    PRINT "CONGRATULATIONS YOUR 100 YEARS OLD!"
+    PRINT "AND YOU JUST HAD A STROKE."
+    PRINT "TOLD YOU WOULD ONLY HAVE ONE YEAR, OH WELL."
+    PRINT "YOU HAD A GOOD RUN, NOT REALLY BUT WHO CARES."
+    PRINT "HOPE YOU HAD FUN YOU OLD HAG!"
+    INPUT "NOW FOR THE CREDITS...", GO$
+    CLS
+    PRINT "IDEA BY: PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "CREATED BY: PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "PROGRAMMED BY: PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "ORIGINAL STORY BY: PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "CREDITS BY: PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "GAME TESTER: MICHAEL GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "SPECIAL THANKS TO PHILLIP GERVAIS"
+    SLEEP 3
+    CLS
+    PRINT "CAST"
+    SLEEP 2
+    PRINT "GRANNY -"; name$
+    SLEEP 1
+    PRINT "NARRATOR -PHILLIP GERVAIS"
+    SLEEP 1
+    PRINT "THAT GUY WHO ALWAYS WON BINGO -CLINT EASTWOOD"
+    SLEEP 3
+    CLS
+    PRINT "THE END!"
+    SLEEP 3
+    GOTO THEND
+
+    INPUT "THE END", GO$
+    END
+    END IF
+     GOTO HM
+     CASE 6
+     PRINT "YOU SIT THERE FOR AWHILE THINKING ITS A BLACK AND WHITE PICTURE..."
+     INPUT "", GO$
+     INPUT "BUT ACTUALLY THE T.V.'S BROKE.YOU GET UP AND WALK AWAY", GO$
+     GOTO HM
+     CASE 7
+OA:
+CLS
+     PRINT "WHERE TO:"
+     PRINT "1. PHARMACY"
+     PRINT "2. WELFARE OFFICE"
+     PRINT "3. MINI MART"
+     PRINT "4. 24 HOUR BINGO HALL"
+     PRINT "5. HOME"
+      INPUT "", OPLACE
+     SELECT CASE OPLACE
+          CASE 1
+PHY:
+          CLS
+          PRINT "1. ENERGY PILLS:"; EP
+          PRINT "2. CRACK PILLS:"; CP
+          PRINT "3. BUTT PLUG PILLS:"; BPP
+          PRINT "4. HAPPY PILLS:"; HP
+          PRINT "5. LEAVE"
+          INPUT "WHAT DO YOU WANT, MAM"; ASCD
+          SELECT CASE ASCD
+               CASE 1
+               PRINT "THAT'LL BE 5 DOLLARS"
+               IF CASH < 5 THEN
+               PRINT "IM AFRAID YOU DONT HAVE ENOUGH"
+               ELSE
+               PRINT "HERE YOU ARE, 5 ENERGY PILLS"
+               CASH = CASH - 5
+               EP = EP + 5
+               END IF
+               INPUT "PRESS ENTER", GO$
+               CASE 2
+               PRINT "THAT'LL BE 15 DOLLARS"
+               IF CASH < 15 THEN
+               PRINT "IM AFRAID YOU DONT HAVE ENOUGH"
+               ELSE
+               PRINT "HERE YOU ARE, 5 CRACK PILLS"
+               CP = CP + 5
+               CASH = CASH - 15
+               END IF
+               INPUT "PRESS ENTER", GO$
+               CASE 3
+               PRINT "THAT'LL BE 10 DOLLARS"
+               IF CASH < 10 THEN
+               PRINT "IM AFRAID YOU DONT HAVE ENOUGH"
+               ELSE
+               PRINT "HERE YOU ARE, 10 BUTT PLUG PILLS"
+               BPP = BPP + 10
+               CASH = CASH - 10
+               END IF
+               INPUT "PRESS ENTER", GO$
+               CASE 4
+               PRINT "THAT'LL BE 5 DOLLARS"
+               IF CASH < 5 THEN
+               PRINT "IM AFRAID YOU DONT HAVE ENOUGH"
+               ELSE
+               PRINT "HERE YOU ARE, 5 HAPPY PILLS"
+               HP = HP + 5
+               CASH = CASH - 5
+               END IF
+               INPUT "PRESS ENTER", GO$
+               CASE 5
+               GOTO OA
+               CASE ELSE
+               GOTO PHY
+               END SELECT
+
+              GOTO OA
+          CASE 2
+          CLS
+          IF WELFARE = 1 THEN
+          PRINT "HERE IS YOUR 25 DOLLARS FOR THE DAY"
+          WELFARE = 0
+          CASH = CASH + 25
+          ELSE
+          PRINT "YOU ALREADY HAD YOUR MONEY, GET LOST!"
+          END IF
+          INPUT "PRESS ENTER", GO$
+          GOTO OA:
+
+          CASE 3
+STR:
+          CLS
+     PRINT "WHAT ARE YOU GOING TO BUY"
+     PRINT "1. VODKA (50$)"
+     PRINT "2. HEALTH DRINKS (4$)"
+     PRINT "3. MILK (4$)"
+     PRINT "4. CHEESE (4$)"
+     PRINT "5. BREAD (4$)"
+     PRINT "6. MEAT (4$)"
+     PRINT "7. GREEN STUFF (4$)"
+     PRINT "8. BAKING SODA (2$)"
+     PRINT "9. MAYONASE (4$)"
+     PRINT "10. TO EXIT"
+     INPUT ""; BYT
+    
+     IF BYT = 1 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+    
+     IF CASH < (50 * AMNT) THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE, SURE YOU SHOULD BE DRINKING AT YOUR AGE?"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 50 * AMNT
+     VODKA = VODKA + AMNT
+     END IF
+    
+     AMNT = 0
+     GOTO STR
+     ELSEIF BYT = 2 THEN
+   
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+   
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     DR = DR + AMNT
+     END IF
+     AMNT = 0
+     GOTO STR
+
+     ELSEIF BYT = 3 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+   
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     MIL = MIL + AMNT
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 4 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+  
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     CHES = CHES + AMNT
+    
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 5 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+  
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     BRED = BRED + AMNT
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 6 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+  
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     MET = MET + AMNT
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 7 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+  
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     GREN = GREN + AMNT
+    
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 8 THEN
+    
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+    
+     IF CASH < 2 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 2 * AMNT
+     BS = BS + AMNT
+
+     END IF
+     AMNT = 0
+     GOTO STR
+     ELSEIF BYT = 9 THEN
+     INPUT "HOW MANY?", AMNT
+     IF AMNT < 1 OR AMNT <> INT(AMNT) THEN
+         PRINT "Please enter a positive whole number."
+         GOTO STR
+     END IF
+  
+     IF CASH < 4 * AMNT THEN
+     PRINT "DONT HAVE ENOUGH"
+     GOTO STR
+     ELSE
+     PRINT "HERE YOU ARE"
+     INPUT "PRESS ENTER", GO$
+     CASH = CASH - 4 * AMNT
+     MAY = MAY + AMNT
+     END IF
+     AMNT = 0
+     GOTO STR
+    
+     ELSEIF BYT = 10 THEN
+    
+     BYT = 0
+     AMNT = 0
+    
+     GOTO OA
+    
+     ELSE
+    
+     BYT = 0
+     AMNT = 0
+     GOTO STR
+     END IF
+
+          CASE 4
+         
+          CALL BINGO(CASH, BING, BATH, BPP, health, VARD, EP, SLP2)
+          IF VARD = 1 THEN
+          GOTO HM
+          END IF
+          IF SLP2 = 1 THEN
+          SLP2 = 0
+          BED$ = "Y"
+          GOTO SLP
+          END IF
+          GOTO OA
+          CASE 5
+          GOTO HM
+
+          CASE ELSE
+          GOTO OA
+
+     END SELECT
+     CASE 8
+    INPUT "What do you want to save it as"; filename$
+
+    OPEN filename$ + ".sav" FOR OUTPUT AS #1
+    WRITE #1, "GRANNY1"
+    WRITE #1, health, VARD, SLP2, CASH, EP, BS, CP, VODKA, DR, WELFARE, MET, BPP, HP, MIL, CHES, BRED, GREN, MAY, BING, AGE, BATH, EPT, BHURT
+    WRITE #1, name$, BED$, FATIGUE$
+    CLOSE #1
+    INPUT "Exit(y/n)?", ex$
+    IF UCASE$(ex$) = "Y" THEN
+    END
+    END IF
+    GOTO AG
+
+     CASE ELSE
+     GOTO AG
+END SELECT
+THEND:
+    PRINT "THE END!"
+    END
+
+SUB BINGO (CASH, BING, BATH, BPP, health, VARD, EP, SLP2)
+top:
+CLS
+IF WIN >= 3 THEN
+INPUT "YOU'VE WON ALOT, WANT TO QUIT? TYPE YES IF SO."; QT$
+IF LEFT$(UCASE$(QT$), 1) = "Y" THEN
+GOTO BOT
+END IF
+END IF
+IF health < 3 THEN
+PRINT "YOUR HEALTH IS LOW, MAYBE YOU SHOULD GET BETTER FIRST"
+GOTO BOT
+END IF
+BATH = BATH + 1
+ENG = ENG + 1
+IF ENG > 4 THEN
+PRINT "GETTING TIRED...."
+INPUT "HOPE YOU HAVE ENERGY PILLS", GO$
+IF EP >= 3 THEN
+EP = EP - 3
+INPUT "YOU HAD ENOUGH ENERGY PILLS", GO$
+ENG = 0
+ELSE
+INPUT "DIDNT HAVE ENOUGH!!TIME TO NAP!", GO$
+SLP2 = 1
+GOTO BOT
+END IF
+END IF
+
+IF BATH = 10 THEN
+INPUT "UH OH! GOTTA GO, HOPE YOU HAVE ENOUGH PILLS...", GO$
+IF BPP >= 2 THEN
+BATH = 0
+BPP = BPP - 2
+INPUT "HAD ENOUGH PILLS!THAT SHOULD HOLD YA!", GO$
+ELSE
+PRINT "UH OH! NOT ENOUGH!"
+INPUT "HEHE, YOU JUST CRAPPED YOUR PANTS AND HAVE TO GO HOME!", GO$
+health = health - 3
+VARD = 1
+BATH = 0
+GOTO BOT
+END IF
+END IF
+CLS
+turn = 0
+IF CASH < 15 THEN
+INPUT "YOU DONT HAVE ENOUGH TO PLAY,GO AWAY!", GO$
+GOTO BOT
+END IF
+CLS
+health = health - 1
+CASH = CASH - 15
+T = INT(RND * 14) + 61
+U = INT(RND * 14) + 61
+V = INT(RND * 14) + 61
+W = INT(RND * 14) + 61
+X = INT(RND * 14) + 61
+
+O = INT(RND * 14) + 46
+P = INT(RND * 14) + 46
+Q = INT(RND * 14) + 46
+R = INT(RND * 14) + 46
+S = INT(RND * 14) + 46
+
+K = INT(RND * 14) + 31
+L = INT(RND * 14) + 31
+M = INT(RND * 14) + 31
+N = INT(RND * 14) + 31
+
+A = INT(RND * 14) + 1
+B = INT(RND * 14) + 1
+C = INT(RND * 14) + 1
+D = INT(RND * 14) + 1
+E = INT(RND * 14) + 1
+
+F = INT(RND * 14) + 16
+G = INT(RND * 14) + 16
+H = INT(RND * 14) + 16
+I = INT(RND * 14) + 16
+J = INT(RND * 14) + 16
+
+PRINT "WELCOME TO BINGO MANIA!"
+players = INT(RND * 5) + 2
+PRINT "THERE ARE"; players; "OTHER PLAYERS PLAYING WITH YOU"
+PRINT "F MEANS FREE SPACE AND IF YOU HAVE THE NUMBER,"
+INPUT "A ZERO WILL TAKE ITS PLACE", GO$
+PRINT
+NEW:
+CLS
+PRINT "   B   I   N   G   O  "
+PRINT "+----------------------+"
+PRINT "|"; A; TAB(6); F; TAB(11); K; TAB(15); O; TAB(19); T; TAB(24); "|"
+PRINT "|"; B; TAB(6); G; TAB(11); L; TAB(15); P; TAB(19); U; TAB(24); "|"
+PRINT "|"; C; TAB(6); H; TAB(11); " F  "; TAB(15); Q; TAB(19); V; TAB(24); "|"
+PRINT "|"; D; TAB(6); I; TAB(11); M; TAB(15); R; TAB(19); W; TAB(24); "|"
+PRINT "|"; E; TAB(6); J; TAB(11); N; TAB(15); S; TAB(19); X; TAB(24); "|"
+PRINT "+----------------------+"
+INPUT "Enter for the next number, Q to go home", GO$
+IF UCASE$(GO$) = "Q" THEN
+    GOTO BOT
+END IF
+NNUM = INT(RND * 75) + 1
+IF NNUM <= 15 THEN
+NUMBER$ = "B" + STR$(NNUM)
+ELSEIF NNUM > 15 AND NNUM <= 30 THEN
+NUMBER$ = "I" + STR$(NNUM)
+ELSEIF NNUM > 30 AND NNUM <= 45 THEN
+NUMBER$ = "N" + STR$(NNUM)
+ELSEIF NNUM > 45 AND NNUM <= 60 THEN
+NUMBER$ = "G" + STR$(NNUM)
+ELSEIF NNUM > 60 AND NNUM <= 75 THEN
+NUMBER$ = "O" + STR$(NNUM)
+END IF
+PRINT NUMBER$
+IF NNUM = A THEN
+A = 0
+END IF
+IF NNUM = B THEN
+B = 0
+END IF
+IF NNUM = C THEN
+C = 0
+END IF
+IF NNUM = D THEN
+D = 0
+END IF
+IF NNUM = E THEN
+E = 0
+END IF
+IF NNUM = F THEN
+F = 0
+END IF
+IF NNUM = G THEN
+G = 0
+END IF
+IF NNUM = H THEN
+H = 0
+END IF
+IF NNUM = I THEN
+I = 0
+END IF
+IF NNUM = J THEN
+J = 0
+END IF
+IF NNUM = K THEN
+K = 0
+END IF
+IF NNUM = L THEN
+L = 0
+END IF
+IF NNUM = M THEN
+M = 0
+END IF
+IF NNUM = N THEN
+N = 0
+END IF
+IF NNUM = O THEN
+O = 0
+END IF
+IF NNUM = P THEN
+P = 0
+END IF
+IF NNUM = Q THEN
+Q = 0
+END IF
+IF NNUM = R THEN
+R = 0
+END IF
+IF NNUM = S THEN
+S = 0
+END IF
+IF NNUM = T THEN
+T = 0
+END IF
+IF NNUM = U THEN
+U = 0
+END IF
+IF NNUM = V THEN
+V = 0
+END IF
+IF NNUM = W THEN
+W = 0
+END IF
+IF NNUM = X THEN
+X = 0
+END IF
+
+IF E = 0 AND I = 0 AND P = 0 AND T = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF A = 0 AND G = 0 AND R = 0 AND X = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF E = 0 AND J = 0 AND N = 0 AND S = 0 AND X = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF D = 0 AND I = 0 AND M = 0 AND R = 0 AND W = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF C = 0 AND H = 0 AND Q = 0 AND V = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF B = 0 AND G = 0 AND L = 0 AND P = 0 AND U = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF A = 0 AND F = 0 AND K = 0 AND O = 0 AND T = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF T = 0 AND U = 0 AND V = 0 AND W = 0 AND X = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF O = 0 AND P = 0 AND Q = 0 AND R = 0 AND S = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF K = 0 AND L = 0 AND M = 0 AND N = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF F = 0 AND G = 0 AND H = 0 AND I = 0 AND J = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF A = 0 AND B = 0 AND C = 0 AND D = 0 AND E = 0 THEN
+INPUT "YOU WON 50 BUCKS!!", GO$
+WIN = WIN + 1
+CASH = CASH + 50
+GOTO top
+END IF
+
+IF turn > 5 THEN
+CRA = 100 / players
+ow = INT(RND * CRA) + 1
+IF ow = 3 THEN
+PRINT "SOMEONE ELSE WON!!"
+INPUT "MAKE A NOTE TO BEAT THEM UP LATER", GO$
+GOTO top
+END IF
+END IF
+
+INPUT "", GO$
+turn = turn + 1
+GOTO NEW
+
+BOT:
+BING = 0
+END SUB

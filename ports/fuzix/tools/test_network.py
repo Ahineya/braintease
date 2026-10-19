@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
     subprocess.run([str(ROOT / 'src/ripple-asm/target/release/rlink'),
                     str(build / 'user/entry.pobj'), str(obj), str(build / 'user/userlib.pobj'),
                     *libs, '-f', 'rxe', '--bank-size', '64000', '-o', str(exe)], check=True)
-    names = ['init', 'sh', 'echo', 'cat', 'stty', 'tty', 'ttycheck', 'vi', 'levee',
+    names = ['init', 'sh', 'echo', 'cat', 'stty', 'tty', 'ttycheck', 'levee',
              'ifconfig', 'ping', 'telnet', 'telnetd']
     for name in [*(name + '.rxe' for name in names), 'FUZIX.SYS', 'bios.bin']:
         (tmp / name).symlink_to(build / name)
@@ -139,12 +139,12 @@ with tempfile.TemporaryDirectory(prefix='fuzix-network-') as directory:
                     assert b'STILL_ALIVE\n' in line(second, b'echo STILL_ALIVE')
                     print('Concurrent PTYs, Telnet negotiation and Ctrl-C passed', flush=True)
                     # Levee, stop/continue, redraw and save over the remote PTY.
-                    at = len(received(first));first.queue(b'vi /network-edit\r\n')
+                    at = len(received(first));first.queue(b'levee /network-edit\r\n')
                     until(lambda: b'\x1b[?1049h' in received(first)[at:])
                     spin(0.3);first.queue(b'iSaved over telnet.\x1b');spin(0.3)
                     first.queue(b'\x1a')
                     until(lambda: b'fuzix# ' in received(first)[at:])
-                    assert b'Stopped vi /network-edit' in received(first)[at:]
+                    assert b'Stopped levee /network-edit' in received(first)[at:]
                     at = len(received(first));first.queue(b'fg\r\n')
                     until(lambda: b'\x1b[?1049h' in received(first)[at:])
                     first.queue(b':wq\r\n')

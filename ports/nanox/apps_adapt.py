@@ -8,11 +8,19 @@ HERE = Path(__file__).resolve().parent
 
 
 def adapt_apps(dest):
+    from tetris_adapt import adapt_tetris
+    adapt_tetris(dest)
+    from desktop_adapt import adapt_desktop
+    adapt_desktop(dest)
     from roach_adapt import adapt_roach
     adapt_roach(dest)
     for name in ('nxeyes.c', 'nxeyes.h', 'nxclock.c'):
         shutil.copyfile(HERE / 'upstream/src/demos/nanox' / name,
                         dest / 'demos/nanox' / name)
+    # Upstream's fallback must not export the same symbol as our full libm.
+    replace(dest, 'demos/nanox/nxeyes.c', 'double\nhypot(double a, double b)',
+            'static double\nnxeyes_hypot(double a, double b)')
+    replace(dest, 'demos/nanox/nxeyes.c', 'hypot(dx, dy)', 'nxeyes_hypot(dx, dy)')
     replace(dest, 'demos/nanox/nxeyes.c', 'malloc(sizeof(nxeyes_state))',
             'calloc(1, sizeof(nxeyes_state))')
     replace(dest, 'demos/nanox/nxeyes.c', '#include <stdlib.h>',

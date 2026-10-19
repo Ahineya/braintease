@@ -1,10 +1,15 @@
 import { Entry, parse_bytes } from "lib/ini";
-import { open_read, metadata, REGULAR, environment, Errno, error_message } from "std/posix";
+import {} from "std/result";
+import { open_read, metadata, REGULAR, environment, Errno, error_message, create_new, rename, remove_file, set_permissions, process_id } from "std/posix";
+import { number } from "./files";
 export struct Settings {
     tabstop: u16,
     expandtab: bool,
     autoindent: bool,
     numbers: bool,
+    wrap: bool,
+    textwidth: u16,
+    format_text: bool,
     runs: Vec<Entry>,
     notice: String
 }
@@ -76,6 +81,60 @@ fn entries(path: String) -> Result<Vec<Entry>, String> {
     }
 }
 
+fn flag(settings: &mut Settings, key: String, enabled: bool) -> Result<unit, String> {
+    if (key == "expandtab") {
+        settings.expandtab = enabled;
+        return Ok({});
+    }
+    if (key == "autoindent") {
+        settings.autoindent = enabled;
+        return Ok({});
+    }
+    if (key == "numbers") {
+        settings.numbers = enabled;
+        return Ok({});
+    }
+    if (key == "wrap") {
+        settings.wrap = enabled;
+        return Ok({});
+    }
+    Err("Unknown editor setting: " + key)
+}
+
+fn editor_option(settings: &mut Settings, e: &Entry) -> Result<unit, String> {
+    if (e.key == "formatoptions") {
+        if (e.value != "" && e.value != "t") {
+            return Err("Only formatoptions=t is supported");
+        }
+        settings.format_text = e.value == "t";
+        return Ok({});
+    }
+    if (e.key == "textwidth") {
+        let n = match decimal(e.value) {
+            Some(n) if (n <= 4096) => n,
+            _ => {
+                return Err("textwidth must be 0..4096");
+            }
+        };
+        settings.textwidth = n as u16;
+        return Ok({});
+    }
+    if (e.key == "tabstop") {
+        let n = match decimal(e.value) {
+            Some(n) if (n >= 1 && n <= 16) => n,
+            _ => {
+                return Err("tabstop must be 1..16");
+            }
+        };
+        settings.tabstop = n as u16;
+        return Ok({});
+    }
+    if (e.value != "true" && e.value != "false") {
+        return Err("Editor flags must be true or false");
+    }
+    flag(settings, e.key, e.value == "true")
+}
+
 fn layer(settings: &mut Settings, path: String) -> Result<unit, String> {
     let values = entries(path)?;
     for (i in 0..values.len()) {
@@ -83,32 +142,7 @@ fn layer(settings: &mut Settings, path: String) -> Result<unit, String> {
         if (e.section == "run") {
             settings.runs.push(e);
         } else if (e.section == "editor") {
-            if (e.key == "tabstop") {
-                let n = match decimal(e.value) {
-                    Some(n) => n,
-                    None => {
-                        return Err("tabstop must be 1..16");
-                    }
-                };
-                if (n < 1 || n > 16) {
-                    return Err("tabstop must be 1..16");
-                }
-                settings.tabstop = n as u16;
-            } else {
-                if (e.value != "true" && e.value != "false") {
-                    return Err("Editor flags must be true or false");
-                }
-                let enabled = e.value == "true";
-                if (e.key == "expandtab") {
-                    settings.expandtab = enabled;
-                } else if (e.key == "autoindent") {
-                    settings.autoindent = enabled;
-                } else if (e.key == "numbers") {
-                    settings.numbers = enabled;
-                } else {
-                    return Err("Unknown editor setting: " + e.key);
-                }
-            }
+            editor_option(settings, &e)?;
         } else {
             return Err("Unknown config section: " + e.section);
         }
@@ -117,8 +151,8 @@ fn layer(settings: &mut Settings, path: String) -> Result<unit, String> {
 }
 
 export fn configured() -> Settings {
-    let mut settings = Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, runs: [], notice: "" };
-    for (path in ["/etc/rift.ini", env("HOME", "/") + "/.config/rift/config.ini"]) {
+    let mut settings = Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, wrap: true, textwidth: 0, format_text: true, runs: [], notice: "" };
+    for (path in ["/etc/rift.ini", env("HOME", "/") + "/.config/rift/config.ini", env("HOME", "/") + "/.riftrc"]) {
         match layer(&mut settings, path) {
             Ok(_) => {},
             Err(error) => {
@@ -127,6 +161,61 @@ export fn configured() -> Settings {
         }
     }
     settings
+}
+
+/// Atomically saves editor options; runner configuration stays in config.ini.
+export fn persist(settings: &Settings) -> Result<unit, String> {
+    let path = env("HOME", "/") + "/.riftrc";
+    for (entry in entries(path)?) {
+        if (entry.section != "editor") {
+            return Err(".riftrc must contain editor options only");
+        }
+    }
+    let temporary = path + ".tmp-" + number(process_id() as usize);
+    let file = match create_new(temporary) {
+        Ok(file) => move(file),
+        Err(error) => {
+            return Err(error_message(error));
+        }
+    };
+    let text = "[editor]\nwrap=" + if (settings.wrap) {
+        "true"
+    } else {
+        "false"
+    } + "\ntextwidth=" + number(settings.textwidth as usize) + "\nformatoptions=" + if (settings.format_text) {
+        "t"
+    } else {
+        ""
+    } + "\ntabstop=" + number(settings.tabstop as usize) + "\nexpandtab=" + if (settings.expandtab) {
+        "true"
+    } else {
+        "false"
+    } + "\nautoindent=" + if (settings.autoindent) {
+        "true"
+    } else {
+        "false"
+    } + "\nnumbers=" + if (settings.numbers) {
+        "true"
+    } else {
+        "false"
+    } + "\n";
+    let result = file.write_text(text);
+    let closed = move(file).close();
+    if (result.is_err() || closed.is_err()) {
+        remove_file(temporary);
+        return Err("Cannot write .riftrc");
+    }
+    if (set_permissions(temporary, 384).is_err()) {
+        remove_file(temporary);
+        return Err("Cannot protect .riftrc");
+    }
+    match rename(temporary, path) {
+        Ok(_) => Ok({}),
+        Err(error) => {
+            remove_file(temporary);
+            Err(error_message(error))
+        }
+    }
 }
 
 export fn template(settings: &Settings, language: String) -> String {

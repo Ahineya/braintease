@@ -1,0 +1,20 @@
+import macro { html } from "std/html_macro";
+import { Html } from "std/html";
+import { Event } from "std/html_event";
+import { mount_ui, Ui } from "std/ui";
+type Msg = Ignore;
+fn update(model: i16, msg: Msg, ui: Ui<Msg>) -> i16 {
+    model
+}
+
+fn view(model: &i16) -> Html<Msg> {
+    let mut rows: Vec<Html<Msg>> = [];
+    for (i in 0..500) {
+        rows.push(html!{<p>row</p>});
+    }
+    html!{<section><input class="automatic" autofocus={true} value={"selected"} on_focus={fn(event:Event)=>Ignore} on_blur={fn(event:Event)=>{println(event.value);Ignore}} on_keydown={fn(event:Event)=>Ignore}/>{rows}<input class="manual"/></section>}
+}
+
+fn main() {
+    mount_ui(0, update, view, 2).unwrap();
+}

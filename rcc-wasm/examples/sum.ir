@@ -1,0 +1,23 @@
+module sum_example {
+  target wasm
+  function i16 @sum(i16 %0) {
+    block 0:
+      br label 1
+    block 1:
+      %1 = phi i16 [0, label 0], [%4, label 2]
+      %2 = phi i16 [0, label 0], [%5, label 2]
+      %3 = ult i1 %1, %0
+      br %3, label 2, label 3
+    block 2:
+      %4 = add i16 %1, 1
+      %5 = add i16 %2, %1
+      br label 1
+    block 3:
+      ret %2
+  }
+  function i16 @main() {
+    block 0:
+      %0 = call i16 func @sum(11)
+      ret %0
+  }
+}

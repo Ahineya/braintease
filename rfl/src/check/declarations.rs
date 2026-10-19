@@ -10,6 +10,7 @@ pub(super) fn prelude_async() -> Adt {
         name_span: span,
         exported: false,
         params: vec![TypeParam {
+            arity: 0,
             name: "T".into(),
             span,
             bounds: vec![],
@@ -43,11 +44,13 @@ pub(super) fn prelude_result() -> Adt {
         name_span: span,
         params: vec![
             TypeParam {
+                arity: 0,
                 bounds: Vec::new(),
                 name: "T".to_string(),
                 span,
             },
             TypeParam {
+                arity: 0,
                 bounds: Vec::new(),
                 name: "E".to_string(),
                 span,
@@ -216,6 +219,7 @@ pub(super) fn prelude_option() -> Adt {
         name: "Option".to_string(),
         name_span: span,
         params: vec![TypeParam {
+            arity: 0,
             bounds: Vec::new(),
             name: "T".to_string(),
             span,

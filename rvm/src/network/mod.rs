@@ -192,14 +192,14 @@ impl NetworkDevice {
         }
         self.host = host::HostNetwork::new(setting);
         if self.host.is_external() {
-            self.host.ensure(self).map_err(str::to_owned)?;
+            self.host.ensure(self)?;
         }
         Ok(())
     }
     /// Attach before entering an interactive terminal, so helper authorization
     /// cannot compete with the guest's input reader. Ordinary attachment is lazy.
     pub fn prepare_host(&self) -> Result<(), String> {
-        self.host.ensure(self).map_err(str::to_owned)
+        self.host.ensure(self)
     }
     pub fn port(&self) -> NetworkPort {
         NetworkPort(Arc::clone(&self.state))
@@ -253,7 +253,7 @@ impl NetworkDevice {
         // CAPS and unrelated devices never start host networking. An initial
         // valid NET_INFO explicitly queries the NIC and enables lazy attachment.
         if command == COMMAND_NET_INFO {
-            let _ = self.host.ensure(self); // failure is logged once; INFO reports link down
+            let _ = self.host.ensure(self); // INFO reports link down while attachment recovers
         }
         let mut state = self.state.lock().unwrap();
         match command {

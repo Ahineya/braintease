@@ -446,3 +446,12 @@ fn forward_struct_layouts_normalize_inside_callable_and_adt_fields() {
         "",
     );
 }
+
+#[test]
+fn projected_field_assignments_preserve_cow_and_evaluate_indices_once() {
+    parity(
+        include_str!("fixtures/projected-field-assignment.rfl"),
+        0,
+        "projected assignment passed\n",
+    );
+}

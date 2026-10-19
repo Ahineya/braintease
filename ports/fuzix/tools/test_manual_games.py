@@ -26,7 +26,7 @@ man -w tclsh
 man sh | col -b > /sh-help
 grep SYNOPSIS /sh-help
 man vi | col -b > /vi-help
-grep Levee /vi-help
+grep Rift /vi-help
 man tclsh | col -b > /tcl-help
 grep 'Tcl subset' /tcl-help
 man less | col -b > /less-help
@@ -102,7 +102,7 @@ def batch(image, jit, label):
     output = '\n'.join(line for line in output.splitlines() if not line.startswith('fuzix# '))
     assert result.returncode == 0 and 'disk synced; power off.' in output, output
     for expected in ('/usr/man/man1/sh.1', '/usr/man/man6/wump.6', '/usr/man/man1/tclsh.1',
-                     'SYNOPSIS', 'Levee', 'Tcl subset',
+                     'SYNOPSIS', 'Rift', 'Tcl subset',
                      'implemented', 'govern ancient Sumeria',
                      'MAN_MISSING:1', 'MAN_SECTION:1', 'MAN_OPTION:1', 'MAN_EMPTY:1',
                      'MAN_LOOP:1', 'MAN_STRESS:0', 'MAN_NATIVE:1', 'MAN_HIGH:1', 'MAN_FFFF:1', 'LOCAL_MANUAL_OK',

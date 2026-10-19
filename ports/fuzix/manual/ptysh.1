@@ -10,8 +10,8 @@ its slave as the controlling terminal. The default command is sh. Input,
 output, terminal signals, line editing, editors and shell job control travel
 through the PTY. Exit the inner shell to return to the outer shell.
 .PP
-FUZIX/Ripple has eight PTY pairs: /dev/ptyp0 through /dev/ptyp7
-and /dev/ttyp0 through /dev/ttyp7. Masters open exclusively, with mode
+Both kernels have sixteen PTY pairs: /dev/ptyp0 through /dev/ptypf
+and /dev/ttyp0 through /dev/ttypf (hexadecimal suffixes). Masters open exclusively, with mode
 0600 on installed device nodes. /dev/tty resolves to the caller's controlling
 terminal. Closing the master hangs up the slave's foreground process group;
 closing the last slave allows the master to drain output and then read EOF.
@@ -23,4 +23,4 @@ The fixed pool, process slots and per-process descriptors limit nesting.
 This bridge uses nonblocking I/O and the existing terminal timeout mechanism.
 It is a minimal PTY host, not a terminal multiplexer or graphical terminal.
 .SH SEE ALSO
-sh(1), tty(1), stty(1), ps(1)
+sh(1), mux(1), tty(1), stty(1), ps(1)

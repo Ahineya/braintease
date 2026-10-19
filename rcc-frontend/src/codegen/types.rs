@@ -70,10 +70,22 @@ pub fn convert_type(ast_type: &Type, location: SourceLocation) -> Result<IrType,
             // Convert struct to IrType::Struct, preserving field type information
             let mut ir_fields = Vec::new();
             
-            for field in fields {
-                // Recursively convert each field type
-                let field_ir_type = convert_type(&field.field_type, location.clone())?;
+            let layout = crate::semantic::struct_layout::calculate_struct_layout(fields, location.clone())?;
+            let mut end = 0;
+            for field in &layout.fields {
+                if field.bit_width.is_some() && field.offset < end { continue; }
+                // A flexible member is inline tail storage, not the pointer
+                // representation used for standalone incomplete array types.
+                // Keeping a pointer here makes aggregate GEP strides exceed
+                // sizeof(struct), so (p + 1) skips past the actual tail.
+                let field_ir_type = match field.field_type.unqualified() {
+                    Type::Array { element_type, size: None } if field.size == 0 =>
+                        IrType::Array { size: 0,
+                            element_type: Box::new(convert_type(element_type, location.clone())?) },
+                    _ => convert_type(&field.field_type, location.clone())?,
+                };
                 ir_fields.push(field_ir_type);
+                end = field.offset + field.size;
             }
             
             Ok(IrType::Struct {

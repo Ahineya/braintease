@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYYYY\n",
+  "description": "Free-list reuse, coalescing, realloc including exhausted growth, and calloc contracts",
+  "use_runtime": true
+}

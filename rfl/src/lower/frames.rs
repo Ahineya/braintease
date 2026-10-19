@@ -226,6 +226,9 @@ pub(super) fn emit_return(
     frame: &Value,
     release: bool,
 ) -> Result<(), CompileError> {
+    if proc.direct {
+        return direct::finish(builder, proc, frame);
+    }
     // Only process entry and C wrappers create frames with a null caller.
     // Ordinary RFL functions always return into a suspended activation.
     if proc.name == "main" || proc.c_export {
@@ -268,7 +271,7 @@ pub(super) fn emit_return(
                 builder.build_store(value, cell, IrType::I16).ir()?;
             }
             if keeps(proc, proc.ret) {
-                retain_managed_through(builder, proc, &slot, proc.ret)?;
+                moves::clear_transferred(builder, proc, frame, start, proc.ret)?;
             }
         } else {
             let value = load_slot(builder, proc, frame, result)?;
@@ -462,11 +465,19 @@ pub(super) fn emit_apply(
     arg_tys: &[Ty],
     dest: usize,
     next: usize,
+    known: Option<&Proc>,
 ) -> Result<(), CompileError> {
     let base = proc.slots[slot].offset;
-    let id = load_cell(builder, frame, base, IrType::I16)?;
-    let words = load_cell(builder, frame, base + 1, IrType::I16)?;
-    let size = as_i32(builder, words)?;
+    let (id, size) = if let Some(callee) = known {
+        (
+            Value::Constant(callee.func_id as i64),
+            i32_const(builder, callee.frame_cells)?,
+        )
+    } else {
+        let id = load_cell(builder, frame, base, IrType::I16)?;
+        let words = load_cell(builder, frame, base + 1, IrType::I16)?;
+        (id, as_i32(builder, words)?)
+    };
     let raw = builder
         .build_call(
             Value::Global("rfl_frame_alloc".to_string()),
@@ -496,10 +507,12 @@ pub(super) fn emit_apply(
         }
         offset += ty.cells();
     }
-    let env_addr = load_cell(builder, frame, base + 2, IrType::I16)?;
-    let env_bank = load_cell(builder, frame, base + 3, IrType::I16)?;
-    store_cell(builder, &callee_frame, offset, env_addr)?;
-    store_cell(builder, &callee_frame, offset + 1, env_bank)?;
+    if known.is_none_or(|callee| callee.env_at.is_some()) {
+        let env_addr = load_cell(builder, frame, base + 2, IrType::I16)?;
+        let env_bank = load_cell(builder, frame, base + 3, IrType::I16)?;
+        store_cell(builder, &callee_frame, offset, env_addr)?;
+        store_cell(builder, &callee_frame, offset + 1, env_bank)?;
+    }
     store_cell(builder, frame, RESUME, Value::Constant(next as i64))?;
     builder.build_return(Some(callee_frame)).ir()
 }
@@ -517,15 +530,14 @@ pub(super) fn copy_to_offset(
         return Ok(());
     }
     if cell_wise(ty) {
-        for index in 0..ty.cells() {
-            let value = load_cell(
-                builder,
-                src_frame,
-                src_proc.slots[src].offset + index,
-                IrType::I16,
-            )?;
-            store_cell(builder, dest_frame, dest_offset + index, value)?;
-        }
+        copy_frame_cells(
+            builder,
+            src_frame,
+            src_proc.slots[src].offset,
+            dest_frame,
+            dest_offset,
+            ty.cells(),
+        )?;
         if keeps(src_proc, ty) {
             retain_tree(builder, src_proc, dest_frame, dest_offset, ty)?;
         }

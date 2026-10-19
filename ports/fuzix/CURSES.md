@@ -28,13 +28,39 @@ on normal disks automatically.
 - Use `wgetnstr(window, buffer, capacity - 1)` for bounded line input. The legacy
   `wgetstr` cannot know a buffer's capacity and returns `ERR/EINVAL`. The scanw
   wrappers use their own bounded 512-character input.
-- Screen cells are now 32-bit `chtype` (`unsigned long`, two C16 characters).
-  Their low eight bits hold ASCII/DEC glyph identifiers, bits 8–15 retain the
-  existing attributes, and bits 16–21 hold one of 64 color-pair identifiers.
+- Screen cells are 32-bit `chtype` (`unsigned long`, two C16 characters).
+  Bits 0–20 hold a Unicode scalar, interned grapheme identifier or wide-cell
+  continuation. Bits 21–25 hold blink, bold, reverse/standout, underline and
+  DEC graphics; bits 26–31 hold one of 64 color-pair identifiers.
   `WINDOW._line`, `WINDOW._attrs`, `waddch` and `winch` preserve the full cell.
   Rebuild applications and their curses objects together after this ABI change.
-  Attributes are never emitted as text. Full Unicode text and complete ncurses
-  compatibility are not supplied.
+  Attributes are never emitted as text. Use the macros instead of numeric masks.
+  Standout and reverse share a bit. This is a Unicode-capable curses subset,
+  rather than a complete implementation of ncurses' wide-character API.
+- `waddstr`/`wadd_utf8` decode UTF-8; `waddch` accepts a Unicode scalar plus
+  attributes. Combining marks extend the preceding grapheme, wide characters
+  occupy a head and continuation cell, and refresh emits the original UTF-8.
+  Malformed input renders replacement characters. Clipping never emits a
+  partial UTF-8 encoding. The bounded display pool and width/font policy are
+  documented in [the shared Unicode library](../../libraries/unicode/README.md).
+- `wget_wch(window, &value)` returns `OK` for a Unicode scalar,
+  `KEY_CODE_YES` for a function key, or `ERR` for timeout/error. Always inspect
+  the return status: some Unicode scalar values equal legacy `KEY_*` numbers.
+  Its decoder survives fragmented reads, timeouts and resize. Legacy `wgetch`
+  still returns raw bytes and function keys for existing applications.
+  `wgetnstr` edits and erases complete UTF-8 graphemes; its limit counts octets.
+  RFL exposes the distinction through `Screen.event()`/`Window.event()`;
+  `.key()` remains appropriate for ASCII shortcuts. Reusable `lib/tui_input`
+  fields use `.event()` and report cursor positions in display columns.
+- `ripple_curses_bracketed_paste(1)` requests host bracketed paste. Input reports
+  `KEY_PASTE_BEGIN`/`KEY_PASTE_END`; bytes between them remain literal, including
+  escape sequences. Split end markers survive polling timeouts. Suspend/exit
+  disables the terminal mode, and resume restores it. RFL exposes the request
+  as `Screen.bracketed_paste(true)`.
+  `ripple_curses_text_run` collects complete, ready UTF-8 scalars into a bounded
+  caller buffer without refreshing per character. Nonliteral runs stop before
+  function/control events, retaining them for the ordinary event reader. Chunk
+  lookahead uses stdin's existing FILE buffer so other stdio consumers share it.
 - ANSI SGR rendering implements bold, reverse/standout, underline and blink
   without relying on optional `mr`/`so` entries in an existing termcap file.
   This fixes invisible selection when those capabilities are absent. Attribute
@@ -47,7 +73,7 @@ on normal disks automatically.
   invalidates the physical screen so existing cells repaint in the new colors.
 - `ripple_curses_lines(1)` selects DEC Special Graphics borders; zero selects
   ASCII. Both the host terminal and the guest graphics terminal can display the
-  line glyphs (the latter maps them onto its ROM font). Unknown termcap names
+  line glyphs (the latter uses its Unicode bitmap font). Unknown termcap names
   fall back to the installed ANSI entry.
 - Independent windows compose from back to front through `wnoutrefresh` and
   `doupdate`. Staging copies each complete layer, so overlapping unchanged
@@ -108,14 +134,22 @@ python3 ports/fuzix/tools/test_curses.py --build build/fuzix
 ```
 
 Both tests boot an actual kernel with a disposable disk and exercise a private
-guest PTY. The expanded probe includes 93 assertions on native Fuse-X and
+guest PTY. The expanded probe includes 115 assertions on native Fuse-X and
 RVM JIT: scanner boundaries, temporary file I/O, raw/echo modes, key decoding,
 FILE/ungetch lookahead, bounded editing, timeout/halfdelay, fragmented escape
 input, signal interruption, window ownership, attribute output, window dimensions, resize, repeated
 endwin, actual SIGSTOP/SIGCONT, atexit restoration, PTY hangup, full-width color
 cells, pair validation, line glyphs, composed/moving windows and bidirectional
 scrolling (including parent aliases), batched per-cell attributes/clipping,
-no lower-right scrolling and cursor-shape validation.
+no lower-right scrolling and cursor-shape validation. Unicode checks cover
+scalar/style preservation, wide-cell overwrite, combining marks, fragmented
+input, text/function-key collisions and grapheme-aware bounded input.
+
+`python3 rfl/tools/test_unicode.py --os both` also checks the RFL widgets,
+Unicode shell arguments/editing, scratch-buffer boundaries and VT throughput
+on disposable guest disks. `python3 ports/graphics/tests/test_unicode_render.py`
+checks actual Cyrillic, Greek and combining-accent pixels in gterm on both
+guests and nxterm on Fuse-X.
 
 The RFL [OS integration suite](../../rfl/os/README.md#validation) additionally
 checks the visible selection colors, INI theme inheritance/overrides, floating

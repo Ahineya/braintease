@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${FUZIX_BUILD:-$ROOT/build/fuzix}"
 run_only=0
 build_only=0
+rebuild=0
 fresh=0
 install_apps=0
 jit=1
@@ -15,11 +16,13 @@ usage() {
 Usage: scripts/run-fuzix.sh [options] [host options...]
 
 Boot FUZIX/Ripple. Try help, ls, cat README, echo hello > note, hello,
-forkcheck, preemptcheck, lynx http://wiby.me/, and shutdown.
+forkcheck, preemptcheck, telegram, music /music, lynx http://wiby.me/, and shutdown.
 Use shutdown before closing the VM.
 Files persist across launches and kernel rebuilds.
 Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
 
+  --incremental    Build only changed inputs (default)
+  --rebuild        Force rebuilding OS/programs; preserve the disk
   --build-only     Build/update the default disk without booting
   --run-only       Boot existing artifacts without building or updating
   --rvm            Run RVM (the only supported backend; also accepts positional rvm)
@@ -32,16 +35,22 @@ Ctrl+C interrupts the foreground guest program. Ctrl+] stops the VM abruptly.
   --headless       Disable interactive terminal input
   --input TEXT     Preload commands, e.g. --input $'ls\nshutdown\n'
   --timeout N      Stop after N host seconds (not a clean guest shutdown)
+  --audio MODE     auto, on (interactive default), or off
+  --audio-wav FILE Capture rendered PCM in a WAV file
 
 The first build imports no network dependencies beyond the normal Rust tools.
-Normal builds update the kernel and managed Unix executables on the default
+Normal launches use content fingerprints plus Make dependencies to reuse unchanged
+compilers, kernels and applications. The first launch after this upgrade can
+rebuild older artifacts once. Normal builds update the kernel and managed Unix executables on the default
 disk, preserving user files. Compatible roots gain space and inodes automatically.
 C16 V2 roots upgrade to V3 (1 GiB) with a backup. V1 disks require --fresh.
+Image updates keep one previous disk in DISK.bak (RIPPLE_IMAGE_BACKUPS overrides).
 Normal launches check the disk and back up and repair recoverable shutdown
-metadata before updating. Structural damage stops the update. --disk skips
-updates unless --install-apps is supplied. Set FUZIX_BUILD for another build
-directory. Root disks use the Ripple C16 filesystem ABI.
+metadata and abandoned anonymous pipes before updating. Structural damage stops
+the update. --disk skips updates unless --install-apps is supplied. Set
+FUZIX_BUILD for another build directory. Root disks use the Ripple C16 filesystem ABI.
 FUZIX/Ripple requires the MMU. Non-MMU builds and the RBF backend are retired.
+For the separate boot-only Brainfuck experiment, use scripts/run-fuzix-bf.sh.
 HELP
 }
 while [[ $# -gt 0 ]]; do
@@ -60,6 +69,8 @@ while [[ $# -gt 0 ]]; do
             shift ;;
         --run-only) run_only=1; shift ;;
         --build-only) build_only=1; shift ;;
+        --incremental) shift ;;
+        --rebuild) rebuild=1; shift ;;
         --fresh) fresh=1; shift ;;
         --install-apps) install_apps=1; shift ;;
         --jit) jit=1; shift ;;
@@ -70,8 +81,8 @@ while [[ $# -gt 0 ]]; do
         *) args+=("$1"); shift ;;
     esac
 done
-if [[ "$run_only" == 1 && ( "$fresh" == 1 || "$build_only" == 1 || "$install_apps" == 1 ) ]]; then
-    echo 'error: --run-only cannot be combined with --fresh, --build-only, or --install-apps' >&2; exit 1
+if [[ "$run_only" == 1 && ( "$fresh" == 1 || "$rebuild" == 1 || "$build_only" == 1 || "$install_apps" == 1 ) ]]; then
+    echo 'error: --run-only cannot be combined with --fresh, --rebuild, --build-only, or --install-apps' >&2; exit 1
 fi
 if [[ -n "$disk" && ( "$fresh" == 1 || ! -f "$disk" ) ]]; then
     echo 'error: --disk requires an existing image and cannot be combined with --fresh' >&2; exit 1
@@ -81,12 +92,15 @@ if [[ "$run_only" == 0 ]]; then
     if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
         export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
     fi
-    printf 'Checking compiler, assembler and VM...\n' >&2
-    cargo build --quiet --release --manifest-path "$ROOT/Cargo.toml" -p rcc-driver -p rvm -p rfl
-    cargo build --quiet --release --manifest-path "$ROOT/src/ripple-asm/Cargo.toml" --bin rasm --bin rlink
     mkdir -p "$OUT"
     OUT="$(cd "$OUT" && pwd)"
-    make -C "$ROOT/ports/fuzix" "BUILD=$OUT" -j4 images >&2
+    build_arguments=(fuzix --build "$OUT")
+    if [[ "$rebuild" == 1 ]]; then build_arguments+=(--rebuild); fi
+    printf 'Checking changed FUZIX inputs (log: %s/build.log)...\n' "$OUT" >&2
+    if ! python3 "$ROOT/scripts/build_progress.py" --log "$OUT/build.log" -- \
+        python3 "$ROOT/scripts/build-os.py" "${build_arguments[@]}"; then
+        exit 1
+    fi
 fi
 if [[ ! -f "$OUT/.mmu" || "$(cat "$OUT/.mmu")" != 1 ]]; then
     echo 'error: non-MMU or unmarked FUZIX artifacts are unsupported; rebuild without --run-only (MMU=0 is retired)' >&2

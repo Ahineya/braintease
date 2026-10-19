@@ -9,18 +9,22 @@ from test_os import Guest, ROOT, PORT, run
 F1, F2, F3, F4, F5 = b'\x1bOP', b'\x1bOQ', b'\x1bOR', b'\x1bOS', b'\x1b[15~'
 F6, F7, F8, F9, F10 = [f'\x1b[{n}~'.encode() for n in (17,18,19,20,21)]
 
-def make_image(system, build, artifact, directory):
+def make_image(system, build, artifact, directory, *, extra_files=(), extra_fixtures=None, applications=None):
     files = []
-    for name in ['sh','cat','echo','true','bf','tclsh','awk','make','m4','dc','chmod','sleep','mkdir','cp']:
+    for name in (applications if applications is not None else ['sh','cat','echo','true','bf','tclsh','awk','make','m4','dc','chmod','sleep','mkdir','cp']):
         source = build / (name + '.rxe') if system == 'fuzix' else build / 'apps' / (name + '.fxe')
         assert source.is_file(), source
         files.append({'name':'/bin/'+name, 'source':str(source)})
     files.append({'name':'/bin/rift','source':str(artifact)})
+    files.extend(extra_files)
     if system == 'fuzix': files.append({'name':'/init','source':str(build / 'init.rxe')})
     fixtures = {
         '/etc/termcap':r'ansi|vt100|xterm|xterm-256color|fuse-x:co#80:li#24:cl=\E[H\E[2J:ho=\E[H:cm=\E[%i%d;%dH:me=\E[0m:md=\E[1m:us=\E[4m:ue=\E[0m:ce=\E[K:up=\E[A:bc=^H:'+'\n',
         '/tmp/main.rfl':'fn main() {\n    call(one, nested(two));\n}\n',
         '/tmp/other.txt':'other tab\n',
+        '/tmp/picker/adir/inside.txt':'PICKER_INSIDE\n',
+        '/tmp/picker/root.txt':'PICKER_ROOT\n',
+        '/tmp/picker/.hidden.txt':'PICKER_HIDDEN\n',
         '/tmp/a\'b $x.bf':'++++++++[>++++++++<-]>+.\n',
         '/tmp/test.tcl':'puts RIFT_TCL_OK\n',
         '/tmp/test.awk':'BEGIN { print "RIFT_AWK_OK" }\n',
@@ -31,6 +35,8 @@ def make_image(system, build, artifact, directory):
         '/tmp/.rift-config':'[editor]\ntabstop=2\n[run]\nbrainfuck=echo RIFT_CUSTOM_OK {file}\n',
         '/tmp/big.txt':('0123456789abcdef' * 4375) + '\n',
     }
+    fixtures.update({f'/tmp/picker/item-{i:02d}.txt':f'PICKER_ITEM_{i}\n' for i in range(35)})
+    fixtures.update(extra_fixtures or {})
     for name, data in fixtures.items():
         source = directory / ('fixture-' + str(len(files)))
         source.write_bytes(data.encode())
@@ -69,8 +75,13 @@ def exercise(args, system, directory):
     def command_line(command):
         guest.send(b':');guest.visible(': command');guest.send(command.encode()+b'\r')
     def stable(text):
-        guest.visible(text)
+        # "Tabs" also appears permanently in the menu/footer. Wait for the
+        # chooser's own footer before sending Esc or another function key.
+        guest.visible('Enter select  Esc cancel' if text == 'Tabs' else text)
         # Wait for the whole frame rather than racing its cursor/status tail.
+        for _ in range(3): guest.pump()
+    def picker_directory(path):
+        guest.wait(lambda: path in ''.join(guest.screen.lines[2]), 'picker directory '+path)
         for _ in range(3): guest.pump()
     try:
         guest.raw(guest.prompt)
@@ -84,6 +95,51 @@ def exercise(args, system, directory):
             guest.wait(lambda: ''.join(guest.screen.lines[2][7:10]).rstrip() == text and
                        guest.screen.y == 2 and guest.screen.x == 7 + len(text), 'successive insertion frames')
         guest.send(b'\x1b');stable('NORMAL');command_line('qa!');guest.raw(guest.prompt)
+        # The same shared directory panel rendered as a floating Open dialog.
+        guest.send(b'rift\r');stable('NORMAL')
+        guest.send(F3);stable('Open file');guest.send(b'/tmp/picker\r');picker_directory('/tmp/picker')
+        assert '.hidden.txt' not in guest.screen.text()
+        guest.send(b'\x14');stable('.hidden.txt')
+        guest.send(b'\x14');guest.wait(lambda: '.hidden.txt' not in guest.screen.text(), 'hidden files toggled off')
+        guest.send(b'/missing-file\r');stable('No such file')
+        guest.send(b'\x15')
+        guest.send(b'\t\x1b[H\x1b[B\r');picker_directory('/tmp/picker/adir')
+        guest.send(b'\x02');picker_directory('/tmp/picker');stable('>adir')
+        guest.send(b'\x1b[F');stable('>root.txt')
+        guest.send(b'\x1b[5~');guest.wait(lambda: '>root.txt' not in guest.screen.text(), 'page up moves selection')
+        guest.send(b'root');stable('>root.txt');stable('Find: root')
+        guest.send(b'\r');stable('PICKER_ROOT')
+        guest.send(b'iKEEP\x1b');stable('KEEPPICKER_ROOT')
+        guest.send(b'\x0f');stable('Open file');picker_directory('/tmp/picker')
+        guest.send(b'adir/inside.txtZ');stable('adir/inside.txtZ')
+        guest.send(b'\x1b[D\x1b[3~')
+        guest.wait(lambda: 'adir/inside.txt' in guest.screen.text() and 'adir/inside.txtZ' not in guest.screen.text(), 'filename deletion has reached the screen before resize')
+        guest.resize(6,30);stable('resize to 40x13')
+        guest.resize(24,80);stable('Open file');stable('adir/inside.txt')
+        guest.send(b'\r');stable('PICKER_INSIDE')
+        # Reopening an existing file switches tabs instead of creating a duplicate.
+        guest.send(F3);stable('Open file');guest.send(b'../root.txt\r');stable('KEEPPICKER_ROOT')
+        guest.send(F4);stable('Tabs');assert '4:' not in guest.screen.text();guest.send(b'\x1b')
+        guest.wait(lambda: 'Enter select  Esc cancel' not in guest.screen.text(), 'Tabs dialog dismissed before the next function key')
+        guest.send(F3);stable('Open file');guest.send(b'\x1b');guest.wait(lambda: 'Open file' not in guest.screen.text(), 'picker dismissed');stable('KEEPPICKER_ROOT')
+        guest.send(F10);stable('Rift menu');guest.send(b'\r');stable('Select command');guest.send(b'\x1b[B\r');stable('Open file');guest.send(b'\x1b');stable('KEEPPICKER_ROOT')
+        # Reusing an existing tab must work even with every slot occupied.
+        for i in range(5):
+            command_line(f'e /tmp/picker/item-{i:02d}.txt');stable(f'PICKER_ITEM_{i}')
+        guest.send(F3);stable('Open file');guest.send(b'/tmp/picker/root.txt\r');stable('KEEPPICKER_ROOT')
+        guest.send(F3);stable('Open file');guest.send(b'/tmp/picker/item-05.txt\r');stable('maximum 8')
+        command_line('theme');stable('Theme (session)');guest.send(b'm\r');guest.wait(lambda: 'Theme (session)' not in guest.screen.text(), 'picker mono theme selected')
+        guest.send(F3);stable('Open file')
+        guest.wait(lambda: guest.screen.lines[1][2] == '+' and guest.screen.lines[4][5] == '-', 'picker ASCII separators')
+        guest.send(b'\t');guest.wait(lambda: any(row[5][3] for row in guest.screen.styles[5:17]), 'monochrome file selection remains visible')
+        guest.send(b'\x1b');stable('KEEPPICKER_ROOT')
+        command_line('qa!');guest.raw(guest.prompt)
+        if args.only_picker:
+            guest.send(b'shutdown\r');guest.process.wait(timeout=30);assert guest.process.returncode==0
+            print(system+': focused file picker, eight-tab reuse, monochrome styles and terminal restoration passed',flush=True)
+            return
+        print(system+': file picker navigation, parent reselection, scrolling, type-ahead, hidden files, errors, path editing, resize, menu, cancellation and existing tabs passed',flush=True)
+
         guest.send(b'rift /tmp/main.rfl /tmp/other.txt\r');stable('NORMAL')
         assert guest.screen.alternate and 'other.txt' in guest.screen.text()
         # Actual lexical attributes: fn is gold, body background is ordinary blue.
@@ -118,7 +174,9 @@ def exercise(args, system, directory):
         command_line('theme');stable('Theme (session)');guest.send(b'm\r');guest.wait(lambda: 'Theme (session)' not in guest.screen.text(), 'mono theme selected');stable('NORMAL')
         command_line('2');guest.send(b'wviw');stable('VISUAL');assert any(s[3] for row in guest.screen.styles[2:21] for s in row);guest.send(b'\x1b')
         # Opening a NUL file must leave the current buffer intact.
-        guest.send(F3);guest.visible('Open file');guest.send(b'/tmp/unsafe.bin\r');stable('Binary NUL')
+        guest.send(F3);stable('Open file')
+        guest.wait(lambda: guest.screen.lines[1][2] == '+' and guest.screen.lines[4][5] == '-', 'monochrome picker uses ASCII borders and separators')
+        guest.send(b'/tmp/unsafe.bin\r');stable('Binary NUL')
         # Prompts support moving within the filename, rather than append-only editing.
         print(system+': tabs, themes and resize passed',flush=True)
         guest.send(F3);guest.visible('Open file');guest.send(b"/tmp/a'b $x.bfZ\x1b[D\x1b[3~\r");stable('brainfuck')
@@ -186,6 +244,7 @@ def main():
     parser.add_argument('--native-build',type=Path,default=ROOT/'fuse-x/build')
     parser.add_argument('--fuzix-build',type=Path,default=ROOT/'build/fuzix')
     parser.add_argument('--prebuilt',type=Path)
+    parser.add_argument('--only-picker',action='store_true',help='Run file picker and tab integration checks only')
     parser.add_argument('--save-artifacts',type=Path)
     args=parser.parse_args()
     for system in (['fuse-x','fuzix'] if args.os=='both' else [args.os]):

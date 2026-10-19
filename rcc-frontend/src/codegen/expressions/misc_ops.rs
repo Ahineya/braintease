@@ -21,6 +21,9 @@ pub fn generate_sizeof_expr(
     gen: &mut TypedExpressionGenerator,
     operand: &TypedExpr,
 ) -> Result<Value, CompilerError> {
+    if super::bit_fields::spec(operand).is_some() {
+        return Err(CompilerError::semantic_error("sizeof cannot be applied to a bit-field".into(), rcc_common::SourceLocation::new_simple(0, 0)));
+    }
     generate_sizeof(gen, operand.get_type())
 }
 

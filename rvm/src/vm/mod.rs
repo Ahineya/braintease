@@ -4,11 +4,14 @@ mod execution;
 /// VM module - Virtual Machine implementation for the Ripple architecture
 mod instruction;
 mod interrupts;
+#[cfg_attr(target_arch = "wasm32", path = "../web/jit.rs")]
 mod jit;
 mod mmio;
 mod protection;
 mod state;
+#[cfg_attr(target_arch = "wasm32", path = "../web/storage.rs")]
 mod storage;
+#[cfg_attr(target_arch = "wasm32", path = "../web/terminal.rs")]
 mod terminal;
 
 pub use instruction::Instr;
@@ -23,6 +26,7 @@ use ripple_asm::Register;
 use std::collections::{HashMap, VecDeque};
 
 /// The Ripple Virtual Machine
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub struct VM {
     pub mmu: crate::mmu::Mmu,
     mmu_pending: Option<crate::mmu::Fault>,
@@ -128,6 +132,15 @@ pub struct VM {
 }
 
 impl VM {
+    #[cfg(target_arch = "wasm32")]
+    pub fn browser_disk_bytes(&self) -> &[u8] { self.storage.as_ref().map_or(&[], |s|s.bytes.as_slice()) }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn browser_disk(&mut self, data: Vec<u8>) -> Result<(), String> {
+        self.storage = Some(Storage::from_bytes(data)?);
+        Ok(())
+    }
+
     pub fn new(bank_size: u16) -> Self {
         Self::with_memory_size(bank_size, DEFAULT_MEMORY_SIZE)
     }

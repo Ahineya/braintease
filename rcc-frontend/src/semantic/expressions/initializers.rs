@@ -178,6 +178,7 @@ impl InitializerAnalyzer {
                                     }
                                 }
                             } else {
+                                while current < fields.len() && fields[current].name.is_empty() && fields[current].bit_width.is_some() { current += 1; }
                                 if current >= fields.len() {
                                     return Err(SemanticError::TypeMismatch {
                                         expected: resolved.clone(),

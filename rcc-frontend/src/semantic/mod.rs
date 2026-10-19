@@ -91,14 +91,36 @@ impl SemanticAnalyzer {
     
     /// Analyze a translation unit
     pub fn analyze(&mut self, ast: &mut TranslationUnit) -> Result<(), CompilerError> {
+        // C99 6.2.2: a function declaration without a storage class, or with
+        // extern, inherits the linkage of a visible earlier declaration.
+        // In particular, `static int f(void); int f(void) { ... }` stays
+        // private to this translation unit. Code generation consumes the
+        // definition's storage class, so carry the inherited linkage there.
+        let mut internal_functions = std::collections::HashSet::new();
         // First pass: collect all function and global variable declarations
         for item in &mut ast.items {
             match item {
                 TopLevelItem::Function(func) => {
+                    if internal_functions.contains(&func.name) {
+                        func.storage_class = crate::StorageClass::Static;
+                    }
+                    if func.storage_class == crate::StorageClass::Static {
+                        internal_functions.insert(func.name.clone());
+                    }
                     self.type_analyzer.borrow_mut().declare_function(func)?;
                 }
                 TopLevelItem::Declarations(decls) => {
                     for decl in decls {
+                        if matches!(self.type_analyzer.borrow().resolve_type(&decl.decl_type), Type::Function { .. })
+                            && decl.storage_class != crate::StorageClass::Typedef
+                        {
+                            if internal_functions.contains(&decl.name) {
+                                decl.storage_class = crate::StorageClass::Static;
+                            }
+                            if decl.storage_class == crate::StorageClass::Static {
+                                internal_functions.insert(decl.name.clone());
+                            }
+                        }
                         // Handle different types of declarations explicitly
                         match decl.storage_class {
                             crate::StorageClass::Typedef => {
@@ -184,6 +206,22 @@ impl SemanticAnalyzer {
 mod tests {
     use super::*;
     use crate::{Frontend, TopLevelItem};
+
+    #[test]
+    fn function_definition_inherits_static_prototype_linkage() {
+        let mut ast = Frontend::parse_source(
+            "static int helper(int); extern int helper(int); \
+             int helper(int x) { return x + 1; } \
+             int public_function(void) { return helper(41); }"
+        ).unwrap();
+        SemanticAnalyzer::new().analyze(&mut ast).unwrap();
+        let definitions: Vec<_> = ast.items.iter().filter_map(|item| match item {
+            TopLevelItem::Function(function) => Some(function),
+            _ => None,
+        }).collect();
+        assert_eq!(definitions[0].storage_class, crate::StorageClass::Static);
+        assert_eq!(definitions[1].storage_class, crate::StorageClass::Auto);
+    }
 
     #[test]
     fn test_semantic_analysis_simple_function() {

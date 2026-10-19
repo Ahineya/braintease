@@ -29,11 +29,11 @@ ALL_OBJ_FILES = $(RUNTIME_OBJ_FILES) crt0.pobj
 RUNTIME_LIB = libruntime.par
 
 # rOS apps: INT21 putchar/getchar, no mmio. crt0_ros is linked separately.
-ROS_C_SOURCES = ros/putchar.c ros/getchar.c
+ROS_C_SOURCES = ros/putchar.c ros/getchar.c ros/tty_write.c
 ROS_C_ASM = $(ROS_C_SOURCES:.c=.asm)
 ROS_C_OBJ = $(ROS_C_SOURCES:.c=.pobj)
 ROS_ASM_OBJ = ros/int21.pobj ros/crt0_ros.pobj ros/crt0_sys.pobj
-LIBROS_OBJ = ros/int21.pobj ros/putchar.pobj ros/getchar.pobj puts.pobj
+LIBROS_OBJ = ros/int21.pobj ros/putchar.pobj ros/getchar.pobj ros/tty_write.pobj puts.pobj
 LIBROS = libros.par
 BUILD_RULES := $(abspath $(lastword $(MAKEFILE_LIST)))
 
@@ -64,7 +64,7 @@ irq.asm: irq.c $(RCC) $(RUNTIME_HEADERS) $(BANK_SIZE_STAMP)
 	@$(RCC) compile $< -o $@ -I./include --bank-size $(BANK_SIZE) -D BANK_SIZE=$(BANK_SIZE)
 
 stack_segments.asm: stack_segments.asm.in $(BANK_SIZE_STAMP)
-	sed "s/@LIMIT@/$$(( $(BANK_SIZE) - 10 ))/g" $< > $@
+	python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).read_text().replace("@LIMIT@", str(int(sys.argv[2]) - 10)), end="")' $< $(BANK_SIZE) > $@
 
 stack_segments.pobj: stack_segments.asm $(RASM) $(BANK_SIZE_STAMP)
 	$(RASM) assemble $< -o $@ --bank-size $(BANK_SIZE) --max-immediate $(MAX_IMMEDIATE)

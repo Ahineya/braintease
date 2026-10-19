@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <ripple_unicode.h>
 
 /* C23 this became a real type */
 #if ( __STDC_VERSION__ < 202000)
@@ -69,17 +70,19 @@ typedef int bool;
 #define getbegyx(win,y,x) (y = (win)->_begy, x = (win)->_begx)
 
 /* Video attribute definitions. */
-#define A_BLINK        0x0100
+/* 21-bit Unicode scalar/display ID, five style flags, six pair bits.
+ * Standout and Reverse have identical terminal behavior and share one flag. */
+#define A_BLINK        0x00200000UL
 #define A_BLANK        0
-#define A_BOLD	       0x0200
-#define A_DIM	       0
+#define A_BOLD         0x00400000UL
+#define A_DIM          0
 #define A_PROTECT      0
-#define A_REVERSE      0x0400
-#define A_STANDOUT     0x0800
-#define A_UNDERLINE    0x1000
-#define A_ALTCHARSET   0x2000
+#define A_REVERSE      0x00800000UL
+#define A_STANDOUT     A_REVERSE
+#define A_UNDERLINE    0x01000000UL
+#define A_ALTCHARSET   0x02000000UL
 
-/* 32-bit cells retain characters, legacy attributes and 64 independent color pairs. */
+/* Cell storage remains two C16 words. Recompile users of the old packed ABI. */
 typedef unsigned long chtype;
 
 /* Type declarations. */
@@ -95,6 +98,9 @@ typedef struct ripple_curses_window {
   int        _delay; /* wgetch timeout in ms: -1 blocking, 0 poll. */
   struct ripple_curses_window *_parent;
   int        _children;
+  struct ru_break _grapheme;
+  int _lasty, _lastx, _last_valid;
+  struct ru_decoder _input_utf8;
   int	   _tabsize;			/* tab character size */
   bool	   _clear;			/* causes clear at next refresh */
   bool	   _leave;			/* leaves cursor as it happens */
@@ -116,31 +122,31 @@ extern WINDOW *curscr;			/* the current screen image */
 extern WINDOW *stdscr;			/* the default screen window */
 extern struct termios _orig_tty, _tty;
 
-extern unsigned int ACS_ULCORNER;	/* terminal dependent block grafic */
-extern unsigned int ACS_LLCORNER;	/* charcters.  Forget IBM, we are */
-extern unsigned int ACS_URCORNER;	/* independent of their charset. :-) */
-extern unsigned int ACS_LRCORNER;
-extern unsigned int ACS_RTEE;
-extern unsigned int ACS_LTEE;
-extern unsigned int ACS_BTEE;
-extern unsigned int ACS_TTEE;
-extern unsigned int ACS_HLINE;
-extern unsigned int ACS_VLINE;
-extern unsigned int ACS_PLUS;
-extern unsigned int ACS_S1;
-extern unsigned int ACS_S9;
-extern unsigned int ACS_DIAMOND;
-extern unsigned int ACS_CKBOARD;
-extern unsigned int ACS_DEGREE;
-extern unsigned int ACS_PLMINUS;
-extern unsigned int ACS_BULLET;
-extern unsigned int ACS_LARROW;
-extern unsigned int ACS_RARROW;
-extern unsigned int ACS_DARROW;
-extern unsigned int ACS_UARROW;
-extern unsigned int ACS_BOARD;
-extern unsigned int ACS_LANTERN;
-extern unsigned int ACS_BLOCK;
+extern chtype ACS_ULCORNER;	/* terminal dependent block grafic */
+extern chtype ACS_LLCORNER;	/* charcters.  Forget IBM, we are */
+extern chtype ACS_URCORNER;	/* independent of their charset. :-) */
+extern chtype ACS_LRCORNER;
+extern chtype ACS_RTEE;
+extern chtype ACS_LTEE;
+extern chtype ACS_BTEE;
+extern chtype ACS_TTEE;
+extern chtype ACS_HLINE;
+extern chtype ACS_VLINE;
+extern chtype ACS_PLUS;
+extern chtype ACS_S1;
+extern chtype ACS_S9;
+extern chtype ACS_DIAMOND;
+extern chtype ACS_CKBOARD;
+extern chtype ACS_DEGREE;
+extern chtype ACS_PLMINUS;
+extern chtype ACS_BULLET;
+extern chtype ACS_LARROW;
+extern chtype ACS_RARROW;
+extern chtype ACS_DARROW;
+extern chtype ACS_UARROW;
+extern chtype ACS_BOARD;
+extern chtype ACS_LANTERN;
+extern chtype ACS_BLOCK;
 
 extern char *unctrl(char _c);
 extern int baudrate(void);
@@ -205,7 +211,7 @@ extern void touchwin(WINDOW *_win);
 extern int waddch(WINDOW *_win, chtype _c);
 extern int waddstr(WINDOW *_win, char *_str);
 extern int wbox(WINDOW *_win, int _ymin, int _xmin, int _ymax,
-				int _xmax, unsigned int _v, unsigned int _h);
+				int _xmax, chtype _v, chtype _h);
 extern void wclear(WINDOW *_win);
 extern int wclrtobot(WINDOW *_win);
 extern int wclrtoeol(WINDOW *_win);
@@ -227,10 +233,10 @@ extern int wtabsize(WINDOW *_win, int _ts);
 
 /* Characters and attributes are separate from decoded input key codes. */
 #define A_NORMAL 0
-#define A_COLOR 0x003f0000UL
-#define A_ATTRIBUTES 0x003fff00UL
-#define COLOR_PAIR(n) (((chtype)(n) & 63UL) << 16)
-#define PAIR_NUMBER(a) ((int)(((chtype)(a) >> 16) & 63UL))
+#define A_COLOR 0xfc000000UL
+#define A_ATTRIBUTES 0xffe00000UL
+#define COLOR_PAIR(n) (((chtype)(n) & 63UL) << 26)
+#define PAIR_NUMBER(a) ((int)(((chtype)(a) >> 26) & 63UL))
 #define COLOR_BLACK 0
 #define COLOR_RED 1
 #define COLOR_GREEN 2
@@ -246,10 +252,17 @@ int use_default_colors(void);
 int init_pair(int, int, int);
 int pair_content(int, int *, int *);
 void ripple_curses_lines(int);
+void ripple_curses_bracketed_paste(int);
+unsigned ripple_curses_text_run(WINDOW *, unsigned char *, unsigned, int);
 void ripple_curses_invalidate(void);
 int wscrl(WINDOW *, int);
 int wbkgd(WINDOW *, chtype);
-#define A_CHARTEXT 0x00ffU
+#define A_CHARTEXT 0x001fffffUL
+/* Semantic block cells; the renderer emits one UTF-8 code point per cell.
+ * The character field contains actual Unicode scalars, not ROM indices. */
+#define RIPPLE_BLOCK_UPPER 0x2580
+#define RIPPLE_BLOCK_LOWER 0x2584
+#define RIPPLE_BLOCK_FULL 0x2588
 #define KEY_MIN 0x101
 #define KEY_DOWN 0x102
 #define KEY_UP 0x103
@@ -280,6 +293,8 @@ int wbkgd(WINDOW *, chtype);
 #define KEY_REDO 0563
 #define KEY_SELECT 0601
 #define KEY_RESIZE 0x19a
+#define KEY_PASTE_BEGIN 0x19b
+#define KEY_PASTE_END 0x19c
 #define getnstr(s,n) wgetnstr(stdscr,s,n)
 #define timeout(n) wtimeout(stdscr,n)
 int wgetnstr(WINDOW *, char *, int);
@@ -297,6 +312,12 @@ int ripple_curses_resize(void);
 /* Packed cell writes; shape 0 default, 1 block, 2 underline, 3 bar. */
 int ripple_curses_cells(WINDOW *, int, int, const chtype *, int);
 int ripple_curses_cursor_shape(int);
+/* Wide input: OK means Unicode text, KEY_CODE_YES means a function key.
+ * ERR leaves an incomplete UTF-8 sequence buffered for the next read. */
+#define KEY_CODE_YES 1
+int wget_wch(WINDOW *, uint32_t *);
+int ripple_curses_scalar(WINDOW *, uint32_t);
+int wadd_utf8(WINDOW *, const unsigned char *, size_t);
 #define CURSES_H
 
 #endif

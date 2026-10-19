@@ -1,0 +1,3 @@
+fn above(n:&usize)->bool{*n>4096}
+fn wide(n:&u32)->u32{*n+70000}
+fn main(){let n:usize=70000;let v:u32=2;println(above(&n));println(wide(&v));}

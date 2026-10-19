@@ -45,6 +45,42 @@ mod bool_assignment_tests {
 }
 
 impl TypeAnalyzer {
+    pub(crate) fn expression_bit_width(&self, expr: &Expression) -> Option<u8> {
+        // Width is declaration metadata: querying it must not lay out and clone
+        // an entire large structure for every member expression.
+        fn resolve<'a>(mut ty: &'a Type, defs: &'a HashMap<String, Type>) -> Option<&'a Type> {
+            for _ in 0..64 {
+                ty = match ty {
+                    Type::Volatile(inner) => inner,
+                    Type::Typedef(name) => defs.get(name)?,
+                    Type::Struct { name: Some(name), fields } | Type::Union { name: Some(name), fields } if fields.is_empty() => defs.get(name)?,
+                    _ => return Some(ty),
+                };
+            }
+            None
+        }
+        fn width(ty: &Type, member: &str, defs: &HashMap<String, Type>, depth: u8) -> Option<u8> {
+            if depth > 64 { return None; }
+            match resolve(ty, defs)? {
+                Type::Struct { fields, .. } | Type::Union { fields, .. } => {
+                    for field in fields {
+                        if field.name == member { return field.bit_width; }
+                        if field.name.is_empty() && field.bit_width.is_none() {
+                            if let Some(w) = width(&field.field_type, member, defs, depth + 1) { return Some(w); }
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            }
+        }
+        let ExpressionKind::Member { object, member, is_pointer } = &expr.kind else { return None; };
+        let defs = self.type_definitions.borrow();
+        let ty = resolve(object.expr_type.as_ref()?, &defs)?;
+        let ty = if *is_pointer { ty.pointer_target()? } else { ty };
+        width(ty, member, &defs, 0)
+    }
+
     pub fn new(
         symbol_table: Rc<RefCell<SymbolTable>>,
         symbol_locations: Rc<RefCell<HashMap<SymbolId, SourceLocation>>>,
@@ -174,6 +210,7 @@ impl TypeAnalyzer {
                         name: f.name.clone(),
                         field_type: self.unwrap_typedefs_shallow(&f.field_type),
                         offset: f.offset,
+                        bit_width: f.bit_width,
                     }).collect(),
                 }
             }
@@ -198,6 +235,7 @@ impl TypeAnalyzer {
                         name: f.name.clone(),
                         field_type: self.unwrap_typedefs_shallow(&f.field_type),
                         offset: f.offset,
+                        bit_width: f.bit_width,
                     }).collect(),
                 }
             }
@@ -287,6 +325,7 @@ impl TypeAnalyzer {
                     name: field.name.clone(),
                     field_type: self.unwrap_typedefs_shallow(&field.field_type),
                     offset: field.offset,
+                    bit_width: field.bit_width,
                 }).collect(),
             },
             Type::Union { name, fields } => Type::Union {
@@ -295,6 +334,7 @@ impl TypeAnalyzer {
                     name: field.name.clone(),
                     field_type: self.unwrap_typedefs_shallow(&field.field_type),
                     offset: field.offset,
+                    bit_width: field.bit_width,
                 }).collect(),
             },
             _ => ty.clone(),
@@ -336,6 +376,12 @@ impl TypeAnalyzer {
     
     /// Get common type between two types
     pub fn common_type(&self, left: &Type, right: &Type) -> Type {
+        // Conditional arithmetic operands use the usual arithmetic conversions,
+        // even when either type can be assigned to the other. Choosing the
+        // first assignable type makes `condition ? 0 : long_value` truncate.
+        if self.is_arithmetic(left) && self.is_arithmetic(right) {
+            return self.arithmetic_result_type(left, right);
+        }
         if let (Some(left_target), Some(right_target)) = (self.pointer_target(left), self.pointer_target(right)) {
             if left_target.unqualified() == right_target.unqualified() {
                 let target = if left_target.is_volatile() || right_target.is_volatile() {

@@ -63,6 +63,7 @@ inoptr fuse_host_create(inoptr parent,uint8_t *name) {
     inoptr ino=0;
     unsigned mode;
     if(!(getperm(parent)&OTH_WR)) {udata.u_error=EACCES;i_deref(parent);return 0;}
+    if(udata.u_callno==68) {udata.u_error=EOPNOTSUPP;i_deref(parent);return 0;}
     if(udata.u_callno==51)mode=udata.u_argn1;
     else if(udata.u_callno==4) {
         mode=udata.u_argn1;
@@ -103,10 +104,11 @@ void fuse_host_read(inoptr ino) {
 void fuse_host_write(inoptr ino,unsigned flags) {
     unsigned long a[8]={0};long count;
     a[0]=ino->c_num;a[1]=udata.u_offset;
-    a[2]=(unsigned long)udata.u_base;a[3]=udata.u_count;a[4]=!!(flags&O_APPEND);
+    a[2]=(unsigned long)udata.u_base;a[3]=udata.u_count;a[4]=!!(flags&O_APPEND);a[6]=!!(flags&O_SYNC);
     count=request(4,a);
     if(count<0)udata.u_done=(usize_t)-1;
-    else {udata.u_done=0;umove(count);udata.u_offset=a[5];load(ino);}
+    else {udata.u_done=0;umove(count);udata.u_offset=a[5];
+        if((unsigned long)udata.u_offset>ino->c_node.i_size)ino->c_node.i_size=udata.u_offset;}
 }
 int fuse_host_open(inoptr ino,unsigned flags) {
     unsigned long a[8]={0};
@@ -155,9 +157,9 @@ int fuse_host_sync(void) {unsigned long a[8]={0};return request(13,a)<0?-1:0;}
 arg_t fuse_host_rename(int *handled) {
     inoptr src,sp=0,dst,dp=0;arg_t result=-1;
     uint8_t old[FILENAME_LEN+1];unsigned long a[8]={0};
-    src=n_open((void *)udata.u_argn,&sp);
+    src=n_open_flags((void *)udata.u_argn,&sp,N_NOFOLLOW|N_NODEREF);
     memcpy(old,lastname,sizeof(old));
-    dst=n_open((void *)udata.u_argn1,&dp);
+    dst=n_open_flags((void *)udata.u_argn1,&dp,N_NOFOLLOW|N_NODEREF);
     *handled=fuse_host_inode(src)||fuse_host_inode(sp)||fuse_host_inode(dst)||fuse_host_inode(dp);
     if(*handled) {
         if(!src || !sp || !dp) {if(!udata.u_error)udata.u_error=ENOENT;}

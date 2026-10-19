@@ -1,6 +1,7 @@
 mod async_functions;
 mod bindings;
 mod borrows;
+mod browser;
 mod calls;
 mod captures;
 mod closures;
@@ -19,6 +20,7 @@ mod ffi;
 mod functions;
 mod inference;
 mod iteration;
+mod kinds;
 mod methods;
 mod numeric;
 mod operators;
@@ -135,6 +137,7 @@ pub struct MethodFact {
 
 #[derive(Clone)]
 pub struct TypeMemberFact {
+    pub operation: bool,
     pub qualifier: String,
     pub contract: String,
     pub name: String,
@@ -199,6 +202,7 @@ fn analyze_inner(
         scopes: Vec::new(),
         bindings: Vec::new(),
         fn_ret: Ty::Unit,
+        lambda_return: None,
         async_context: None,
         loops: 0,
         schemas: Vec::new(),
@@ -217,6 +221,7 @@ fn analyze_inner(
         cfns: Vec::new(),
         shared_spans: HashSet::new(),
         capture_error: None,
+        capture_once: false,
         vec_elems: Vec::new(),
         owner_elems: Vec::new(),
         arrays: Vec::new(),
@@ -226,12 +231,18 @@ fn analyze_inner(
         methods: Vec::new(),
         traits: Vec::new(),
         projection_types: HashMap::new(),
+        projection_contracts: HashMap::new(),
         projection_stack: Vec::new(),
         impl_contexts: HashMap::new(),
+        signature_only: HashSet::new(),
         assoc_self: None,
         trait_sigs: HashMap::new(),
         trait_impls: Vec::new(),
         trait_scopes: module.trait_scopes.clone(),
+        constructors: Vec::new(),
+        constructor_names: HashMap::new(),
+        applications: HashMap::new(),
+        applied_constructors: HashMap::new(),
         opaque: HashMap::new(),
         subst: HashMap::new(),
         generic_check: false,
@@ -307,6 +318,7 @@ fn analyze_inner(
         declarations.validate_traits()?;
         declarations.check_generic_declarations()?;
         checker.trait_dispatch = declarations.trait_dispatch;
+        checker.projection_contracts = declarations.projection_contracts;
         checker.facts = declarations.facts;
         checker.uses = declarations.uses;
         checker.expr_types = declarations.expr_types;
@@ -340,6 +352,7 @@ fn analyze_inner(
             .collect();
         let repr_c = checker.structs.iter().map(|info| info.repr_c).collect();
         let module = TModule {
+            once_functions: checker.once_function_ids(),
             collections: CollectionTypes {
                 vectors: checker.vec_elems.clone(),
                 owners: checker.owner_elems.clone(),
@@ -387,6 +400,12 @@ pub(crate) const BUILTIN_FUNCTIONS: &[(&str, &str)] = &[
 ];
 
 fn builtin_signature(name: &str) -> Option<&'static str> {
+    if name == "__browser_root_get" {
+        return Some("fn() -> fn(u16, u32) -> u32");
+    }
+    if name == "__browser_root_replace" {
+        return Some("fn(fn(u16, u32) -> u32) -> fn(u16, u32) -> u32");
+    }
     if name == "__expect_value" {
         return Some("fn(Option<T> | Result<T, E>, String) -> T");
     }
@@ -398,6 +417,9 @@ fn builtin_signature(name: &str) -> Option<&'static str> {
     }
     if name == "__erase_owned" {
         return Some("fn(Owned<T>) -> ErasedOwner");
+    }
+    if name == "__share_owned" {
+        return Some("fn(Owned<T>) -> SharedOwner");
     }
     if name == "__borrow_raw" {
         return Some("unsafe fn(*mut T) -> &mut T");
@@ -452,6 +474,8 @@ struct Checker<'a> {
     scopes: Vec<HashMap<String, u32>>,
     bindings: Vec<Binding>,
     fn_ret: Ty,
+    /// Some(None) while inferring a lambda result; Some(Some(T)) after a return.
+    lambda_return: Option<Option<Ty>>,
     loops: u32,
     schemas: Vec<AdtSchema>,
     /// Constructor name to `(schema index, tag)`.
@@ -468,6 +492,7 @@ struct Checker<'a> {
     outer_scopes: Vec<HashMap<String, u32>>,
     outer_bindings: Vec<Binding>,
     captures: Vec<crate::typed::Capture>,
+    capture_once: bool,
     vec_elems: Vec<Ty>,
     owner_elems: Vec<Ty>,
     arrays: Vec<ArrayInfo>,
@@ -477,13 +502,23 @@ struct Checker<'a> {
     methods: Vec<Inherent>,
     traits: Vec<Trait>,
     projection_types: HashMap<(Ty, String, String), Ty>,
+    /// Preserve the contract selected from rigid bounds when specializing T::Item.
+    projection_contracts: HashMap<(usize, usize, String), String>,
     projection_stack: Vec<(Ty, String, String)>,
-    impl_contexts: HashMap<String, String>,
+    impl_contexts: HashMap<String, (String, ParsedTy)>,
+    /// Trait call contracts are checked signatures; calls are replaced before lowering.
+    signature_only: HashSet<String>,
     assoc_self: Option<(String, Ty)>,
     trait_sigs: HashMap<(String, String), FuncSig>,
     trait_impls: Vec<std::rc::Rc<traits::TraitImpl>>,
     trait_scopes: Vec<TraitScope>,
-    /// Rigid declaration-time parameters, represented by opaque nominal types.
+    /// Compile-time identities for first-order type constructors.
+    constructors: Vec<kinds::Constructor>,
+    constructor_names: HashMap<String, Ty>,
+    // Abstract applications live only in the rigid declaration-checking clone.
+    applications: HashMap<(Ty, Vec<Ty>), Ty>,
+    applied_constructors: HashMap<Ty, (Ty, Vec<Ty>)>,
+    /// Rigid declaration-time value types and their trait bounds.
     opaque: HashMap<Ty, (String, Vec<String>)>,
     subst: HashMap<String, Ty>,
     generic_check: bool,
@@ -564,6 +599,7 @@ struct LiveBorrow {
 
 #[derive(Clone)]
 struct FuncSig {
+    once: bool,
     params: Vec<Ty>,
     ret: Ty,
 }
@@ -571,8 +607,15 @@ struct FuncSig {
 #[derive(Clone)]
 enum IInfo {
     Concrete(Ty),
-    Func { params: Vec<u32>, ret: u32 },
-    Adt { schema: usize, args: Vec<u32> },
+    Func {
+        once: bool,
+        params: Vec<u32>,
+        ret: u32,
+    },
+    Adt {
+        schema: usize,
+        args: Vec<u32>,
+    },
     Tuple(Vec<u32>),
     Struct(u32),
 }
@@ -618,8 +661,11 @@ impl Solver {
     }
 
     fn func(&mut self, params: Vec<u32>, ret: u32) -> u32 {
+        self.func_mode(params, ret, false)
+    }
+    fn func_mode(&mut self, params: Vec<u32>, ret: u32, once: bool) -> u32 {
         let id = self.fresh();
-        self.info[id as usize] = Some(IInfo::Func { params, ret });
+        self.info[id as usize] = Some(IInfo::Func { once, params, ret });
         id
     }
 
@@ -696,8 +742,19 @@ impl Solver {
         match (left, right) {
             (IInfo::Concrete(a), IInfo::Concrete(b)) if a == b => Ok(()),
             (IInfo::Struct(a), IInfo::Struct(b)) if a == b => Ok(()),
-            (IInfo::Func { params: a, ret: ar }, IInfo::Func { params: b, ret: br }) => {
-                if a.len() != b.len() {
+            (
+                IInfo::Func {
+                    once: ao,
+                    params: a,
+                    ret: ar,
+                },
+                IInfo::Func {
+                    once: bo,
+                    params: b,
+                    ret: br,
+                },
+            ) => {
+                if ao != bo || a.len() != b.len() {
                     return Err("incompatible types");
                 }
                 for (left, right) in a.into_iter().zip(b) {
@@ -829,7 +886,9 @@ fn mentions_unsolved(ty: &ParsedTy, params: &[String], solved: &[Option<Ty>]) ->
             .any(|field| mentions_unsolved(field, params, solved)),
         ParsedTy::Named { name, args, .. } => {
             if let Some(index) = params.iter().position(|param| param == name) {
-                return solved[index].is_none();
+                if solved[index].is_none() {
+                    return true;
+                }
             }
             args.iter()
                 .any(|arg| mentions_unsolved(arg, params, solved))

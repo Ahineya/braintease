@@ -36,6 +36,7 @@ int rfl_curses_resume(void) {
 int rfl_curses_colors(void) { return start_color() == OK; }
 int rfl_curses_pair(int pair, int fg, int bg) { return init_pair(pair, fg, bg); }
 void rfl_curses_lines(int enabled) { ripple_curses_lines(enabled); }
+void rfl_curses_bracketed(int enabled) { ripple_curses_bracketed_paste(enabled); }
 static WINDOW *target(void *window) { return window ? window : stdscr; }
 void *rfl_curses_window(int rows, int cols, int row, int col) {
     WINDOW *w;
@@ -49,19 +50,49 @@ int rfl_curses_reposition(void *window, int row, int col) { return mvwin(window,
 int rfl_curses_height(void *window) { return target(window)->_maxy + 1; }
 int rfl_curses_width(void *window) { return target(window)->_maxx + 1; }
 void rfl_curses_background(void *window, unsigned long style) { wbkgd(target(window), style); }
-void rfl_curses_text(void *window, int row, int col, const unsigned char *bytes, int count, unsigned long style) {
+/* Synchronous draw scratch: no callback, suspension or retained pointer occurs
+ * between filling a chunk and copying it into the window. Shared by all windows. */
+unsigned char *rfl_curses_scratch(void) { static unsigned char bytes[512]; return bytes; }
+static struct ru_decoder drawing;
+static WINDOW *drawing_window;
+int rfl_curses_text_begin(void *window, int row, int col, unsigned long style) {
     WINDOW *w = target(window);
-    int i;
-    if (row < 0 || row > w->_maxy || col < 0 || col > w->_maxx) return;
-    wattrset(w, style); wmove(w, row, col);
-    for (i = 0; i < count && col + i <= w->_maxx; ++i) waddch(w, bytes[i]);
+    drawing_window = NULL; drawing.need = 0;
+    if (row < 0 || row > w->_maxy || col < 0 || col > w->_maxx) return 0;
+    wattrset(w, style); wmove(w, row, col); drawing_window = w; return 1;
 }
-void rfl_curses_fill(void *window, int row, int col, int width, int ch, unsigned long style) {
+int rfl_curses_text_chunk(unsigned char *bytes, int count, int final) {
+    int i = 0, decoded; uint32_t cp;
+    if (!drawing_window) return 0;
+    while (i < count) {
+        decoded = ru_decode(&drawing, bytes[i], &cp);
+        if (decoded >= 0) ++i;
+        if (decoded) {
+            if (cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
+            if (ripple_curses_scalar(drawing_window, cp) == ERR) { drawing_window = NULL; return 0; }
+        }
+    }
+    if (final) {
+        if (drawing.need) ripple_curses_scalar(drawing_window, RU_REPLACEMENT);
+        drawing_window = NULL;
+    }
+    return 1;
+}
+void rfl_curses_fill(void *window, int row, int col, int width, unsigned long ch, unsigned long style) {
     WINDOW *w = target(window);
-    int i;
+    int i, cells = ru_width(ch);
     if (row < 0 || row > w->_maxy || col < 0 || col > w->_maxx || width < 1) return;
+    if (width > w->_maxx - col + 1) width = w->_maxx - col + 1;
+    if (cells < 1) { ch = RU_REPLACEMENT; cells = 1; }
     wattrset(w, style); wmove(w, row, col);
-    for (i = 0; i < width && col + i <= w->_maxx; ++i) waddch(w, ch);
+    for (i = 0; i + cells <= width; i += cells)
+        if (ripple_curses_scalar(w, ch) == ERR) break;
+    if (i < width) ripple_curses_scalar(w, ' ');
+}
+/* -1 timeout, -2 terminal loss, 0 text, 1 function key. */
+int rfl_curses_event(void *window, uint32_t *value) {
+    int result; errno = 0; result = wget_wch(target(window), value);
+    return result == ERR && (feof(stdin) || errno == EIO || errno == EBADF) ? -2 : result;
 }
 void rfl_curses_border(void *window, int row, int col, int rows, int cols, unsigned long style) {
     WINDOW *w = target(window);

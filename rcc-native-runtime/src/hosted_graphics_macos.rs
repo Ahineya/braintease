@@ -21,8 +21,31 @@ struct Menus {
     window_menu: *mut Object,
     dock: *mut Object,
     signature: Option<Vec<(u32, String)>>,
+    windows: Vec<(u32, *mut Object)>,
+    clipboard_count: isize,
 }
 thread_local! { static MENUS:RefCell<Option<Menus>>=const {RefCell::new(None)}; }
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Point { x: f64, y: f64 }
+unsafe impl objc::Encode for Point {
+    fn encode() -> objc::Encoding { unsafe { objc::Encoding::from_str("{CGPoint=dd}") } }
+}
+/// AppKit supplies the current desktop pointer even outside this window.
+/// Sample on the UI thread; convert to top-left content coordinates before
+/// the caller maps physical pixels through the presentation viewport.
+pub(super) fn pointer(window: &winit::window::Window) -> (f32, f32) {
+    use winit::platform::macos::WindowExtMacOS;
+    unsafe {
+        let native = window.ns_window() as *mut Object;
+        let p: Point = msg_send![native, mouseLocationOutsideOfEventStream];
+        let view: *mut Object = msg_send![native, contentView];
+        let p: Point = msg_send![view,convertPoint:p fromView:std::ptr::null_mut::<Object>()];
+        let flipped: BOOL = msg_send![view, isFlipped];
+        let height = window.inner_size().height as f64 / window.scale_factor();
+        (p.x as f32, if flipped != NO { p.y } else { height - p.y } as f32)
+    }
+}
 pub(super) fn independent_windows() {
     unsafe {
         let _: () = msg_send![class!(NSWindow),setAllowsAutomaticWindowTabbing:NO];
@@ -73,6 +96,55 @@ extern "C" fn show_window(_: &Object, _: Sel, sender: *mut Object) {
         let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
         let _: () = msg_send![app,activateIgnoringOtherApps:YES];
     }
+}
+// NSPasteboard is touched exclusively on AppKit's main thread. Only owned,
+// bounded UTF-8 crosses into guest execution; no AppKit object is retained there.
+unsafe fn synchronize_clipboard(m: &mut Menus) {
+    use super::hosted_graphics::CLIPBOARD_MAX;
+    unsafe {
+        let pasteboard: *mut Object = msg_send![class!(NSPasteboard), generalPasteboard];
+        let publish = m.shared.lock().unwrap().clipboard_publish.take();
+        if let Some(text) = publish {
+            let _: isize = msg_send![pasteboard, clearContents];
+            let _: BOOL = msg_send![pasteboard, setString:string(&text) forType:string("public.utf8-plain-text")];
+            m.clipboard_count = msg_send![pasteboard, changeCount];
+            return;
+        }
+        let count: isize = msg_send![pasteboard, changeCount];
+        if count == m.clipboard_count { return; }
+        m.clipboard_count = count;
+        let value: *mut Object = msg_send![pasteboard, stringForType:string("public.utf8-plain-text")];
+        let mut text = String::new();
+        if !value.is_null() {
+            // Check the encoded size before allocating/copying a host paste.
+            let length: usize = msg_send![value, lengthOfBytesUsingEncoding:4usize];
+            if length <= CLIPBOARD_MAX {
+                let bytes: *const std::ffi::c_char = msg_send![value, UTF8String];
+                if !bytes.is_null() {
+                    let slice = std::slice::from_raw_parts(bytes.cast::<u8>(), length);
+                    if !slice.contains(&0) { text = String::from_utf8_lossy(slice).into_owned(); }
+                }
+            }
+        }
+        m.shared.lock().unwrap().clipboard = text;
+    }
+}
+extern "C" fn edit_action(_: &Object, selector: Sel, _: *mut Object) {
+    MENUS.with(|slot| {
+        if let Some(m) = slot.borrow_mut().as_mut() {
+            unsafe { synchronize_clipboard(m); }
+            let code = if selector == sel!(pasteFuseX:) {2}
+                else if selector == sel!(copyFuseX:) {1}
+                else if selector == sel!(cutFuseX:) {3} else {4};
+            for &(id, window) in &m.windows {
+                let focused: BOOL = unsafe { msg_send![window, isKeyWindow] };
+                if focused != NO {
+                    if let Some(w) = m.shared.lock().unwrap().windows.get_mut(&id) { w.action(code); }
+                    break;
+                }
+            }
+        }
+    });
 }
 unsafe fn string(text: &str) -> *mut Object {
     let bytes = CString::new(text).unwrap();
@@ -130,6 +202,9 @@ unsafe fn initialize(shared: Arc<Mutex<Shared>>) -> Menus {
             sel!(showFuseXWindow:),
             show_window as extern "C" fn(&Object, Sel, *mut Object),
         );
+        for selector in [sel!(copyFuseX:), sel!(pasteFuseX:), sel!(cutFuseX:), sel!(selectAllFuseX:)] {
+            decl.add_method(selector, edit_action as extern "C" fn(&Object, Sel, *mut Object));
+        }
         let actions: *mut Object = msg_send![decl.register(), new];
         let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
         let delegate: *mut Object = msg_send![app, delegate];
@@ -167,6 +242,7 @@ unsafe fn initialize(shared: Arc<Mutex<Shared>>) -> Menus {
         let bar = menu("");
         let application = menu("Fuse-X");
         let file = menu("File");
+        let edit = menu("Edit");
         let windows = menu("Window");
         let dock = menu("Fuse-X");
         item(
@@ -203,17 +279,25 @@ unsafe fn initialize(shared: Arc<Mutex<Shared>>) -> Menus {
         );
         submenu(bar, "Fuse-X", application);
         submenu(bar, "File", file);
+        for (title, key, selector) in [("Cut", "x", sel!(cutFuseX:)), ("Copy", "c", sel!(copyFuseX:)),
+            ("Paste", "v", sel!(pasteFuseX:)), ("Select All", "a", sel!(selectAllFuseX:))] {
+            item(edit, title, key, selector, actions, std::ptr::null_mut());
+        }
+        submenu(bar, "Edit", edit);
         submenu(bar, "Window", windows);
         let _: () = msg_send![app,setMainMenu:bar];
         let _: () = msg_send![bar, release];
         let _: () = msg_send![application, release];
         let _: () = msg_send![file, release];
+        let _: () = msg_send![edit, release];
         Menus {
             shared,
             actions,
             window_menu: windows,
             dock,
             signature: None,
+            windows: Vec::new(),
+            clipboard_count: -1,
         }
     }
 }
@@ -221,6 +305,8 @@ pub(super) fn update(shared: Arc<Mutex<Shared>>, windows: Vec<(u32, String, *mut
     MENUS.with(|slot| {
         let mut slot = slot.borrow_mut();
         let m = slot.get_or_insert_with(|| unsafe { initialize(shared) });
+        m.windows = windows.iter().map(|(id, _, p)| (*id, *p as *mut Object)).collect();
+        unsafe { synchronize_clipboard(m); }
         let signature: Vec<_> = windows
             .iter()
             .map(|(id, title, _)| (*id, title.clone()))

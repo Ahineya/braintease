@@ -1,0 +1,308 @@
+// Pure typed view descriptions. No DOM, host services or runtime HTML parser.
+import { Copy } from "std/value";
+import { Event as BrowserEvent, CLICK, INPUT, CHANGE, KEYDOWN, KEYUP, COMPOSITION_START, COMPOSITION_END, DOUBLE_CLICK, BLUR, FOCUS } from "std/html_event";
+
+/// A typed attribute, controlled property, event listener or sibling identity.
+export type Prop<M> = Attr(String, String) | Value(String) | Checked(bool) | Disabled(bool) | Listener(u16, u16, fn(BrowserEvent) -> M) | Key(String) | Focus(bool);
+/// A pure text, element or fragment description carrying the application message type.
+export type Html<M> = HtmlText(String) | HtmlElement(u16, String, Vec<Prop<M>>, Vec<Html<M>>) | HtmlFragment(Vec<Html<M>>);
+
+/// Creates a text node; its contents are never parsed as HTML.
+export fn text<M>(value: String) -> Html<M> {
+    HtmlText(value)
+}
+
+/// Groups children without adding a DOM element.
+export fn fragment<M>(children: Vec<Html<M>>) -> Html<M> {
+    HtmlFragment(children)
+}
+
+/// Renders a present child or an empty fragment.
+export fn optional<M>(child: Option<Html<M>>) -> Html<M> {
+    match child {
+        Some(value) => value,
+        None => HtmlFragment([])
+    }
+}
+
+/// Creates an HTML element and flattens nested child fragments.
+export fn node<M>(tag: String, props: Vec<Prop<M>>, children: Vec<Html<M>>) -> Html<M> {
+    HtmlElement(0, tag, props, flatten(children))
+}
+
+/// Creates an SVG element and flattens nested child fragments.
+export fn svg<M>(tag: String, props: Vec<Prop<M>>, children: Vec<Html<M>>) -> Html<M> {
+    HtmlElement(1, tag, props, flatten(children))
+}
+
+/// Creates a string attribute checked against the UI schema before rendering.
+export fn attribute<M>(name: String, value: String) -> Prop<M> {
+    Attr(name, value)
+}
+
+/// Controls the current text value of an input, textarea, select or option.
+export fn value<M>(text: String) -> Prop<M> {
+    Value(text)
+}
+
+/// Controls the checked state of an input.
+export fn checked<M>(enabled: bool) -> Prop<M> {
+    Checked(enabled)
+}
+
+/// Controls whether a supported form control is disabled.
+export fn disabled<M>(enabled: bool) -> Prop<M> {
+    Disabled(enabled)
+}
+
+/// Assigns a stable identity unique among this element's siblings.
+export fn key<M>(identity: String) -> Prop<M> {
+    Key(identity)
+}
+
+/// Binds an event kind and synchronous listener policy to a message-producing handler.
+export fn on_event<M>(kind: u16, flags: u16, handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(kind, flags, handler)
+}
+
+/// Emits a copyable message for each click.
+export fn on_click<M: Copy>(message: M) -> Prop<M> {
+    Listener(CLICK, 0, fn(event: BrowserEvent) => message)
+}
+
+/// Maps the current text value of an input event into a message.
+export fn on_input<M>(handler: fn(String) -> M) -> Prop<M> {
+    Listener(INPUT, 0, fn(event: BrowserEvent) => handler(event.value))
+}
+
+/// Maps the current checked state of a change event into a message.
+export fn on_change<M>(handler: fn(bool) -> M) -> Prop<M> {
+    Listener(CHANGE, 0, fn(event: BrowserEvent) => handler(event.checked))
+}
+
+/// Maps an owned key-down event payload into a message.
+export fn on_keydown<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(KEYDOWN, 0, handler)
+}
+
+/// Maps an owned key-up event payload into a message.
+export fn on_keyup<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(KEYUP, 0, handler)
+}
+
+/// Maps an input composition-start event into a message.
+export fn on_composition_start<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(COMPOSITION_START, 0, handler)
+}
+
+/// Maps an input composition-end event into a message.
+export fn on_composition_end<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(COMPOSITION_END, 0, handler)
+}
+
+// Fragments and optional/list children have no DOM identity of their own.
+/// Recursively expands fragments into a flat sibling list in source order.
+export fn flatten<M>(children: Vec<Html<M>>) -> Vec<Html<M>> {
+    let mut out: Vec<Html<M>> = [];
+    for (child in children) {
+        match child {
+            HtmlFragment(nested) => {
+                for (value in flatten(nested)) {
+                    out.push(value);
+                }
+            },
+            other => {
+                out.push(other);
+            },
+        }
+    }
+    out
+}
+
+/// Returns an element's sibling key, or None for an unkeyed view.
+export fn identity<M>(view: Html<M>) -> Option<String> {
+    match view {
+        HtmlElement(_, _, props, _) => {
+            for (prop in props) {
+                match prop {
+                    Key(k) => {
+                        return Some(k);
+                    },
+                    _ => {}
+                }
+            }
+            None
+        },
+        _ => None
+    }
+}
+
+/// Textual children can be rendered with any message type. Implement this for
+/// application-owned display values; dispatch is static and borrows the value.
+export trait TextChild {
+    /// Borrows this value and renders text with the surrounding view's message type.
+    fn html_child<M>(&self) -> Html<M>;
+}
+
+/// Message-bearing views retain their existing message type. Collections and
+/// optional views compose this capability without erasing event handler types.
+export trait ViewChild {
+    /// The message type preserved by this view or collection of views.
+    type Message;
+    /// Borrows this view and converts it without erasing its message type.
+    fn html_child(&self) -> Html<Self::Message>;
+}
+
+impl<M> ViewChild for Html<M> {
+    type Message = M;
+    fn html_child(&self) -> Html<M> {
+        *self
+    }
+}
+
+impl<T: ViewChild> ViewChild for Vec<T> {
+    type Message = T::Message;
+    fn html_child(&self) -> Html<T::Message> {
+        let mut children: Vec<Html<T::Message>> = [];
+        for (child in self) {
+            children.push(child.html_child());
+        }
+        fragment(children)
+    }
+}
+
+impl<T: ViewChild> ViewChild for Option<T> {
+    type Message = T::Message;
+    fn html_child(&self) -> Html<T::Message> {
+        match self {
+            Some(child) => child.html_child(),
+            None => fragment([])
+        }
+    }
+}
+
+impl TextChild for String {
+    fn html_child<M>(&self) -> Html<M> {
+        text(*self)
+    }
+}
+
+impl TextChild for char {
+    fn html_child<M>(&self) -> Html<M> {
+        text(from_char(*self))
+    }
+}
+
+impl TextChild for bool {
+    fn html_child<M>(&self) -> Html<M> {
+        text(if (*self) {
+            "true"
+        } else {
+            "false"
+        })
+    }
+}
+
+impl TextChild for i8 {
+    fn html_child<M>(&self) -> Html<M> {
+        number((*self) as i64)
+    }
+}
+
+impl TextChild for i16 {
+    fn html_child<M>(&self) -> Html<M> {
+        number((*self) as i64)
+    }
+}
+
+impl TextChild for i32 {
+    fn html_child<M>(&self) -> Html<M> {
+        number((*self) as i64)
+    }
+}
+
+impl TextChild for i64 {
+    fn html_child<M>(&self) -> Html<M> {
+        number((*self) as i64)
+    }
+}
+
+impl TextChild for u8 {
+    fn html_child<M>(&self) -> Html<M> {
+        text(unsigned_text((*self) as u64))
+    }
+}
+
+impl TextChild for u16 {
+    fn html_child<M>(&self) -> Html<M> {
+        text(unsigned_text((*self) as u64))
+    }
+}
+
+impl TextChild for u32 {
+    fn html_child<M>(&self) -> Html<M> {
+        text(unsigned_text((*self) as u64))
+    }
+}
+
+impl TextChild for u64 {
+    fn html_child<M>(&self) -> Html<M> {
+        text(unsigned_text((*self) as u64))
+    }
+}
+
+impl TextChild for usize {
+    fn html_child<M>(&self) -> Html<M> {
+        text(unsigned_text((*self) as u64))
+    }
+}
+
+/// Integer text without console formatting or a host call.
+export fn number<M>(value: i64) -> Html<M> {
+    let negative = value < 0;
+    // Wrapping unsigned subtraction also handles i64::MIN without signed overflow.
+    let magnitude = if (negative) {
+        0 as u64 - value as u64
+    } else {
+        value as u64
+    };
+    let digits = unsigned_text(magnitude);
+    text(if (negative) {
+        "-" + digits
+    } else {
+        digits
+    })
+}
+
+fn unsigned_text(value: u64) -> String {
+    let mut n = value;
+    let mut result = "";
+    while (true) {
+        result = from_char((48 + (n % 10) as u32) as char) + result;
+        n /= 10;
+        if (n == 0) {
+            break;
+        }
+    }
+    result
+}
+
+/// Requests focus after insertion when false changes to true; does not steal focus on later renders.
+export fn autofocus<M>(enabled: bool) -> Prop<M> {
+    Focus(enabled)
+}
+
+/// Maps a double-click event into a message.
+export fn on_double_click<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(DOUBLE_CLICK, 0, handler)
+}
+
+/// Maps blur and its current control value into a message.
+export fn on_blur<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(BLUR, 0, handler)
+}
+
+/// Maps focus into a message without synchronous guest reentry.
+export fn on_focus<M>(handler: fn(BrowserEvent) -> M) -> Prop<M> {
+    Listener(FOCUS, 0, handler)
+}

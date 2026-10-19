@@ -6,6 +6,7 @@
 #undef DEBUG_NREADY		/* debug nready counting */
 
 #include <kernel.h>
+#include <process-state.h>
 #include <tty.h>
 #include <kdata.h>
 #include <printf.h>
@@ -29,7 +30,7 @@ static void do_psleep(void *event, uint_fast8_t state)
 	case P_SLEEP:		// echo output from devtty happens while processes are still sleeping but in-context
 	case P_IOWAIT:
 	case P_STOPPED:		// coming to a halt
-		nready++;	/* We will fix this back up below */
+		proc_ready_add();	/* We will fix this back up below */
 	case P_RUNNING:		// normal process
 		break;
 	default:
@@ -39,8 +40,12 @@ static void do_psleep(void *event, uint_fast8_t state)
 		panic(PANIC_VOODOO);
 	}
 
-	udata.u_ptab->p_status = state;
-	udata.u_ptab->p_wait = event;
+	proc_setstate(udata.u_ptab,state);
+	#ifdef CONFIG_RIPPLE_SCHED
+    proc_wait_event(udata.u_ptab,event);
+#else
+    udata.u_ptab->p_wait = event;
+#endif
 	udata.u_ptab->p_waitno = ++waitno;
 
 	switchout();		/* Switch us out, and start another process */
@@ -70,6 +75,10 @@ void wakeup(void *event)
 	kprintf("wakeup(0x%p)\n", event);
 #endif
 	irq = di();
+
+#ifdef CONFIG_RIPPLE_SCHED
+    proc_wake_event(event);
+#else
 	for (p = ptab; p < ptab_end; ++p) {
 		if (p->p_status > P_RUNNING && p->p_wait == event) {
 #ifdef DEBUG_SLEEP
@@ -79,6 +88,7 @@ void wakeup(void *event)
 			pwake(p);
 		}
 	}
+#endif
 	irqrestore(irq);
 }
 
@@ -92,8 +102,8 @@ void pwake(ptptr p)
 {
 	if (p->p_status > P_RUNNING && p->p_status < P_STOPPED) {
 		if (p->p_status != P_READY) {
-			nready++;
-			p->p_status = P_READY;
+			proc_ready_add();
+			proc_setstate(p,P_READY);
 		}
 		p->p_wait = NULL;
 	}
@@ -119,7 +129,7 @@ void switchout(void)
 	/* We do the accounting in switchout as it's cheaper and easier to
 	   do it once. Useful trick borrowed from Linux */
 	if (udata.u_ptab->p_status > P_READY)
-		nready--;
+		proc_ready_remove();
 
 #ifdef DEBUG_NREADY
 	{
@@ -138,8 +148,8 @@ void switchout(void)
 	   running until it happens */
 	if (chksigs()) {
 		if (udata.u_ptab->p_status > P_READY)
-			nready++;
-		udata.u_ptab->p_status = P_RUNNING;
+			proc_ready_add();
+		proc_setstate(udata.u_ptab,P_RUNNING);
 		ei();
 		/* Drop through - we want to be running, but we might be
 		   pre-empted by someone else */
@@ -157,11 +167,14 @@ void switchout(void)
 	   are waiting for input while mostly system idle */
 	if (udata.u_ptab->p_status == P_RUNNING || udata.u_ptab->p_status == P_READY) {
 		if (nready == 1) {
-			udata.u_ptab->p_status = P_RUNNING;
+			proc_setstate(udata.u_ptab,P_RUNNING);
+#ifdef CONFIG_RIPPLE_SCHED
+            proc_sched_switch();
+#endif
 			ei();
 			return;
 		}
-		udata.u_ptab->p_status = P_READY;
+		proc_setstate(udata.u_ptab,P_READY);
 	}
 	/* We probably need to run something else */
 	plt_switchout();
@@ -178,6 +191,14 @@ ptptr getproc_nextp = &ptab[0];
 
 ptptr getproc(void)
 {
+#ifdef CONFIG_RIPPLE_SCHED
+    ptptr next;
+    for(;;) {
+        next=proc_pick();if(next)return next;
+        if(udata.u_ininterrupt)panic(PANIC_EI);
+        ei();plt_idle();di();
+    }
+#else
 	ptptr haltafter;
 #ifdef DEBUG_SLEEP
 #ifdef DEBUGREALLYHARD
@@ -236,6 +257,7 @@ ptptr getproc(void)
 			plt_idle();
 		}
 	}
+#endif
 }
 
 #else
@@ -266,7 +288,7 @@ ptptr getproc(void)
 			p = p->p_pptr;
 		case P_READY:
 			/* If we are ready run us */
-			p->p_status = P_RUNNING;
+			proc_setstate(p,P_RUNNING);
 		case P_RUNNING:
 			/* If we are running keep running */
 #ifdef DEBUGREALLYHARD
@@ -308,11 +330,11 @@ void makeproc(register ptptr p, register u_data *u)
 	program_vectors(&u->u_page);	/* set up vectors in new process and
 					   if needed copy any common code */
 #ifdef CONFIG_PARENT_FIRST
-	p->p_status = P_READY;
+	proc_setstate(p,P_READY);
 #else
-	p->p_status = P_RUNNING;
+	proc_setstate(p,P_RUNNING);
 #endif
-	nready++;		/* runnable process count */
+	proc_ready_add();		/* runnable process count */
 
 	pp = u->u_ptab;		/* Because it is a copy of the parent */
 
@@ -398,7 +420,7 @@ ptptr ptab_alloc(void)
 				memcpy(newp->p_name, udata.u_ptab->p_name, sizeof(newp->p_name));
 			}
 			if (pagemap_alloc(newp) == 0) {
-				newp->p_status = P_FORKING;
+				proc_setstate(newp,P_FORKING);
 				nproc++;
 			} else {
 				udata.u_error = ENOMEM;
@@ -553,6 +575,8 @@ void timer_interrupt(void)
 	/* Check run time of current process. We don't charge time while
 	   swapping as the last thing we want to do is to swap a process in
 	   and decide it took time to swap in so needs to go away again! */
+
+/* Retain an instruction-count ceiling as a host-clock failure fallback. */
 	if (!inswap && ++runticks >= udata.u_ptab->p_priority && !udata.u_insys) {
 		/* It might appear to make the best sense to just leave
 		   runticks ticking upwards if nobody else needs to run but
@@ -633,13 +657,18 @@ void unix_syscall(void)
 	 */
 		(udata.u_callno != 32 /* fork */ || !udata.u_retval) &&
 #endif
-		runticks >= udata.u_ptab->p_priority && nready > 1) {
+#ifdef CONFIG_RIPPLE_SCHED
+        need_resched && nready > 1)
+#else
+        runticks >= udata.u_ptab->p_priority && nready > 1)
+#endif
+    {
 #ifdef DEBUG_PREEMPT
 		kprintf("P: %d %x %d\n", runticks, udata.u_ptab, udata.u_ptab->p_priority);
 #endif
 		/* Time to switch out? - we may have overstayed our welcome inside
 		   a syscall so swtch straight afterwards */
-		udata.u_ptab->p_status = P_READY;
+		proc_setstate(udata.u_ptab,P_READY);
 		/* We know there will be a switch if we hit this point so
 		   don't look for optimizations. Likewise we know a signal
 		   process will stay running/ready */
@@ -748,8 +777,8 @@ static uint_fast8_t chksigset(struct sigbits *sb, uint_fast8_t b)
 				/* Yes: we could be in P_SLEEP on a close race
 				   with do_psleep() */
                 /* switchout has already uncharged a sleeping task. */
-                if (udata.u_ptab->p_status > P_READY) nready++;
-                udata.u_ptab->p_status = P_STOPPED;
+                if (udata.u_ptab->p_status > P_READY) proc_ready_add();
+                proc_setstate(udata.u_ptab,P_STOPPED);
                 udata.u_ptab->p_event = j + (b << 4);
                 ssig(udata.u_ptab->p_pptr, SIGCHLD);
                 wakeup(udata.u_ptab->p_pptr);
@@ -783,8 +812,8 @@ static uint_fast8_t chksigset(struct sigbits *sb, uint_fast8_t b)
 			   to task switch into bed. In that case we need
 			   to put the process back in running state */
 			if (udata.u_ptab->p_status == P_SLEEP) {
-				udata.u_ptab->p_status = P_RUNNING;
-				nready++;
+				proc_setstate(udata.u_ptab,P_RUNNING);
+				proc_ready_add();
 			}
 			doexit(dump_core(j + (b << 4)));
 		} else if (*svec != SIG_IGN) {
@@ -863,9 +892,9 @@ void ssig(register ptptr proc, uint_fast8_t sig)
 		if (sig == SIGCONT || sig == SIGKILL) {
 			/* You can never send yourself a SIGCONT when you are stopped */
 			if (proc->p_status == P_STOPPED) {
-			        proc->p_status = P_READY;
+			        proc_setstate(proc,P_READY);
 			        proc->p_event = 0;
-			        nready++;
+			        proc_ready_add();
 			}
 			/* CONT discards pending stops */
 			proc->p_sig[1].s_pending &= ~(SIGBIT(SIGSTOP) | SIGBIT(SIGTTIN)
@@ -881,11 +910,13 @@ void ssig(register ptptr proc, uint_fast8_t sig)
 			if (!(m->s_held & sigm)) {
 				switch (proc->p_status) {
 				case P_SLEEP:
-					proc->p_status = P_READY;
-					nready++;
+					proc_setstate(proc,P_READY);
+					proc_ready_add();
 				default:;
 				}
-				proc->p_wait = NULL;
+#ifndef CONFIG_RIPPLE_SCHED
+                proc->p_wait = NULL;
+#endif
 			}
 			m->s_pending |= sigm;
 		}
@@ -897,7 +928,7 @@ void ssig(register ptptr proc, uint_fast8_t sig)
 			   things like ^C feel nice */
 			sync_clock();
 			if (udata.u_ptab == proc)
-				proc->p_status = P_RUNNING;
+				proc_setstate(proc,P_RUNNING);
 		}
 	}
 	irqrestore(irq);
@@ -946,13 +977,13 @@ static int signal_parent(ptptr c)
         if (p->p_sig[1].s_ignored & (1 << (SIGCHLD - 16))) {
 		/* POSIX.1 says that SIG_IGN for SIGCHLD means don't go
 		   zombie, just clean up as we go */
-		c->p_status = P_EMPTY;
+		proc_setstate(c,P_EMPTY);
                 return 0;
 	}
 	ssig(p, SIGCHLD);
 	/* Wake up a waiting parent, if any. */
 	wakeup((char *)p);
-	c->p_status = P_ZOMBIE;
+	proc_setstate(c,P_ZOMBIE);
 	return 1;
 }
 
@@ -976,7 +1007,9 @@ void doexit(uint16_t val)
 	if (udata.u_ptab->p_pid == 1)
 		panic(PANIC_KILLED_INIT);
 
-	sync();		/* Not necessary, but a good idea. */
+#ifndef CONFIG_RIPPLE_SCHED
+    sync(); /* Legacy ports retain their exit-time barrier. */
+#endif
 
 	irq = di();
 
@@ -1055,7 +1088,7 @@ void doexit(uint16_t val)
         udata.u_page = 0xFFFFU;
         udata.u_page2 = 0xFFFFU;
         signal_parent(udata.u_ptab);
-	nready--;
+	proc_ready_remove();
 	nproc--;
 	switchin(getproc());
 	panic(PANIC_DOEXIT);

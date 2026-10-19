@@ -1,0 +1,6 @@
+{
+  "title": "JavaScript on Fuse-X / FUZIX",
+  "note": "notes.txt",
+  "program": "/bin/echo",
+  "arguments": ["Unicode: Привет, мир! — Hello 🌍", "one argument with spaces"]
+}

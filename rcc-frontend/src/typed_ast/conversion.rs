@@ -73,7 +73,7 @@ fn type_initializer(
             // A scalar initializer for a union initializes the first member.
             if let Type::Union { fields, .. } = resolved.unqualified() {
                 if !fields.is_empty() {
-                    let inner = type_expression(expr, type_env)?;
+                    let inner = type_initializer(init, &fields[0].field_type, type_env)?;
                     return Ok(TypedExpr::ArrayInitializer {
                         elements: vec![inner],
                         expr_type: resolved.clone(),
@@ -81,8 +81,20 @@ fn type_initializer(
                 }
             }
 
-            // Otherwise, process as normal expression
-            type_expression(expr, type_env)
+            let value = type_expression(expr, type_env)?;
+            // Static aggregate elements must carry their destination's floating
+            // type into constant generation, just as scalar assignment does.
+            // Otherwise {1, 2} in a float table stores integer bit patterns.
+            let target = resolved.unqualified();
+            if target.is_floating() && value.get_type().unqualified() != target {
+                Ok(TypedExpr::Cast {
+                    operand: Box::new(value),
+                    target_type: target.clone(),
+                    expr_type: target.clone(),
+                })
+            } else {
+                Ok(value)
+            }
         }
         InitializerKind::List(initializers) => {
             expand_list_initializer(initializers, &resolved, type_env)
@@ -244,6 +256,7 @@ fn expand_list_initializer(
                             }
                         })?;
                         current = idx;
+                        while current < init_count && fields[current].name.is_empty() && fields[current].bit_width.is_some() { current += 1; }
                         if current >= init_count {
                             return Err(TypeError::TypeMismatch(
                                 "Flexible array members cannot be initialized".to_string(),
@@ -258,6 +271,7 @@ fn expand_list_initializer(
                         ));
                     }
                     _ => {
+                        while current < init_count && fields[current].name.is_empty() && fields[current].bit_width.is_some() { current += 1; }
                         if current >= init_count {
                             return Err(TypeError::TypeMismatch(
                                 "Too many initializers for struct".to_string(),
@@ -317,7 +331,17 @@ fn expand_list_initializer(
                     }
                 }
             }
-            let (_idx, value) = chosen.unwrap_or_else(|| (0, zero_expr(&fields[0].field_type)));
+            let (idx, value) = chosen.unwrap_or_else(|| (0, zero_expr(&fields[0].field_type)));
+            let value = if let Some(width) = fields[idx].bit_width {
+                let value = if matches!(fields[idx].field_type.unqualified(), Type::Bool) {
+                    TypedExpr::Cast { target_type: Type::Bool, expr_type: Type::Bool, operand: Box::new(value) }
+                } else { value };
+                TypedExpr::Binary {
+                    op: BinaryOp::BitAnd, left: Box::new(value),
+                    right: Box::new(TypedExpr::IntLiteral { value: if width == 64 { -1 } else { ((1u64 << width) - 1) as i64 }, expr_type: fields[idx].field_type.clone() }),
+                    expr_type: fields[idx].field_type.clone(),
+                }
+            } else { value };
             Ok(TypedExpr::ArrayInitializer {
                 elements: vec![value],
                 expr_type: expected_type.clone(),
@@ -688,6 +712,7 @@ pub fn type_expression(
                 object: Box::new(object_typed),
                 member: member.clone(),
                 offset,
+                bit_field: field_layout.bit_width.map(|w| (w, field_layout.bit_offset)),
                 is_pointer: *is_pointer,
                 expr_type: {
                     let field = type_env.type_analyzer.borrow().resolve_type(&field_layout.field_type);

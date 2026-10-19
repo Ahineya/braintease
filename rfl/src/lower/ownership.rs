@@ -295,7 +295,12 @@ pub(super) fn retain_words(
     ty: Ty,
 ) -> Result<(), CompileError> {
     let index = match ty {
-        Ty::Vec(_) | Ty::Slice(_) | Ty::String | Ty::Owned(_) | Ty::ErasedOwner => 0,
+        Ty::Vec(_)
+        | Ty::Slice(_)
+        | Ty::String
+        | Ty::Owned(_)
+        | Ty::ErasedOwner
+        | Ty::SharedOwner => 0,
         Ty::Adt(_) => 1,
         Ty::Func(_) => 2,
         _ => return Ok(()),
@@ -361,9 +366,15 @@ pub(super) fn retain_managed_through(
         | Ty::Adt(_)
         | Ty::Func(_)
         | Ty::Owned(_)
-        | Ty::ErasedOwner => {
+        | Ty::ErasedOwner
+        | Ty::SharedOwner => {
             let index = match ty {
-                Ty::Vec(_) | Ty::Slice(_) | Ty::String | Ty::Owned(_) | Ty::ErasedOwner => 0,
+                Ty::Vec(_)
+                | Ty::Slice(_)
+                | Ty::String
+                | Ty::Owned(_)
+                | Ty::ErasedOwner
+                | Ty::SharedOwner => 0,
                 Ty::Adt(_) => 1,
                 _ => 2,
             };
@@ -430,7 +441,7 @@ pub(super) fn release_managed_body(
     ty: Ty,
 ) -> Result<(), CompileError> {
     match ty {
-        Ty::Owned(_) | Ty::ErasedOwner => {
+        Ty::Owned(_) | Ty::ErasedOwner | Ty::SharedOwner => {
             let addr = load_through(builder, slot, 0)?;
             let bank = load_through(builder, slot, 1)?;
             // Clear first: a synchronous finalizer may perform nested cleanup.
@@ -747,22 +758,20 @@ pub(super) fn emit_drop_func(builder: &mut IrBuilder, built: &Built) -> Result<(
         .iter()
         .filter(|proc| !proc.captures.is_empty())
         .collect();
-    for proc in &capturing {
-        let matched = builder.new_label();
-        let next_check = builder.new_label();
-        let is_fn = builder
-            .build_binary(
-                IrBinaryOp::Eq,
-                Value::Temp(0),
-                Value::Constant(proc.func_id as i64),
-                IrType::I1,
-            )
-            .ir()?;
-        builder
-            .build_branch_cond(Value::Temp(is_fn), matched, next_check)
-            .ir()?;
-        builder.create_block(matched).ir()?;
-        for cap in &proc.captures {
+    let entries: Vec<_> = capturing
+        .iter()
+        .map(|proc| (proc.func_id as i64, builder.new_label()))
+        .collect();
+    let unknown = builder.new_label();
+    index_switch(builder, Value::Temp(0), &entries, unknown)?;
+    for (proc, (_, matched)) in capturing.iter().zip(&entries) {
+        builder.create_block(*matched).ir()?;
+        let captures: Vec<_> = if proc.captures.iter().any(|cap| cap.transfer) {
+            proc.captures.iter().rev().collect()
+        } else {
+            proc.captures.iter().collect()
+        };
+        for cap in captures {
             if cap.shared {
                 let addr = load_cell(builder, &obj, cap.offset, IrType::I16)?;
                 let bank = load_cell(builder, &obj, cap.offset + 1, IrType::I16)?;
@@ -779,8 +788,8 @@ pub(super) fn emit_drop_func(builder: &mut IrBuilder, built: &Built) -> Result<(
             )
             .ir()?;
         builder.build_branch(skip).ir()?;
-        builder.create_block(next_check).ir()?;
     }
+    builder.create_block(unknown).ir()?;
     builder
         .build_call(Value::Global("free".to_string()), vec![obj], IrType::Void)
         .ir()?;

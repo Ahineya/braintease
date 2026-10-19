@@ -22,6 +22,7 @@ This document provides a comprehensive list of C99 features currently implemente
 - Function-like macros with parameters
 - Variadic macros (`__VA_ARGS__`)
 - `defined()` operator in conditionals
+- Signed/unsigned 64-bit `intmax_t`-style conditional arithmetic and short-circuit evaluation
 - Recursive macro expansion with depth limiting
 
 ## Lexer
@@ -61,6 +62,7 @@ This document provides a comprehensive list of C99 features currently implemente
 - Function declarations and definitions
 - Parameter declarations (named and unnamed)
 - Multiple declarators (`int x, y, z;`)
+- Grouped declarators and typedef-array adjustment in function parameters
 - Storage class specifiers
 - Type definitions
 
@@ -92,6 +94,7 @@ This document provides a comprehensive list of C99 features currently implemente
   - Functions (with parameters and variadic support)
   - Structures (named and anonymous)
   - Unions (named and anonymous)
+  - Packed integer bit-fields; see [layout and validation](docs/compiler-bit-fields.md)
   - Enums (with explicit values)
 - Type qualifiers: `const`, `volatile`
 - Typedef support

@@ -18,6 +18,14 @@ mod tests {
     }
 
     #[test]
+    fn disabled_macro_definition_syntax_is_not_diagnosed() {
+        let source = "#if 0\n#define FOREIGN(fmt, args...) foreign(fmt, args)\n#if 1\n#define BROKEN(a b) a\n#endif\n#else\n#define OK(x) x\n#endif\nOK(42)\n";
+        assert_eq!(preprocess(source).unwrap().trim(), "42");
+        assert!(preprocess("#define FOREIGN(fmt, args...) x\n").is_err());
+        assert!(preprocess("#if 1\n#define BROKEN(a b) a\n#endif\n").is_err());
+    }
+
+    #[test]
     fn test_basic_passthrough() {
         let input = "int main() { return 0; }";
         let output = preprocess(input).unwrap();

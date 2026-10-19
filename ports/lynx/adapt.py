@@ -40,7 +40,18 @@ def generate(source: Path, output: Path):
                         '#define HTTP_NETREAD(a, b, c, d)   ripple_browser_read(a, b, c)')
     http = replace_once(http, '#define HTTP_NETWRITE(a, b, c, d)  NETWRITE(a, b, c)',
                         '#define HTTP_NETWRITE(a, b, c, d)  ripple_browser_write(a, b, c)')
-    http = replace_once(http, '  try_again:', '  try_again:\n    ripple_browser_begin();')
+    http = replace_once(http, '#define HTTP_NETCLOSE(a, b)  (void)NETCLOSE(a)',
+                        '#define HTTP_NETCLOSE(a, b)  ripple_browser_close(a)')
+    no_tls = '    if (!StrNCmp(url, "https", 5)) {\n\tHTAlert(gettext("This client does not contain support for HTTPS URLs."));\n\tstatus = HT_NOT_LOADED;\n\tgoto done;\n    }\n    status = HTDoConnect(arg, "HTTP", HTTP_PORT, &s);'
+    http = replace_once(http, no_tls,
+        '    if (using_proxy && strstr(url, "https://")) {\n'
+        '        HTAlert("HTTPS proxy tunnels are not supported.");\n'
+        '        status=HT_NOT_LOADED;goto done;\n    }\n'
+        '    status = !StrNCmp(url,"https://",8) ? HTDoConnect(arg,"HTTPS",HTTPS_PORT,&s) : HTDoConnect(arg,"HTTP",HTTP_PORT,&s);\n'
+        '    if(status>=0 && !StrNCmp(url,"https://",8) && ripple_browser_secure(s,url)<0) {\n'
+        '        ripple_browser_close(s);status=HT_NOT_LOADED;goto done;\n    }')
+    http = replace_once(http, '  done:\n', '  done:\n    ripple_browser_tls_close();\n')
+    http = replace_once(http, '  try_again:' , '  try_again:\n    ripple_browser_begin();')
     http = replace_once(http, '    rv = HTCopy(anAnchor, s, (void *) handle, target);',
                         '    rv = HTCopy(anAnchor, s, (void *) handle, target);\n'
                         '    if (ripple_browser_limit_hit()) {\n'

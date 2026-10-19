@@ -1,0 +1,5 @@
+{
+  "description": "C16 global banks, pointers, callback tables, heap reuse, strings and float semantics shared with Wasm",
+  "use_runtime": true,
+  "expected": "YYYYYYY\n"
+}

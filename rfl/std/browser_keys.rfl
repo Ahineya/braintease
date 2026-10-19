@@ -1,0 +1,93 @@
+// Open-addressed sibling-key index. Build/lookup is expected O(n), not an
+// all-pairs scan when a keyed list changes order.
+import { replace } from "std/mem";
+/// An open-addressed index for sibling keys or pooled strings.
+export struct KeyIndex {
+    /// Hash slots containing keys and their caller-supplied indices.
+    slots: Vec<Option<(String, usize)>>,
+    /// Number of occupied slots.
+    count: usize
+}
+
+/// Creates an empty index sized for the expected entry count.
+export fn key_index(count: usize) -> KeyIndex {
+    let mut size: usize = 2;
+    while (size < count * 2) {
+        size *= 2;
+    }
+    let mut slots: Vec<Option<(String, usize)>> = [];
+    for (i in 0..size) {
+        slots.push(None);
+    }
+    KeyIndex { slots: slots, count: 0 }
+}
+
+fn hash(key: String) -> u32 {
+    let mut value: u32 = 2166136261;
+    for (i in 0..key.len()) {
+        value = (value ^ key[i] as u32) * 16777619;
+    }
+    value
+}
+
+impl KeyIndex {
+    /// Returns the index associated with a key, or None when absent.
+    export fn find(&self, key: String) -> Option<usize> {
+        let mut at = (hash(key) as usize) % self.slots.len();
+        for (i in 0..self.slots.len()) {
+            match &self.slots[at] {
+                None => {
+                    return None;
+                },
+                Some(pair) => {
+                    let (name, index) = *pair;
+                    if (name == key) {
+                        return Some(index);
+                    }
+                },
+            }
+            at = (at + 1) % self.slots.len();
+        }
+        None
+    }
+    /// Inserts a new key; returns false for an existing key without replacing its index.
+    export fn insert(&mut self, key: String, index: usize) -> bool {
+        if (self.count * 2 >= self.slots.len()) {
+            let next = key_index(self.slots.len());
+            let old = replace(self, next);
+            for (slot in old.slots) {
+                match slot {
+                    Some(pair) => {
+                        let (name, index) = pair;
+                        self.insert(name, index);
+                    },
+                    None => {}
+                }
+            }
+        }
+        let mut at = (hash(key) as usize) % self.slots.len();
+        for (i in 0..self.slots.len()) {
+            let state = match self.slots[at] {
+                None => 0,
+                Some(pair) => {
+                    let (name, _) = pair;
+                    if (name == key) {
+                        1
+                    } else {
+                        2
+                    }
+                }
+            };
+            if (state == 0) {
+                self.slots[at] = Some((key, index));
+                self.count += 1;
+                return true;
+            }
+            if (state == 1) {
+                return false;
+            }
+            at = (at + 1) % self.slots.len();
+        }
+        false
+    }
+}

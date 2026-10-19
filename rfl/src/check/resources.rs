@@ -4,6 +4,7 @@ use super::*;
 impl Checker<'_> {
     pub(in crate::check) fn check_resource_declarations(&self) -> Result<(), CompileError> {
         let module = TModule {
+            once_functions: self.once_function_ids(),
             functions: self.typed.clone(),
             adts: self.adts.clone(),
             structs: self
@@ -21,7 +22,11 @@ impl Checker<'_> {
             repr_c: self.structs.iter().map(|s| s.repr_c).collect(),
             externs: self.externs.clone(),
         };
-        crate::resources::check(self.source, &module)
+        crate::resources::check_with_named_functions(
+            self.source,
+            &module,
+            self.ast_fns.iter().map(|f| f.name.as_str()),
+        )
     }
 
     pub(super) fn check_storage_builtin(
@@ -39,7 +44,7 @@ impl Checker<'_> {
             ));
         }
         let value = self.check_expr(&args[0], None)?;
-        let (ty, kind) = if name == "__erase_owned" {
+        let (ty, kind) = if matches!(name, "__erase_owned" | "__share_owned") {
             if !matches!(value.ty, Ty::Owned(_)) {
                 return Err(CompileError::at(
                     self.source,
@@ -47,7 +52,14 @@ impl Checker<'_> {
                     "erasure requires Owned<T>",
                 ));
             }
-            (Ty::ErasedOwner, TExprKind::EraseOwner(Box::new(value)))
+            (
+                if name == "__share_owned" {
+                    Ty::SharedOwner
+                } else {
+                    Ty::ErasedOwner
+                },
+                TExprKind::EraseOwner(Box::new(value)),
+            )
         } else {
             self.require_unsafe(span)?;
             let Ty::Ptr(id) = value.ty else {
@@ -240,7 +252,10 @@ impl Checker<'_> {
                         "cannot move a borrowed reference",
                     ));
                 }
-                if self.captures.iter().any(|cap| cap.local == binding)
+                if self
+                    .captures
+                    .iter()
+                    .any(|cap| cap.local == binding && !cap.transfer)
                     || self.bindings[binding as usize].shared
                 {
                     return Err(CompileError::at(

@@ -1,0 +1,84 @@
+// Experimental test tree, deliberately not a browser UI ABI.
+export type Prop<M> = Attribute(String, String) | Event(String, M);
+export type Node<M> = Text(String) | Element(String, Vec<Prop<M>>, Vec<Node<M>>);
+export fn text<M>(value: String) -> Node<M> {
+    Text(value)
+}
+
+export fn attribute<M>(name: String, value: String) -> Prop<M> {
+    Attribute(name, value)
+}
+
+export fn event<M>(name: String, message: M) -> Prop<M> {
+    Event(name, message)
+}
+
+export fn node<M>(tag: String, props: Vec<Prop<M>>, children: Vec<Node<M>>) -> Node<M> {
+    Element(tag, props, children)
+}
+
+fn escaped(value: String) -> String {
+    let mut out = "";
+    let mut i: usize = 0;
+    while (i < value.len()) {
+        let ch = value[i];
+        if (ch == '&') {
+            out = out + "&amp;";
+        } else if (ch == '<') {
+            out = out + "&lt;";
+        } else if (ch == '>') {
+            out = out + "&gt;";
+        } else if (ch == '\"') {
+            out = out + "&quot;";
+        } else {
+            out = out + value[i..i + 1];
+        }
+        i += 1;
+    }
+    out
+}
+
+export fn render<M>(view: Node<M>) -> String {
+    match view {
+        Text(value) => escaped(value),
+        Element(tag, props, children) => {
+            let mut out = "<" + tag;
+            for (prop in props) {
+                match prop {
+                    Attribute(name, value) => {
+                        out = out + " " + name + "=\"" + escaped(value) + "\"";
+                    },
+                    Event(_, _) => {}
+                }
+            }
+            out = out + ">";
+            for (child in children) {
+                out = out + render(child);
+            }
+            out + "</" + tag + ">"
+        },
+    }
+}
+
+export fn events<M>(view: Node<M>) -> Vec<M> {
+    let mut result: Vec<M> = [];
+    match view {
+        Text(_) => {},
+        Element(_, props, children) => {
+            for (prop in props) {
+                match prop {
+                    Attribute(_, _) => {},
+                    Event(_, message) => {
+                        result.push(message);
+                    }
+                }
+            }
+            for (child in children) {
+                for (message in events(child)) {
+                    result.push(message);
+                }
+            }
+        },
+    }
+    result
+}

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* FUZIX socket/inode bridge to the shared guest Ethernet/IP/TCP stack.
- * Protocol state lives in reserved physical banks 5–6, outside the kernel GP and
- * user page pool. Every stack operation and DEVICE transaction runs under di.
+ * The control table lives in bank 5; bank-local chunks hold larger pools.
+ * Every stack operation and DEVICE transaction runs under di.
  * Packet callbacks only queue kernel data and wake tasks; never copy to users. */
 /* Upstream's unused native-net daemon hook has a different net_poll ABI. */
 #define net_poll fuzix_native_net_poll
@@ -19,11 +19,10 @@
 #define LISTENERS NET_TCP_LISTENERS
 #define ACCEPT_POOL 4
 /* The compact TIME_WAIT helper is shared with the runtime implementation. */
-extern int tcp_wait_save(NetTcp *);
 extern int tcp_wait_port(NetContext *,unsigned short);
 struct packet { unsigned length; struct sockaddr_in peer; uint8_t data[PACKET_SIZE]; };
 struct endpoint {
-    unsigned used, type, protocol, state, head, count, waiting, shut;
+    unsigned used, type, protocol, state, head, count, waiting, shut, slot;
     int listener, error;
     unsigned write_wait;
     struct sockaddr_in write_peer;
@@ -36,19 +35,39 @@ struct endpoint {
 struct network_state {
     NetContext net;
     NetConfig config;
-    NetTcp active[NSOCKET];
+    struct endpoint *slots[NSOCKET];
+    NetTcp *active[NSOCKET];
     NetTcpListener listeners[LISTENERS];
-    NetTcp pools[LISTENERS][ACCEPT_POOL];
+    NetTcp *pools[LISTENERS];
     NetTcpWaitTable timewait;
     uint8_t scratch[PACKET_SIZE];
     unsigned opened, up, busy;
     unsigned long polled, sequence;
 };
 #define N ((struct network_state *)0x00050000UL)
-struct endpoint_table { struct endpoint slots[NSOCKET]; };
-#define E ((struct endpoint_table *)0x00060000UL)
-typedef char endpoints_fit_bank[sizeof(struct endpoint_table) <= 64000UL ? 1 : -1];
+/* Each chunk fits one bank. Index through stable pointers rather
+ * than subtracting pointers into a formerly contiguous endpoint array. */
+#define CHUNK_SLOTS 16
+#define TCP_CHUNK_SLOTS 4
+#define NETWORK_POLL_BUDGET 16
+struct endpoint_chunk { struct endpoint slots[CHUNK_SLOTS]; };
+struct tcp_chunk { NetTcp slots[TCP_CHUNK_SLOTS]; };
+typedef char endpoints_fit_bank[sizeof(struct endpoint_chunk) <= 64000UL ? 1 : -1];
+typedef char tcp_chunk_fits_bank[sizeof(struct tcp_chunk) <= 64000UL ? 1 : -1];
+typedef char accept_pool_fits_bank[sizeof(NetTcp) * ACCEPT_POOL <= 64000UL ? 1 : -1];
+typedef char complete_chunks[NSOCKET % CHUNK_SLOTS == 0 ? 1 : -1];
 typedef char network_state_fits_bank[sizeof(struct network_state) <= 64000UL ? 1 : -1];
+static void *network_alloc(unsigned cells) {
+    void *p;
+#ifdef CONFIG_FUSE_X
+    p = rcc_process_kernel_alloc(cells);
+    if (p) memset(p,0,cells);
+#else
+    p = ripple_mmu_kernel_alloc(cells);
+#endif
+    if (!p) panic("cannot allocate shared network storage");
+    return p;
+}
 static unsigned initialized;
 static unsigned endpoint_status(struct endpoint *);
 
@@ -86,9 +105,27 @@ static unsigned long sequence(void *unused,const unsigned char *peer,unsigned sh
     return N->sequence ^ ((uint32_t)rng_get()<<16) ^ rng_get() ^ now;
 }
 void ripple_network_init(void) {
+    unsigned i,j;
+    struct endpoint_chunk *endpoints;
+    struct tcp_chunk *tcp;
     irqflags_t flags=di();
     ripple_zero(N,sizeof(*N));
-    ripple_zero(E,sizeof(*E));
+    for(i=0;i<NSOCKET;i+=CHUNK_SLOTS) {
+#ifndef CONFIG_FUSE_X
+        /* Retain the original endpoint bank for the first chunk. */
+        if(!i) {endpoints=(struct endpoint_chunk *)0x00060000UL;ripple_zero(endpoints,sizeof(*endpoints));}
+        else
+#endif
+        endpoints=network_alloc(sizeof(*endpoints));
+        for(j=0;j<CHUNK_SLOTS;j++) {
+            N->slots[i+j]=&endpoints->slots[j];
+        }
+    }
+    for(i=0;i<NSOCKET;i+=TCP_CHUNK_SLOTS) {
+        tcp=network_alloc(sizeof(*tcp));
+        for(j=0;j<TCP_CHUNK_SLOTS;j++)N->active[i+j]=&tcp->slots[j];
+    }
+    for(i=0;i<LISTENERS;i++)N->pools[i]=network_alloc(sizeof(NetTcp)*ACCEPT_POOL);
     ripple_local_init();
     N->config.address[0]=192;N->config.address[1]=168;N->config.address[2]=64;N->config.address[3]=250;
     N->config.mask[0]=N->config.mask[1]=N->config.mask[2]=255;
@@ -129,7 +166,9 @@ static void release_endpoint(struct endpoint *s) {
     if(s->tcp) {
         if(s->listener>=0) r=net_tcp_release(&N->listeners[s->listener],s->tcp);
         else {
-            r=s->tcp->active ? tcp_wait_save(s->tcp) : NET_OK;
+            /* The internal save helper assumes TIME_WAIT. Retire only after
+             * queued TLS alerts/data and the FIN exchange have completed. */
+            r=s->tcp->active ? net_tcp_retire(s->tcp) : NET_OK;
             if(!r) memset(s->tcp,0,sizeof(*s->tcp));
         }
         if(r)return;
@@ -139,25 +178,39 @@ static void release_endpoint(struct endpoint *s) {
 void ripple_network_poll(void) {
     struct endpoint *s;
     struct sockaddr_in peer;
-    unsigned i,j,length,before[NSOCKET];
-    unsigned long now;
+    unsigned i,j,round,length,before[NSOCKET];
+    unsigned long now,received;
     irqflags_t flags;
+    VmNetStats stats;
     int r;
     if(!initialized||!N->opened||!N->up)return;
     flags=di();now=now_ms();
-    if(N->busy||now-N->polled<10){irqrestore(flags);return;}
+    if(N->busy){irqrestore(flags);return;}
+    /* Poll timers/idle tables at most once per clock tick. Queued frames and
+     * writes/window updates bypass that limit, without rescanning 64 idle
+     * TCBs on every userspace clock/select syscall. */
+    if(now-N->polled<10&&!N->net.pending&&
+       vm_net_stats(N->config.interface,&stats)==VM_DEVICE_OK&&!stats.rx_queued) {
+        irqrestore(flags);return;
+    }
     N->busy=1;N->polled=now;
-    for(i=0;i<NSOCKET;i++)before[i]=E->slots[i].used==1?endpoint_status(&E->slots[i]):0;
-    r=net_poll(&N->net,now);used(r);
-    if(N->net.event==NET_EVENT_ECHO_REPLY||N->net.event==NET_EVENT_ECHO_REQUEST) {
-        length=read16(N->net.rx+16);address(&peer,N->net.peer,0);
-        if(length<=PACKET_SIZE)for(i=0;i<NSOCKET;i++) {
-            s=&E->slots[i];if(s->type==SOCK_RAW)queued(s,&peer,N->net.rx+14,length);
+    for(i=0;i<NSOCKET;i++)before[i]=N->slots[i]->used==1?endpoint_status(N->slots[i]):0;
+    /* Drain a bounded burst before emitting cumulative ACKs. Empty polls and
+     * timer progress stop the burst; no 10 ms delay is imposed on queued data. */
+    for(round=0;round<NETWORK_POLL_BUDGET;round++) {
+        received=N->net.received_frames;
+        r=net_poll(&N->net,now);used(r);
+        if(N->net.event==NET_EVENT_ECHO_REPLY||N->net.event==NET_EVENT_ECHO_REQUEST) {
+            length=read16(N->net.rx+16);address(&peer,N->net.peer,0);
+            if(length<=PACKET_SIZE)for(i=0;i<NSOCKET;i++) {
+                s=N->slots[i];if(s->type==SOCK_RAW)queued(s,&peer,N->net.rx+14,length);
+            }
         }
+        if(received==N->net.received_frames)break;
     }
     for(i=0;i<LISTENERS;i++)if(N->listeners[i].net)net_tcp_listener_poll(&N->listeners[i],now);
     for(i=0;i<NSOCKET;i++) {
-        s=&E->slots[i];if(!s->used)continue;
+        s=N->slots[i];if(!s->used)continue;
         if(s->tcp && s->listener<0 && s->tcp->active)net_tcp_poll(s->tcp,now);
         if(s->used==2) {
             if(s->tcp && s->tcp->active && now-s->closed_at>=10000UL && s->tcp->state!=NET_TCP_TIME_WAIT)
@@ -185,10 +238,10 @@ void ripple_network_poll(void) {
 uint_fast8_t issocket(inoptr ino) { return (ino->c_node.i_mode&F_MASK)==F_SOCK; }
 static struct endpoint *inode_socket(inoptr ino) {
     unsigned slot=ino->c_node.i_addr[0];
-    if(slot>=NSOCKET||E->slots[slot].used!=1||E->slots[slot].inode!=ino) {
+    if(slot>=NSOCKET||N->slots[slot]->used!=1||N->slots[slot]->inode!=ino) {
         error(ENOTCONN);return 0;
     }
-    return &E->slots[slot];
+    return N->slots[slot];
 }
 /* Readiness only inspects guest state: no data consumption, accepts, ARP
  * requests, flag changes or error clearing. Urgent TCP data is unsupported. */
@@ -246,7 +299,7 @@ static struct endpoint *fd_socket(long fd,unsigned *flags) {
 }
 static int free_slot(void) {
     unsigned i;
-    for(i=0;i<NSOCKET;i++)if(!E->slots[i].used)return i;
+    for(i=0;i<NSOCKET;i++)if(!N->slots[i]->used)return i;
     return error(ENOBUFS);
 }
 int ripple_socket_fd(unsigned slot) {
@@ -270,9 +323,9 @@ int ripple_socket_fd(unsigned slot) {
 }
 static int make_socket(unsigned slot,unsigned type,unsigned protocol) {
     int fd=ripple_socket_fd(slot);
-    struct endpoint *s=&E->slots[slot];
+    struct endpoint *s=N->slots[slot];
     if(fd<0)return -1;
-    memset(s,0,sizeof(*s));s->used=1;s->type=type;s->protocol=protocol;
+    memset(s,0,sizeof(*s));s->slot=slot;s->used=1;s->type=type;s->protocol=protocol;
     s->state=SS_UNCONNECTED;s->listener=-1;s->inode=getinode(fd);
     s->local.sin_family=s->peer.sin_family=AF_INET;
     return fd;
@@ -312,7 +365,7 @@ static int put_address(long ptr,long sizeptr,const struct sockaddr_in *a) {
 static int bound_port(struct endpoint *s,unsigned port) {
     unsigned i;
     for(i=0;i<NSOCKET;i++) {
-        struct endpoint *other=&E->slots[i];
+        struct endpoint *other=N->slots[i];
         if(other!=s&&other->used&&other->type==s->type&&
            other->local.sin_port==swap16(port))return 1;
     }
@@ -346,12 +399,12 @@ static int socket_io(struct endpoint *s,unsigned flags,int writing,struct sockad
         if(s->error){r=s->error;s->error=0;return error(r);}
         if(s->type==SOCK_STREAM) {
             if(!s->tcp||s->state!=SS_CONNECTED)return error(ENOTCONN);
-            size=count>NET_TCP_BUFFER?NET_TCP_BUFFER:count;
+            size=writing?NET_TCP_BUFFER:PACKET_SIZE;if(size>count)size=count;
             if(writing) {
                 if(!valaddr_r(udata.u_base,size,size)||uget(udata.u_base,N->scratch,size))return -1;
                 for(i=0;i<size;i++)if(N->scratch[i]>255)return error(EINVAL);
                 r=net_tcp_write(s->tcp,N->scratch,size,&n);
-                if(!r){udata.u_done=n;return n;}
+                if(!r){N->polled=now_ms()-10;udata.u_done=n;return n;}
                 if(r!=NET_AGAIN){if(r==NET_CLOSED){ssig(udata.u_ptab,SIGPIPE);return error(EPIPE);}return error(net_error(r));}
             } else {
                 if(s->tcp->rx_used) {
@@ -360,7 +413,7 @@ static int socket_io(struct endpoint *s,unsigned flags,int writing,struct sockad
                     r=net_tcp_read(s->tcp,N->scratch,size,&n);
                     if(!r) {
                         if(uput(N->scratch,udata.u_base,n))return -1;
-                        udata.u_done=n;return n;
+                        N->polled=now_ms()-10;udata.u_done=n;return n;
                     }
                 } else if(s->tcp->peer_fin)return 0;
                 else if(!s->tcp->active)return error(s->tcp->error?net_error(s->tcp->error):ENOTCONN);
@@ -445,10 +498,10 @@ arg_t sock_ioctl(inoptr ino,int req,char *data) {
         N->up=!!(f.ifr_flags&IFF_UP);
         if(!N->up) {
             net_unconfigure(&N->net);
-            for(i=0;i<NSOCKET;i++)if(E->slots[i].used==1) {
-                if(E->slots[i].tcp)net_tcp_abort(E->slots[i].tcp);
-                E->slots[i].error=ENETDOWN;wakeup(&E->slots[i]);
-                selwake_inode(E->slots[i].inode,SELECT_IN|SELECT_OUT);
+            for(i=0;i<NSOCKET;i++)if(N->slots[i]->used==1) {
+                if(N->slots[i]->tcp)net_tcp_abort(N->slots[i]->tcp);
+                N->slots[i]->error=ENETDOWN;wakeup(N->slots[i]);
+                selwake_inode(N->slots[i]->inode,SELECT_IN|SELECT_OUT);
             }
             for(i=0;i<LISTENERS;i++)net_tcp_unlisten(&N->listeners[i]);
         } else net_configure(&N->net,&N->config);
@@ -536,11 +589,12 @@ arg_t _netcall(void) {
         if(s->type!=SOCK_STREAM){if(autobind(s))break;s->peer=addr;s->state=SS_CONNECTED;r=0;break;}
         if(s->state!=SS_CONNECTING) {
             if(autobind(s))break;
-            slot=s-E->slots;s->tcp=&N->active[slot];memset(&cfg,0,sizeof(cfg));
+            slot=s->slot;s->tcp=N->active[slot];memset(&cfg,0,sizeof(cfg));
             unpack_ip(addr.sin_addr.s_addr,cfg.peer);cfg.local_port=swap16(s->local.sin_port);
             cfg.remote_port=swap16(addr.sin_port);cfg.timeout_ms=600000UL;
             cfg.initial_sequence=sequence(0,cfg.peer,cfg.remote_port,now_ms());
             r=net_tcp_connect(&N->net,s->tcp,&cfg,now_ms());
+            N->polled=now_ms()-10;
             if(r){s->tcp=0;error(net_error(r));r=-1;break;}
             s->peer=addr;address(&s->local,N->config.address,s->tcp->local_port);s->state=SS_CONNECTING;
         } else if(flags&O_NDELAY){r=error(EALREADY);break;}
@@ -559,7 +613,7 @@ arg_t _netcall(void) {
         fd=free_slot();if(fd<0){net_tcp_abort(accepted);net_tcp_release(&N->listeners[s->listener],accepted);r=-1;break;}
         r=make_socket(fd,SOCK_STREAM,IPPROTO_TCP);
         if(r<0){net_tcp_abort(accepted);net_tcp_release(&N->listeners[s->listener],accepted);break;}
-        child=&E->slots[fd];child->tcp=accepted;child->listener=s->listener;child->state=SS_CONNECTED;
+        child=N->slots[fd];child->tcp=accepted;child->listener=s->listener;child->state=SS_CONNECTED;
         address(&child->local,N->config.address,accepted->local_port);address(&child->peer,accepted->peer,accepted->remote_port);
         if(put_address(a[2],a[3],&child->peer)){int saved=udata.u_error;doclose(r);udata.u_error=saved;r=-1;}
         break;

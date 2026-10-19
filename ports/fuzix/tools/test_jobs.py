@@ -114,13 +114,14 @@ def live(image, jit):
         send(b'\x03')
         until(b'fuzix# ')
         assert b'FG_STATUS:130\n' in command_line(b'echo FG_STATUS:$?')
-        send(b'vi /job-note\r'); until(b'\x1b[?1049h')
+        # Exercise Levee's suspend contract explicitly: vi may alias another editor.
+        send(b'levee /job-note\r'); until(b'\x1b[?1049h')
         time.sleep(0.2)
         send(b'iPreserved through suspend.\x1b')
         time.sleep(0.1)
         send(b'\x1a')
         text = until(b'fuzix# ')
-        assert b'Stopped vi /job-note' in text and b'\x1b[?1049l' in text, text
+        assert b'Stopped levee /job-note' in text and b'\x1b[?1049l' in text, text
         send(b'fg\r'); until(b'\x1b[?1049h')
         send(b':wq\r'); until(b'fuzix# ')
         assert b'Preserved through suspend.' in command_line(b'cat /job-note')
@@ -172,7 +173,10 @@ def live(image, jit):
     finally:
         if proc.poll() is None:
             proc.terminate()
-            proc.wait(timeout=10)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill(); proc.wait(timeout=10)
         os.close(master)
         Path('/tmp/fuzix-jobs-live-mmu-' + ('jit' if jit else 'interpreter') + '.log').write_bytes(transcript)
     fsck(image)

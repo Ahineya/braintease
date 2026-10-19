@@ -19,6 +19,7 @@ instructions=100000000000
 timeout=300
 jobs=4
 headless=0
+mouse=0
 build_only=0
 clean_only=0
 rebuild=0
@@ -43,6 +44,7 @@ Usage: ports/doom/run.sh [options]
   --headless              Capture a frame without a window
   --frame N               Presentation to capture (default: 1)
   --input-script FILE     Deterministic keyboard input
+  --mouse                 Enable mouse controls and cursor capture (default: off)
   --output DIRECTORY      Captures, disk copy and reports (default: build/run)
   --clock MODE            paced, unthrottled or stepped
   --audio MODE            auto (default) or off for speaker playback
@@ -71,6 +73,7 @@ while [[ $# -gt 0 ]]; do
     --headless) headless=1; shift;;
     --frame) value "$@"; frame="$2"; shift 2;;
     --input-script) value "$@"; input="$2"; shift 2;;
+    --mouse) mouse=1; shift;;
     --output) value "$@"; out="$2"; shift 2;;
     --clock) value "$@"; clock="$2"; shift 2;;
     --jit) jit=1; shift;;
@@ -128,7 +131,7 @@ make_target=ripple
 if [[ "$rebuild" == 1 ]]; then
   make -C "$PORT" clean "BUILD=$build"
 fi
-make -C "$PORT" -j "$jobs" PROGRAM=engine "TARGET=$make_target" "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "START_DEMO=$start_demo" "LOW_DETAIL=$low_detail" "RESOLUTION_SCALE=$resolution_scale"
+make -C "$PORT" -j "$jobs" PROGRAM=engine "TARGET=$make_target" "BUILD=$build" "WAD=$wad" "WAD_MODE=$wad_mode" "ASSET_VALIDATION=$asset_validation" "START_MAP=$start_map" "START_DEMO=$start_demo" "LOW_DETAIL=$low_detail" "RESOLUTION_SCALE=$resolution_scale" "MOUSE_INPUT=$mouse"
 if [[ "$build_only" == 1 ]]; then
   if [[ "$target" == native ]]; then
     printf 'Native executable: %s\n' "$build/rcc-native/engine/engine"

@@ -94,6 +94,7 @@ char *strerror(int e) {
     case EISCONN: return "Socket is already connected";
     case EDESTADDRREQ: return "Destination address required";
     case ENOBUFS: return "No buffer space available";
+    case ELOOP: return "Too many symbolic links";
     case EOVERFLOW: return "Value too large for caller ABI";
     case EPROTONOSUPPORT: return "Protocol not supported";
     default:
@@ -116,9 +117,6 @@ char *getenv(char *name) {
                 return *p + n + 1;
     return NULL;
 }
-/* UTC until this platform has a timezone database. */
-struct tm *localtime(time_t *t) { return gmtime(t); }
-struct tm *localtime_r(time_t *t, struct tm *r) { return gmtime_r(t, r); }
 const char *_ultoa(unsigned long n) {
     static char b[34];
     sprintf(b, "%lu", n);
@@ -169,13 +167,6 @@ char *ultoa(unsigned long n, char *b, int base) {
         b[j++] = t[--i];
     b[j] = 0;
     return b;
-}
-int readlink(const char *p, char *b, int n) {
-    (void)p;
-    (void)b;
-    (void)n;
-    errno = EINVAL;
-    return -1;
 }
 char *setlocale(int c, const char *s) {
     (void)c;
@@ -260,9 +251,6 @@ int uname(struct utsname *s) {
     strcpy(s->machine, "Ripple");
     return 0;
 }
-char *tzname[2] = {"UTC", "UTC"};
-int daylight;
-long timezone;
 char *stpcpy(char *dest, const char *src) {
     while ((*dest = *src++))
         dest++;

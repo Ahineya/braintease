@@ -1,11 +1,13 @@
 import {} from "std/result";
+import {} from "../../../libraries/unicode/unicode.c";
 import { buffer, octets, Buffer } from "lib/text";
-import { key, controls, view, Vi, View, reset } from "../../apps/rift/vi";
+import { key, event, selection, controls, view, Vi, View, reset } from "../../apps/rift/vi";
+import { InputEvent } from "std/curses";
 import { Settings } from "../../apps/rift/config";
 import { detect } from "../../apps/rift/languages";
 import { joined, parent, basename } from "lib/path";
 fn settings() -> Settings {
-    Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, runs: [], notice: "" }
+    Settings { tabstop: 4, expandtab: true, autoindent: true, numbers: true, wrap: true, textwidth: 0, format_text: true, runs: [], notice: "" }
 }
 
 fn keys(b: &Buffer, v: &mut View, vi: &mut Vi, input: String) {
@@ -159,7 +161,121 @@ fn digit_and_paste() -> bool {
     true
 }
 
+fn unicode_editing() -> bool {
+    let b = buffer().unwrap();
+    let mut v = view();
+    let mut vi = controls();
+    let s = settings();
+    keys(&b, &mut v, &mut vi, "i");
+    for (scalar in [1046 as u32, 101, 769, 20013, 128578, 258]) {
+        event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: scalar }, &s, 19);
+    }
+    if (!equal(&b, "Жé中🙂Ă") || v.cursor != b.len() || b.visual(v.cursor, 4) != 7) {
+        println("Unicode input or key collision failed");
+        return false;
+    }
+    key(&b, &mut v, &mut vi, 263, &s, 19);
+    key(&b, &mut v, &mut vi, 260, &s, 19);
+    key(&b, &mut v, &mut vi, 263, &s, 19);
+    keys(&b, &mut v, &mut vi, from_char(27 as char) + "lx");
+    if (!equal(&b, "Жé") || v.cursor != 2) {
+        println("Grapheme deletion failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "u.");
+    if (!equal(&b, "Жé")) {
+        println("Unicode undo/dot failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "0v");
+    let bounds = selection(&b, v, &vi);
+    if (bounds.start != 0 || bounds.end != 2) {
+        println("Unicode selection failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "y$p");
+    if (!equal(&b, "ЖéЖ")) {
+        println("Unicode register/paste failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "r");
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    keys(&b, &mut v, &mut vi, "0.");
+    if (!equal(&b, "中é中")) {
+        println("Unicode replacement/dot failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "f");
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    if (v.cursor != 6) {
+        println("Unicode character search failed");
+        return false;
+    }
+    keys(&b, &mut v, &mut vi, "F");
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    if (v.cursor != 0) {
+        println("Unicode backward search failed");
+        return false;
+    }
+    // A full emoji ZWJ sequence is one selectable/deletable unit.
+    let emoji = buffer().unwrap();
+    emoji.append(octets("A👩‍💻Z\r\n").unwrap()).unwrap();
+    let mut ev = view();
+    let mut ec = controls();
+    keys(&emoji, &mut ev, &mut ec, "lv");
+    let selected = selection(&emoji, ev, &ec);
+    if (selected.start != 1 || selected.end != 12) {
+        println("Emoji cluster selection failed");
+        return false;
+    }
+    keys(&emoji, &mut ev, &mut ec, "d");
+    if (!equal(&emoji, "AZ\r\n")) {
+        println("Emoji cluster deletion failed");
+        return false;
+    }
+    keys(&emoji, &mut ev, &mut ec, "u");
+    if (!equal(&emoji, "A👩‍💻Z\r\n")) {
+        return false;
+    }
+    true
+}
+
+fn typing_format() -> bool {
+    let b = buffer().unwrap();
+    let mut v = view();
+    let mut vi = controls();
+    let mut s = settings();
+    s.textwidth = 20;
+    let input = "ione two three four five six seven eight nine";
+    for (i in 0..input.len()) {
+        key(&b, &mut v, &mut vi, input[i] as i16, &s, 19);
+    }
+    key(&b, &mut v, &mut vi, 27, &s, 19);
+    if (!equal(&b, "one two three four\nfive six seven eight\nnine")) {
+        println("Typed prose formatting failed");
+        return false;
+    }
+    key(&b, &mut v, &mut vi, 117, &s, 19);
+    if (!equal(&b, "")) {
+        println("Formatting undo grouping failed");
+        return false;
+    }
+    s.format_text = false;
+    for (i in 0..input.len()) {
+        key(&b, &mut v, &mut vi, input[i] as i16, &s, 19);
+    }
+    key(&b, &mut v, &mut vi, 27, &s, 19);
+    if (!equal(&b, "one two three four five six seven eight nine")) {
+        println("Typing formatting disable failed");
+        return false;
+    }
+    true
+}
+
 fn main() -> i16 {
+    if (!typing_format()) {
+        return 9;
+    }
     if (!object_change()) {
         return 1;
     }
@@ -175,8 +291,17 @@ fn main() -> i16 {
     if (!lexing()) {
         return 4;
     }
+    if (!unicode_editing()) {
+        return 8;
+    }
     if (detect("Makefile").name != "make" || detect("HELLO.BF").lexer != 8 as u16 || detect("main.rfl").lexer != 1 as u16) {
         return 5;
+    }
+    for (file in ["hello.js", "module.mjs", "SCRIPT.CJS"]) {
+        let js = detect(file);
+        if (js.name != "javascript" || js.lexer != 14 as u16 || js.tool != "js" || js.variable != "JS") {
+            return 10;
+        }
     }
     if (joined("/a/b", "../x") != "/a/x" || parent("/a") != "/" || basename("/a/b") != "b") {
         return 6;

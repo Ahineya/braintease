@@ -12,11 +12,14 @@ ROOT = Path(__file__).resolve().parents[3]
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build', type=Path, default=ROOT / 'build/fuzix')
-    parser.add_argument('--only', choices=('all', 'desktop', 'roach'), default='all')
+    parser.add_argument('--only', choices=('all', 'desktop', 'roach', 'nxdsktop', 'tetris', 'paint'), default='all')
     args = parser.parse_args()
     build = args.build.resolve()
     cases = {'desktop': 'desktop_clients_input_resize_and_recovery',
-             'roach': 'roaches_masks_animation_occlusion_and_cleanup'}
+             'roach': 'roaches_masks_animation_occlusion_and_cleanup',
+             'nxdsktop': 'nxdsktop_menu_dialogs_files_and_session',
+             'tetris': 'tetris_gameplay_lines_pause_and_highscore',
+             'paint': 'repaints_commit_parent_and_children_together'}
     for case, test in cases.items():
         if args.only not in ('all', case):
             continue

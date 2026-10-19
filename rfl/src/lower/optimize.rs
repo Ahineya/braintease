@@ -54,8 +54,8 @@ pub(super) fn retain_reachable(procs: &mut Vec<Proc>) {
     }
 }
 
-pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
-    let live_at_resume = super::liveness::live_at_resume(proc);
+pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc, entries: &ResumeEntries) {
+    let liveness = super::liveness::frame_liveness(proc);
     let borrowed: HashSet<_> = proc
         .segs
         .iter()
@@ -164,11 +164,10 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
     };
     let mut homes = BTreeMap::new();
     let mut entry = Vec::new();
+    let mut reloads = HashMap::<u32, Vec<Instruction>>::new();
     for (offset, slot) in &candidates {
         let ty = ir_ty(proc.slots[*slot].ty);
         let local = fresh();
-        let addr = fresh();
-        let value = fresh();
         let home = fat_temp(local, BankTag::Stack);
         entry.push(Instruction::Alloca {
             result: local,
@@ -176,19 +175,27 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
             count: None,
             result_type: ptr_ty(),
         });
-        entry.push(frame_gep(addr, *offset));
-        entry.push(Instruction::Load {
-            result: value,
-            ptr: fat_temp(addr, BankTag::Mixed),
-            result_type: ty.clone(),
-            volatile: false,
-        });
-        entry.push(Instruction::Store {
-            value: Value::Temp(value),
-            ptr: home.clone(),
-            value_type: ty.clone(),
-            volatile: false,
-        });
+        for (&segment, &label) in entries {
+            if !liveness.at_entry[segment].contains(slot) {
+                continue;
+            }
+            let reload = reloads.entry(label).or_default();
+            let addr = fresh();
+            let value = fresh();
+            reload.push(frame_gep(addr, *offset));
+            reload.push(Instruction::Load {
+                result: value,
+                ptr: fat_temp(addr, BankTag::Mixed),
+                result_type: ty.clone(),
+                volatile: false,
+            });
+            reload.push(Instruction::Store {
+                value: Value::Temp(value),
+                ptr: home.clone(),
+                value_type: ty.clone(),
+                volatile: false,
+            });
+        }
         homes.insert(*offset, (home, ty));
     }
     for block in &mut function.blocks {
@@ -205,7 +212,7 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
                         let live = match resume {
                             Value::Constant(id) => usize::try_from(*id)
                                 .ok()
-                                .and_then(|id| live_at_resume.get(id)),
+                                .and_then(|id| liveness.at_resume.get(id)),
                             _ => None,
                         };
                         if live.is_some_and(|live| !live.contains(&slot)) {
@@ -247,6 +254,12 @@ pub(super) fn promote_frame_words(function: &mut Function, proc: &Proc) {
                 _ => {}
             }
             block.instructions.push(inst);
+        }
+        // Insert after rewriting so these heap reads and private-home stores
+        // cannot themselves be mistaken for ordinary frame accesses.
+        if let Some(mut reload) = reloads.remove(&block.id) {
+            reload.append(&mut block.instructions);
+            block.instructions = reload;
         }
     }
     entry.append(&mut function.blocks[0].instructions);

@@ -47,7 +47,7 @@ The bridge implements open/read/write/seek, directory enumeration, creation and
 removal, hard links, atomic rename, truncation, chmod and timestamps. Native
 Fuse-X packages can execute directly from the export. FUZIX retains path walking,
 mount traversal, the inode/open-file tables, shared offsets across dup/fork,
-close-on-exec and descriptor cleanup. Build-generated hooks adapt six canonical
+close-on-exec and descriptor cleanup. Build-generated hooks adapt seven canonical
 kernel units without editing `ports/fuzix/`; generation fails if a hook's source
 contract changes. Host references stay behind opaque handles.
 
@@ -55,8 +55,13 @@ Host file contents use one octet per guest cell, including binary data. Host-sid
 file creation and replacement are visible on subsequent lookups. An open file
 retains its identity across rename/unlink, as on the host. Directory scans use
 snapshots; a fresh scan sees current entries. Empty-directory checks always use
-the current host directory. Closing writable handles and guest sync flush file
-data through host sync operations; this is not a claim of crash recovery.
+the current host directory. Close releases the guest descriptor without a global
+flush. Dirty host objects remain flushable after close/unlink; at most 64 are
+retained before a batch flush. Guest sync, O_SYNC writes and orderly shutdown
+issue host durability barriers. Clean writable opens need no barrier. This is
+not a claim of crash recovery. Descriptor operations refresh metadata for
+`fstat` and SEEK_END, rather than on every descriptor validation. See the
+[kernel I/O contract](../../ports/fuzix/KERNEL-IO.md).
 
 The initial contract is:
 
@@ -81,7 +86,10 @@ Further compatibility work includes:
 
 - Filename encoding, case sensitivity, and guest name/size limits.
 - Ownership, permissions, executable bits, and timestamps.
-- Symbolic and hard links, including links that leave the exported directory.
+- Guest disk symbolic links are implemented (see the shared filesystem
+  specification). Host symlinks, including those targeting files inside the
+  export, remain hidden/rejected; guest creation of a host link is unsupported.
+  Hard links between visible host files are already supported.
 - Visibility of changes made by Mac applications, plus cache invalidation.
 - Rename, unlink of open files, error translation, and flush guarantees.
 - Mount removal while files are open and the scope of the exported directory.

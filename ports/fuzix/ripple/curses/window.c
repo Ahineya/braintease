@@ -68,6 +68,7 @@ int delwin(WINDOW *w) {
 int wbkgd(WINDOW *w, chtype style) {
     int y, x;
     if (!w) return ERR;
+    w->_last_valid = 0;
     w->_attrs = style & A_ATTRIBUTES;
     for (y = 0; y <= w->_maxy; ++y)
         for (x = 0; x <= w->_maxx; ++x) w->_line[y][x] = ' ' | w->_attrs;
@@ -79,6 +80,7 @@ int wscrl(WINDOW *w, int lines) {
     if (!w || !w->_scroll) return ERR;
     if (distance > w->_regbottom - w->_regtop + 1) distance = w->_regbottom - w->_regtop + 1;
     if (distance < -(w->_regbottom - w->_regtop + 1)) distance = -(w->_regbottom - w->_regtop + 1);
+    w->_last_valid = 0;
     /* Copy cells, not row pointers: derived windows must retain parent aliases. */
     for (y = distance >= 0 ? w->_regtop : w->_regbottom;
          y >= w->_regtop && y <= w->_regbottom; y += distance >= 0 ? 1 : -1) {

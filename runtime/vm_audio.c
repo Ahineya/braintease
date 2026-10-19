@@ -8,6 +8,33 @@ static unsigned short submit_audio(unsigned short command, volatile unsigned sho
     return mmio_read(MMIO_DEVICE_STATUS);
 }
 static unsigned long audio_words(unsigned short lo,unsigned short hi) { return (unsigned long)lo | ((unsigned long)hi << 16); }
+unsigned short vm_audio_mix(VmAudioMixVoice *voices,unsigned short count,short *samples,unsigned short frames) {
+    volatile unsigned short d[10];
+    unsigned long v=(unsigned long)voices,p=(unsigned long)samples;
+    if(sizeof(VmAudioMixVoice)!=12)return VM_DEVICE_BAD_DESCRIPTOR;
+    d[0]=1;d[1]=10;d[2]=v>>16;d[3]=(unsigned short)v;d[4]=count;
+    d[5]=p>>16;d[6]=(unsigned short)p;d[7]=frames;d[8]=d[9]=0;
+    return submit_audio(VM_AUDIO_MIX,d);
+}
+unsigned short vm_audio_output_stats(VmAudioOutputStats *out) {
+    volatile unsigned short d[12];unsigned short status,i;
+    d[0]=1;d[1]=12;for(i=2;i<12;i++)d[i]=0;
+    status=submit_audio(VM_AUDIO_OUTPUT_STATS,d);
+    if(status==VM_DEVICE_OK){
+        out->live=d[2];out->gaps=audio_words(d[4],d[5]);
+        out->missing_frames=(unsigned long long)audio_words(d[6],d[7]) |
+            ((unsigned long long)audio_words(d[8],d[9]) << 32);
+        out->max_gap_ms=audio_words(d[10],d[11]);
+    }
+    return status;
+}
+unsigned short vm_audio_output_state(unsigned long *pending,unsigned short *live) {
+    volatile unsigned short d[6];unsigned short status,i;
+    d[0]=1;d[1]=6;for(i=2;i<6;i++)d[i]=0;
+    status=submit_audio(VM_AUDIO_OUTPUT_STATE,d);
+    if(status==VM_DEVICE_OK){*pending=audio_words(d[2],d[3]);*live=d[4];}
+    return status;
+}
 unsigned short vm_audio_configure(unsigned long rate,unsigned short channels,unsigned long capacity) {
     volatile unsigned short d[8];
     d[0]=1;d[1]=8;d[2]=(unsigned short)rate;d[3]=(unsigned short)(rate >> 16);

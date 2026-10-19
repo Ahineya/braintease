@@ -16,7 +16,7 @@ No new IR opcode and no new machine instruction are required. RFL functions are 
 
 The hardware stack is bank 2. The backend gives every live call a frame there: saved registers, a spill area, and any `alloca`. One frame is small. A recursive RFL call chain is not, and the backend does not grow that bank or perform tail calls.
 
-**Ordinary RFL-to-RFL calls do not nest on the hardware stack.**
+**Recursive, suspending and unproved RFL-to-RFL calls use heap frames.**
 
 Each monomorphized RFL function is one IR function with the C calling convention:
 
@@ -42,7 +42,7 @@ A call site:
 2. Allocates the callee record, with this record as its caller.
 3. Returns the callee record to the driver.
 
-The function entry switches on the resume index and continues after the call. Inlining is allowed. A call that remains after inlining uses this protocol.
+The function entry switches on the resume index and continues after the call. Inlining is allowed. Calls without a bounded synchronous proof use this protocol.
 
 A tail call drops the current record and returns the callee record with the current caller link. Tail recursion, including `fold`, uses constant activation space. Non-tail recursion, including `map`, uses one record per live call and reclaims it when that call returns.
 
@@ -50,7 +50,33 @@ Activation records come from a bump arena. The arena allocates chunks with `mall
 
 Records are not reference-counted. A closure copies captured values into its own environment. That environment is a managed object and may outlive the record.
 
-The hardware stack, at an RFL yield point, holds startup, the driver, and nothing else from the RFL call chain. While an RFL function is running between yields, the backend may also hold that function's spill frame. Source-level objects are not placed in that spill frame. RFL never emits an `alloca` whose size follows a source value.
+The hardware stack, at an RFL yield point, holds startup, the driver, and nothing else from the RFL call chain. While an RFL function is running between yields, the backend may also hold that function's spill frame and bounded synchronous scratch described below. RFL never emits an `alloca` whose size follows a source value.
+
+### Bounded synchronous calls
+
+A conservative call-graph analysis also emits `rfl_direct_*` bodies for small,
+acyclic synchronous helpers. The current limits are four selected call levels,
+256 cells per source frame, and 1,024 cells of source frame/result storage along
+a selected chain. These are selection limits, not a measurement of backend
+spills. Unknown callback invocations, C calls/re-entry, suspension, async
+construction/cancellation, and values whose destruction can invoke guest
+callbacks prevent selection. Recursive cycles never receive this proof.
+
+Proven callers prepare arguments in fixed scratch storage allocated once per
+IR invocation, call the body directly, and receive its result through separate
+scratch. Repeated loop calls reuse those buffers. No heap activation, resume
+write or driver roundtrip is needed at these sites. Tail-call arguments are
+prepared before cleaning the parent; parent cleanup still precedes the child.
+The original `rfl_fn_*` wrapper remains compatible with the closure/driver ABI,
+including unit-returning finalizer roots. Main, C exports and async bodies keep
+their original entries.
+
+Whole-value moves into disjoint storage transfer the existing managed share.
+Only the source's owning pointer cells are cleared; tags, scalar fields and
+borrowed pointers retain their values. Returning a managed value similarly
+transfers its result share before releasing other locals. Boxed/shared storage
+keeps the conservative copy-and-release path. Ordinary value copies still
+retain their own share, and destination replacement preserves cleanup order.
 
 `extern "C"` calls are direct IR calls. They happen while the active RFL function is on the hardware stack and do not yield. An exported C function may build a frame and enter the driver. If C calls back into RFL during an `extern "C"` call, that entry nests another driver on the hardware stack, once per crossing. Deep recursion inside C still uses bank 2. Pure RFL recursion does not.
 

@@ -19,7 +19,9 @@ static int launch(char *program,char *arg,int keep){
 static void stop(int pid){if(pid>0){kill(-pid,SIGTERM);kill(-pid,SIGCONT);}}
 int main(int argc,char **argv){
     int pid,status,connected=0,i,ready[2],result=1;char fdarg[8],envarg[32],c;fd_set fds;struct timeval timeout;
-    if(argc>1){puts("usage: startx\nStart the Nano-X desktop. Close its display to return here.");return 0;}
+    char *desktop="/bin/nxdsktop";
+    if(argc==2&&!strcmp(argv[1],"--minimal"))desktop="/bin/nxlaunch";
+    else if(argc>1){puts("usage: startx [--minimal]\nStart NXDSKTOP, or the minimal launcher. Close the desktop to return here.");return argc==2&&!strcmp(argv[1],"--help")?0:2;}
     signal(SIGTERM,caught);signal(SIGINT,caught);signal(SIGHUP,caught);
     putenv("NANOX_SESSION=1");
     if(pipe(ready)<0)return 1;
@@ -36,14 +38,14 @@ int main(int argc,char **argv){
     connected=wm>0&&select(ready[0]+1,&fds,NULL,NULL,&timeout)>0&&read(ready[0],&c,1)==1&&c=='R';
     close(ready[0]);
     if(!connected){fputs("startx: NanoWM did not start\n",stderr);stopping=1;goto done;}
-    launcher=launch("/bin/nxlaunch",NULL,-1);terminal=launch("/bin/nxterm",NULL,-1);
+    launcher=launch(desktop,NULL,-1);terminal=launch("/bin/nxterm",NULL,-1);
     if(launcher<=0||terminal<=0){stopping=1;goto done;}
     result=0;
     while(!stopping){
         pid=waitpid(-1,&status,0);
         if(pid==server){server=0;if(!WIFEXITED(status)||WEXITSTATUS(status))result=1;break;}
         if(pid==wm){wm=0;stopping=1;result=1;break;}
-        if(pid==launcher){launcher=0;stopping=1;result=1;break;}
+        if(pid==launcher){launcher=0;stopping=1;result=WIFEXITED(status)?WEXITSTATUS(status):1;break;}
         if(pid==terminal)terminal=0;
         if(pid<0&&errno!=EINTR)break;
     }

@@ -1,0 +1,5 @@
+{
+  "expected": "YY\n",
+  "use_runtime": true,
+  "description": "C99 hexadecimal floating literal exponents used by QuickJS"
+}

@@ -1,8 +1,9 @@
-import { IoError, Errno, InvalidLength, InvalidPath, SameFile, UnsupportedFileType, create, open_read, open_append, read_bytes as read, write_all, arguments, environment, process_id, exit, metadata, read_dir, create_dir, remove_file, DIRECTORY, REGULAR, MAX_READ, SEEK_SET, set_permissions, executable, run_program } from "std/posix";
+import { IoError, Errno, InvalidLength, InvalidPath, SameFile, UnsupportedFileType, create, open_read, open_append, read_bytes as read, write_all, arguments, environment, process_id, exit, metadata, read_dir, create_dir, remove_file, DIRECTORY, REGULAR, SYMLINK, MAX_READ, SEEK_SET, set_permissions, executable, run_program } from "std/posix";
 import { copy_file, move_path, Moved, CopiedSourceRetained, shell_quote } from "../../apps/commander/actions";
 import {} from "std/option";
 import {} from "std/result";
-import { normalize, load_panel } from "../../apps/commander/model";
+import { normalize } from "lib/path";
+import { file_panel } from "lib/tui_files";
 import { theme_checks } from "./themes";
 import { number } from "../../apps/commander/format";
 
@@ -90,13 +91,62 @@ fn probe() -> Result<unit, IoError> {
     }
     let position = file.seek(0, 1)?;
     ensure(position == 65550, 22);
+    file.seek(69990, SEEK_SET)?;
+    let mut reusable: Vec<u8> = [];
+    for (i in 0..32) {
+        reusable.push(0);
+    }
+    let snapshot = reusable;
+    let valid = file.read_into(&mut reusable)?;
+    ensure(valid == 10 && reusable.len() == 32 && snapshot[0] == 0, 54);
+    let edge: usize = 69990;
+    for (i in 0..valid) {
+        ensure(reusable[i] == ((edge + i) % 251) as u8, 55);
+    }
+    let eof = file.read_into(&mut reusable)?;
+    ensure(eof == 0 && reusable.len() == 32, 56);
+    match write_all(-1, []) {
+        Ok(_) => {},
+        _ => ensure(false, 57)
+    }
+    match file.write_prefix(&reusable, 33) {
+        Err(InvalidLength) => {},
+        _ => ensure(false, 58)
+    }
     let info = metadata("/tmp/rfl-large")?;
     ensure(info.size == 70000, 23);
     let info = metadata("/left")?;
     ensure(info.kind == DIRECTORY, 24);
-    let panel = load_panel("/left")?;
+    let panel = file_panel("/left", true)?;
     ensure(panel.entries.len() == 4 && panel.entries[0].name == ".." && panel.entries[1].name == "adir" && panel.entries[2].name == "alpha.txt", 25);
     ensure(normalize("/left/adir/.././alpha.txt") == "/left/alpha.txt", 26);
+    // Exercise the shared panel model on a real guest filesystem, independently
+    // of Commander or a modal's keyboard loop.
+    create_dir("/panel-model")?;
+    create_dir("/panel-model/child")?;
+    let hidden = create("/panel-model/.hidden")?;
+    move(hidden).close()?;
+    let mut model = file_panel("/panel-model", false)?;
+    ensure(model.entries.len() == 2 && model.entries[1].name == "child", 60);
+    model.select_name("child");
+    model.reveal(1);
+    model.refresh(true)?;
+    model.reveal(1);
+    ensure(model.entries.len() == 3 && model.selected_path() == "/panel-model/child", 61);
+    model.enter("child")?;
+    ensure(model.entries.len() == 1 && model.selected_path() == "/panel-model", 62);
+    model.enter("..")?;
+    ensure(model.selected_path() == "/panel-model/child", 63);
+    match model.enter("/missing-directory") {
+        Err(_) => {},
+        Ok(_) => ensure(false, 64)
+    }
+    ensure(model.path == "/panel-model" && model.selected_path() == "/panel-model/child", 65);
+    model.select_name(".hidden");
+    model.refresh(false)?;
+    model.reveal(1);
+    ensure(model.entries.len() == 2 && model.cursor.selected < 2, 66);
+
     let count = copy_file("/tmp/rfl-large", "/right/large")?;
     ensure(count == 70000, 27);
     let copy = open_read("/right/large")?;
@@ -118,7 +168,8 @@ fn probe() -> Result<unit, IoError> {
     ensure(read_dir("/right")?.is_empty(), 31);
     let commander = metadata("/bin/rfl-fm")?;
     let alias = metadata("/bin/mc")?;
-    ensure(commander.device == alias.device && commander.inode == alias.inode, 32);
+    // metadata uses lstat: the installed alias has its own link inode.
+    ensure(commander.kind == REGULAR && alias.kind == SYMLINK && commander.device == alias.device && commander.inode != alias.inode && executable("/bin/mc")?, 32);
     println("RFL_OS_OK");
     Ok({})
 }

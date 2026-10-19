@@ -107,7 +107,7 @@ int expand(char *as, int rflg)
 	}
 	count = 0;
 	if (*cs == 0) {
-		*cs++ = 0200;
+		*cs++ = QUOTE;
 	}
 	if (dir) {		/* check for rescan */
 		register char *rs;
@@ -179,7 +179,7 @@ int gmatch(register char *s, register char *p)
 
 	if ( (scc = *s++) ) {
 		if ((scc &= STRIP) == 0) {
-			scc = 0200;
+			scc = QUOTE;
 		}
 	}
 	switch (c = *p++) {

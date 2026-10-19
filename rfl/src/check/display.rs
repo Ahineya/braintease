@@ -30,9 +30,12 @@ pub(super) fn parsed_brief(ty: &ParsedTy) -> String {
             if *mutable { "*mut " } else { "*const " },
             parsed_brief(inner)
         ),
-        ParsedTy::Func { params, ret, .. } => {
+        ParsedTy::Func {
+            once, params, ret, ..
+        } => {
             format!(
-                "fn({}) -> {}",
+                "{}fn({}) -> {}",
+                if *once { "once " } else { "" },
                 params
                     .iter()
                     .map(parsed_brief)

@@ -37,8 +37,7 @@ long sysconf(int name)
       /* In theory down to RAM */
       return 256;
     case _SC_SYMLOOP_MAX:
-      /* Not supported yet */
-      return 1;
+      return 40; /* Shared guest pathname expansion limit. */
     case _SC_TTY_NAME_MAX:
       return 9;
     case _SC_TZNAME_MAX:

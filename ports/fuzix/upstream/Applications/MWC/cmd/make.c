@@ -44,6 +44,7 @@ int tflag;			/* touch files rather than run commands */
 int qflag;			/* zero exit status if file up to date */
 int pflag;			/* print macro defns, target descriptions */
 int dflag;			/* debug mode -- verbose printout */
+int delete_on_error;
 int eflag;			/* make environ macros protected */
 
 /* Globals. */
@@ -57,7 +58,7 @@ int		lastc;
 int		lineno;
 MACRO		*macro;
 char		macroname[NMACRONAME+1];
-char		*mvarval[4];		/* list of macro variable values */
+char		*mvarval[5];		/* list of macro variable values */
 int		nbackup;
 time_t		now;
 char		*srcpath;
@@ -363,7 +364,7 @@ int command(TOKEN *tp)
 {
 	const char *p = tp->value;
 
-	if (strcmp(p, "include") == 0) {
+	if (strcmp(p, "include") == 0 || strcmp(p, "-include") == 0) {
 		tp = tp->next;
 		if (tp == NULL) {
 			doerr("include requires filename");
@@ -371,7 +372,7 @@ int command(TOKEN *tp)
 		}
 		do {
 			int oldline = lineno;
-			input(tp->value);
+			if (strcmp(p, "-include") || access(tp->value, F_OK) == 0) input(tp->value);
 			lineno = oldline;
 			tp = tp->next;
 		} while(tp);
@@ -395,7 +396,7 @@ void input(const char *file)
 	unsigned char saved_backup[NBACKUP];
 	register int c;
 	char *action;
-	int twocolons;
+	int twocolons, assignment;
 
 	memcpy(saved_backup, backup, nbackup);
 	nbackup = 0;
@@ -437,8 +438,18 @@ void input(const char *file)
 		case ';':
 			doerr("; after target or macroname");
 		case '=':
-			if (tp==NULL || tp->next!=NULL)
-				doerr("= without macro name or in token list");
+            assignment = '=';
+            if (tp && tp->next && !tp->next->next && strlen(tp->next->value) == 1 &&
+                strchr("+?", tp->next->value[0])) {
+                assignment = tp->next->value[0];
+            } else if (tp && !tp->next && *tp->value) {
+                size_t n = strlen(tp->value);
+                if (strchr("+?", tp->value[n-1])) {
+                    assignment = tp->value[n-1]; tp->value[n-1] = 0;
+                }
+            }
+            if (!tp || !*tp->value || (tp->next && assignment == '='))
+                doerr("= without macro name or in token list");
 			defining++;
 			while((c=nextc())==' ' || c=='\t');
 			starttoken();
@@ -447,7 +458,14 @@ void input(const char *file)
 				c=nextc();
 			}
 			endtoken();
-			define(tp->value, token, 0);
+			if (assignment == '?' && mexists(tp->value)) free(token);
+            else {
+                if (assignment == '+' && mexists(tp->value)) {
+                    char *joined = mmalloc(strlen(mexists(tp->value)) + strlen(token) + 2);
+                    sprintf(joined, "%s %s", mexists(tp->value), token); free(token); token = joined;
+                }
+                define(tp->value, token, 0);
+            }
 			defining=0;
 			break;
 		case ':':
@@ -623,7 +641,8 @@ int fexists(char *name)
 		printf("fexists(%s) = %d getmdate(name) = %d\n", name,
 		getmdate(name) != 0, getmdate(name));
 #endif
-	return getmdate(name) != 0;
+	/* Image-seeded files may legitimately have an epoch-zero timestamp. */
+	return stat(name, &statbuf) == 0 || getmdate(name) != 0;
 }
 
 /*
@@ -694,6 +713,7 @@ SYM *lookup(char *name)
 	sp->deplist=NULL;
 	sp->type=T_UNKNOWN;
 	sp->moddate=0;
+    sp->phony=0;
 	sp->next=sym;
 	sym=sp;
 	return(sp);
@@ -745,6 +765,11 @@ void install(TOKEN *cons, TOKEN *ante, char *action, int twocolons)
 	SYM *cp;
 	TOKEN *ap;
 
+    if (Streq(cons->value, ".PHONY")) {
+        for (ap = ante; ap; ap = ap->next) lookup(ap->value)->phony = 1;
+        return;
+    }
+    if (Streq(cons->value, ".DELETE_ON_ERROR")) { delete_on_error = 1; return; }
 	if (deftarget==NULL && cons->value[0]!='.')
 		deftarget=cons->value;
 	if (dflag){
@@ -833,17 +858,17 @@ void make(SYM *s)
 	if (type==T_DETAIL) {
 		implicit(s, "", 0);
 		for(dep=s->deplist;dep!=NULL;dep=dep->next)
-			if (dep->symbol->moddate > s->moddate)
+			if (dep->symbol->phony || dep->symbol->moddate > s->moddate)
 				docmd0(s, dep->action, name, dep->symbol->filename);
 	} else {
-		update=0;
+		update=s->phony;
 		starttoken();
 		for(dep=s->deplist;dep!=NULL;dep=dep->next){
 			if (dflag)
 				printf("%s time=%ld %s time=%ld\n",
 				    dep->symbol->filename, dep->symbol->moddate,
 				    name, s->moddate);
-			if (dep->symbol->moddate>s->moddate){
+			if (dep->symbol->phony || dep->symbol->moddate>s->moddate){
 				update++;
 				addtoken(' ');
 				for(t=dep->symbol->filename;*t;t++)
@@ -886,6 +911,7 @@ void expand(char *str)
 			case '?':	p = mvarval[1]; break;
 			case '<':	p = mvarval[2]; break;
 			case '*':	p = mvarval[3]; break;
+            case '^': p = mvarval[4]; break;
 			case '{':
 			case '(':
 				endc = (c == '(') ? ')' : '}';
@@ -918,13 +944,15 @@ void expand(char *str)
 void docmd0(SYM *s, char *cmd, char *at, char *ques)
 {
 	register char *cp;
-	register DEP *dep;
+	register DEP *dep, *prior;
 	char *less, *prefix;
 
 	/* Build dependency list. */
 	starttoken();
 	for (dep = s->deplist; dep != NULL; dep = dep->next) {
-		addtoken(' ');
+        for (prior = s->deplist; prior != dep && prior->symbol != dep->symbol; prior = prior->next);
+        if (prior != dep) continue;
+		if (toklen) addtoken(' ');
 		for (cp = dep->symbol->filename; *cp; cp++)
 			addtoken(*cp);
 	}
@@ -940,7 +968,7 @@ void docmd0(SYM *s, char *cmd, char *at, char *ques)
 
 	if ((cp = rindex(prefix, '.')) != NULL)
 		*cp = '\0';
-	docmd(s, cmd, at, ques, less, prefix);
+	docmd(s, cmd, at, ques, s->deplist ? s->deplist->symbol->filename : "", prefix, less);
 	free(less);
 	free(prefix);
 }
@@ -948,7 +976,7 @@ void docmd0(SYM *s, char *cmd, char *at, char *ques)
 /* Mark s as modified; if tflag, touch s, otherwise execute the necessary
  * commands.
  */
-void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star)
+void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star, char *all)
 {
 	if (dflag)
 		printf("ex '%s'\n\t$@='%s'\n\t$?='%s'\n\t$<='%s'\n\t$*='%s'\n",
@@ -964,6 +992,7 @@ void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star)
 	mvarval[1] = ques;
 	mvarval[2] = less;
 	mvarval[3] = star;
+    mvarval[4] = all;
 	starttoken();
 	expand(cmd);
 	endtoken();
@@ -978,12 +1007,14 @@ void docmd(SYM *s, char *cmd, char *at, char *ques, char *less, char *star)
 void doit(char *cmd)
 {
 	register char *mark;
-	int sflg, iflg, rstat;
+	int sflg, iflg, rstat, existed;
+    struct stat before, after;
 
 	if (nflag) {
 		printf("%s\n", cmd);
 		return;
 	}
+    existed = stat(mvarval[0], &before) == 0;
 	do {
 		mark = index(cmd, '\n');
 		if (mark != NULL)
@@ -1001,8 +1032,12 @@ void doit(char *cmd)
 		if (!sflg)
 			printf("%s\n", cmd);
 		fflush(stdout);
-		rstat = system(cmd);
+        rstat = system(cmd);
 		if (rstat != 0 && !iflg) {
+            if (delete_on_error && (!sexists(mvarval[0]) || !sexists(mvarval[0])->phony) && stat(mvarval[0], &after) == 0 &&
+                (!existed || before.st_mtime != after.st_mtime || before.st_size != after.st_size))
+                unlink(mvarval[0]);
+            rstat = WIFEXITED(rstat) ? WEXITSTATUS(rstat) : 128 + WTERMSIG(rstat);
 			if (sflg)
 				die("%s	exited with status %d",
 					cmd, rstat);
@@ -1082,7 +1117,7 @@ void implicit(SYM *obj, char *ques, int definite)
 				make(subj);
 				if (definite || subj->moddate>obj->moddate)
 					docmd(obj, rule->action,
-						obj->name, ques, file, prefix);
+						obj->name, ques, file, prefix, file);
 				free(prefix);
 				free(rulename);
 				return;

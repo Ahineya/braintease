@@ -17,7 +17,7 @@
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 /* Character mask definitions. */
-#define CHR_MSK	((int) 0x00ff)		/* ASCIIZ character mask */
+#define CHR_MSK	((chtype) A_CHARTEXT)		/* ASCIIZ character mask */
 #define	ATR_MSK	((chtype) A_ATTRIBUTES)		/* attribute mask */
 #define ATR_NRM	((int) 0x0000)		/* no special attributes */
 

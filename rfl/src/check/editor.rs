@@ -55,6 +55,13 @@ impl Checker<'_> {
                     }
                 }
                 let contract = tr.name.clone();
+                if method.receiver.is_none() {
+                    continue;
+                }
+                if !method.type_params.is_empty() {
+                    methods.push((name, trait_method_signature(method), contract));
+                    continue;
+                }
                 let Ok(signature) =
                     self.projected_method_signature(&contract, &name, self.referent(ty))
                 else {

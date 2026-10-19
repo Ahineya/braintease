@@ -4,8 +4,8 @@ Lynx runs inside FUZIX on RVM and native Fuse-X, using guest libc, shared C16
 curses and the guest's own DNS/TCP stack. The configured upstream Lynx/libwww
 units and small port adapter compile with RCC. HTTP rendering, link navigation,
 GET forms and Telnet browsing have actual guest acceptance tests. See the
-[roadmap](../../docs/networking/terminal-browser.md) for the separate TLS and
-broader web milestones.
+[roadmap](../../docs/networking/terminal-browser.md) for broader web milestones. HTTPS now uses the shared guest wolfSSL client,
+including the optional [crypto accelerator](../../docs/arch/crypto.md).
 
 ## Build and test
 
@@ -28,8 +28,8 @@ python3 ports/lynx/build.py
 python3 ports/lynx/test_local.py
 ```
 
-The result is `ports/lynx/build/lynx.fxe`, with roughly 231,000 static cells
-across four banks and a 27 MiB package. `build/resources-native.json` records
+The result is `ports/lynx/build/lynx.fxe`, with roughly 308,000 static cells
+across five banks and a 39 MiB package, including guest TLS. `build/resources-native.json` records
 exact sizes and function counts for the latest build.
 The compiler selects the extended global region automatically. Native ABI 2
 supports sixteen global banks; ABI 1 packages remain loadable. Rebuild the
@@ -45,8 +45,8 @@ python3 ports/lynx/test_local.py --target ripple --build-dir build/fuzix
 
 This lowers all browser units with bank-aware global references and links the
 shared guest SDK, including curses, software floating math and floating output
-formatting. The result is `ports/lynx/build/lynx.rxe`, with roughly 3.4 million
-instructions and 231,000 static cells. `build/resources-ripple.json` records
+formatting. The result is `ports/lynx/build/lynx.rxe`, with roughly 5.5 million
+instructions and 308,000 static cells, including guest TLS. `build/resources-ripple.json` records
 exact sizes for the latest build. The
 linker also emits `build/ripple-map.json`, mapping symbols to instruction indices
 and dense data offsets for debugging; `rlink --map PATH` is available generally.
@@ -103,21 +103,73 @@ Ctrl-Z restores the shell; `fg` resumes and repaints the browser. The port owns
 this signal handling because the shared curses library leaves job control to
 applications.
 
+## Startup and terminal performance
+
+The October 18 console/loader changes address two independent costs. Fuse-X's
+root block driver now converts little-endian C16 cells in the host I/O adapter,
+and its executable streamer copies whole memory spans instead of acquiring the
+shared kernel-memory lock for every package octet. Files still go through the
+guest filesystem and permission checks; native applications cannot call these
+kernel-only adapters directly.
+
+The shared console line discipline now batches ordinary output through
+[`TTY_WRITE`](../../docs/arch/mmio.md), using bounded kernel staging on RVM and
+Fuse-X. Existing buffered libc/curses applications benefit without rebuilding
+the application. Standalone runtime `puts`/`printf` also use bulk output, with
+legacy fallback; PTYs retain their existing queue/backpressure behavior.
+
+On this development host, medians of three runs using the **same installed
+39 MiB TLS-enabled browser binary**, networking disabled and a local fixture:
+
+| Fuse-X measurement | Before | After |
+| --- | ---: | ---: |
+| `lynx -version`, including process exit | 6.27 s | 2.32 s |
+| Local HTML dump, including process exit | 7.15 s | 3.61 s |
+| Local interactive page, through the final link cursor | 7.94 s | 3.62 s |
+| 128 KiB raw console output, excluding executable loading | 696 ms | 26.9 ms |
+
+The last measurement is transport throughput, not a claim that every editor
+operation becomes 26 times faster. The equivalent RVM/JIT console probe recorded
+285 ms versus 133 ms medians, with substantial cold-JIT variation. Network, DNS
+and TLS latency are excluded. Remaining startup includes loading the large
+package and the browser's initialization/rendering work.
+
+Reproduce on disposable disks, without concurrent builds:
+
+```sh
+python3 ports/lynx/bench_startup.py
+python3 fuse-x/cc.py ports/fuzix/tools/consolecheck.c -o fuse-x/build/apps/consolecheck.fxe
+python3 ports/fuzix/tools/test_console_output.py --os fuse-x --bench
+make -C ports/fuzix BUILD="$PWD/build/fuzix" "$PWD/build/fuzix/consolecheck.rxe"
+python3 ports/fuzix/tools/test_console_output.py --os fuzix --bench
+```
+
+`bench_startup.py --kernel /path/to/saved/fuse-x` compares a saved kernel with
+the same current apps. The console probe accepts `--kernel` too (a Fuse-X binary
+or RVM binary according to `--os`). Omit `--bench` for exact raw-octet,
+bank-crossing and stdio ordering checks. Neither tool opens a normal user disk.
+
 ## Bounds and unsupported features
 
 The port caps each HTTP response at **65,536 wire octets**, including the status
 line, headers and chunk framing. The cap applies without Content-Length and to
-chunked responses; overflow aborts the load with an explicit message and leaves
+chunked responses (after TLS decryption for HTTPS); overflow aborts the load with an explicit message and leaves
 the browser usable. This is a transfer bound, not a guarantee about the memory
 cost of every possible HTML document. Cache defaults to two rendered documents;
 connect/read waits default to 15 seconds. `/etc/lynx.cfg` holds those defaults
 and a 2,048-character URL limit. Request writes handle partial transfers.
 
-ASCII/Latin-1 tables and ASCII display are enabled. UTF-8, JavaScript, TLS,
-compressed responses, cookies and external media are outside this milestone.
-HTTPS produces an explicit unsupported message. Public sites may redirect to
-HTTPS or serve a JavaScript verification page; the guest displays that response
-but cannot complete the verification.
+ASCII/Latin-1 tables and ASCII display are enabled. HTTPS uses guest TLS 1.2/1.3
+with certificate-chain, hostname/SAN and expiry checks against `/etc/ssl/cert.pem`.
+`SSL_CERT_FILE` selects another guest CA file. Normal installers preserve an
+existing trust bundle and install `/dev/urandom` and `/dev/crypto`. The browser
+supports software crypto when the accelerator is unavailable.
+
+UTF-8, JavaScript, compressed responses, cookies, external media and HTTPS proxy
+tunnels remain outside this profile. A JavaScript verification page can be
+rendered as HTML but its script cannot run. TLS failures abort the load without
+an option to bypass certificate verification. Handshake waits are bounded at
+60 seconds; body reads retain a 15-second timeout and poll keyboard cancellation.
 
 Set `LYNX_RESOURCE_REPORT=1` in the **guest** when profiling. On normal exit the
 browser prints `LYNX_HEAP_ARENA_CELLS`: growth of its guest allocator arena from
@@ -196,7 +248,7 @@ files in ignored `build/probe/`. `results.json` summarizes the selected units;
 any failed compilation makes the script fail. Specific source stems can be
 passed instead of `--all`; `-j` controls compiler concurrency.
 
-The initial configuration omits TLS, compression, most optional protocols,
+The configuration omits compression, most optional protocols,
 localization and option menus. Only ASCII and ISO Latin-1 conversion tables are
 enabled. Compilation is not evidence of runtime correctness, full C16 auditing,
 complete charset coverage or arbitrary-page safety. Browser-specific transport
@@ -253,3 +305,18 @@ The complete unmodified archive is retained in `vendor/`. Extraction preserves
 its notices and `COPYING` (GNU GPL version 2); individual libwww/source files
 retain their own notices and terms. Local adaptations are build-generated from
 `adapt.py`. This is a pinned source choice, not a claim about the latest release.
+
+## HTTPS acceptance
+
+Build the matching kernel and browser, then run the independent TLS fixture:
+
+```sh
+python3 ports/tls/tests/test_lynx.py --target native --executable fuse-x/build/apps/lynx.fxe
+python3 ports/tls/tests/test_lynx.py --target ripple --executable build/fuzix/lynx.rxe
+```
+
+These use disposable disks. The fixture covers TLS 1.2/1.3, ECC and RSA servers,
+chunked pages, redirects, expired/untrusted/mismatched certificates, interactive
+HTTPS links, cancelling a stalled transfer, and returning to the shell.
+`--smoke` checks one rendered HTTPS page; `--ui-only` checks the interactive
+lifecycle. The plain HTTP/browser regression remains `test_browser.py`.

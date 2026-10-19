@@ -47,7 +47,8 @@ if (program === 'renderer_tables') {
     + before(from(source, 'static void SetJoyButtons'), 'void G_Ticker (void)'));
   write('controls_defaults.inc', before(read('m_controls.c'), 'void M_BindBaseControls(void)'));
   const platform = fs.readFileSync(path.join(port, 'src/platform.c'), 'utf8');
-  write('platform_keyboard.inc', before(from(platform, 'static unsigned char held['), ';')
+  write('platform_keyboard.inc', before(from(platform, 'int usemouse ='), ';') + ';\n'
+    + before(from(platform, 'static unsigned char held['), ';')
     + ';\n' + before(from(platform, 'static int doom_key('), 'void I_StartTic(void)')
     // Compile the actual device adapter on both targets, using the public C
     // types without importing Ripple's libc headers into the host C oracle.

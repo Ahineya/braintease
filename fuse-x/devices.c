@@ -6,6 +6,7 @@
 #include <native_hosted.h>
 #include "pty.h"
 #include "graphics.h"
+#include "pcm.h"
 
 static HostFile *disk;
 static unsigned writable;
@@ -44,7 +45,6 @@ void fuse_disk_close(void) {
 }
 static int root_open(uint_fast8_t minor, uint16_t flags) { used(flags); return minor ? -1 : 0; }
 static int root_io(uint_fast8_t minor, uint_fast8_t raw, uint_fast8_t flags, unsigned write) {
-    unsigned i;
     unsigned long offset = (unsigned long)udata.u_block * (2UL * BLKSIZE);
     used(flags);
     if (minor || raw) { udata.u_error = ENXIO; return -1; }
@@ -52,15 +52,9 @@ static int root_io(uint_fast8_t minor, uint_fast8_t raw, uint_fast8_t flags, uns
     if (offset >= disk_size || disk_size - offset < 2UL * BLKSIZE || fseek(disk, offset, 0)) {
         udata.u_error = EIO; return -1;
     }
-    if (write) {
-        for (i = 0; i < BLKSIZE; i++) {
-            octets[2 * i] = udata.u_dptr[i] & 255;
-            octets[2 * i + 1] = udata.u_dptr[i] >> 8;
-        }
-        if (fwrite(octets, 1, 2 * BLKSIZE, disk) != 2 * BLKSIZE) { udata.u_error = EIO; return -1; }
-    } else {
-        if (fread(octets, 1, 2 * BLKSIZE, disk) != 2 * BLKSIZE) { udata.u_error = EIO; return -1; }
-        for (i = 0; i < BLKSIZE; i++) udata.u_dptr[i] = octets[2 * i] | (octets[2 * i + 1] << 8);
+    if ((write ? rcc_hosted_write_cells(disk, udata.u_dptr, BLKSIZE)
+               : rcc_hosted_read_cells(disk, udata.u_dptr, BLKSIZE)) != BLKSIZE) {
+        udata.u_error = EIO; return -1;
     }
     return BLKSIZE;
 }
@@ -131,6 +125,7 @@ struct devsw dev_tab[] = {
     {fuse_system_open, no_close, fuse_system_read, fuse_system_write, fuse_system_ioctl},
     {ripple_slave_open, ripple_slave_close, tty_read, tty_write, ripple_console_ioctl},
     {ripple_pty_open, ripple_pty_close, ripple_pty_read, ripple_pty_write, ripple_pty_ioctl},
-    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl}
+    {ripple_gfx_open, ripple_gfx_close, no_rdwr, no_rdwr, ripple_gfx_ioctl},
+    {ripple_pcm_open, ripple_pcm_close, no_rdwr, ripple_pcm_write, ripple_pcm_ioctl}
 };
-bool validdev(uint16_t dev) { return major(dev) < 5; }
+bool validdev(uint16_t dev) { return major(dev) < 6; }

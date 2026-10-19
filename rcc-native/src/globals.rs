@@ -101,6 +101,37 @@ fn flatten(
             }
         }
         (IrType::Array { size, element_type }, Value::ConstantAggregate(values)) => {
+            if **element_type == IrType::I16
+                && values.iter().all(|v| {
+                    matches!(
+                        v,
+                        Value::Constant(_)
+                            | Value::FatPtr(_)
+                            | Value::Function(_)
+                            | Value::Global(_)
+                    )
+                })
+            {
+                let mut cell = 0;
+                for value in values {
+                    let pointer_value = matches!(
+                        value,
+                        Value::FatPtr(_) | Value::Function(_) | Value::Global(_)
+                    );
+                    let width = if pointer_value { 2 } else { 1 };
+                    if cell + width > *size {
+                        return Err("cell initializer exceeds object storage".into());
+                    }
+                    let value_type = if pointer_value {
+                        IrType::FatPtr(Box::new(IrType::I16))
+                    } else {
+                        IrType::I16
+                    };
+                    flatten(compiler, offset(pointer, cell)?, &value_type, value, out)?;
+                    cell += width;
+                }
+                return Ok(());
+            }
             if values.len() as u64 > *size {
                 return Err("too many native aggregate values".into());
             }

@@ -3,12 +3,115 @@
 The DoomGeneric engine adapted to Ripple's 16-bit C bytes, banked pointers and
 existing VM instruction set. This directory contains the engine, platform code,
 build rules, shareware WAD and regression fixtures. No external Doom checkout,
-patch application, Python installation or source-fetch step is required.
+patch application or source-fetch step is required.
 
-Current scope: single-player Doom at 320×200 RGB565 by default, keyboard controls, 35 Hz
-logical simulation ticks and silent audio. Development and tests use the Rust
+Current scope: single-player Doom at 320×200 RGB565, keyboard controls, 35 Hz
+logical simulation ticks, PCM effects and optional OPL3 music. Development and tests use the Rust
 VM. An experimental Brainfuck launcher uses the same port and guest ISA;
 the regular port tests do not run it.
+
+## Fuse-X and FUZIX userspace builds
+
+Doom also runs as an ordinary guest process, using filesystem WAD reads,
+`/dev/gfx` windows, HID keyboard events and the OS monotonic clock. These are
+explicit optional builds, separate from the normal app lists and launchers.
+They require Python 3 in addition to the build tools below.
+
+From the repository root, build the kernel audio extension and stage the Fuse-X version:
+
+```sh
+cargo build --release -p rcc-native-runtime
+make -C fuse-x -j4 bundle
+python3 ports/doom/guest/build.py fuse-x --stage fuse-x-shared
+```
+
+In Fuse-X, with the usual shared folder mounted, run:
+
+```sh
+/mnt/host/doom.fxe
+/mnt/host/doom.fxe -warp 1 1
+```
+
+The app defaults to `doom1.wad` beside its executable; `-iwad PATH` selects
+another location for the bundled shareware IWAD. Keep its original octet file
+format. This guest build uses the ordinary WAD reader, without a cooked asset
+disk or direct storage/display MMIO. Arrow keys move/turn, Ctrl fires, Space
+uses, Shift runs, A/D strafe, and Esc opens the menu. Closing the native window
+also exits the process. Fuse-X starts with a resizable 960×600 window. The
+original pixels are scaled with nearest-neighbour sampling and black borders
+to preserve their proportions. Current Fuse-X kernels use `GX_UPLOAD_INDEXED`
+to copy the original 320×200 indices and 256-colour palette once and perform
+RGB565 conversion/scaling inside the graphics device. Older kernels can use
+RGB565 `GX_UPLOAD_SCALED`, or the C scaler as a compatibility fallback. Drag a window edge or use the macOS green
+fullscreen button. The RVM guest keeps its original 320×200 surface.
+
+Fuse-X enables PCM sound effects and OPL3 music by default, through `/dev/pcm`.
+Restart a running Fuse-X session after rebuilding its kernel to enable the new
+music ioctls. Old kernels continue with effects and report music unavailable.
+Playback starts after the first rendered frame with a small queued lead. Queue
+refills are bounded and nonblocking; a full audio queue cannot stall simulation.
+Effects refill according to the speaker queue, independently of simulation tick
+catch-up. The host speaker adds a short jitter cushion; deterministic WAV
+captures keep their exact sample timeline.
+Fuse-X also accelerates effect resampling, gain/panning and mixing with `PCM_MIX`.
+It matches the C mixer's signed rounding and clipping. The kernel stages bounded
+source spans, and the audio device returns mixed samples and voice positions;
+older kernels retain the C fallback. Music still uses the OPL3/MUS device.
+Available effects are precached before the first frame, avoiding file reads and
+allocation on the first gunshot or monster sound. Missing shareware effects are
+skipped during precaching.
+Use Doom's `-nosound`, `-nomusic` or `-nosfx` options to control playback, or
+`--no-audio` on the build command for a silent executable. FUZIX builds remain
+silent. Both guest builds retain fixed controls and lack saved configuration.
+
+Build the FUZIX/RVM executable without installing it into any image:
+
+```sh
+python3 ports/doom/guest/build.py fuzix
+```
+
+Outputs: `build/guest/fuse-x/doom.fxe` and `build/guest/fuzix/doom.rxe` beneath
+this directory. `--build PATH` chooses another guest output root;
+`--sdk-build PATH` selects an existing or new SDK output directory. `--compiler PATH`
+can select an isolated compiler during parallel toolchain work. Per-source
+objects are cached by compiler, flags, source and header content. The FUZIX
+build links the banked renderer/fixed-point assembly kernels and floating-point
+support library; its build is checked separately from native Fuse-X playback.
+Neither command opens a normal guest disk.
+
+Validate Fuse-X against a fresh, disposable 64 MiB filesystem:
+
+```sh
+python3 ports/doom/guest/test.py
+```
+
+The test requires an existing Fuse-X kernel, shell and echo executable under
+`fuse-x/build`. It checks 32 frames each of the title, E1M1 and demo, paced
+playback, scaling/letterboxing through 1920×1080, native window closing, missing
+WAD errors, graphics/audio cleanup, and separate non-silent music/effects captures.
+`python3 ports/doom/guest/test_audio_device.py` checks the music ioctl validation,
+copied buffers across banks, inherited descriptor ownership, and PCM regression.
+For exact pixel comparison with the independent Clang/GCC reference:
+
+```sh
+make -C ports/doom -j4 native BUILD=build/guest/reference WAD_MODE=packed PCM_AUDIO=0
+python3 ports/doom/guest/test.py --reference ports/doom/build/guest/reference/native/engine/engine
+```
+
+Pixel/audio captures and the guest transcript stay in `build/guest/`. Guest-only
+`--frames N` exits after N presentations; `--fast` disables the 35 Hz wall-clock
+pacing for deterministic tests. The default run remains paced.
+
+For frame-rate and audio-queue measurements without screenshot/capture overhead:
+
+```sh
+python3 ports/doom/guest/benchmark.py --check
+python3 ports/doom/guest/benchmark.py --live --check
+```
+
+The latter also exercises physical speakers and reports actual output gaps.
+Both use a freshly generated private filesystem. `--stats` on the guest command
+reports frame timing and audio underruns when combined with `--frames N`.
 
 ## Build and play
 
@@ -913,8 +1016,10 @@ therefore progresses through the same game ticks without having to catch up
 with an ever-growing wall-clock backlog.
 
 Input arrives as ordered typed events: USB HID keys, relative mouse movement,
-and mouse buttons, with a coherent state snapshot for overflow recovery. Doom
-requests cursor capture while focused; focus loss releases keys, buttons and
+and mouse buttons, with a coherent state snapshot for overflow recovery. Mouse
+controls and cursor capture are disabled by default so the desktop cursor stays
+free. Use `ports/doom/run.sh --mouse` (or `make MOUSE_INPUT=1`) to opt in.
+With mouse controls enabled, Doom requests cursor capture while focused; focus loss releases keys, buttons and
 capture, and refocusing restores the requested capture. Mouse X turns (or strafes
 with Alt), Y moves forward/back, and left/right/middle use Doom's control defaults.
 The adapter translates these into the engine's ordinary events. Doom renders its indexed-color image; the adapter converts through

@@ -59,7 +59,7 @@ def run(image, jit):
     # The shell may release its own partial arena page between commands.
     assert int(rows[1][1]) <= int(rows[0][1]) + 1, rows
     assert len(re.findall(r'up \d+ days?, \d+:\d+:\d+, \d+/\d+ processes, load average:', text)) == 2
-    for expected in ['MMU_STRESS:0', 'process exhaustion (30 children) and slot recovery passed',
+    for expected in ['MMU_STRESS:0', 'process exhaustion (62 children) and slot recovery passed',
                      'physical exhaustion, failed exec, and page recovery passed',
                      'shrink/regrow, ENOMEM rollback, and repeated cleanup passed']:
         assert expected in text, (expected, text[-8000:])

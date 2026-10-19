@@ -1,0 +1,8 @@
+import { initial } from "./model";
+import { init } from "./commands";
+import { update } from "./update";
+import { view } from "./view";
+import { program_with_init } from "std/ui_command";
+fn main() {
+    program_with_init(initial(), init, update, view, 8).unwrap();
+}

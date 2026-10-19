@@ -1,0 +1,21 @@
+struct Log {
+    items: Vec<String>
+}
+
+impl Log {
+    fn output(&self) -> Vec<String> {
+        self.items
+    }
+}
+
+fn main() -> i16 {
+    let log = Log { items: ["hello"] };
+    if (log.output().len() != 1) {
+        return 1;
+    }
+    if ("hello".len() + 1 != 6) {
+        return 2;
+    }
+    println("lengths preserved");
+    0
+}

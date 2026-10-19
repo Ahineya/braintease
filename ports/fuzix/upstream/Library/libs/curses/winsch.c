@@ -14,6 +14,7 @@ int winsch(WINDOW *win, char c)
   int y = win->_cury;
   int maxx = win->_maxx;
 
+  win->_last_valid = 0;
   if ((c < ' ') && (c == '\n' || c == '\r' || c == '\t' || c == '\b'))
 	return(waddch(win, c));
   end = &win->_line[y][x];

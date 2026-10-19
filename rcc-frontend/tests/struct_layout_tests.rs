@@ -12,16 +12,19 @@ fn test_simple_struct_layout() {
             name: "x".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "y".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "z".to_string(),
             field_type: Type::Long, // 2 words
             offset: None,
+            bit_width: None,
         },
     ];
 
@@ -54,11 +57,13 @@ fn test_struct_with_arrays() {
                 size: Some(10),
             },
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "x".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
     ];
 
@@ -82,11 +87,13 @@ fn test_struct_with_pointers() {
                 bank: None,
             },
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "x".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
     ];
 
@@ -106,11 +113,13 @@ fn test_nested_structs() {
                 name: "a".to_string(),
                 field_type: Type::Int,
                 offset: None,
+                bit_width: None,
             },
             StructField {
                 name: "b".to_string(),
                 field_type: Type::Int,
                 offset: None,
+                bit_width: None,
             },
         ],
     };
@@ -120,11 +129,13 @@ fn test_nested_structs() {
             name: "inner".to_string(),
             field_type: inner_struct,
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "x".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
     ];
 
@@ -154,6 +165,7 @@ fn test_incomplete_type_error() {
         name: "bad".to_string(),
         field_type: Type::Void, // Void has no size
         offset: None,
+        bit_width: None,
     }];
 
     let result = calculate_struct_layout(&fields, SourceLocation::new_simple(0, 0));
@@ -174,6 +186,7 @@ fn test_unsized_array_error() {
             size: None, // Unsized array
         },
         offset: None,
+        bit_width: None,
     }];
 
     let result = calculate_struct_layout(&fields, SourceLocation::new_simple(0, 0));
@@ -187,11 +200,13 @@ fn test_find_field() {
             name: "x".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
         StructField {
             name: "y".to_string(),
             field_type: Type::Int,
             offset: None,
+            bit_width: None,
         },
     ];
 
@@ -217,6 +232,7 @@ fn test_recursive_struct_detection() {
                 name: "data".to_string(),
                 field_type: Type::Int,
                 offset: None,
+                bit_width: None,
             },
             StructField {
                 name: "next".to_string(),
@@ -225,6 +241,7 @@ fn test_recursive_struct_detection() {
                     fields: vec![], // Would be filled in reality
                 },
                 offset: None,
+                bit_width: None,
             },
         ],
     };
@@ -240,6 +257,7 @@ fn test_recursive_struct_detection() {
                 name: "data".to_string(),
                 field_type: Type::Int,
                 offset: None,
+                bit_width: None,
             },
             StructField {
                 name: "next".to_string(),
@@ -251,6 +269,7 @@ fn test_recursive_struct_detection() {
                     bank: None,
                 },
                 offset: None,
+                bit_width: None,
             },
         ],
     };

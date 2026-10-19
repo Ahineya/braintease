@@ -1,0 +1,24 @@
+import { Environment, share_environment, with_environment } from "std/effect_env";
+
+/// Shared identity with synchronous exclusive access. Copies retain the same
+/// storage, including nested move-only values. The last handle runs cleanup.
+export type Shared<T> = Shared(SharedOwner, Environment<T>);
+
+/// Transfers value into shared storage. Cleanup runs before nested resources drop.
+export fn shared<T>(value: T, cleanup: fn(&mut T) -> unit) -> Shared<T> {
+    let (owner, view) = share_environment(move(value), cleanup);
+    Shared(owner, view)
+}
+
+/// Shares a value whose nested resources already implement their own cleanup.
+export fn share<T>(value: T) -> Shared<T> {
+    shared(move(value), fn(value: &mut T) => {})
+}
+
+/// Temporarily accesses the shared payload. No reference may escape or cross an
+/// await. Reentrant access faults. This call retains storage throughout f.
+export fn with_shared<T, A>(value: Shared<T>, f: once fn(&mut T) -> A) -> A {
+    match value {
+        Shared(owner, view) => with_environment(view, move(f))
+    }
+}

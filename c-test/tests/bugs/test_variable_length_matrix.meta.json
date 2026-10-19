@@ -1,0 +1,5 @@
+{
+  "description": "C99 variable length two-dimensional stack array",
+  "expected": "Y\n",
+  "use_runtime": true
+}

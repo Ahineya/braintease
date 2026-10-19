@@ -34,7 +34,7 @@ Other arguments are passed to rvm; target/release/rvm --help lists them.
 Normal launches check the toolchain and rebuild changed sources incrementally.
 The OS, bundled HELLO, SIERP and BF programs, and README.TXT are kept current
 in build/ros/ros.img, preserving other files. Before changing an existing
-disk, it saves a backup alongside it (ros.img.bak, ros.img.bak.1, ...).
+disk, it keeps one previous image alongside it (ros.img.bak).
 Use --fresh to reformat the default disk and remove all existing files.
 Set ROS_BUILD to use a different build directory. Any image supplied with
 --disk is left intact by the build; the running guest can still write to it.

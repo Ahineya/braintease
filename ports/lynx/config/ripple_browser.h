@@ -8,4 +8,7 @@ void ripple_browser_begin(void);
 int ripple_browser_read(int, void *, unsigned);
 int ripple_browser_write(int, const void *, unsigned);
 int ripple_browser_limit_hit(void);
+int ripple_browser_secure(int, const char *);
+void ripple_browser_close(int);
+void ripple_browser_tls_close(void);
 #endif

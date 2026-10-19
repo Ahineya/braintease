@@ -14,10 +14,14 @@ impl<'a> Checker<'a> {
             std::mem::replace(&mut self.async_context, func.is_async.then_some(None));
         let saved_assoc_self = self.assoc_self.clone();
         if !capture {
-            self.assoc_self = self
-                .impl_contexts
-                .get(&func.name)
-                .map(|tr| (tr.clone(), self.referent(self.sigs[name].params[0])));
+            self.assoc_self = if let Some((tr, owner)) = self.impl_contexts.get(&func.name).cloned()
+            {
+                let arity = self.traits.iter().find(|t| t.name == tr).unwrap().arity;
+                let ty = self.apply_argument(&owner, arity, &HashMap::new())?;
+                Some((tr, ty))
+            } else {
+                None
+            };
         }
         let saved = Suspended {
             scopes: std::mem::take(&mut self.scopes),
@@ -126,7 +130,15 @@ impl<'a> Checker<'a> {
                 });
             }
         }
-        let ret = declared.unwrap_or_else(|| self.peek_block(&func.body).unwrap_or(Ty::I16));
+        let hint = self.peek_block(&func.body);
+        // An unknown tail (for example a generic call or a match containing
+        // one) must infer its result before constraining callback outputs.
+        // Preserve known named-function hints, including context needed by `?`.
+        // The provisional numeric default is only for recursive references.
+        let infer_result = declared.is_none() && (capture || hint.is_none());
+        let saved_lambda_return =
+            std::mem::replace(&mut self.lambda_return, infer_result.then_some(None));
+        let mut ret = declared.unwrap_or_else(|| hint.unwrap_or(Ty::I16));
         if func.is_async && (func.name == "main" || func.c_export) {
             return Err(CompileError::at(
                 self.source,
@@ -134,15 +146,8 @@ impl<'a> Checker<'a> {
                 "async functions cannot be main or exported through the C ABI",
             ));
         }
-        if func.name == "main" && !matches!(ret, Ty::Unit | Ty::I16) {
-            return Err(CompileError::at(
-                self.source,
-                func.name_span.start,
-                format!("main returns unit or i16, not {}", self.show(ret)),
-            ));
-        }
         self.fn_ret = ret;
-        if ret.is_ref() {
+        if escaped_ref(&self.ty_to_parsed(ret)) {
             return Err(CompileError::at(
                 self.source,
                 func.name_span.start,
@@ -150,6 +155,51 @@ impl<'a> Checker<'a> {
             ));
         }
         self.sigs.get_mut(name).unwrap().ret = Some(async_result.unwrap_or(ret));
+        let mut body = self.check_block(&func.body, if infer_result { None } else { Some(ret) })?;
+        for (index, stmt) in prefix.into_iter().enumerate() {
+            body.stmts.insert(index, stmt);
+        }
+        let body_ty = body.tail.as_ref().map(|expr| expr.ty).unwrap_or(Ty::Unit);
+        let returning_tail = infer_result && func.body.tail.as_ref().is_some_and(expr_returns);
+        if infer_result {
+            let from_return = self.lambda_return.flatten();
+            ret = if body.tail.is_some() && !returning_tail {
+                body_ty
+            } else {
+                from_return.unwrap_or(Ty::Unit)
+            };
+            if let Some(want) = from_return {
+                if want != ret {
+                    return Err(CompileError::at(
+                        self.source,
+                        func.name_span.start,
+                        format!(
+                            "lambda returns {}, but its body has type {}",
+                            self.show(want),
+                            self.show(ret)
+                        ),
+                    ));
+                }
+            }
+            if escaped_ref(&self.ty_to_parsed(ret)) {
+                return Err(CompileError::at(
+                    self.source,
+                    func.name_span.start,
+                    "a function cannot return a reference",
+                ));
+            }
+            self.sigs.get_mut(name).unwrap().ret = Some(ret);
+        }
+
+        // Validate and publish the final result, not the provisional recursive
+        // signature. Editor facts must agree with the checked callable type.
+        if func.name == "main" && !matches!(ret, Ty::Unit | Ty::I16) {
+            return Err(CompileError::at(
+                self.source,
+                func.name_span.start,
+                format!("main returns unit or i16, not {}", self.show(ret)),
+            ));
+        }
         if func.type_params.is_empty() && func.name_span.end > func.name_span.start {
             let params = self.sigs[name]
                 .params
@@ -166,11 +216,7 @@ impl<'a> Checker<'a> {
                 fact.ty = signature;
             }
         }
-        let mut body = self.check_block(&func.body, Some(ret))?;
-        for (index, stmt) in prefix.into_iter().enumerate() {
-            body.stmts.insert(index, stmt);
-        }
-        let body_ty = body.tail.as_ref().map(|expr| expr.ty).unwrap_or(Ty::Unit);
+
         if func.body.tail.is_none() && ret != Ty::Unit && !always_returns(&func.body) {
             return Err(CompileError::at(
                 self.source,
@@ -178,7 +224,7 @@ impl<'a> Checker<'a> {
                 format!("`{}` must return {}", func.name, self.show(ret)),
             ));
         }
-        if func.body.tail.is_some() && body_ty != ret {
+        if func.body.tail.is_some() && !returning_tail && body_ty != ret {
             return Err(CompileError::at(
                 self.source,
                 func.name_span.start,
@@ -219,6 +265,7 @@ impl<'a> Checker<'a> {
         self.scopes = saved.scopes;
         self.bindings = saved.bindings;
         self.fn_ret = saved.fn_ret;
+        self.lambda_return = saved_lambda_return;
         self.loops = saved.loops;
         self.outer_scopes = saved_outer_scopes;
         self.outer_bindings = saved_outer_bindings;
@@ -232,7 +279,7 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn instantiate(&mut self, name: &str, args: &[Ty]) -> Result<String, CompileError> {
-        if self.generic_check {
+        if self.generic_check && !self.signature_only.contains(name) {
             self.check_declaration(name)?;
         }
         let key = (name.to_string(), args.to_vec());
@@ -263,6 +310,9 @@ impl<'a> Checker<'a> {
                 variadic: false,
             },
         );
+        if self.signature_only.contains(name) {
+            return Ok(mangled);
+        }
         let saved_subst = std::mem::replace(&mut self.subst, subst);
         self.check_fn(&func, &mangled, true, false)?;
         self.subst = saved_subst;
@@ -280,6 +330,7 @@ impl<'a> Checker<'a> {
 
     pub(super) fn mangle_ty(&self, ty: Ty) -> String {
         match ty {
+            Ty::Constructor(id) => format!("constructor${id}$"),
             Ty::Adt(id) => {
                 let adt = &self.adts[id as usize];
                 let mut text = self.schemas[adt.schema].name.clone();
@@ -309,7 +360,7 @@ impl<'a> Checker<'a> {
             }
             Ty::Func(id) => {
                 let sig = &self.funcs[id as usize];
-                let mut text = String::from("fn");
+                let mut text = String::from(if sig.once { "oncefn" } else { "fn" });
                 for param in &sig.params {
                     text.push('$');
                     text.push_str(&self.mangle_ty(*param));

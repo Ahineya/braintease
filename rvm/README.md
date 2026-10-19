@@ -2,6 +2,10 @@
 
 A reference implementation of the Ripple VM architecture that executes programs produced by the ripple-asm assembler and linker.
 
+For the WebAssembly interpreter and isolated FUZIX browser demo, see
+[RVM in the browser](web/README.md). It boots to the console; `startx` opens
+NanoWM and NXDSKTOP on demand.
+
 ## Features
 
 - Complete implementation of all Ripple VM instructions

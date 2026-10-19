@@ -1,6 +1,7 @@
 //! Constructors in the RFL type checker.
 
 use super::*;
+mod arguments;
 
 impl<'a> Checker<'a> {
     pub(super) fn nullary(
@@ -124,11 +125,30 @@ impl<'a> Checker<'a> {
                 ));
             }
             for (index, ty) in type_args.iter().enumerate() {
-                solved[index] = Some(self.apply(ty, &HashMap::new())?);
+                if kinds::is_slot(ty) {
+                    continue;
+                }
+                solved[index] = Some(self.apply_argument(
+                    ty,
+                    self.schemas[schema].type_params[index].arity,
+                    &HashMap::new(),
+                )?);
             }
-        } else if let Some(Ty::Adt(id)) = expected {
+        }
+        if let Some(Ty::Adt(id)) = expected {
             if self.adts[id as usize].schema == schema {
                 for (index, arg) in self.adts[id as usize].args.iter().enumerate() {
+                    if solved[index].is_some_and(|explicit| explicit != *arg) {
+                        return Err(CompileError::at(
+                            self.source,
+                            span,
+                            format!(
+                                "expected {}, found {}",
+                                self.show(*arg),
+                                self.show(solved[index].unwrap())
+                            ),
+                        ));
+                    }
                     solved[index] = Some(*arg);
                 }
             }
@@ -146,7 +166,7 @@ impl<'a> Checker<'a> {
                 }
                 checked.push(typed);
             } else {
-                let typed = self.check_expr(arg, None)?;
+                let typed = self.check_inferred_argument(arg, field, &params, &solved)?;
                 self.infer_field(field, typed.ty, &params, &mut solved, span)?;
                 checked.push(typed);
             }
@@ -216,6 +236,7 @@ impl<'a> Checker<'a> {
                 "cannot infer a type through an `extern \"C\"` function",
             )),
             ParsedTy::Func {
+                once,
                 params: fn_params,
                 ret,
                 ..
@@ -228,6 +249,13 @@ impl<'a> Checker<'a> {
                     ));
                 };
                 let sig = self.funcs[id as usize].clone();
+                if *once != sig.once {
+                    return Err(CompileError::at(
+                        self.source,
+                        span,
+                        "consuming and reusable functions have different types",
+                    ));
+                }
                 if fn_params.len() != sig.params.len() {
                     return Err(CompileError::at(
                         self.source,
@@ -349,11 +377,70 @@ impl<'a> Checker<'a> {
             } => {
                 if let Some(index) = params.iter().position(|param| param == name) {
                     if !args.is_empty() {
-                        return Err(CompileError::at(
-                            self.source,
-                            name_span.start,
-                            format!("type parameter `{name}` does not take arguments"),
-                        ));
+                        if matches!(actual, Ty::Constructor(_)) {
+                            let head = solved[index].ok_or_else(|| CompileError::at(self.source, span,
+                                "cannot infer the head of a partial constructor pattern; supply the constructor explicitly"))?;
+                            return self
+                                .infer_partial_pattern(head, args, actual, params, solved, span);
+                        }
+                        let (constructor, concrete) = if let Some(constructor) = solved[index] {
+                            let concrete = self
+                                .project_constructor(constructor, actual)
+                                .ok_or_else(|| {
+                                    CompileError::at(
+                                        self.source,
+                                        span,
+                                        format!(
+                                            "expected application of {}, found {}",
+                                            self.show(constructor),
+                                            self.show(actual)
+                                        ),
+                                    )
+                                })?;
+                            (constructor, concrete)
+                        } else {
+                            self.decompose_constructor(actual).ok_or_else(|| {
+                                CompileError::at(
+                                    self.source,
+                                    span,
+                                    format!(
+                                        "expected application of constructor `{name}`, found {}",
+                                        self.show(actual)
+                                    ),
+                                )
+                            })?
+                        };
+                        if args.len() != concrete.len() {
+                            if solved[index].is_none() {
+                                return Err(CompileError::at(self.source, span,
+                                    "cannot infer a partial constructor; supply explicit slots such as `Result<_, String>`"));
+                            }
+                            return Err(self.arity_error(
+                                name_span.start,
+                                name,
+                                args.len(),
+                                concrete.len(),
+                            ));
+                        }
+                        match solved[index] {
+                            None => solved[index] = Some(constructor),
+                            Some(existing) if existing == constructor => {}
+                            Some(existing) => {
+                                return Err(CompileError::at(
+                                    self.source,
+                                    span,
+                                    format!(
+                                        "expected constructor {}, found {}",
+                                        self.show(existing),
+                                        self.show(constructor)
+                                    ),
+                                ))
+                            }
+                        }
+                        for (arg, got) in args.iter().zip(concrete) {
+                            self.infer_field(arg, got, params, solved, span)?;
+                        }
+                        return Ok(());
                     }
                     match solved[index] {
                         None => solved[index] = Some(actual),
@@ -371,6 +458,9 @@ impl<'a> Checker<'a> {
                         }
                     }
                     return Ok(());
+                }
+                if matches!(actual, Ty::Constructor(_)) {
+                    return self.infer_constructor_pattern(parsed, actual, params, solved, span);
                 }
                 if let Some(prim) = Ty::parse_name(name) {
                     if prim != actual {

@@ -63,6 +63,7 @@ typedef struct sym {
 	char *filename;
 	struct dep *deplist;
 	int type;
+    int phony;
 	time_t moddate;
 } SYM;
 
@@ -110,7 +111,7 @@ extern void install(TOKEN *, TOKEN *, char *, int);
 extern void make(SYM *);
 extern void expand(char *);
 extern void docmd0(SYM *, char *, char *, char *);
-extern void docmd(SYM *, char *, char *, char *, char *, char *);
+extern void docmd(SYM *, char *, char *, char *, char *, char *, char *);
 extern void doit(char *cmd);
 extern void implicit(SYM *, char *, int);
 extern void defalt(SYM *, char *);

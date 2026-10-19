@@ -11,6 +11,9 @@ choose configuration paths, application roles, environment variables or themes.
 | Ordered INI reader | [`ini/ini.h`](ini/ini.h) | `lib/ini` |
 | Semantic theme configuration | [`tui-theme/tui_theme.h`](tui-theme/tui_theme.h) | `lib/tui_theme` |
 | Install theme styles into curses | [`tui-theme/tui_curses.h`](tui-theme/tui_curses.h) | `lib/tui_curses` |
+| Bounded QR encoding and packed rows | [`qr/qr.h`](qr/qr.h) | `lib/qr` |
+| PNG/GIF/JPEG/BMP decoding, RGBA and RGB565 | [`image/image.h`](image/image.h), [`image/nano.h`](image/nano.h) | `lib/image` |
+| UTF-8, graphemes, terminal widths and bitmap glyphs | [`unicode/README.md`](unicode/README.md), [`ripple_unicode.h`](../runtime/include/ripple_unicode.h) | `lib/unicode` |
 
 INI is independent of filesystems and curses; the theme loader uses libc file
 I/O, and the curses installer depends on core curses. All three C APIs work
@@ -110,9 +113,106 @@ to the caller. Failed mutations leave the text unchanged. Free with `text_free`.
 
 Files are bounded to 512 KiB/65,536 lines with a shared 2 MiB gap-capacity budget,
 plus line indexes and up to 64 groups/1 MiB edit payload per buffer. Raw LF/CRLF
-bytes are preserved, NUL is rejected, and printable ASCII is the display target.
+bytes are preserved and NUL is rejected. Unicode motion/column/render operations
+use the shared Unicode engine, including combining sequences, emoji and wide
+continuation cells. `text_boundary`/`text_next`/`text_previous`/`text_step` expose
+grapheme boundaries while storage/edit ranges remain octets. Malformed UTF-8 is
+displayed safely and retained unchanged. Standalone C builds also link
+`unicode/unicode.c`; standalone RFL clients import that C module explicitly.
+OS builds use the guest SDK's shared Unicode implementation and glyph pool.
 The owned RFL wrapper embeds the same C engine for standalone and OS builds.
+`text_wrap_info`/`text_wrap_at`/`text_wrap_column` expose cached visual word
+wrapping without editing file contents. Layout computes the requested prefix
+and invalidates from the changed logical line. `text_format` optionally inserts
+real newlines at whitespace using terminal columns and the existing undo group;
+width zero disables formatting.
 Rift supplies filesystem/save policy and vi commands; neither is in the engine.
 See the [Rift guide](../rfl/apps/rift/README.md) for contracts and extension points.
 `python3 libraries/tests/test_text.py` runs the independent randomized/reference
 engine checks; `--cc` accepts compiler/SDK flags.
+
+## Images
+
+`image/image.h` is a portable decoder API, independent of the filesystem,
+window server and browser. `ri_image_decode(octets, length, limits, &image)`
+returns a status and an owned `RiImage`, with straight RGBA in four addressable
+octet cells per pixel. Free it with `ri_image_free`. Every failed decode leaves
+the output NULL. `ri_image_error` describes the error; `ri_image_new` creates
+a zeroed canvas. There is no global mutable decoder state or retained input.
+On C16, an octet occupies one 16-bit cell and values above 255 are rejected.
+
+Supported formats:
+
+- PNG: grayscale, RGB, indexed, grayscale-alpha and RGBA; valid 1/2/4/8/16-bit
+  sample depths, all five row filters, Adam7, palettes and `tRNS`. CRC, zlib
+  header, exact DEFLATE output and Adler checks reject malformed streams.
+  Sixteen-bit samples reduce to their high octet.
+- GIF87a/89a: palettes, transparency, offsets, interlacing and bounded LZW.
+  Only the first displayed frame is returned. Animation/disposal timing and
+  plaintext graphics are not implemented.
+- Baseline JPEG: grayscale and YCbCr 4:4:4, 4:2:2, 4:4:0 and 4:2:0, including
+  restart intervals. Progressive/multiscan, CMYK, RGB JPEG and arithmetic
+  coding are unsupported. Chroma uses nearest-neighbour reconstruction.
+- BMP: OS/2 or Windows headers, uncompressed 1/4/8-bit palettes and 24/32-bit
+  pixels, row padding and top-down Windows images. BI_RGB's unused fourth
+  channel is ignored. RLE, bitfields and BMP alpha masks are unsupported.
+
+Defaults bound each dimension to 512, decoded pixels to 65,536, input to
+262,144 octets and temporary work to 786,432 C cells. `RiLimits` allows explicit
+smaller or larger bounds, within the hard 4096-dimension/1,048,576-pixel and
+input ceilings. Work counts temporary allocations, separately from the owned
+RGBA canvas. Applications must impose aggregate cache budgets themselves.
+There is no ICC/gamma correction, EXIF orientation, SVG, WebP, ICO or animation.
+
+Compile `libraries/image/decode.c` once, with the ordinary C16 SDK, or compile
+`image.c`, `png.c`, `gif.c`, `bmp.c`, `jpeg.c` and `../deflate/deflate.c` separately.
+Do not link both forms. The implementation needs only libc. `adapt.py` verifies
+the pinned, unmodified public-domain picojpeg import and reproduces its private
+generated adapter. The adapter uses per-decoder state, widened arithmetic and
+checked markers/tables, and fixes the imported SOS-header consumption bug.
+`vendor/source.json` records provenance and hashes. New image code is MIT;
+the shared DEFLATE extraction retains Joergen Ibsen's zlib license and its
+original notice. It derives from the existing C16 Telegram inflater.
+
+`image/nano.h` and the separate `nano.c` adapter provide `ri_nano_draw` for
+Nano-X applications: scaled and repeated drawing into an explicit clipped
+rectangle, preserving the GC's additional clipping. It converts to RGB565 and
+uploads at most 128-by-32 tiles. Client and server staging each need at most
+8192 C cells; resources are released after each tile. The current FuseDE image
+protocol's alpha plane blends against actual destination pixels, including
+partial transparency. It retains the existing per-client, global and memory
+quotas. This adapter links the ordinary Nano-X/FuseDE client library and needs
+an updated server. The decoder itself has no graphics dependency.
+
+`ri_nano_draw_cached` is an optional retained-resource path. Its caller must
+clip the GC to the supplied rectangle, call `ri_nano_forget(image)` **before**
+changing or freeing RGBA, and `ri_nano_clear()` before closing the connection.
+It keeps at most three server resources/65,536 cells, expands small repeated
+patterns once, and falls back to ordinary visible tiles when a source exceeds
+its bounds or resources are unavailable. No decoder ownership rules change.
+An independent pixel oracle and protocol-operation counter run with
+`python3 libraries/tests/test_image_nano.py`; hosted clips reach 1920x1080.
+
+The owned RFL wrapper embeds exactly the same C engine:
+
+```rfl
+import { decode } from "lib/image";
+import {} from "std/result";
+import {} from "std/option";
+let image = decode(bytes)?;
+let width = image.width();
+let pixel = image.rgba(0, 0); // Option<u32>, packed 0xRRGGBBAA
+```
+
+`Image` automatically frees its canvas; `width`, `height`, `opaque` and checked
+`rgba` accessors are available without a renderer. For bulk drawing C clients
+should pass the canvas to the Nano-X adapter rather than query every pixel.
+
+`python3 libraries/tests/test_image.py --target host` runs independent format
+vectors, pixel hashes, JPEG comparison, bank-sized canvases, truncation,
+allocation failures, guarded buffers and mutated inputs under UBSan. The fixture
+generator needs `cjpeg`/`djpeg` (libjpeg). `--target both` additionally compiles
+and runs the same checks inside disposable Fuse-X and FUZIX/RVM kernels, then
+checks their filesystems. `--compiler` chooses RCC. The RFL wrapper is covered
+by `cargo test --release -p rfl --test image_library`. Actual graphics, clipping,
+scrolling and HTTP/HTTPS loading are covered by NetSurf's `tests/images.py`.

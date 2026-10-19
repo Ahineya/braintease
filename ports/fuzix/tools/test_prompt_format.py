@@ -12,7 +12,7 @@ flags=[]
 if sys.platform=='darwin':
     developer='/Applications/Xcode.app/Contents/Developer'
     if Path(developer).is_dir():environment.setdefault('DEVELOPER_DIR',developer)
-    sdk=subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-path'],env=environment,text=True).strip()
+    sdk=environment.get('SDKROOT') or subprocess.check_output(['xcrun','--sdk','macosx','--show-sdk-path'],env=environment,text=True).strip()
     flags=['-isysroot',sdk]
 with tempfile.TemporaryDirectory(prefix='fuzix-prompt-format-') as folder:
     work=Path(folder)
@@ -20,6 +20,7 @@ with tempfile.TemporaryDirectory(prefix='fuzix-prompt-format-') as folder:
     (work/'utsname.h').write_text('#include <sys/utsname.h>\n')
     subprocess.run([os.environ.get('CC','cc'),*flags,'-std=c99','-Wall','-Wextra','-Werror',
         '-I'+str(work),'-I'+str(PORT/'ripple'),str(PORT/'ripple/shell-prompt.c'),
-        str(PORT/'tools/tests/shell_prompt.c'),'-o',str(work/'check')],check=True,env=environment,timeout=60)
+        str(PORT/'tools/tests/shell_prompt.c'),str(PORT.parent.parent/'libraries/unicode/unicode.c'),
+        '-o',str(work/'check')],check=True,env=environment,timeout=60)
     subprocess.run([str(work/'check')],check=True,timeout=10)
 print('Shell prompt: identities, paths, clock, quoting, colors, multiline geometry and bounds passed')

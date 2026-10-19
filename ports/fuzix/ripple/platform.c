@@ -8,6 +8,7 @@
 #include <timer.h>
 #include <vm_devices.h>
 #include "graphics.h"
+#include "pcm.h"
 #include "selectwait.h"
 struct u_data udata;
 unsigned ripple_kernel_stack = 32;
@@ -35,7 +36,8 @@ void map_init(void) {}
 int pagemap_alloc(ptptr p) {
     if (!udata.u_ptab) {
         if (ripple_mmu_exec(indexof(p))) return ENOMEM;
-    } else ripple_mmu_alloc(indexof(p));
+    }
+    /* Fork constructs the child map once, after saving its parent context. */
     p->p_page = indexof(p) + 1;
     return 0;
 }
@@ -43,6 +45,7 @@ extern void ripple_code_free(ptptr);
 extern void ripple_code_fork(ptptr);
 void pagemap_free(ptptr p) {
     ripple_gfx_exit(p);
+    ripple_pcm_exit(p);
     ripple_code_free(p);
     ripple_mmu_free(indexof(p));
     p->p_size = 0;
@@ -76,9 +79,9 @@ void switchin(ptptr p) {
     ripple_mmu_select(i);
     udata = task_data[i];
     ripple_kernel_stack = 32 + i;
-    p->p_status = P_RUNNING;
+    proc_setstate(p,P_RUNNING);
     runticks = 0;
-    need_resched = 0;
+    proc_sched_switch();
     ripple_context_restore(&contexts[i]);
     panic("switchin returned");
 }
@@ -93,7 +96,11 @@ int16_t dofork(ptptr p) {
     if (ripple_mmu_fork(parent,child)) panic("fork mappings");
     contexts[child] = contexts[parent];
     contexts[child].sb = 32 + child;
-    ripple_bank_copy(32 + parent, 32 + child);
+    /* The upward-growing stack has no live cells above the saved SP. */
+    if (!contexts[parent].sp || contexts[parent].sp>BANK_CELLS ||
+        ripple_copy((void *)((32UL+child)<<16),
+                    (void *)((32UL+parent)<<16),contexts[parent].sp))
+        panic("fork kernel stack");
     return p->p_pid;
 }
 static unsigned long host_seconds;
@@ -112,7 +119,9 @@ void sync_clock(void) {
         irqrestore(flags);
         return;
     }
+    proc_sched_sample(now.seconds_low,(unsigned)(now.nanoseconds/1000000UL));
     ripple_select_clock(&now);
+    ripple_pcm_clock(&now);
     seconds = now.seconds_low - host_seconds;
     fraction = now.nanoseconds / 10000000UL;
     if (fraction < host_fraction) {
@@ -147,6 +156,7 @@ void plt_clock_init(void) {
         tod.low = now.seconds_low;
         tod.high = now.seconds_high;
     }
+    proc_sched_switch();
     irqrestore(flags);
 }
 uint_fast8_t plt_rtc_secs(void) { return 255; }
@@ -253,8 +263,7 @@ long ripple_dispatch(struct ripple_request *user) {
     udata.u_argn1 = req.arg[1];
     udata.u_argn2 = req.arg[2];
     udata.u_argn3 = req.arg[3];
-    unix_syscall();
-    sync_clock();
+    unix_syscall(); /* Includes the exit clock sample before scheduling/signals. */
     _uputw(udata.u_error, (uint16_t *)((uint8_t *)user +
                                        offsetof(struct ripple_request, error)));
     __hard_di();
@@ -301,7 +310,7 @@ int main(void) {
 
 void ripple_preempt(void) {
     udata.u_insys = 1;
-    udata.u_ptab->p_status = P_READY;
+    proc_setstate(udata.u_ptab,P_READY);
     plt_switchout();
     __hard_ei();
     chksigs();

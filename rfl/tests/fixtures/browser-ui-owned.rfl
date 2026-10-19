@@ -1,0 +1,40 @@
+import { program, Cmd, message } from "std/ui_command";
+import { UiQueueFull } from "std/ui";
+import { Html, number } from "std/html";
+type Msg = Number(Owned<i16>) | Empty;
+fn update(model: i16, msg: Msg) -> (i16, Vec<Cmd<Msg>>) {
+    match move(msg) {
+        Number(owner) => {
+            let value = {
+                *owner.borrow()
+            };
+            drop(move(owner));
+            (value, [message(Empty)])
+        },
+        Empty => (model + 1, [])
+    }
+}
+
+fn view(model: &i16) -> Html<Msg> {
+    number((*model) as i64)
+}
+
+fn main() {
+    let ui = program(0, update, view, 4).unwrap();
+    ui.send(Number(owned(42, fn(n: &mut i16) => {
+        println("message dropped");
+    }))).unwrap();
+    for (i in 0..255) {
+        ui.send(Empty).unwrap();
+    }
+    let rejected = owned(7, fn(n: &mut i16) => {
+        match ui.send(Empty) {
+            Err(UiQueueFull) => println("reentrant full"),
+            _ => println("BAD")
+        };
+    });
+    match ui.send(Number(move(rejected))) {
+        Err(UiQueueFull) => println("full"),
+        _ => println("BAD")
+    };
+}

@@ -25,6 +25,8 @@ def native_image(image, kernel, names=('sh', 'echo'), blocks=8192):
               '...JSON.parse(process.argv[2]).map(a=>({name:a.name,mode:0o100755,data:fs.readFileSync(a.path)})),'
               '{name:"/dev/tty",mode:0o20666,device:0x200},'
               '{name:"/dev/proc",mode:0o20666,device:0x103},'
+              '{name:"/dev/urandom",mode:0o20444,device:0x104},'
+              '{name:"/dev/crypto",mode:0o20666,device:0x105},'
               '...Array.from({length:4},(_,i)=>({name:"/dev/ptyp"+i,mode:0o20666,device:0x0300+i})),'
               '...Array.from({length:4},(_,i)=>({name:"/dev/ttyp"+i,mode:0o20666,device:0x202+i})),'
               '{name:"/etc/passwd",data:Buffer.from("root:x:0:0:root:/:/bin/sh\\n")},'
@@ -191,8 +193,13 @@ class Screen:
                 if i + 1 == len(text): break
                 if text[i + 1] == '[':
                     end = i + 2
-                    while end < len(text) and not ('@' <= text[end] <= '~'): end += 1
+                    while end < len(text) and text[end] != '\x1b' and not ('@' <= text[end] <= '~'): end += 1
                     if end == len(text): break
+                    # A suspend signal can interrupt a repaint inside a CSI;
+                    # endwin's next ESC aborts it, as on a real terminal.
+                    if text[end] == '\x1b':
+                        i = end
+                        continue
                     parameters, final = text[i + 2:end], text[end]
                     if not parameters.startswith('?'):
                         numbers = [int(n) if n else 0 for n in parameters.split(';')]

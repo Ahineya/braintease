@@ -64,6 +64,10 @@ static void highlighting(void) {
     text_begin(b, 0); assert(!text_replace(b, 0, 2, (const unsigned char *)"xx", 2));
     assert(!text_render(b, 1, 0, 20, 4, styles, 2048, 0, 0, cells)); assert((cells[0] & ~255UL) == 0);
     text_free(b);
+    b = text_new(); assert(!text_append(b, (const unsigned char *)"a\tb", 3));
+    assert(!text_render(b, 0, 0, 4, 4, styles, 2048, 0, 0, cells) && text_overflow(b));
+    assert(!text_render(b, 0, 1, 4, 4, styles, 2048, 0, 0, cells) && !text_overflow(b));
+    assert(cells[3] == 'b'); text_free(b);
 }
 static void keyword_case(unsigned language, const char *token, unsigned kind) {
     TextBuffer *b = text_new(); unsigned long cells[64], styles[7] = {0,256,512,768,1024,1280,1536};
@@ -86,7 +90,44 @@ static void keywords(void) {
     keyword_case(3, "False", 2); keyword_case(3, "false", 0);
     keyword_case(5, "false", 2); keyword_case(5, "False", 6);
     keyword_case(11, "defparameter", 2); keyword_case(11, "when", 2);
+    keyword_case(13, "PRINT", 2); keyword_case(13, "eLsEiF", 2);
+    keyword_case(13, "printable", 0);
+    keyword_case(13, "' comment with (brackets)", 1);
+    keyword_case(13, "rEm comment", 1);
+    keyword_case(13, "remember", 0);
+    keyword_case(13, "\"a\"\"b\\c\"", 3);
 }
+
+static void javascript_token(TextBuffer *b, unsigned long row, const char *line, const char *token, unsigned kind) {
+    unsigned long cells[160], styles[7] = {0,256,512,768,1024,1280,1536};
+    const char *at = strstr(line, token); unsigned i;
+    assert(at && !text_render(b, row, 0, 160, 4, styles, 2048, 0, 0, cells));
+    for (i = 0; i < strlen(token); ++i) assert((cells[at - line + i] & ~255UL) == styles[kind]);
+}
+static void javascript(void) {
+    const char *first = "async function load($value) { return /a[\\/]/gu.test($value) ? 1.5e-3 : 0xffn; } // tail";
+    const char *source = "async function load($value) { return /a[\\/]/gu.test($value) ? 1.5e-3 : 0xffn; } // tail\n"
+        "const note = `hello\nworld ${name}`;\n/* block\nstill */ var end = true;\nlet $return = total / count;\n";
+    TextBuffer *b = text_new(); unsigned long bounds[2];
+    assert(b && !text_append(b, (const unsigned char *)source, strlen(source))); text_language(b, 14);
+    javascript_token(b, 0, first, "async", 2); javascript_token(b, 0, first, "function", 2);
+    javascript_token(b, 0, first, "$value", 0); javascript_token(b, 0, first, "/a[\\/]/gu", 3);
+    javascript_token(b, 0, first, "1.5e-3", 4); javascript_token(b, 0, first, "0xffn", 4);
+    javascript_token(b, 0, first, "// tail", 1);
+    javascript_token(b, 2, "world ${name}`;", "world ${name}`", 3);
+    javascript_token(b, 4, "still */ var end = true;", "still */", 1);
+    javascript_token(b, 4, "still */ var end = true;", "var", 2);
+    javascript_token(b, 5, "let $return = total / count;", "$return", 0);
+    javascript_token(b, 5, "let $return = total / count;", "/", 5);
+    text_begin(b, 0); assert(!text_replace(b, 0, 0, (const unsigned char *)"/*", 2)); text_damage(b, bounds);
+    javascript_token(b, 0, "/*async function", "async", 1);
+    assert(text_undo(b) == 0);
+    javascript_token(b, 0, first, "function", 2);
+    text_free(b);
+    keyword_case(14, "instanceof", 2); keyword_case(14, "yield", 2); keyword_case(14, "$return", 0);
+    keyword_case(14, "fn", 0); keyword_case(14, "#!/bin/js", 1);
+}
+
 static void display_generation(void) {
     TextBuffer *b = text_new(); unsigned long generation, revision;
     generation = text_generation(b);
@@ -113,4 +154,83 @@ static void banks(void) {
     assert(text_replace(b, 0, 0, bytes, TEXT_MAX + 1) < 0); /* validate size before reading input */
     free(bytes); text_free(b);
 }
-int main(void) { edits(); structure(); randomized(); highlighting(); keywords(); display_generation(); banks(); puts("Text engine: grouped history, randomized edits/line index, CRLF, keyword lookup, syntax/display invalidation and bank boundary passed"); return 0; }
+static void damage_rendering(unsigned language) {
+    TextBuffer *b = text_new(); unsigned iteration, row, edit;
+    unsigned long damage[2], cells[24][80], expected[80];
+    unsigned long styles[7] = {0,256,512,768,1024,1280,1536};
+    const char *parts[] = {"x", "/*", "*/", "\n", "\"\"\"", "(*", "*)", "'", "`", "\\", "\r\n"};
+    unsigned char copy[8192];
+    const char *initial = "fn main() {\n  let x = 12;\n  /* comment\n     continues */\n}\n";
+    assert(b && !text_append(b, (const unsigned char *)initial, strlen(initial)));
+    text_language(b, language); text_damage(b, damage);
+    for (row = 0; row < 24; ++row) assert(!text_render(b, row, 0, 80, 4, styles, 2048, 0, 0, cells[row]));
+    /* A local non-syntax edit converges immediately and touches one row. */
+    assert(!text_replace(b, 0, 0, (const unsigned char *)"x", 1));
+    text_damage(b, damage); assert(damage[0] == 0 && damage[1] == 1);
+    assert(!text_render(b, 0, 0, 80, 4, styles, 2048, 0, 0, cells[0]));
+    srand(438 + language);
+    for (iteration = 0; iteration < 400; ++iteration) {
+        TextBuffer *reference;
+        for (edit = 0; edit < 3; ++edit) {
+            unsigned long n = text_length(b), at = rand() % (n + 1), remove = n - at;
+            const char *part = parts[rand() % (sizeof(parts)/sizeof(parts[0]))];
+            if (remove > 4) remove = 4;
+            remove = rand() % (remove + 1);
+            text_begin(b, at);
+            assert(!text_replace(b, at, remove, (const unsigned char *)part, strlen(part)));
+            text_end(b, at + strlen(part));
+        }
+        if (iteration % 7 == 0) { assert(text_undo(b) >= 0); }
+        if (iteration % 14 == 0) { assert(text_redo(b) >= 0); }
+        text_damage(b, damage);
+        assert(text_length(b) < sizeof(copy) && !text_copy(b, 0, text_length(b), copy));
+        reference = text_new(); assert(reference);
+        assert(!text_append(reference, copy, text_length(b))); text_language(reference, language);
+        for (row = 0; row < 24; ++row) {
+            if (row >= damage[0] && row < damage[1])
+                assert(!text_render(b, row, 0, 80, 4, styles, 2048, 0, 0, cells[row]));
+            assert(!text_render(reference, row, 0, 80, 4, styles, 2048, 0, 0, expected));
+            assert(!memcmp(cells[row], expected, sizeof(expected)));
+        }
+        text_free(reference);
+    }
+    text_free(b);
+}
+static void wrapping(void) {
+    TextBuffer *b = text_new(); unsigned long info[4], index; unsigned char out[128];
+    const unsigned char *text = (const unsigned char *)"one two three four\n12345678\n\n";
+    assert(b && !text_append(b, text, strlen((const char *)text)));
+    assert(text_wrap_info(b, 0, 8, 4, info) == 1 && info[0] == 0 && info[1] == 0 && info[2] == 8 && info[3] == 0);
+    assert(text_wrap_info(b, 1, 8, 4, info) == 1 && info[0] == 0 && info[1] == 8 && info[2] == 6 && info[3] == 8);
+    assert(text_wrap_info(b, 2, 8, 4, info) == 1 && info[3] == 14);
+    assert(text_wrap_at(b, 15, 8, 4) == 2);
+    assert(text_wrap_column(b, 1, 2, 8, 4) == 10);
+    assert(text_wrap_info(b, 4, 8, 4, info) == 1 && info[0] == 1 && !info[2]);
+    assert(text_wrap_info(b, 7, 8, 4, info) == 0);
+    text_begin(b, 0); assert(!text_replace(b, 0, 0, (const unsigned char *)"a\n", 2)); text_end(b, 2);
+    assert(text_wrap_at(b, 17, 8, 4) == 3);
+    assert(text_undo(b) == 0 && text_wrap_at(b, 15, 8, 4) == 2);
+    assert(text_redo(b) == 2 && text_wrap_at(b, 17, 8, 4) == 3);
+    assert(text_wrap_info(b, 0, 0, 4, info) == -1);
+    text_free(b); b = text_new();
+    assert(!text_append(b, (const unsigned char *)"one two three four", 18));
+    text_begin(b, 18); assert(text_format(b, 18, 8, 4) == 18); text_end(b, 18);
+    assert(!text_copy(b, 0, 18, out) && !memcmp(out, "one two\nthree\nfour", 18));
+    assert(text_undo(b) == 18 && !text_copy(b, 0, 18, out) && !memcmp(out, "one two three four", 18));
+    assert(text_format(b, 18, 0, 4) == 18);
+    text_free(b); b = text_new();
+    assert(!text_append(b, (const unsigned char *)"one two three\r\n", 15));
+    text_begin(b, 13); assert(text_format(b, 13, 7, 4) == 14); text_end(b, 14);
+    assert(!text_copy(b, 0, 16, out) && !memcmp(out, "one two\r\nthree\r\n", 16));
+    assert(text_undo(b) == 13 && text_length(b) == 15);
+    text_free(b); b = text_new();
+    /* UTF-8 graphemes (CJK, combining mark, emoji ZWJ) never split. */
+    text = (const unsigned char *)"\xe4\xb8\xad" "e\xcc\x81" "\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x92\xbb";
+    assert(!text_append(b, text, strlen((const char *)text)));
+    index = text_wrap_at(b, 6, 3, 4);
+    assert(index == 1 && text_wrap_info(b, index, 3, 4, info) == 1 && info[3] == 6);
+    assert(text_wrap_column(b, 0, 2, 3, 4) == 3);
+    assert(text_length(b) == strlen((const char *)text));
+    text_free(b);
+}
+int main(void) { edits(); structure(); randomized(); highlighting(); keywords(); javascript(); display_generation(); banks(); damage_rendering(1); damage_rendering(3); damage_rendering(4); damage_rendering(14); wrapping(); puts("Text engine: history, randomized edits/line index, CRLF, syntax convergence, accumulated damage, wrapping and bank boundary passed"); return 0; }

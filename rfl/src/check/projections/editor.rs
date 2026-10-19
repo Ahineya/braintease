@@ -38,6 +38,19 @@ impl Checker<'_> {
             return;
         };
         let tr = self.traits.iter().find(|tr| tr.name == name).unwrap();
+        if tr.arity > 0 {
+            for method in &tr.methods {
+                self.type_members.push(TypeMemberFact {
+                    operation: true,
+                    qualifier: qualifier.into(),
+                    contract: name.clone(),
+                    name: method.name.clone(),
+                    detail: trait_method_signature(method),
+                    scope,
+                    concrete,
+                });
+            }
+        }
         for member in &tr.associated_types {
             let bounds: Vec<_> = member
                 .bounds
@@ -50,6 +63,7 @@ impl Checker<'_> {
                 format!(": {}", bounds.join(" + "))
             };
             self.type_members.push(TypeMemberFact {
+                operation: false,
                 qualifier: qualifier.into(),
                 contract: name.clone(),
                 name: member.name.clone(),

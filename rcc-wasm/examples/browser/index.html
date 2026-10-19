@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple Wasm browser bridge</title>
+<style>
+  body { font: 18px system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; background: #142129; color: #e5f4f1; }
+  button { font: inherit; padding: .6rem 1rem; margin: .5rem; cursor: pointer; }
+  pre { padding: 1rem; background: #0c171d; white-space: pre-wrap; border-radius: .5rem; }
+  #app { min-height: 5rem; }
+</style>
+<h1>RFL + WebAssembly</h1>
+<p>The application below computes and builds DOM patches inside Wasm.</p>
+<div id="app"></div>
+<button id="dispose">Dispose application</button>
+<pre id="output" aria-label="Guest output"></pre>
+<pre id="stats" aria-label="Bridge counters"></pre>
+<script type="module" src="./page.mjs"></script>
+</html>

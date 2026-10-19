@@ -1,0 +1,16 @@
+{
+  "project": "NetSurf",
+  "version": "3.11",
+  "source_url": "https://download.netsurf-browser.org/netsurf/releases/source-full/netsurf-all-3.11.tar.gz",
+  "archive_sha256": "4dea880ff3c2f698bfd62c982b259340f9abcd7f67e6c8eb2b32c61f71644b7b",
+  "components": {
+    "libwapcaplet": "0.4.3",
+    "libparserutils": "0.2.5",
+    "libhubbub": "0.3.8",
+    "libcss": "0.9.2",
+    "libdom": "0.4.2",
+    "libnsutils": "0.1.1",
+    "netsurf": "3.11"
+  },
+  "license": "Imported support libraries: MIT (see each component's COPYING). NetSurf browser core: GPL-2.0 (netsurf/COPYING); embedded Samba talloc: LGPL-2.0-or-later (utils/talloc.c and utils/talloc.h notices)."
+}

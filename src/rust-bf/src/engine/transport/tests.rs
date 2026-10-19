@@ -206,3 +206,90 @@ fn full_width_carried_values_and_wrapping_aliases_are_not_assumed_small() {
         }
     }
 }
+
+#[test]
+fn cleared_progressions_remain_proven_after_predicate_cache_eviction() {
+    for backwards in [false, true] {
+        let body: String = COUNT
+            .chars()
+            .map(|c| {
+                if backwards {
+                    match c {
+                        '>' => '<',
+                        '<' => '>',
+                        _ => c,
+                    }
+                } else {
+                    c
+                }
+            })
+            .collect();
+        let p = Program::parse(&body, true, false).unwrap();
+        let mut m = Machine::new(20480).unwrap();
+        let start = if backwards { 18000 } else { 16 };
+        let direction = if backwards { -1isize } else { 1 };
+        m.pointer = start;
+        m.write_cell(start, 2048);
+        while m.run(&p, 1).unwrap() == Stop::Budget {}
+        // The migrating control left an exact zero progression behind it.
+        // A different stride evicts the small predicate cache, but should not
+        // force every future traversal to discover the same empty cells again.
+        m.zero_cache.prepare(3, 1);
+        let first = (start as isize + 4 * direction) as usize;
+        let proof = m.tape.uniform_prefix(first, 4 * direction, 2047);
+        assert_eq!(proof, Some((2047, 0)));
+        let hole = (first as isize + 400 * direction) as usize;
+        m.write_cell(hole, 9);
+        assert_eq!(
+            m.tape.uniform_prefix(first, 4 * direction, 2047),
+            Some((100, 0))
+        );
+        assert_eq!(m.read_cell(hole), 9);
+        let mut snapshot = Vec::new();
+        m.write_checkpoint(&p, &mut snapshot).unwrap();
+        let mut restored = Machine::read_checkpoint(&p, snapshot.as_slice(), 20480).unwrap();
+        assert_eq!(m.tape(), restored.tape());
+    }
+}
+
+#[test]
+fn long_cleared_ranges_match_literal_with_overlapping_state_and_occupied_holes() {
+    let vector="[-<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>[->>>>>>>>+<<<<<<<<]<<<<<<<<[->>>>>>>>+<<<<<<<<]<<<<<<<<[->>>>>>>>+<<<<<<<<]>>+>>>>>>>>>>>>>>>>>>>>>>]";
+    for source in [COUNT, vector] {
+        for backwards in [false, true] {
+            let direction = if backwards { -1isize } else { 1 };
+            let body: String = source
+                .chars()
+                .map(|c| {
+                    if backwards {
+                        match c {
+                            '>' => '<',
+                            '<' => '>',
+                            _ => c,
+                        }
+                    } else {
+                        c
+                    }
+                })
+                .collect();
+            let start = if backwards { 2300 } else { 32 };
+            for n in [64, 129, 257] {
+                let mut initial = vec![0u16; 2400];
+                initial[start] = n;
+                if source == vector {
+                    initial[(start as isize - 8 * direction) as usize] = 3;
+                    initial[(start as isize - 16 * direction) as usize] = 5;
+                }
+                // An occupied cell beyond the first batch must prevent a
+                // zero shortcut and must be incorporated by literal execution.
+                initial[(start as isize + 800 * direction) as usize] = 2;
+                compare(
+                    &format!("{}{body}", ">".repeat(start)),
+                    &initial,
+                    false,
+                    false,
+                );
+            }
+        }
+    }
+}

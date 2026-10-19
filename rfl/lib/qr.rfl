@@ -1,0 +1,71 @@
+// Shared portable C encoder; all QR generation runs inside the guest.
+import {} from "../../libraries/qr/qr.c";
+extern "C" {
+    fn qr_new(bytes: *const u8, length: u16) -> *mut u16;
+    fn qr_free(qr: *mut u16);
+    fn qr_columns(qr: *mut u16) -> u16;
+    fn qr_rows(qr: *mut u16) -> u16;
+    fn qr_row(qr: *mut u16, row: u16, cells: *mut u32, capacity: u16, style: u32) -> i16;
+}
+
+/// Byte mode, medium error correction, at most version 5: 45 by 23 cells.
+export const MAX_BYTES: usize = 84;
+export type QrError = PayloadTooLarge | InvalidOctet | QrAllocationFailed;
+/// Owned QR matrix. Its dimensions include the complete white quiet zone.
+export struct QrCode {
+    state: Owned<*mut u16>
+}
+
+/// Copies payload bytes into a bounded C encoder. No host or terminal calls.
+export fn encode(payload: Vec<u8>) -> Result<QrCode, QrError> {
+    if (payload.len() > MAX_BYTES) {
+        return Err(PayloadTooLarge);
+    }
+    for (i in 0..payload.len()) {
+        if (payload[i] as u32 > 255) {
+            return Err(InvalidOctet);
+        }
+    }
+    let length = payload.len() as u16;
+    let mut bytes = payload;
+    bytes.push(0);
+    let p = unsafe {
+        qr_new(&bytes[0], length)
+    };
+    if (p.is_null()) {
+        return Err(QrAllocationFailed);
+    }
+    Ok(QrCode { state: owned(p, fn(value: &mut *mut u16) => {
+        qr_free(*value);
+    }) })
+}
+
+impl QrCode {
+    fn raw(&self) -> *mut u16 {
+        let p = self.state.borrow();
+        *p
+    }
+    export fn columns(&self) -> i16 {
+        qr_columns(self.raw()) as i16
+    }
+    export fn rows(&self) -> i16 {
+        qr_rows(self.raw()) as i16
+    }
+    /// Packed curses cells, one C call per row. Empty for an invalid row.
+    /// Only the supplied color pair is retained: use black ink on white paper.
+    /// Draw the entire rectangle; never clip or decorate its quiet zone.
+    export fn row(&self, row: i16, style: u32) -> Vec<u32> {
+        if (row < 0 || row >= self.rows()) {
+            return [];
+        }
+        let width = self.columns();
+        let mut cells: Vec<u32> = [];
+        for (i in 0..width) {
+            cells.push(0);
+        }
+        unsafe {
+            qr_row(self.raw(), row as u16, &mut cells[0], width as u16, style);
+        }
+        cells
+    }
+}

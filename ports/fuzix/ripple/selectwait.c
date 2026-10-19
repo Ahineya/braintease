@@ -11,14 +11,19 @@
 extern unsigned ripple_tty_status(unsigned);
 extern unsigned ripple_socket_status(inoptr);
 extern unsigned ripple_gfx_status(void);
+extern unsigned ripple_pcm_status(void);
 unsigned ripple_select_active;
-static uint8_t selecting[PTABSIZE];
+static uint8_t selecting[PTABSIZE], registered_count[PTABSIZE];
+/* Store inode indices, not pointers into a possibly discarded syscall stack.
+ * Fatal exit and normal completion use the same bounded cleanup. */
+static uint8_t registered[PTABSIZE][UFTSIZE];
+typedef char registered_inode_fits[(ITABSIZE <= 256) ? 1 : -1];
 static struct ripple_deadline_queue deadlines;
 typedef char deadline_slots_fit[(PTABSIZE <= RIPPLE_DEADLINE_SLOTS) ? 1 : -1];
 
 void ripple_select_clock(const VmHostTime *sample) {
     struct ripple_deadline_time now;
-    uint32_t ready;
+    struct ripple_deadline_ready ready;
     unsigned slot;
     if (!deadlines.head) return;
     if (sample) {
@@ -26,20 +31,28 @@ void ripple_select_clock(const VmHostTime *sample) {
         now.seconds_high = sample->seconds_high;
         now.nanoseconds = sample->nanoseconds;
     }
-    ready = ripple_deadline_poll(&deadlines, sample ? &now : NULL);
-    for (slot = 0; ready; ++slot, ready >>= 1)
-        if ((ready & 1) && ptab[slot].p_wait == &deadlines.slots[slot]) pwake(&ptab[slot]);
+    ripple_deadline_poll(&deadlines, sample ? &now : NULL, &ready);
+    if (!ready.bits[0] && !ready.bits[1]) return;
+    for (slot = 0; slot < PTABSIZE; ++slot)
+        if ((ready.bits[slot >> 5] & (1UL << (slot & 31))) &&
+            ptab[slot].p_wait == &deadlines.slots[slot]) pwake(&ptab[slot]);
 }
 
 /* Also called before exit closes descriptors: a fatal signal may discard a
  * sleeping syscall instead of returning through its normal cleanup path. */
 void ripple_select_exit(ptptr p) {
-    inoptr i;unsigned n,cell=(p-ptab)>>3,bit=1U<<((p-ptab)&7);
+    unsigned slot=p-ptab,n,k,cell=slot>>3,bit=1U<<(slot&7);
+    inoptr i;
     irqflags_t irq=di();
-    ripple_deadline_cancel(&deadlines, p-ptab);
-    if(selecting[p-ptab]){selecting[p-ptab]=0;--ripple_select_active;}
-    for(i=i_tab;i<i_tab+ITABSIZE;i++)
-        for(n=0;n<3;n++)i->c_select[n].map[cell]&=~bit;
+    ripple_deadline_cancel(&deadlines,slot);
+    if(selecting[slot]) {
+        selecting[slot]=0;--ripple_select_active;
+        for(k=0;k<registered_count[slot];++k) {
+            i=i_tab+registered[slot][k];
+            for(n=0;n<3;++n)i->c_select[n].map[cell]&=~bit;
+        }
+        registered_count[slot]=0;
+    }
     irqrestore(irq);
 }
 static unsigned status(inoptr ino) {
@@ -53,6 +66,7 @@ static unsigned status(inoptr ino) {
         dev=ino->c_node.i_addr[0];
         if(major(dev)==2)return ripple_tty_status(minor(dev));
         if(major(dev)==3)return ripple_pty_select(minor(dev));
+        if(major(dev)==5)return minor(dev)?SELECT_IN|SELECT_OUT:ripple_pcm_status();
 #ifndef CONFIG_FUSE_X
         if(major(dev)==4)return ripple_gfx_status();
 #endif
@@ -105,11 +119,13 @@ arg_t _select(void) {
         udata.u_ptab-ptab,&start,duration.seconds,duration.microseconds)) {
         irqrestore(irq);udata.u_error=EOVERFLOW;return -1;
     }
+    registered_count[udata.u_ptab-ptab]=0;
     selecting[udata.u_ptab-ptab]=1;++ripple_select_active;
     /* Register before testing, with IRQs masked through the sleep transition. */
     for(fd=0;fd<nfds;fd++)if(nodes[fd]) {
         interest=0;mask=1U<<(fd&15);
         for(n=0;n<3;n++)if(want[n].bits[fd>>4]&mask)interest|=1U<<n;
+        registered[udata.u_ptab-ptab][registered_count[udata.u_ptab-ptab]++]=nodes[fd]-i_tab;
         selwait_inode(nodes[fd],interest,1);
     }
     for(;;) {
