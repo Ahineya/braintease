@@ -295,6 +295,32 @@ int wbkgd(WINDOW *, chtype);
 #define KEY_RESIZE 0x19a
 #define KEY_PASTE_BEGIN 0x19b
 #define KEY_PASTE_END 0x19c
+#define KEY_MOUSE 0x19d
+typedef unsigned long mmask_t;
+typedef struct { short id; int x,y,z; mmask_t bstate; } MEVENT;
+#define BUTTON1_RELEASED 0x00000001UL
+#define BUTTON1_PRESSED  0x00000002UL
+#define BUTTON1_CLICKED  0x00000004UL
+#define BUTTON1_DOUBLE_CLICKED 0x00000008UL
+#define BUTTON1_TRIPLE_CLICKED 0x00000010UL
+#define BUTTON2_RELEASED 0x00000020UL
+#define BUTTON2_PRESSED  0x00000040UL
+#define BUTTON3_RELEASED 0x00000400UL
+#define BUTTON3_PRESSED  0x00000800UL
+#define BUTTON4_PRESSED 0x00010000UL
+#define BUTTON5_PRESSED 0x00200000UL
+#define BUTTON_SHIFT    0x04000000UL
+#define BUTTON_ALT      0x08000000UL
+#define BUTTON_CTRL     0x10000000UL
+#define REPORT_MOUSE_POSITION 0x20000000UL
+/* Raw press/release events; click timing belongs to the widget/application. */
+#define ALL_MOUSE_EVENTS 0x00210c63UL
+mmask_t mousemask(mmask_t, mmask_t *);
+int getmouse(MEVENT *);
+int wenclose(const WINDOW *, int, int);
+int wmouse_trafo(const WINDOW *, int *, int *, bool);
+void ripple_curses_mouse_mode(int);
+void ripple_curses_mouse_restore(int);
 #define getnstr(s,n) wgetnstr(stdscr,s,n)
 #define timeout(n) wtimeout(stdscr,n)
 int wgetnstr(WINDOW *, char *, int);

@@ -18,6 +18,11 @@
 #define PACKETS 2
 #define LISTENERS NET_TCP_LISTENERS
 #define ACCEPT_POOL 4
+/* A bounded lazy cache, not larger inline buffers for every backlog entry. */
+#define STREAM_POOLS 4
+#define STREAM_TX 8192
+#define STREAM_RX 16384U
+#define STREAM_CELLS (STREAM_TX + STREAM_RX + STREAM_RX / 8)
 /* The compact TIME_WAIT helper is shared with the runtime implementation. */
 extern int tcp_wait_port(NetContext *,unsigned short);
 struct packet { unsigned length; struct sockaddr_in peer; uint8_t data[PACKET_SIZE]; };
@@ -40,6 +45,8 @@ struct network_state {
     NetTcpListener listeners[LISTENERS];
     NetTcp *pools[LISTENERS];
     NetTcpWaitTable timewait;
+    uint8_t *stream_buffers[STREAM_POOLS];
+    NetTcp *stream_owners[STREAM_POOLS];
     uint8_t scratch[PACKET_SIZE];
     unsigned opened, up, busy;
     unsigned long polled, sequence;
@@ -67,6 +74,28 @@ static void *network_alloc(unsigned cells) {
 #endif
     if (!p) panic("cannot allocate shared network storage");
     return p;
+}
+static void upgrade_stream(NetTcp *tcp) {
+    unsigned i; uint8_t *buffer;
+    for (i=0;i<STREAM_POOLS;i++) if (!N->stream_owners[i]) {
+        buffer=N->stream_buffers[i];
+        if (!buffer) {
+#ifdef CONFIG_FUSE_X
+            buffer=rcc_process_kernel_alloc(STREAM_CELLS);
+#else
+            buffer=ripple_mmu_kernel_alloc(STREAM_CELLS);
+#endif
+            if (!buffer) return; /* Keep the valid compact socket under pressure. */
+            N->stream_buffers[i]=buffer;
+        }
+        if (!net_tcp_buffers(tcp,buffer,STREAM_TX,buffer+STREAM_TX,STREAM_RX,
+            buffer+STREAM_TX+STREAM_RX)) N->stream_owners[i]=tcp;
+        return;
+    }
+}
+static void release_stream(NetTcp *tcp) {
+    unsigned i;
+    for(i=0;i<STREAM_POOLS;i++)if(N->stream_owners[i]==tcp)N->stream_owners[i]=0;
 }
 static unsigned initialized;
 static unsigned endpoint_status(struct endpoint *);
@@ -172,6 +201,7 @@ static void release_endpoint(struct endpoint *s) {
             if(!r) memset(s->tcp,0,sizeof(*s->tcp));
         }
         if(r)return;
+        release_stream(s->tcp);
     }
     memset(s,0,sizeof(*s));
 }
@@ -265,7 +295,7 @@ static unsigned endpoint_status(struct endpoint *s) {
         if(s->state!=SS_CONNECTED||!t)return SELECT_IN|SELECT_OUT;
         if((s->shut&1)||t->rx_used||t->peer_fin||!t->active||t->state==NET_TCP_FAILED)ready|=SELECT_IN;
         if((s->shut&2)||!t->active||t->state==NET_TCP_FAILED||t->shutting||
-           t->tx_used<NET_TCP_BUFFER)ready|=SELECT_OUT;
+           t->tx_used<NET_TCP_TX_CAP(t))ready|=SELECT_OUT;
         return ready;
     }
     if((s->shut&1)||s->count)ready|=SELECT_IN;
@@ -399,7 +429,8 @@ static int socket_io(struct endpoint *s,unsigned flags,int writing,struct sockad
         if(s->error){r=s->error;s->error=0;return error(r);}
         if(s->type==SOCK_STREAM) {
             if(!s->tcp||s->state!=SS_CONNECTED)return error(ENOTCONN);
-            size=writing?NET_TCP_BUFFER:PACKET_SIZE;if(size>count)size=count;
+            size=count;
+            if(writing && size>PACKET_SIZE)size=PACKET_SIZE;
             if(writing) {
                 if(!valaddr_r(udata.u_base,size,size)||uget(udata.u_base,N->scratch,size))return -1;
                 for(i=0;i<size;i++)if(N->scratch[i]>255)return error(EINVAL);
@@ -410,11 +441,17 @@ static int socket_io(struct endpoint *s,unsigned flags,int writing,struct sockad
                 if(s->tcp->rx_used) {
                     if(size>s->tcp->rx_used)size=s->tcp->rx_used;
                     if(!valaddr_w(udata.u_base,size,size))return -1;
-                    r=net_tcp_read(s->tcp,N->scratch,size,&n);
-                    if(!r) {
-                        if(uput(N->scratch,udata.u_base,n))return -1;
-                        N->polled=now_ms()-10;udata.u_done=n;return n;
-                    }
+                    /* Validate the whole destination first, then transfer the
+                     * ring's at most two spans directly. Consume only after both
+                     * copies succeeded; no 1500-cell scratch bottleneck. */
+                    n=NET_TCP_RX_CAP(s->tcp)-s->tcp->rx_head;
+                    if(n>size)n=size;
+                    if(uput(NET_TCP_RX_DATA(s->tcp)+s->tcp->rx_head,udata.u_base,n))return -1;
+                    if(size>n&&uput(NET_TCP_RX_DATA(s->tcp),(uint8_t *)udata.u_base+n,size-n))return -1;
+                    s->tcp->rx_head=(s->tcp->rx_head+size)%NET_TCP_RX_CAP(s->tcp);
+                    s->tcp->rx_used-=size;s->tcp->bytes_read+=size;
+                    if(s->tcp->active)s->tcp->ack_pending=1;
+                    N->polled=now_ms()-10;udata.u_done=size;return size;
                 } else if(s->tcp->peer_fin)return 0;
                 else if(!s->tcp->active)return error(s->tcp->error?net_error(s->tcp->error):ENOTCONN);
             }
@@ -596,6 +633,7 @@ arg_t _netcall(void) {
             r=net_tcp_connect(&N->net,s->tcp,&cfg,now_ms());
             N->polled=now_ms()-10;
             if(r){s->tcp=0;error(net_error(r));r=-1;break;}
+            upgrade_stream(s->tcp);
             s->peer=addr;address(&s->local,N->config.address,s->tcp->local_port);s->state=SS_CONNECTING;
         } else if(flags&O_NDELAY){r=error(EALREADY);break;}
         if(flags&O_NDELAY){r=error(EINPROGRESS);break;}
@@ -613,6 +651,7 @@ arg_t _netcall(void) {
         fd=free_slot();if(fd<0){net_tcp_abort(accepted);net_tcp_release(&N->listeners[s->listener],accepted);r=-1;break;}
         r=make_socket(fd,SOCK_STREAM,IPPROTO_TCP);
         if(r<0){net_tcp_abort(accepted);net_tcp_release(&N->listeners[s->listener],accepted);break;}
+        upgrade_stream(accepted);
         child=N->slots[fd];child->tcp=accepted;child->listener=s->listener;child->state=SS_CONNECTED;
         address(&child->local,N->config.address,accepted->local_port);address(&child->peer,accepted->peer,accepted->remote_port);
         if(put_address(a[2],a[3],&child->peer)){int saved=udata.u_error;doclose(r);udata.u_error=saved;r=-1;}

@@ -1,0 +1,21 @@
+hp-envy-madt.bin
+Captured read-only from /sys/firmware/acpi/tables/APIC on 2026-10-19.
+Machine: HP Envy x360 16-ac0xxx, board 8C66, BIOS F.04.
+856 bytes; SHA-256 a9cbf60e6bfda5cc3de56dae0b1d47bf88f174b4725e330e62d40873835674a7.
+Original ACPI checksum is preserved. Contains 48 type-9 processor slots,
+14 enabled CPUs, one I/O APIC, two ISA overrides and a type-10 NMI record.
+The parser test uses these exact firmware bytes, with a synthetic checked
+RSDP/XSDT mapping around them. It does not execute firmware or access devices.
+
+NVMe read-only probe fixtures — 2026-10-19
+hp-envy-dmar.bin: 152 bytes; SHA-256 420bb22455294e7dcafc1623c5e328a47873ab3806670a7bf43331f1a514085a.
+Source: /sys/firmware/acpi/tables/DMAR, captured via the authorized HP root SSH connection.
+hp-envy-mcfg.bin: 60 bytes; SHA-256 f94a390faa20717f880df4caf616f66ed24c539fdd5506dea403b9ad9fb4ff38.
+Source: /sys/firmware/acpi/tables/MCFG, captured via the authorized HP root SSH connection.
+hp-envy-gpt.json: 45980 bytes; SHA-256 9633e5f01ba782a264b9dddfa66b39f862d39f24f62309d726bafedfd78c5456.
+Source: O_RDONLY /dev/nvme0n1 GPT metadata only, captured via the authorized HP root SSH connection.
+DMAR contains two DRHD units plus SATC/SIDP device scopes; MCFG has the
+segment-zero bus 0..255 ECAM window. Original ACPI checksums are preserved.
+GPT JSON holds geometry and base64 spans for the protective MBR, both GPT
+headers and both partition-entry arrays. No ESP/ext4 filesystem payload was
+read or stored. It can be tested in a sparse regular file without the real SSD.

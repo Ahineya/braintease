@@ -4,6 +4,7 @@ static int control=-1;static char control_header[3];static unsigned control_used
 static int save_reply;static char control_reply[8];static unsigned control_sent;
 static char rx_header[3],rx_body[256];static unsigned rx_head,rx_size,rx_used,rx_pos;
 static void disconnect(void){
+    cancel_mouse_capture();mouse_used=mouse_paste=0;
     if(client>=0)close(client);client=-1;out_start=out_count=0;
     rx_head=rx_size=rx_used=rx_pos=0;prefix_pending=escape_state=0;mode=help=closing=0;
     paste_count=0;full=dirty=1;rendering=0;
@@ -26,6 +27,7 @@ static void receive_request(void){
         if(rx_used<rx_size)return;
     }
     if(rx_header[0]=='R'){
+        cancel_mouse_capture();mouse_used=mouse_paste=0;
         unsigned w=(unsigned char)rx_body[0]*256U+(unsigned char)rx_body[1];
         unsigned h=(unsigned char)rx_body[2]*256U+(unsigned char)rx_body[3];
         erase_character=(unsigned char)rx_body[4];
@@ -91,7 +93,7 @@ static void server_cleanup(void){
     }
     for(i=0;i<PANES;i++)if(panes[i].used){
         if(panes[i].pid>0){kill(-panes[i].pid,SIGKILL);waitpid(panes[i].pid,&status,0);}
-        free_history(&panes[i]);vt_destroy(&panes[i].vt);
+        free_history(&panes[i]);free(panes[i].committed);free(panes[i].report);vt_destroy(&panes[i].vt);
     }
     free(screen);free(painted);
     if(listenfd>=0)close(listenfd);unlink(endpoint);
@@ -154,7 +156,7 @@ static int server(char **command,unsigned w,unsigned h,int ready){
         }
         if(control>=0){FD_SET(control,&reads);if(control_used==3)FD_SET(control,&writes);if(control>maxfd)maxfd=control;}
         /* Rendering and an already buffered request are runnable work. */
-        timeout.tv_sec=escape_state?0:1;timeout.tv_usec=escape_state?50000:0;
+        timeout.tv_sec=escape_state||mouse_used?0:1;timeout.tv_usec=escape_state||mouse_used?50000:0;
         if(client>=0&&((rendering&&output_free()>100)||(rx_head==3&&rx_used==rx_size&&!paste_count&&focused()->queued<QUEUE-64))){timeout.tv_sec=0;timeout.tv_usec=0;}
         n=select(maxfd+1,&reads,&writes,NULL,&timeout);
         if(n<0){if(errno!=EINTR)break;continue;}
@@ -166,7 +168,7 @@ static struct termios outer_saved;static int outer_changed,stdout_flags=-1;
 static void restore_terminal(void){
     if(stdout_flags>=0)fcntl(1,F_SETFL,stdout_flags);
     if(outer_changed){
-        static const char end[]="\033[?2026l\033[0m\033(B\033[r\033[?7h\033[?25h\033[0 q\033[?1049l";
+        static const char end[]="\033[?1003l\033[?1002l\033[?1000l\033[?1006l\033[?2026l\033[0m\033(B\033[r\033[?7h\033[?25h\033[0 q\033[?1049l";
         unsigned at=0;int n;while(at<sizeof(end)-1){n=write(1,end+at,sizeof(end)-1-at);if(n>0)at+=n;else if(n<0&&errno==EINTR)continue;else break;}
         tcsetattr(0,TCSANOW,&outer_saved);outer_changed=0;
     }
@@ -212,7 +214,7 @@ static int attach(int fd){
     raw=outer_saved;raw.c_lflag&=~(ICANON|ECHO|ISIG);raw.c_iflag&=~(ICRNL|INLCR|IXON);raw.c_oflag&=~OPOST;raw.c_cc[VMIN]=1;raw.c_cc[VTIME]=0;
     if(tcsetattr(0,TCSANOW,&raw)){close(fd);return 1;}
     outer_changed=1;atexit(restore_terminal);
-    fputs("\033[?1049h\033[0m\033(B\033[r\033[?7l\033[?1l\033[?25l\033[H\033[2J",stdout);fflush(stdout);
+    fputs("\033[?1049h\033[0m\033(B\033[r\033[?7l\033[?1l\033[?25l\033[H\033[2J\033[?1006h\033[?1003h",stdout);fflush(stdout);
     stdout_flags=fcntl(1,F_GETFL,0);nonblock(1);nonblock(fd);
     signal(SIGWINCH,signal_resize);signal(SIGHUP,signal_stop);signal(SIGTERM,signal_stop);signal(SIGINT,signal_stop);signal(SIGPIPE,SIG_IGN);
     send_count=resize_request(sendbuf);
@@ -267,8 +269,9 @@ static void usage(void){
          "       mux new NAME [COMMAND [ARG...]]\n"
          "       mux attach NAME | mux list | mux kill NAME\n"
          "       mux save [NAME] | mux restore [NAME] | mux saved\n"
-         "Without arguments, start or attach session main. Default command: sh.\n"
-         "Ctrl-B then ? opens help; ! move pane to tab, S save, C/D restart command/directory.\n"
+         "Without arguments, attach main or restore the last saved default workspace.\n"
+         "Use mux new main for a fresh session. Default command: sh.\n"
+         "Ctrl-B: f desktop tab, w window, m/v move/resize, t title, ? help.\n"
          "Configure history, prefix and shell in ~/.muxrc. See man mux.");
 }
 int main(int argc,char **argv){
@@ -310,7 +313,7 @@ int main(int argc,char **argv){
         if(action==5){
             int failed=save_running(fd);
             if(failed)fputs("mux: could not save session (upgrade its running mux server if needed)\n",stderr);
-            else printf("mux: saved %s (layout and restart commands)\n",session_name);
+            else printf("mux: saved %s and default workspace\n",session_name);
             return failed;
         }
         if(action==4){char k[3]={'K',0,0};int hello=greet(fd),got;unsigned sent=0;char discard[512];
@@ -325,6 +328,14 @@ int main(int argc,char **argv){
     if(!lstat(endpoint,&st)){
         if(!S_ISSOCK(st.st_mode)||st.st_uid!=getuid()){fputs("mux: refusing to replace a non-session path\n",stderr);return 1;}
         if(unlink(endpoint)){perror("mux: stale session");return 1;}
+    }
+    if(action==0&&!command){
+        int exists=default_exists();
+        if(exists<0){perror("mux: default workspace");return 1;}
+        if(exists){
+            restoring=load_snapshot("default");
+            if(!restoring){fputs("mux: default workspace is invalid; use mux new main for a fresh session\n",stderr);return 1;}
+        }
     }
     if(action==6){
         restoring=load_session();

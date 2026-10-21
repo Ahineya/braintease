@@ -18,6 +18,9 @@ static const struct native_program programs[] = {
     {"FXN1:sh:1\n", fuse_shell_entry},
     {"FXN1:hello:1\n", fuse_hello_entry},
     {"FXN1:check:1\n", fuse_test_entry}
+#ifdef FUSE_NATIVE_EXTRA_PROGRAMS
+    , FUSE_NATIVE_EXTRA_PROGRAMS
+#endif
 };
 struct native_arguments { unsigned argc; char **argv, **envp; };
 
@@ -151,8 +154,8 @@ arg_t _execve(void) {
     envp=(char **)wargs((void *)argv,env,NULL);
     ripple_gfx_exit(udata.u_ptab);
     ripple_pcm_exit(udata.u_ptab);
-    for (i=0;i<UFTSIZE;i++) if (udata.u_cloexec & (1UL<<i)) doclose(i);
-    udata.u_cloexec=0;
+    for (i=0;i<UFTSIZE;i++) if (uf_cloexec_test(&udata,i)) doclose(i);
+    uf_cloexec_reset(&udata);
     for (i=0;i<sizeof(udata.u_sigvec)/sizeof(udata.u_sigvec[0]);i++)
         if (udata.u_sigvec[i]!=SIG_IGN) udata.u_sigvec[i]=SIG_DFL;
     udata.u_top=PROGTOP; udata.u_ptab->p_top=PROGTOP;

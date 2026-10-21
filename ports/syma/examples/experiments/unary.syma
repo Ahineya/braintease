@@ -1,0 +1,89 @@
+:clear
+:rule AddUnary Add({Unary a..}, {Unary b..}) -> {Unary a.. b..} :guard And(AreSyms(a..), AreSyms(b..))
+
+:rule SubtractUnary Sub({Unary | a..} {Unary | b..}) -> {Sub {Unary a..} {Unary b..}} :guard And(AreSyms(a..), AreSyms(b..))
+:rule SubtractUnary/A Sub({Unary a..} {Unary}) -> {Unary a..} :guard AreSyms(a..)
+:rule SubtractUnary/Zero Sub({Unary} {Unary b..}) -> {Unary} :guard AreSyms(b..)
+
+:rule MultiplyUnary Mul({Unary a..}, {Unary b..}) -> {Mul Unary {} {A a..} {B b..}} :guard And(AreSyms(a..), AreSyms(b..))
+:rule MultiplyUnary/Step {Mul Unary {..} {A a_ ..} {B b..}} -> {Mul Unary {.. b..} {A ..} {B b..}}
+:rule MultiplyUnary/End {Mul Unary {..} {A} {B b..}} -> {Unary ..}
+
+:rule EqUnary Equ({Unary a..} {Unary a..}) -> {Unary |} :guard And(AreSyms(a..), AreSyms(b..))
+:rule EqUnary Equ({Unary a..} {Unary b..}) -> {Unary} :guard And(AreSyms(a..), AreSyms(b..))
+
+:rule LteUnary Lte({Unary a..} {Unary b..}) -> Equ({Unary} Sub({Unary a..} {Unary b..})) :guard And(AreSyms(a..), AreSyms(b..))
+
+:rule NotUnary/TF Notu({Unary |}) -> {Unary}
+:rule NotUnary/FT Notu({Unary}) -> {Unary |}
+
+:rule GtUnary Gt({Unary a..} {Unary b..}) -> Notu(Lte({Unary a..} {Unary b..})) :guard And(AreSyms(a..), AreSyms(b..))
+
+:rule If/False If({Unary} t_ f_) -> f_
+:rule If/True If({Unary |} t_ f_) -> t_
+
+:rule SortUnary Sortu({Unary a..} {Unary b..}) -> If(Gt({Unary b..} {Unary a..}) {Ordered {Unary b..} {Unary a..}} {Ordered {Unary a..} {Unary b..}}) :guard And(AreSyms(a..), AreSyms(b..))
+
+:rule ModuloUnary Mod({Unary a..}, {Unary b..}) -> If(Gt({Unary b..} {Unary a..}) {Unary a..} {Mod Unary {} {B b..} {A a..}}) :guard And(AreSyms(a..), AreSyms(b..))
+:rule ModuloUnary/Step {Mod Unary {..} {B b..} {A b.. a..}} -> {Mod Unary {.. |} {B b..} {A a..}}
+:rule ModuloUnary/End {Mod Unary {..} {B b..} {A a..}} -> Unary(a..)
+
+:rule DivisionUnary/Zero Div({Unary a..}, {Unary}) -> {NaN} :guard AreSyms(a..)
+:rule DivisionUnary Div({Unary a..}, {Unary b..}) -> If(Gt({Unary b..} {Unary a..}) {Unary |} {Div Unary {} {B b..} {A a..}}) :guard And(AreSyms(a..), AreSyms(b..))
+:rule DivisionUnary/Step {Div Unary {..} {B b..} {A b.. a..}} -> {Div Unary {.. |} {B b..} {A a..}}
+:rule DivisionUnary/End {Div Unary {..} {B b..} {A a..}} -> Unary(..)
+
+; Section for sanity
+:rule ToNum {ToNum {Unary u..}} -> {ToNum 0 {Unary u..}}
+:rule ToNum/Zero {ToNum 0 {Unary}} -> 0
+:rule ToNum/Step {ToNum acc_ {Unary one_ u..}} -> {ToNum Add(acc_ 1) {Unary u..}}
+:rule ToNum/End {ToNum acc_ {Unary}} -> acc_
+
+// And
+
+:rule Runner/Start {Tests t..} -> {Testing True t..}
+:rule Runner/False {Testing True {Test a_ b_} t..} -> {Testing False t..} :guard Not(NormalEq(a_ b_))
+:rule Runner/True {Testing v_ {Test a_ b_} t..} -> {Testing v_ t..} :guard NormalEq(a_ b_)
+
+{Tests
+   {Test 2 ToNum({Div {Unary | | | |} {Unary | |}})}
+   {Test 1 ToNum({Div {Unary | | } {Unary | |}})}
+   {Test 1 ToNum({Div {Unary | | } {Unary | | | | |}})}
+   {Test NaN ToNum({Div {Unary | | } {Unary}})}
+   {Test 2 ToNum({Mod {Unary | |} {Unary | | | |}})}
+   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | | |}})}
+   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | }})}
+   {Test 1 ToNum({Mod {Unary | | | |} {Unary | | |}})}
+   {Test 8 ToNum({Mul {Unary | | | |} {Unary | |}})}
+   {Test 6 ToNum({Add {Unary | | | |} {Unary | |}})}
+   {Test 2 ToNum({Sub {Unary | | | |} {Unary | |}})}
+   {Test 0 ToNum({Sub {Unary | | | |} Add({Unary | |} {Unary | |})})}
+   {Test 0 ToNum(Notu({Unary |}))}
+   {Test 1 ToNum(Notu({Unary}))}
+   {Test 0 ToNum(Lte({Unary | | |} {Unary |}))}
+   {Test 1 ToNum(Lte({Unary | | |} {Unary | | | |}))}
+   {Test 1 ToNum(Lte({Unary | | | |} {Unary | | | |}))}
+}
+
+// Result
+
+{Tests
+   {Test 5 ToNum({Unary | | | | |})}
+   {Test 2 ToNum({Div {Unary | | | |} {Unary | |}})}
+   {Test 1 ToNum({Div {Unary | | } {Unary | |}})}
+   {Test 1 ToNum({Div {Unary | | } {Unary | | | | |}})}
+   {Test NaN ToNum({Div {Unary | | } {Unary}})}
+   {Test 2 ToNum({Mod {Unary | |} {Unary | | | |}})}
+   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | | |}})}
+   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | }})}
+   {Test 1 ToNum({Mod {Unary | | | |} {Unary | | |}})}
+   {Test 8 ToNum({Mul {Unary | | | |} {Unary | |}})}
+   {Test 6 ToNum({Add {Unary | | | |} {Unary | |}})}
+   {Test 2 ToNum({Sub {Unary | | | |} {Unary | |}})}
+   {Test 0 ToNum({Sub {Unary | | | |} Add({Unary | |} {Unary | |})})}
+   {Test 0 ToNum(Notu({Unary |}))}
+   {Test 1 ToNum(Notu({Unary}))}
+   {Test 0 ToNum(Lte({Unary | | |} {Unary |}))}
+   {Test 1 ToNum(Lte({Unary | | |} {Unary | | | |}))}
+   {Test 1 ToNum(Lte({Unary | | | |} {Unary | | | |}))}
+}

@@ -47,13 +47,13 @@ static void fetch(const char *scheme,const char *path,const char *headers,int su
         if(size>16384||nu_exact(output,data,size,30000)){check(0,"response record length");break;}
         data[size]=0;
         if(kind==RIPPLE_HTTP_HEADERS){heads++;check((strstr(data,"HTTP/1.1 ")==data||strstr(data,"HTTP/1.0 ")==data)&&strstr(data,"\r\n\r\n")!=NULL,"HTTP headers record");}
-        else if(kind==RIPPLE_HTTP_BODY){if(used+size<sizeof(body)){memcpy(body+used,data,size);used+=size;}else check(0,"body bound");}
+        else if(kind==RIPPLE_HTTP_BODY){if(!success)continue;if(used+size<sizeof(body)){memcpy(body+used,data,size);used+=size;}else check(0,"body bound");}
         else if(kind==RIPPLE_HTTP_DONE){check(success&&size==0&&heads==1,"successful response terminator");done=1;}
         else if(kind==RIPPLE_HTTP_ERROR){check(!success&&size>0,"failed response terminator");done=1;}
         else {check(0,"response record type");break;}
     }
     body[used]=0;if(success&&expected)check(!strcmp(body,expected),"exact body without neighbouring response bytes");
-    if(success&&!strcmp(path,"binary")) {
+    if(success&&(!strcmp(path,"binary")||!strcmp(path,"gzip-binary"))) {
         int valid=used==5120;
         for(i=0;i<used;i++)if((unsigned char)body[i]!=(i&255))valid=0;
         check(valid,"binary framed body preserves NUL and high octets across records");
@@ -67,6 +67,15 @@ int main(void) {
     fetch("http","two","",1,"TWO");
     fetch("http","chunked","",1,"ABCDEF");
     fetch("http","binary","",1,NULL);
+    fetch("http","gzip-fixed","",1,"GZIP BODY");
+    fetch("http","gzip-chunked","",1,"GZIP BODY");
+    fetch("http","gzip-concat","",1,"GZIP BODY");
+    fetch("http","gzip-binary","",1,NULL);
+    fetch("http","gzip-bad-crc","",0,NULL);
+    fetch("http","after-bad","",1,"RECOVERED");
+    fetch("http","gzip-short","",0,NULL);
+    fetch("http","gzip-limit","",0,NULL);
+    fetch("http","after-bad","",1,"RECOVERED");
     fetch("http","redirect","",1,"");
     fetch("http","after","",1,"AFTER");
     fetch("http","stale","",1,"STALE");
@@ -86,6 +95,8 @@ int main(void) {
     fetch("https","one","",1,"TLS-ONE");
     fetch("https","two","",1,"TLS-TWO");
     fetch("https","chunked","",1,"TLS-CHUNKED");
+    fetch("https","gzip-fixed","",1,"GZIP BODY");
+    fetch("https","gzip-chunked","",1,"GZIP BODY");
     fetch("https","stale","",1,"TLS-STALE");
     fetch("https","retry","",1,"TLS-RETRY");
     fetch("https","binary","",1,NULL);

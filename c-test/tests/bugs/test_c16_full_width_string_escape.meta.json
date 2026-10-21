@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y\n",
+  "description": "String hex escapes must cover the complete 16-bit C16 char range"
+}

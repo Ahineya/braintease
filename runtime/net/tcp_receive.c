@@ -20,6 +20,7 @@ static void syn_reply(NetTcp *tcp, const TcpSegment *segment) {
     if (segment->flags & TCP_URG) { tcp_fail(tcp, NET_UNSUPPORTED); return; }
     tcp->rcv_nxt = segment->sequence + 1; tcp_established(tcp, segment);
     tcp->mss = segment->mss < NET_TCP_MSS ? segment->mss : NET_TCP_MSS;
+    if(tcp->send_buffer)tcp->cwnd=tcp->mss*2;
     tcp->ack_pending = 1;
     if (segment->length) {
         data = *segment; ++data.sequence; data.flags &= 0xfffdU;
@@ -27,7 +28,7 @@ static void syn_reply(NetTcp *tcp, const TcpSegment *segment) {
     }
 }
 int tcp_acceptable(NetTcp *tcp, const TcpSegment *segment) {
-    unsigned short window = NET_TCP_RX_BUFFER - tcp->rx_used;
+    unsigned short window = NET_TCP_RX_CAP(tcp) - tcp->rx_used;
     unsigned long space = segment->length + ((segment->flags & (TCP_SYN | TCP_FIN)) ? 1 : 0);
     if (!space) return segment->sequence == tcp->rcv_nxt || (window && segment->sequence - tcp->rcv_nxt < window);
     if (!window) return 0;
@@ -45,7 +46,7 @@ void tcp_receive(NetTcp *tcp, const TcpSegment *segment) {
     }
     if (segment->flags & TCP_RST) {
         if (segment->sequence == tcp->rcv_nxt) tcp_fail(tcp, NET_RESET);
-        else if (segment->sequence - tcp->rcv_nxt < NET_TCP_RX_BUFFER - tcp->rx_used) tcp_challenge(tcp);
+        else if (segment->sequence - tcp->rcv_nxt < NET_TCP_RX_CAP(tcp) - tcp->rx_used) tcp_challenge(tcp);
         return;
     }
     if (segment->flags & TCP_SYN) {

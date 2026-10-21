@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class Guest:
     def __init__(self, directory, target, applications, files=(), peer=None, blocks=32768, reuse=False,
-                 disk_sectors=393216, build_override=None, code_memory=None):
+                 disk_sectors=393216, build_override=None, code_memory=None, timeout=900):
         self.directory = Path(directory)
         self.target, self.peer = target, peer
         native = target == 'native'
@@ -59,12 +59,12 @@ if(native==='1')writeImage(disk,root);else writeImage(disk,fat16Image([
             command=[os.environ.get('FUSE_X_TEST_KERNEL',str(build/'fuse-x')),'--run',str(self.image)]
         else:
             command=[os.environ.get('RIPPLE_TEST_RVM',str(ROOT/'target/release/rvm')),str(build/'bios.bin'),'--disk',str(self.image),
-                     '--memory','16384000','--jit','--guest-ctrl-c','--net',network,'--timeout','900']
+                     '--memory','16384000','--jit','--guest-ctrl-c','--net',network,'--timeout',str(timeout)]
             if code_memory is not None:command += ['--code-memory',str(code_memory)]
         self.master,slave=pty.openpty();tty.setraw(slave)
         fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack("HHHH",24,80,0,0))
         self.process=subprocess.Popen(command,stdin=slave,stdout=slave,stderr=slave,
-            env=dict(os.environ,TERM='xterm',RCC_NATIVE_HEADLESS='1',RCC_NATIVE_NET=network,RCC_NATIVE_TIMEOUT='900'),
+            env=dict(os.environ,TERM='xterm',RCC_NATIVE_HEADLESS='1',RCC_NATIVE_NET=network,RCC_NATIVE_TIMEOUT=str(timeout)),
             start_new_session=True)
         os.close(slave)
         self.log=bytearray();self.at=0

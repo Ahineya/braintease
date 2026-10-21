@@ -36,6 +36,7 @@ def application(args):
         subprocess.run(command, check=True)
         web_ir=directory/('core-'+args.target)/'c16_http.ir'
         flags=['--target',args.target,'-DRIPPLE_MMU=1']
+        if args.target=='native':flags+=['-DRIPPLE_NETSURF_HOSTED=1']
         flags += [v for path in extra_includes for v in ('-I',str(path))]
         result=subprocess.run([str(compiler),'compile',str(PORT/'http/fetch.c'),*flags,'--emit-ir'],capture_output=True)
         web_ir.with_suffix('.log').write_bytes(result.stderr)
@@ -54,6 +55,7 @@ def application(args):
         if args.gui:
             image_sources.append(ROOT/'libraries/image/nano.c')
         flags=['--target',args.target,'-DRIPPLE_MMU=1',*frontend_flags]
+        if args.target=='native':flags+=['-DRIPPLE_NETSURF_HOSTED=1']
         sdk_includes=[ROOT/'ports/fuzix/ripple/include',ROOT/'ports/fuzix/upstream/Library/include',ROOT/'runtime/include']
         flags += [v for path in [*extra_includes,*sdk_includes] for v in ('-I',str(path))]
         for path in image_sources:
@@ -103,6 +105,9 @@ def application(args):
                 subprocess.run([str(assembler), 'assemble', str(assembly), '-o', str(obj),
                                 '--bank-size', '64000', '--max-immediate', '65535'],
                                stdout=log, stderr=log, check=True)
+            # The object is the incremental link input. Retaining another full
+            # assembly dump per unit costs nearly a GiB for this browser.
+            assembly.unlink(missing_ok=True)
             return obj
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             inputs = list(pool.map(lower, [ir, *objects]))

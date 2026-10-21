@@ -36,12 +36,19 @@ struct pane {
     struct line *history;
     unsigned head,count,limit;
     unsigned x,y,w,h,shown,activity;
+    /* Preferred outer rectangle survives temporary terminal-size constraints. */
+    unsigned fx,fy,fw,fh,z,framed,minimized,title_override;
+    char title[48];
+    struct vt_cell *committed;unsigned committed_w,committed_h;
     char input[QUEUE]; unsigned queued;
     char directory[DIRECTORY_SIZE],restart[RESTART_SIZE];
+    char auto_directory[DIRECTORY_SIZE],auto_command[RESTART_SIZE];
+    unsigned auto_valid,auto_group,restart_override,directory_override;
+    char *report;unsigned report_used;
     unsigned long sync_since;
 };
 struct node { int used,pane,a,b,parent,vertical;unsigned ratio,x,y,w,h; };
-struct tab { int used,root,focus,zoom;char name[25]; };
+struct tab { int used,root,focus,zoom,floating;char name[25]; };
 struct options {unsigned history,prefix;char shell[96];};
 static struct pane panes[PANES];
 static struct node nodes[NODES];
@@ -73,4 +80,5 @@ static void compose(void);
 static void render(void);
 static void handle_input(unsigned c);
 static int save_session(void);
+static void pane_report(struct vt *,unsigned,int);
 #endif

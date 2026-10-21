@@ -170,7 +170,7 @@ fn modexp(base: &[u8], modulus: &[u8], exponent: &[u8]) -> Result<Vec<u8>, u16> 
 fn pbkdf2(password: &[u8], salt: &[u8], count: &[u8]) -> Result<Vec<u8>, u16> {
     let count: [u8; 4] = count.try_into().map_err(|_| STATUS_BAD_DESCRIPTOR)?;
     let iterations = u32::from_be_bytes(count);
-    if !(1..=100_000).contains(&iterations) {
+    if !(1..=1_000_000).contains(&iterations) {
         return Err(STATUS_BAD_DESCRIPTOR);
     }
     let prf = <Hmac<Sha512> as Mac>::new_from_slice(password).map_err(|_| STATUS_BAD_DESCRIPTOR)?;
@@ -271,7 +271,8 @@ mod tests {
         // Independently reproducible with Python hashlib.pbkdf2_hmac.
         assert_eq!(pbkdf2(b"password",b"salt",&1u32.to_be_bytes()).unwrap(),hex("867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5d513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce"));
         assert_eq!(pbkdf2(b"password",b"salt",&2u32.to_be_bytes()).unwrap(),hex("e1d9c16aa681708a45f5c7c4e215ceb66e011a2e9f0040713f18aefdb866d53cf76cab2868a39b9f7840edce4fef5a82be67335c77a6068e04112754f27ccf4e"));
-        for n in [0u32, 100_001] {
+        assert_eq!(pbkdf2(b"password",b"salt",&200_000u32.to_be_bytes()).unwrap(),hex("01f8712941c86ffad39b79100696ea63b03b95b50d3aa121bfd265577fece6c402bbe0fcb432ea50b3e95b81c81aa2e9d82213cd3305c137b73ae1d2fec72bc5"));
+        for n in [0u32, 1_000_001] {
             assert!(pbkdf2(b"", b"", &n.to_be_bytes()).is_err());
         }
     }

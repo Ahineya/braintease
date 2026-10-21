@@ -81,6 +81,18 @@ If you specify a non-existent line in a range, the comm-
 and will abort and Levee will tell you "bad address".
 
 .SS Command mode commands
+.PP
+The Riplix Unix build accepts ANSI CSI and SS3 arrow keys in visual command
+mode and as operator motions, like the corresponding h, j, k and l motions.
+Its legacy insertion buffer does not support arrow navigation; arrow keys
+are ignored with a bell until Escape returns to command mode. Function keys
+are unbound. Escape alone leaves insert mode after a short sequence timeout.
+.PP
+To check the keyboard, open a file with several lines, press Escape and try
+all four arrows; they should move like h, j, k and l. Try d followed by Right
+to delete one character, then u to undo. During insertion, arrows should ring
+the bell without inserting characters or newlines. Escape followed by :q!
+and Enter quits without saving the test.
 
 .TP
 .B  args

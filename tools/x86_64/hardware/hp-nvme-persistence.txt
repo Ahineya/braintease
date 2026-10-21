@@ -1,0 +1,236 @@
+OFFLINE CLI FOLLOW-UP — 2026-10-19
+==================================
+The dedicated filesystem is now 128MiB within the same 30GiB reservation, with
+105 CLI commands plus diagnostics and verified preservation of user files.
+The upgrade and USB are prepared; NEW app-payload physical acceptance is
+pending. See hp-offline-userspace.txt for current hashes and commands.
+The accepted physical persistence milestone and historical provisioning follow.
+
+HP NVMe PERSISTENCE — PHYSICAL TWO-BOOT ACCEPTANCE PASSED
+============================================================================
+2026-10-19 — supersedes the historical preparation record below.
+
+Physical result: the user reports the test passed. Their second-boot photograph
+shows HP_NVME_SURVIVED from the saved file, the copied saved-echo executing with
+after-reboot output, diskcheck --verify passing wide-cell/partial-write/block/EOF
+checks, and shutdown completing with filesystem synced/session stopped. This
+accepts native physical NVMe filesystem writes, data/executable recovery after
+reboot and orderly flush on this HP. Ubuntu's subsequent normal boot is now confirmed by SSH inspection. No new disk or USB writes were needed to
+record this result. The provisioning and original test procedure follow.
+
+Connected to the physical HP in SystemRescue RAM overlay over key-authenticated
+SSH on port 22. Exact disk model/serial/size, both original GPT copies, partition
+identities and ext4 UUID matched the approved plan. Ubuntu and EFI were
+unmounted, swap absent, holders absent, AC online and battery full. Fresh GPT
+backups were saved to the Mac BEFORE clearing the NVMe read-only guard.
+
+Performed the authorized OFFLINE operation:
+- e2fsck -f -p passed before shrinking, after shrinking and after GPT updates.
+  Existing nonfatal extent-tree compactness notices were retained in the logs.
+- resize2fs reduced ext4 to 241911040 blocks of 4096 bytes before changing GPT.
+- p2 now ends at 1937491967; its original start, PARTUUID, type, attributes and
+  name remain unchanged. Every original GPT entry byte was checked, with only
+  p2's last-LBA field changed. p1's entry remains byte-identical.
+- Created dedicated 30GiB p3 at 1937491968..2000406527, sector size 512,
+  GUID aac13ff7-aacc-40cb-a27f-c1e49910e6ba,
+  type a90c10b4-cb9d-4a61-8b6a-e8f4d16938cf, name Riplix, attributes zero.
+- Both GPT headers/arrays validate. Ubuntu filesystem UUID remains
+  a6343905-fa2c-408a-8bb0-4b3922a1182c. Read-only/noload mounts confirmed exact
+  saved hashes of fstab, GRUB configuration and all saved Ubuntu EFI files.
+- Wrote ONLY the checked 16MiB C16 V3 seed to p3 and verified its full read-back
+  hash. GPT metadata stayed unchanged. p1/p2 remained read-only during seeding.
+  30GiB is RESERVED; the initial usable filesystem is deliberately still 16MiB.
+- Restored the entire NVMe read-only guard in rescue after provisioning.
+
+Production payload and USB
+--------------------------
+New BOOTX64.EFI SHA256:
+94912ca636400bcb12a686010b24197c2e72a8610d7f4b55f20f562b43fbab4c
+Root seed SHA256:
+70fb807d3e8d338f74cbb4f9281f9460bd9ec1685d436c6fb32b935bf2c7ae1a
+Compiled exact disk GUID 6ac74996-1fef-4065-9d7d-d79af9d893b6 plus the actual
+p3 GUID, geometry and sector size. Checked/bounded mode and existing ABI remain.
+
+The byte-identical production payload passed TWO QEMU processes with the actual
+HP GPT metadata/geometry in a NEW sparse regular virtual disk, including full
+shell/app/process/pipe/timer checks and exact data/copied-executable persistence.
+Only GPT metadata was captured; virtual EFI/Ubuntu payloads were fake canaries.
+Both GPT copies and seven named 4KiB canary pages matched after each boot. This
+is explicitly sampled coverage for the ~1TB fixture, not a whole-disk hash.
+Earlier small-canary fixtures retain their full outside-partition hash checks.
+
+Both identified SanDisk USB partitions were updated, read back after unmount /
+read-only remount, and passed offline FAT checks. Current EFI/BOOT slots:
+  BOOTX64.EFI  new partition-root production payload (hash above)
+  BOOTOLD.EFI  accepted read-only NVMe/GPT probe with RAM root
+  BOOTRAM.EFI  accepted fast-console RAM root without NVMe probe
+The rescue EFI is unchanged. Allocation backups/identity and the checked seed
+are saved on the data volume. Rescue now defaults to a text console/nmtui and
+the real sshd.service on port 22. Its startup job finishes; a fresh SSH login
+survives it. The former port-2222 child was killed when autorun ended; the old
+VM check only tested early login and missed that lifecycle problem. The initial
+USB verification's SSH text/case assertion failed AFTER write/readback/FAT
+checks; corrected independent read-only final verification passed. Logs remain.
+USB partitions are unmounted. No internal EFI install, boot-entry or firmware
+change was performed, and the HP has not been rebooted by the agent.
+
+Original physical acceptance procedure (now passed)
+---------------------------
+Reboot the HP and choose the NORMAL UEFI USB entry (not EFI/RESCUE).
+Require the NVMe persistent-root status and shell, then run:
+  appcheck
+  echo HP_NVME_SURVIVED > /root/persist
+  cp /bin/echo /root/saved-echo
+  diskcheck
+  shutdown
+After the synced/session-stopped message, power-cycle and boot the same USB:
+  cat /root/persist
+  /root/saved-echo after-reboot
+  diskcheck --verify
+  shutdown
+Require exact HP_NVME_SURVIVED, after-reboot and disk-check success. Then boot
+Ubuntu normally and confirm coexistence. At preparation time, Linux seeding and
+virtual tests alone did not establish native physical persistence; the user's
+subsequent second-boot result recorded above now closes that acceptance.
+On boot failure, photograph the message; the read-only BOOTOLD fallback remains
+available through Boot From EFI File. No further allocation approval is needed.
+
+Evidence: build/x86_64-hp-persistent/{preflight.log,shrink.log,partition.log,
+ubuntu-verified.json,seed-result.json,production-check/result.json,
+usb-written.json,rescue-final-evidence.tar,root-identity.json}.
+Original approval/backups: build/hardware/hp-nvme-persistence-2026-10-19/.
+Next after physical persistence and Ubuntu boot: expand filesystem/userspace,
+then networking. Guest compiler self-hosting stays with its existing owner.
+
+HISTORICAL PREPARATION RECORD — allocation was pending at this point
+=====================================================
+2026-10-19
+
+Current evidence
+----------------
+The physical USB probe passed: WD PC SN560 SDDPNQE-1T00-2006, serial
+24231U807090, namespace 1, 2,000,409,264 sectors of 512 bytes. Both native GPT
+copies/arrays verified; RAM root and shell work. Writes remain disabled in the
+physical USB image. The fast-console image remains its BOOTOLD.EFI fallback.
+
+Ubuntu read-only SSH inspection after that boot confirms:
+  nvme0n1p1  LBA 2048..2203647         FAT EFI, mounted /boot/efi
+  nvme0n1p2  LBA 2203648..2000406527   ext4, mounted /
+  p1 PARTUUID 5b46a40c-54be-48b3-8a20-59d35a5d5165
+  p2 PARTUUID 163d2a81-c99a-4347-9c45-c68e250cf552
+  ext4 available: 843,883,036,672 bytes (~786 GiB).
+There is only ~1.3 MiB at the end outside the current partitions. The large
+free-space figure is INSIDE ext4; it cannot be used as a new raw partition.
+The EFI filesystem also has ~1.04 GiB free, but a file inside FAT requires a
+separate filesystem/file-extent backend. It is not an unallocated partition.
+
+Approved physical allocation (latest user instruction)
+------------------------------------------------------
+User approved reserving approximately 30GB. Use 30 GiB (32,212,254,720 bytes)
+at the END of the existing Ubuntu ext4 partition for Riplix.
+Keep Ubuntu's partition start unchanged; do not relocate it or touch the ESP.
+If a fresh read-only capture still matches today's layout, proposed LBAs are:
+  Ubuntu p2 new last: 1937491967
+  Riplix p3 first:    1937491968
+  Riplix p3 last:     2000406527
+That is exactly 62,914,560 sectors / 30 GiB, with 1 MiB-aligned start/end.
+These coordinates require fresh identity/geometry checks before any writes.
+A fresh identity/geometry check and filesystem minimum-size check come first.
+
+This needs an OFFLINE ext4 shrink. Ubuntu's mounted root cannot be shrunk over
+its current normal SSH session. Use a live/rescue environment with the NVMe
+partitions unmounted, after an up-to-date backup of valuable Ubuntu files.
+Save both GPT copies and the original partition identity/layout before changes.
+Run an offline filesystem check, shrink ext4 safely below its proposed new end,
+then reduce p2's end; leave its start, GUID and filesystem UUID unchanged.
+Create p3 only in the verified freed range, using a fresh partition GUID and
+project-private type a90c10b4-cb9d-4a61-8b6a-e8f4d16938cf, attributes zero.
+Verify both GPT copies and the Ubuntu filesystem afterwards. No formatting or
+raw seeding of p1/p2 is authorized by this proposal.
+
+Once the dedicated partition exists
+-----------------------------------
+Seed ONLY p3 with a checked C16 V3 root, bounded by its exact byte range.
+Use the current tested 16 MiB filesystem for the first persistence experiment;
+the adapter exposes only its declared length, even inside a 30 GiB partition.
+The unused space is reserved for later application/toolchain expansion. Growing
+the filesystem is a separate offline preparation step, not automatic at boot.
+A full 1 GiB C16 V3 filesystem fits the signed-32-bit stream limit but has not
+been validated by this small-fixture milestone; test that size before growing.
+Compile the production partition profile with the actual disk GUID, new p3
+GUID, exact first/last LBA and 512-byte sector identity. Never use the disposable
+fixture identities from README/test-root-identity.json for the physical SSD.
+Preserve the accepted read-only RAM-root USB as fallback, then refresh the main
+USB payload with the independently tested production partition profile.
+
+First physical acceptance still boots the loader/kernel from USB, but mounts
+Riplix's dedicated NVMe root. Require ROOT_PARTITION_OK, shell/app/disk checks,
+create a persistent marker and copy an executable, then orderly shutdown.
+A second cold boot must recover the exact marker, data and executable. Return
+to Ubuntu afterwards and check the original boot/filesystem and GPT layout.
+No physical write-success claim until this test has actually passed.
+Installing the loader on internal EFI storage and adding a boot-menu entry is
+separate work after persistence; keep USB boot during initial validation.
+
+Implementation scope already prepared
+-------------------------------------
+Native exact-identity GPT selection validates both GPT copies, type/attributes,
+geometry and C16 signature/superblock before enabling the root window. All
+logical I/O is relative to that window. Write commands are independently bounded
+at the NVMe doorbell boundary; flush is blocked until selection succeeds.
+Test scratch writes run only after selection and restore their original bytes.
+Virtual fixtures have separate EFI/Ubuntu canary partitions. Tests verify data
+and copied-app persistence across two QEMU processes, full outside-partition
+hashes, and fail-closed identity, metadata, format and device-I/O cases.
+No internal partition, physical raw storage, firmware entry or USB payload has
+been changed during this partition-support implementation.
+
+Completed validation
+---------------------
+build/x86_64-partition/result.json and build/x86_64-partition-4k/result.json:
+  Full shell/app/process/pipe/timer suite, two-process exact data/executable
+  persistence, all-byte outside-partition hashes, 13 rejection cases EACH.
+  Direct write/flush-before-selection and writes outside the selected window
+  are refused before command IDs/doorbells advance.
+build/x86_64-partition-production/production-check/result.json:
+  Normal production GPT/FAT32 USB image, two complete QEMU boots with a fresh
+  disposable GPT root fixture; exact persistence and matching outside hashes.
+  This image embeds DISPOSABLE identities and is NOT a physical HP payload.
+build/x86_64-nvme/result.json:
+  Legacy raw-NVMe two-boot/five-error regression remains green.
+Host production selector/GPT, schema, no-replace/symlink and randomized boundary
+checks pass, including >32-bit native LBAs. The standalone production C harness
+passes 18 good/rejected 512/4096-byte-sector fixtures under UBSan.
+
+30GiB follow-up:
+  Partition size is now independent of the signed C16 stream limit. That limit
+  is enforced on the declared filesystem length BEFORE enabling the window.
+  Host tests cover 30GiB at high LBAs, inaccessible reserved tail and >=2GiB
+  declared-filesystem refusal. Sparse fixture creation and full hashing of all
+  bytes OUTSIDE that large partition remain bounded to a few MiB of canaries.
+  build/x86_64-partition-30g/production-check/result.json passes two production
+  USB boots with a 30GiB virtual reservation, exact data/executable persistence
+  and matching full outside-partition hashes. Additional large-reservation /
+  oversized-filesystem cases pass the production selector under host UBSan.
+  Saved read-only GPT and Ubuntu boot backups + original geometry are under
+  build/hardware/hp-nvme-persistence-2026-10-19/. These are metadata/boot backups,
+  not a full backup of Ubuntu's personal files.
+
+Firmware test finding: on a writable damaged-primary-GPT virtual disk, UEFI
+repaired that header from the valid backup before entering our loader. The
+negative test now freezes the backend read-only so native strict rejection is
+actually exercised. The first failed test/repair observation is preserved in
+firmware-gpt-repair.json and firmware-repaired-gpt.log in both test directories.
+The native driver/parser never repairs GPT; firmware behaviour precedes it.
+
+Next implementation stages after persistence
+--------------------------------------------
+Add a broader Unix userspace independently of the unfinished guest toolchain.
+The user explicitly clarified that the compiler/linker is still being worked
+on by its existing agent, who will verify self-hosting later. Integrate that
+toolchain only after its handoff, including our pending app_link.py ELF
+alignment fix and regression.
+Then bring up networking/remote shell in QEMU before the HP network device.
+The AX211 Wi-Fi needs device-specific firmware/802.11 work; it is not enabled
+merely by having the shared socket API. USB Ethernet is a possible separate
+hardware path once USB/xHCI runtime support exists.

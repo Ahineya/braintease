@@ -78,4 +78,7 @@ def prepare():
     for name,data in [('jpeg-codec.inc',prefix+s),('jpeg-codec.h',prefix+header)]:
         path=HERE/name
         if not path.exists() or path.read_text()!=data:path.write_text(data)
-if __name__=='__main__':prepare()
+if __name__=='__main__':
+    prepare()
+    from adapt_stb import prepare as stb
+    stb()

@@ -30,6 +30,8 @@
 #include "deflate.h"
 
 #include <limits.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 
@@ -42,6 +44,12 @@ struct tinf_tree {
 };
 
 struct tinf_data {
+    int (*next)(void *);
+    int (*emit)(void *,const unsigned char *,unsigned);
+    void *opaque;
+    unsigned char *history;
+    unsigned history_at;
+    uint32_t total,limit;
 	const unsigned char *source;
 	const unsigned char *source_end;
 	uint32_t tag;
@@ -185,7 +193,11 @@ static void tinf_refill(struct tinf_data *d, int32_t num)
 		if (d->source != d->source_end) {
 			d->tag |= (uint32_t) *d->source++ << d->bitcount;
 		}
-		else {
+		else if(d->next) {
+            int value=d->next(d->opaque);
+            if(value<0||value>255)d->overflow=1;
+            else d->tag|=(uint32_t)value<<d->bitcount;
+        } else {
 			d->overflow = 1;
 		}
 		d->bitcount += 8;
@@ -253,10 +265,10 @@ static int32_t tinf_decode_symbol(struct tinf_data *d, const struct tinf_tree *t
 		 * the following block (which may be an uncompressed block). */
 		if (bits == 0) {
 			if (source == end) {
-				d->overflow = 1;
-				break;
-			}
-			tag = *source++;
+                int value=d->next?d->next(d->opaque):-1;
+                if(value<0||value>255){d->overflow=1;break;}
+                tag=value;
+            } else tag = *source++;
 			bits = 8;
 		}
 		offs = 2 * offs + (tag & 1);
@@ -407,6 +419,16 @@ static int32_t tinf_decode_trees(struct tinf_data *d, struct tinf_tree *lt,
 
 /* -- Block inflate functions -- */
 
+/* The 32 KiB history doubles as eight output chunks. Neither source nor
+ * decoded entity is retained in full by the streaming interface. */
+static int32_t tinf_output(struct tinf_data *d,unsigned char value) {
+    unsigned at;
+    if(d->total==d->limit)return TINF_BUF_ERROR;
+    at=d->history_at;d->history[at++]=value;++d->total;
+    if(!(at&4095U)&&d->emit(d->opaque,d->history+at-4096,4096))return TINF_DATA_ERROR;
+    d->history_at=at==32768U?0:at;
+    return TINF_OK;
+}
 /* Given a stream and two trees, inflate a block of data */
 static int32_t tinf_inflate_block_data(struct tinf_data *d, struct tinf_tree *lt,
                                    struct tinf_tree *dt)
@@ -446,6 +468,7 @@ static int32_t tinf_inflate_block_data(struct tinf_data *d, struct tinf_tree *lt
 		}
 
 		if (sym < 256) {
+            if(d->next) {int32_t r=tinf_output(d,sym);if(r)return r;continue;}
 			if (d->dest == d->dest_end) {
 				return TINF_BUF_ERROR;
 			}
@@ -482,6 +505,16 @@ static int32_t tinf_inflate_block_data(struct tinf_data *d, struct tinf_tree *lt
 			offs = tinf_getbits_base(d, dist_bits[dist],
 			                         dist_base[dist]);
 
+            if(d->next) {
+                if(d->overflow||offs>32768L||(uint32_t)offs>d->total)return TINF_DATA_ERROR;
+                if((uint32_t)length>d->limit-d->total)return TINF_BUF_ERROR;
+                for(i=0;i<length;i++) {
+                    unsigned at=d->history_at>=(unsigned)offs?d->history_at-(unsigned)offs:
+                        32768U-((unsigned)offs-d->history_at);
+                    int32_t r=tinf_output(d,d->history[at]);if(r)return r;
+                }
+                continue;
+            }
 			if (offs > d->dest - d->dest_start) {
 				return TINF_DATA_ERROR;
 			}
@@ -504,6 +537,18 @@ static int32_t tinf_inflate_block_data(struct tinf_data *d, struct tinf_tree *lt
 static int32_t tinf_inflate_uncompressed_block(struct tinf_data *d)
 {
 	uint32_t length, invlength;
+    if(d->next) {
+        int32_t r;d->tag=0;d->bitcount=0;
+        length=tinf_getbits(d,16);invlength=tinf_getbits(d,16);
+        if(d->overflow||length!=(~invlength&65535UL))return TINF_DATA_ERROR;
+        if(length>d->limit-d->total)return TINF_BUF_ERROR;
+        while(length--) {
+            unsigned value=tinf_getbits(d,8);
+            if(d->overflow)return TINF_DATA_ERROR;
+            r=tinf_output(d,value);if(r)return r;
+        }
+        return TINF_OK;
+    }
 
 	if (d->source_end - d->source < 4) {
 		return TINF_DATA_ERROR;
@@ -577,6 +622,7 @@ int32_t ri_deflate(void *dest, uint32_t *destLen,
 
 	if (!dest || !destLen || !source || !sourceLen) return TINF_DATA_ERROR;
 	/* Initialise data */
+    d.next = NULL; /* Select the original bounded whole-buffer path. */
 	d.source = (const unsigned char *) source;
 	d.source_end = d.source + sourceLen;
 	d.tag = 0;
@@ -631,3 +677,26 @@ int32_t ri_deflate(void *dest, uint32_t *destLen,
 	return TINF_OK;
 }
 
+
+int32_t ri_inflate_stream(int (*next)(void *),int (*emit)(void *,const unsigned char *,unsigned),
+                         void *opaque,uint32_t limit,uint32_t *produced) {
+    struct tinf_data *d;int32_t final,result=TINF_OK;unsigned n;
+    if(!next||!emit||!produced)return TINF_DATA_ERROR;
+    d=calloc(1,sizeof(*d));if(!d)return TINF_BUF_ERROR;
+    d->history=malloc(32768UL);if(!d->history){free(d);return TINF_BUF_ERROR;}
+    d->next=next;d->emit=emit;d->opaque=opaque;d->limit=limit;
+    do {
+        unsigned type;
+        final=tinf_getbits(d,1);type=tinf_getbits(d,2);
+        if(d->overflow){result=TINF_DATA_ERROR;break;}
+        if(type==0)result=tinf_inflate_uncompressed_block(d);
+        else if(type==1)result=tinf_inflate_fixed_block(d);
+        else if(type==2)result=tinf_inflate_dynamic_block(d);
+        else result=TINF_DATA_ERROR;
+    }while(!result&&!final);
+    if(d->overflow||d->bitcount>=8)result=TINF_DATA_ERROR;
+    n=d->total&4095U;
+    if(!result&&n&&emit(opaque,d->history+d->history_at-n,n))result=TINF_DATA_ERROR;
+    if(!result)*produced=d->total;
+    free(d->history);free(d);return result;
+}

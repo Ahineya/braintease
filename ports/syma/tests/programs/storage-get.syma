@@ -1,0 +1,9 @@
+{Universe
+ {Program {Effects {Pending {StorageGet s {Store Local} {Key "test"}}} {Inbox}}}
+ {Rules
+  {R get {Program {Effects p_ {Inbox {StorageGetComplete s {Found {List 42 "ї"}}}}}}
+   {Program {Effects {Pending {Print p {Message "STORAGE_OK\n"}}} {Inbox}}}}
+  {R done {Program {Effects p_ {Inbox {PrintComplete p Success}}}}
+   {Program {Effects {Pending {Exit 0}} {Inbox}}}}
+ }
+}

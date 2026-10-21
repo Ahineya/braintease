@@ -152,6 +152,10 @@ def make(folder):
   assert head==b'P6' and dimensions==f'{w} {h}'.encode() and maximum==b'255'
   rgba=bytes(v for i in range(0,len(reference),3) for v in [*reference[i:i+3],255])
   add(f'jpeg-{int(grey)}-{sample}.jpg',data,rgba,w,h,jpeg=True)
+  progressive=subprocess.check_output(['cjpeg','-progressive','-quality','90','-sample',sample,str(source)])
+  reference=subprocess.check_output(['djpeg','-rgb'],input=progressive).split(b'\n',3)[3]
+  rgba=bytes(v for i in range(0,len(reference),3) for v in [*reference[i:i+3],255])
+  add(f'jpeg-progressive-{int(grey)}-{sample}.jpg',progressive,rgba,w,h,jpeg=True)
  source.unlink()
  return vectors
 
@@ -161,6 +165,16 @@ def header(folder):
  for i,v in enumerate(vectors):
   array('image_data_'+str(i),v['path'].read_bytes())
   if v['rgba']:array('image_expected_'+str(i),v['rgba'])
+ # A photo far beyond the old source-pixel limit, decoded directly into a
+ # bounded thumbnail. Reference DC samples come from an independent decoder.
+ w,h=1025,769
+ ppm=(f'P6\n{w} {h}\n255\n').encode()+bytes(c for y in range(h) for x in range(w) for c in [(x+y)%256]*3)
+ source=Path(folder)/'large.ppm';source.write_bytes(ppm)
+ large=subprocess.check_output(['cjpeg','-quality','80','-sample','2x2',str(source)])
+ reference=subprocess.check_output(['djpeg','-scale','1/8','-nosmooth','-rgb'],input=large).split(b'\n',3)[3]
+ rgba=bytes(c for y in range(0,97,2) for x in range(0,129,2) for c in [*reference[(y*129+x)*3:(y*129+x)*3+3],255])
+ array('image_large_baseline',large);array('image_large_expected',rgba)
+ source.unlink()
  lines.append('static const struct vector vectors[]={')
  for i,v in enumerate(vectors):
   lines.append('{"%s",image_data_%d,sizeof(image_data_%d),%d,%d,0x%08xUL,%s,%d},'%(v['name'],i,i,v['width'],v['height'],v['hash'],'image_expected_'+str(i) if v['rgba'] else 'NULL',v['opaque']))

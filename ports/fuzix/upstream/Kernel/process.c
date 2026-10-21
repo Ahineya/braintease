@@ -12,6 +12,9 @@
 #include <printf.h>
 #include <audio.h>
 #include <timer.h>
+#ifdef CONFIG_FUSE_X
+#include <remotefs-kernel.h>
+#endif
 
 /* psleep() puts a process to sleep on the given event.  If another
  * process is runnable, it switches out the current one and starts the
@@ -314,7 +317,7 @@ ptptr getproc(void)
  */
 void makeproc(register ptptr p, register u_data *u)
 {				/* Passed New process table entry */
-	uint8_t *j, *e;
+	oft_index_t *j, *e;
 	irqflags_t irq;
 	ptptr pp;
 
@@ -614,6 +617,11 @@ void unix_syscall(void)
 	arg_t rv;
 	udata.u_error = 0;
 
+	#ifdef CONFIG_FUSE_X
+    if (udata.u_callno == RFS_SYSCALL) {
+        rv=fuse_remote_control();udata.u_retval=rv;
+    } else
+#endif
 	if (udata.u_callno >= FUZIX_SYSCALL_COUNT) {
 		udata.u_error = ENOSYS;
 	} else {
@@ -989,6 +997,9 @@ static int signal_parent(ptptr c)
 
 void doexit(uint16_t val)
 {
+#ifdef CONFIG_FUSE_X
+    fuse_remote_exit(udata.u_ptab);
+#endif
 #ifdef CONFIG_SELECT
     ripple_select_exit(udata.u_ptab);
 #endif

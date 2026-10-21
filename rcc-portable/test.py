@@ -62,6 +62,7 @@ def main():
 
         fixtures = [(HERE / f'tests/{name}.c', None) for name in
                     ['scalars', 'control', 'memory', 'strings', 'aggregates', 'varargs', 'relocations', 'inline_switch', 'wide_unary', 'floating_unary', 'preprocessor']]
+        fixtures.append((HERE / 'tests/bitfields.c', None))
         for name in ['test_nested_struct_return', 'test_large_struct_byval',
                      'test_union_return', 'test_nested_field_assign_from_call']:
             path = ROOT / f'c-test/tests/memory/structs/{name}.c'
@@ -232,7 +233,6 @@ int main(void) {
         rejected = {
             'vla': ('int main(void){int n=3;int a[n];return a[0];}', 'variable length'),
             'va_start': ('void f(void){void *ap;__builtin_va_start(ap,ap);}', 'va_start requires'),
-            'bitfield': ('struct S{int a:2;};int f(struct S*p){return p->a;}', 'not implemented'),
             'atomic': ('_Atomic int a;', 'not yet supported'),
             'alignment': ('int main(void){_Alignas(2) int a=0;return a;}', 'extended alignment'),
             'encoding': ('int main(void){return sizeof(u"abc");}', 'prefixed string'),

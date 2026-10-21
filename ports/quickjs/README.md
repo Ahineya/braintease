@@ -20,6 +20,10 @@ environment/process APIs, timers and the `select()` loop.
 Broader conformance, reusable embedding/RFL wrappers and browser bindings remain
 future gates.
 
+The [jpipe tools](../jpipe/README.md) reuse this engine for streaming JSON Lines,
+text adapters, map/filter/reduce, stable sorting and fused single-process pipelines.
+They are a separate frontend; piped input to `js` continues to mean source code.
+
 ## Reproduce
 
 The pristine MIT-licensed upstream release is pinned by archive SHA-256 in

@@ -26,6 +26,7 @@ static struct lease *mine(unsigned long handle) {
     }
     fail(EINVAL);return NULL;
 }
+#include "render-abi.h"
 void ripple_gfx_wakeup(void) { if(waiting)wakeup(&waiting);selwake_dev(4,0,SELECT_IN); }
 void ripple_gfx_poll(void) {
     unsigned i;unsigned long a[12]={0};
@@ -58,6 +59,43 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     struct gx_handle handle;struct lease *lease;
     unsigned long a[12]={0};
     if(m)return fail(ENXIO);
+    if(req==GX_RENDER)return render_ioctl(user);
+    if(req==GX_RASTER_A8){
+        struct gx_raster_a8 r;unsigned long cells,list_cells,d,s;
+        if(uget(user,&r,sizeof(r)))return -1;
+        if(r.version!=GX_VERSION)return fail(EINVAL);
+        if(!r.width&&!r.height&&!r.stride&&!r.flags&&!r.count&&!r.dst&&!r.primitives)
+            return rcc_hosted_gx(29,a)<0?fail(ENOTTY):0;
+        if(!r.width||!r.height||r.width>GX_HOSTED_MAX_WIDTH*2||
+            r.height>GX_HOSTED_MAX_HEIGHT*2||r.stride<r.width||
+            (r.flags&~GX_A8_CLEAR)||r.count>8192UL)return fail(EINVAL);
+        cells=(unsigned long)(r.height-1)*r.stride+r.width;
+        list_cells=r.count*sizeof(struct gx_a8_primitive);
+        if(!valaddr_r(r.dst,cells,cells)||!valaddr_w(r.dst,cells,cells))return -1;
+        if(r.count){
+            if(!valaddr_r((const uint8_t *)r.primitives,list_cells,list_cells))return -1;
+            d=(unsigned long)r.dst;s=(unsigned long)r.primitives;
+            d=(d>>16)*64000UL+(unsigned)d;s=(s>>16)*64000UL+(unsigned)s;
+            if(d<s+list_cells&&s<d+cells)return fail(EINVAL);
+        }
+        a[0]=(unsigned long)r.dst;a[1]=(unsigned long)r.primitives;
+        a[2]=r.width;a[3]=r.height;a[4]=r.stride;a[5]=r.count;a[6]=r.flags;
+        return host(29,a)<0?-1:0;
+    }
+    if(req==GX_RASTER_BGR888){
+        struct gx_raster_bgr888 r;unsigned long count;
+        if(uget(user,&r,sizeof(r)))return -1;
+        if(r.version!=GX_VERSION||!r.width||!r.height||r.width>GX_HOSTED_MAX_WIDTH*2||
+            r.height>GX_HOSTED_MAX_HEIGHT*2||r.dst_stride<(unsigned long)r.width*3||
+            (r.mask&&r.mask_stride<r.width)||r.blue>255||r.green>255||r.red>255||r.opacity>255)return fail(EINVAL);
+        count=(unsigned long)(r.height-1)*r.dst_stride+(unsigned long)r.width*3;
+        if(!valaddr_r(r.dst,count,count)||!valaddr_w(r.dst,count,count))return -1;
+        if(r.mask){count=(unsigned long)(r.height-1)*r.mask_stride+r.width;
+            if(!valaddr_r(r.mask,count,count))return -1;}
+        a[0]=(unsigned long)r.dst;a[1]=(unsigned long)r.mask;a[2]=r.width;a[3]=r.height;
+        a[4]=r.dst_stride;a[5]=r.mask_stride;a[6]=r.blue;a[7]=r.green;a[8]=r.red;a[9]=r.opacity;
+        return host(25,a)<0?-1:0;
+    }
     if(req==GX_RASTER_FILL||req==GX_RASTER_COPY){
         struct gx_raster r;if(uget(user,&r,sizeof(r))||raster_request(&r,req==GX_RASTER_COPY))return -1;
         a[0]=(unsigned long)r.dst;a[1]=(unsigned long)r.src;a[2]=r.width;a[3]=r.height;
@@ -66,8 +104,17 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     }
     if(req==GX_INFO) {
         struct gx_info info={GX_VERSION,GX_CAP_COPY|GX_CAP_FILL|GX_CAP_INPUT|GX_CAP_MULTIWINDOW|GX_CAP_TITLE|GX_CAP_RESIZE|GX_CAP_DESKTOP_POINTER|GX_CAP_RASTER|GX_CAP_SCALED_UPLOAD|GX_CAP_INDEXED_UPLOAD|GX_CAP_CLIPBOARD,GX_HOSTED_MAX_WIDTH,GX_HOSTED_MAX_HEIGHT,WINDOWS,GX_RGB565,(unsigned long)GX_HOSTED_MAX_WIDTH*GX_HOSTED_MAX_HEIGHT};
+        info.flags|=GX_CAP_BGR888_UPLOAD|GX_CAP_BACKING_SCALE|GX_CAP_BGR888_RASTER;
+        info.flags|=GX_CAP_PRESENTATION_ZOOM;
         if(rcc_hosted_gx(21,a)>=0)info.flags|=GX_CAP_TERMINAL;
         return uput(&info,user,sizeof(info));
+    }
+    if(req==GX_FORMATS) {
+        struct gx_formats f;
+        if(uget(user,&f,sizeof(f)))return -1;
+        if(f.version!=GX_VERSION)return fail(EINVAL);
+        if(host(26,a)<0)return -1;
+        f.preferred=a[1];f.formats=a[2];return uput(&f,user,sizeof(f));
     }
     if(req==GX_TERMINAL_METRICS){
         struct gx_terminal_metrics t;
@@ -77,9 +124,9 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(req==GX_CREATE||req==GX_CREATE_HIDDEN) {
         struct gx_window w;unsigned i;
         if(uget(user,&w,sizeof(w))||!valaddr_w(user,sizeof(w),sizeof(w)))return -1;
-        if(w.version!=GX_VERSION||w.format!=GX_RGB565||!w.width||!w.height||w.width>GX_HOSTED_MAX_WIDTH||w.height>GX_HOSTED_MAX_HEIGHT)return fail(EINVAL);
+        if(w.version!=GX_VERSION||(w.format!=GX_RGB565&&w.format!=GX_XRGB8888)||!w.width||!w.height||w.width>GX_HOSTED_MAX_WIDTH||w.height>GX_HOSTED_MAX_HEIGHT)return fail(EINVAL);
         for(i=0;i<WINDOWS&&leases[i].handle;i++);if(i==WINDOWS)return fail(ENOMEM);
-        w.title[63]=0;a[0]=w.width;a[1]=w.height;a[2]=(unsigned long)w.title;a[3]=req==GX_CREATE_HIDDEN?GX_WINDOW_HIDDEN:0;
+        w.title[63]=0;a[0]=w.width;a[1]=w.height;a[2]=(unsigned long)w.title;a[3]=req==GX_CREATE_HIDDEN?GX_WINDOW_HIDDEN:0;a[4]=w.format;
         if(host(1,a)<0)return -1;
         leases[i].owner=udata.u_ptab;leases[i].pid=udata.u_ptab->p_pid;leases[i].handle=a[0];
         w.window=w.surface=a[0];return uput(&w,user,sizeof(w));
@@ -88,6 +135,21 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(handle.version!=GX_VERSION)return fail(EINVAL);
     lease=mine(handle.handle);if(!lease)return -1;
     a[0]=handle.handle;
+    if(req==GX_PRESENTATION_ZOOM){
+        struct gx_presentation z;
+        if(uget(user,&z,sizeof(z))||!valaddr_w(user,sizeof(z),sizeof(z)))return -1;
+        if(z.percent<100||z.percent>300)return fail(EINVAL);
+        a[1]=z.percent;
+        if(host(28,a)<0)return -1;
+        z.percent=a[1];return uput(&z,user,sizeof(z));
+    }
+    if(req==GX_BACKING_SCALE){
+        struct gx_backing b;
+        if(uget(user,&b,sizeof(b))||!valaddr_w(user,sizeof(b),sizeof(b)))return -1;
+        if(b.scale>2)return fail(EINVAL);a[1]=b.scale;
+        if(host(24,a)<0)return -1;
+        b.scale=a[1];b.width=a[2];b.height=a[3];return uput(&b,user,sizeof(b));
+    }
     if(req==GX_TERMINAL_DRAW){
         struct gx_terminal_draw t;
         if(uget(user,&t,sizeof(t)))return -1;
@@ -123,6 +185,23 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     if(req==GX_DESTROY) { if(host(2,a)<0)return -1;memset(lease,0,sizeof(*lease));return 0; }
     if(req==GX_PRESENT)return host(4,a)<0?-1:0;
     if(req==GX_ACTIVATE)return host(13,a)<0?-1:0;
+    if(req==GX_FILL_RGB888) {
+        struct gx_fill_rgb888 f;if(uget(user,&f,sizeof(f)))return -1;
+        if(f.colour>0xffffffUL)return fail(EINVAL);
+        a[1]=f.x;a[2]=f.y;a[3]=f.width;a[4]=f.height;a[5]=f.colour;
+        return host(27,a)<0?-1:0;
+    }
+    if(req==GX_UPLOAD_BGR888) {
+        struct gx_upload u;unsigned long row,count;
+        if(uget(user,&u,sizeof(u)))return -1;
+        row=(unsigned long)u.width*3;
+        if(u.stride<row)return fail(EINVAL);
+        if(!u.width||!u.height)return 0;
+        count=(unsigned long)(u.height-1)*u.stride+row;
+        if(!valaddr_r(u.pixels,count,count))return -1;
+        a[1]=u.x;a[2]=u.y;a[3]=u.width;a[4]=u.height;a[5]=u.stride;a[6]=(unsigned long)u.pixels;
+        return host(23,a)<0?-1:0;
+    }
     if(req==GX_UPLOAD||req==GX_UPLOAD_SCALED||req==GX_UPLOAD_INDEXED) {
         struct gx_upload u;unsigned long count;
         if(req==GX_UPLOAD_INDEXED) {

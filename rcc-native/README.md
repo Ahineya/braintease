@@ -77,8 +77,29 @@ This milestone deliberately retains the existing data model: 16-bit cells,
 16-bit C `int`/`char`, 32-bit logical bank/offset pointers, and 64,000 cells per
 bank. `rcc-ir::target::DataLayout` owns checked IR storage sizing. Logical memory
 is a runtime-owned allocation; generated native arithmetic and control flow do
-not execute VM instructions. Loads, stores, pointer arithmetic, allocation,
-and MMIO currently go through checked runtime adapters.
+not execute VM instructions. Loads, stores, allocation and MMIO retain checked
+runtime adapters. Pointer arithmetic within one valid bank in the common low
+256-bank range is lowered inline; bank crossings,
+higher hosted addresses and malformed inputs retain `rcc_native_gep` and its
+target-specific checks. This also covers stack/variadic address calculations
+without acquiring raw memory views or changing polling/COW behavior.
+
+`RCC_NATIVE_MEMORY=read-v1` additionally opts hosted code generation into private
+read views. Unset or `checked` keeps scalar helpers; invalid values fail. The
+runtime retains an immutable Arc-backed private page and grants a versioned
+five-u64 native descriptor. Generated code acquires once for a straight-line
+region with at least two nonvolatile loads, checks whole-scalar coverage and
+reads 1–4 little-endian cells directly, retaining one poll per load. A denial or
+range miss uses the existing helper without an extra poll or per-load retry.
+Calls, stores, IR edges and continuation/checkpoint boundaries end the view;
+only the reviewed non-suspending polling helper preserves it. Inline GEP keeps
+the view; GEP's checked helper branch ends it. No raw address enters guest IR
+storage or a continuation. Writes, volatile/device/shared reads and flat
+non-process backing remain checked. High-bank GEP still uses its helper, which
+limits reuse for those expressions. Loop-wide hoisting and direct writes are
+future work. Freestanding opt-in is rejected until its runtime is implemented.
+Checked builds emit no acquisition import and remain compatible with existing
+runtimes; opt-in FXE manifests explicitly require `rcc_native_memview_v1/3`.
 
 RCC-generated C and RFL share a **private native ABI**: a hidden runtime context,
 one `u64` carrier per scalar parameter, and one result carrier. Integer widths
@@ -98,7 +119,9 @@ caller's frame, preserving promoted scalar widths and supporting `va_copy`.
 are copied into logical memory.
 
 Host data layouts, direct native RFL calls, native pointers, aggregate ABI
-classification, host C interoperability, and cross-compilation are later work.
+classification and host C interoperability are later work. The standalone
+native route builds for its host; the separate freestanding object emitter
+below supports explicit x86_64 cross-compilation for the C kernel and apps.
 Logical stack/heap limits still apply. Globals automatically extend from the
 legacy bank 1 into a separate region at banks 32–47 when necessary, up to
 1,024,000 cells including the reserved first cell. Allocation excludes that
@@ -159,11 +182,41 @@ milestone and report runtime errors when requested. TTY input is available via
 `getchar`; the asynchronous MMIO TTY input queue is not connected. Native
 executables use the host process exit status (low eight bits on Unix).
 
-Linking currently supports macOS and Linux, with execution validated on macOS
-ARM64. A host C linker is required. The runtime is found at
+Linking supports macOS and Linux. Execution is validated on macOS ARM64 and,
+for headless compiler/process tests and a hosted Riplix shell, x86_64 Linux.
+The [x86_64 acceptance guide](../tools/x86_64/README.md) provides the isolated
+Linux test command and the separate freestanding boot milestones. Linux window,
+audio and live-network behavior are outside that headless acceptance check.
+A host C linker is required. The runtime is found at
 `target/release/librcc_native_runtime.a`; `RCC_NATIVE_RUNTIME` overrides its path
 (e.g. with `CARGO_TARGET_DIR`). `RCC_NATIVE_CC` overrides the linker executable.
 On macOS the SDK comes from the selected developer toolchain through `xcrun`.
+
+## Freestanding x86_64 objects
+
+`rcc-native-object --triple x86_64-unknown-none INPUT.ir -o kernel.o` emits ELF
+machine code without linking the hosted runtime. Repeat `--kernel KERNEL.ir`
+for shared kernel units, as with `link-native`. The exported
+`rcc_native_entry(ctx)` initializes logical globals/function tokens and enters
+C main through the same private ABI. The build host's ISA features are not
+used, stack probing and unwind metadata are disabled, and the ordinary host
+`main`/`rcc_native_start` wrapper is omitted. Hosted compilation is unchanged.
+
+The [freestanding boot guide](../tools/x86_64/README.md) builds a relocatable
+ELF kernel with a small C16 runtime and boots the shared Riplix kernel through
+`/init` into the independently loaded V7 Bourne shell in QEMU. Add
+`--application MANIFEST.json` to emit an application object and target-specific
+manifest instead of a kernel entry. `compile_freestanding_application` exposes
+the same operation to library callers. The x86 boot tools package it as RXE1
+with static guest libc and explicit runtime bindings; hosted FXE/shared-library
+containers remain separate. That runtime supports
+kernel-selected contexts, private copy-on-write snapshots, exec, wait, timers,
+blocking pipes, setjmp/longjmp, a writable RAM root and polled PC keyboard/serial input. It is
+separate from `rcc-native-runtime`; unsupported services fail explicitly.
+Programs currently share ring 0 and use cooperative scheduling. Shared guest
+libraries, hardware isolation/IRQ preemption,
+architecture-dependent RFL configuration and persistent device drivers remain
+subsequent work.
 
 ## Multi-file C programs and Doom
 

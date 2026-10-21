@@ -32,15 +32,15 @@ static void waited(int pid){int s;C(waitpid(pid,&s,0)==pid);C(WIFEXITED(s)&&WEXI
 static void api(void){
     int fd,high,n;char *allocation,*edge;struct timeval t={0,0};struct timespec before,after;unsigned long ms;
     struct ripple_select_request req;
-    C(sizeof(fd_set)==2&&sizeof(struct timeval)==4&&sizeof(req)==9);
-    memset(&req,0,sizeof(req));req.version=RIPPLE_SELECT_VERSION+1;
+    C(sizeof(fd_set)==RIPPLE_SELECT_WIDE_WORDS&&sizeof(struct timeval)==4&&sizeof(req)==9);
+    memset(&req,0,sizeof(req));req.version=99;
     C(call(72,0,(long)&req,0,0)==-1&&errno==EINVAL);
     req.version=RIPPLE_SELECT_VERSION;
     C(call(72,65536UL,(long)&req,0,0)==-1&&errno==EINVAL);
     FD_ZERO(&r);FD_SET(0,&r);FD_SET(15,&r);FD_SET(16,&r);FD_SET(31,&r);
     C(r.bits[0]==0x8001&&r.bits[1]==0x8001);FD_CLR(16,&r);C(!FD_ISSET(16,&r)&&FD_ISSET(31,&r));
     C(select(-1,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
-    C(select(33,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
+    C(select(FD_SETSIZE+1,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);
     FD_ZERO(&r);FD_SET(14,&r);C(select(15,&r,NULL,NULL,&t)==-1&&errno==EBADF);
     FD_ZERO(&r);FD_SET(31,&r);C(select(0,&r,NULL,NULL,&t)==0&&!r.bits[0]&&!r.bits[1]);
     t.tv_usec=1000000UL;C(select(0,NULL,NULL,NULL,&t)==-1&&errno==EINVAL);

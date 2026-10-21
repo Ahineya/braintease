@@ -8,7 +8,96 @@ pub(super) const CLIPBOARD_MAX: usize = 32768;
 const MAX_WINDOWS: usize = 16;
 const MAX_WIDTH: u32 = 1920;
 const MAX_HEIGHT: u32 = 1080;
+// Presentation zoom changes native window points, never guest pixels or DPI.
+fn presentation_size(width:u32,height:u32,percent:u32)->(u32,u32){
+    ((width*percent+50)/100,(height*percent+50)/100)
+}
+fn guest_size(width:u32,height:u32,percent:u32)->(u32,u32){
+    ((width*100+percent/2)/percent,(height*100+percent/2)/percent)
+}
+fn fitted_zoom(width:u32,height:u32,requested:u32,monitor:Option<(u32,u32)>)->u32{
+    let Some((mw,mh))=monitor else{return requested;};
+    let fit=((mw.saturating_sub(32)*100/width).min(mh.saturating_sub(80)*100/height)).max(100);
+    if fit>=requested{return requested;}
+    // Small steps avoid awkward scales while preserving every explicit request
+    // that fits. The minimum remains 100%, even on an undersized monitor.
+    (fit/5*5).max(100)
+}
+fn presentation_viewport(texture:(u32,u32),surface:(u32,u32))->(f32,f32,f32,f32){
+    let scale=(surface.0 as f32/texture.0 as f32).min(surface.1 as f32/texture.1 as f32);
+    let (width,height)=(texture.0 as f32*scale,texture.1 as f32*scale);
+    ((surface.0 as f32-width)/2.0,(surface.1 as f32-height)/2.0,width,height)
+}
+fn presentation_pixel(position:(f32,f32),texture:(u32,u32),surface:(u32,u32))->(i32,i32){
+    let (x,y,width,height)=presentation_viewport(texture,surface);
+    (((position.0-x)*texture.0 as f32/width).floor() as i32,
+     ((position.1-y)*texture.1 as f32/height).floor() as i32)
+}
+// Pixels 0.12's default renderer rounds upscaling down to an integer. Opted-in
+// presentation zoom needs fractional nearest-neighbour sampling instead (e.g.
+// 135% in logical points on a Retina display is a 2.7x physical enlargement).
+struct PresentationRenderer{
+    layout:pixels::wgpu::BindGroupLayout,
+    sampler:pixels::wgpu::Sampler,
+    pipeline:pixels::wgpu::RenderPipeline,
+}
+impl PresentationRenderer{
+    fn new(device:&pixels::wgpu::Device,format:pixels::wgpu::TextureFormat)->Self{
+        use pixels::wgpu as w;
+        let shader=device.create_shader_module(w::ShaderModuleDescriptor{
+            label:Some("GX presentation zoom"),source:w::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(r#"
+struct Vertex { @builtin(position) position:vec4<f32>, @location(0) uv:vec2<f32> };
+@vertex fn vertex(@builtin(vertex_index) index:u32)->Vertex {
+    var positions=array<vec2<f32>,3>(vec2<f32>(-1.0,-1.0),vec2<f32>(3.0,-1.0),vec2<f32>(-1.0,3.0));
+    let p=positions[index]; var v:Vertex; v.position=vec4<f32>(p,0.0,1.0);
+    v.uv=vec2<f32>((p.x+1.0)*0.5,(1.0-p.y)*0.5); return v;
+}
+@group(0) @binding(0) var image:texture_2d<f32>;
+@group(0) @binding(1) var image_sampler:sampler;
+@fragment fn fragment(v:Vertex)->@location(0) vec4<f32> { return textureSample(image,image_sampler,v.uv); }
+"#))});
+        let layout=device.create_bind_group_layout(&w::BindGroupLayoutDescriptor{
+            label:None,entries:&[
+                w::BindGroupLayoutEntry{binding:0,visibility:w::ShaderStages::FRAGMENT,
+                    ty:w::BindingType::Texture{sample_type:w::TextureSampleType::Float{filterable:true},view_dimension:w::TextureViewDimension::D2,multisampled:false},count:None},
+                w::BindGroupLayoutEntry{binding:1,visibility:w::ShaderStages::FRAGMENT,
+                    ty:w::BindingType::Sampler(w::SamplerBindingType::Filtering),count:None},
+            ]});
+        let sampler=device.create_sampler(&w::SamplerDescriptor{mag_filter:w::FilterMode::Nearest,min_filter:w::FilterMode::Nearest,..Default::default()});
+        let pipeline_layout=device.create_pipeline_layout(&w::PipelineLayoutDescriptor{label:None,bind_group_layouts:&[&layout],push_constant_ranges:&[]});
+        let pipeline=device.create_render_pipeline(&w::RenderPipelineDescriptor{
+            label:Some("GX presentation zoom"),layout:Some(&pipeline_layout),
+            vertex:w::VertexState{module:&shader,entry_point:"vertex",buffers:&[]},
+            fragment:Some(w::FragmentState{module:&shader,entry_point:"fragment",targets:&[Some(w::ColorTargetState{
+                format,blend:None,write_mask:w::ColorWrites::ALL})]}),
+            primitive:w::PrimitiveState::default(),depth_stencil:None,multisample:w::MultisampleState::default(),multiview:None});
+        Self{layout,sampler,pipeline}
+    }
+    fn render(&self,encoder:&mut pixels::wgpu::CommandEncoder,target:&pixels::wgpu::TextureView,context:&pixels::PixelsContext,surface:(u32,u32)){
+        use pixels::wgpu as w;
+        let texture=context.texture.create_view(&w::TextureViewDescriptor::default());
+        let group=context.device.create_bind_group(&w::BindGroupDescriptor{label:None,layout:&self.layout,entries:&[
+            w::BindGroupEntry{binding:0,resource:w::BindingResource::TextureView(&texture)},
+            w::BindGroupEntry{binding:1,resource:w::BindingResource::Sampler(&self.sampler)},
+        ]});
+        let (x,y,width,height)=presentation_viewport((context.texture_extent.width,context.texture_extent.height),surface);
+        let mut pass=encoder.begin_render_pass(&w::RenderPassDescriptor{label:Some("GX presentation zoom"),color_attachments:&[Some(w::RenderPassColorAttachment{
+            view:target,resolve_target:None,ops:w::Operations{load:w::LoadOp::Clear(w::Color::BLACK),store:true}})],depth_stencil_attachment:None});
+        pass.set_pipeline(&self.pipeline);pass.set_bind_group(0,&group,&[]);
+        pass.set_viewport(x,y,width,height,0.0,1.0);pass.draw(0..3,0..1);
+    }
+}
 type Result<T> = std::result::Result<T, u16>;
+#[path="hosted_raster.rs"]
+mod raster;
+#[path="hosted_coverage.rs"]
+mod coverage;
+#[path="hosted_colour.rs"]
+mod colour;
+#[path="hosted_render.rs"]
+mod render;
+#[path="hosted_desktop.rs"]
+mod desktop;
 
 pub(super) struct Surface {
     width: u32,
@@ -16,6 +105,10 @@ pub(super) struct Surface {
     title: String,
     back: Vec<u16>,
     front: Arc<Vec<u16>>,
+    // RGB565 buffers are empty for a true-colour surface. Exactly one backing
+    // representation is allocated; legacy clients keep their original storage.
+    colour: Option<colour::TrueColour>,
+    render: render::State,
     sequence: u64,
     input: InputState,
     closed: bool,
@@ -24,6 +117,12 @@ pub(super) struct Surface {
     resize_in_flight: Option<(u32, u32)>,
     activation: u64,
     configuration: u64,
+    backing_scale:u32,
+    preferred_scale:u32,
+    automatic_scale:bool,
+    requested_zoom:u32,
+    zoom_percent:u32,
+    presentation_monitor:Option<(u32,u32)>,
     pointer_requested: bool,
     desktop_pointer: Option<(i32, i32)>,
     #[cfg(target_os="macos")]
@@ -31,16 +130,61 @@ pub(super) struct Surface {
 }
 impl Surface {
     fn rgba(&self)->Option<Arc<Vec<u32>>>{
+        if let Some(frame)=self.colour.as_ref(){return Some(frame.front.clone());}
         #[cfg(target_os="macos")]
         if let Some(frame)=self.terminal.as_ref(){return Some(frame.front.clone());}
         None
     }
-    fn pixel_scale(&self)->u32{if self.rgba().is_some(){2}else{1}}
+    fn pixel_scale(&self)->u32{
+        #[cfg(target_os="macos")]
+        if self.terminal.is_some(){return 2;}
+        self.backing_scale
+    }
+    fn format(&self)->u32{if self.colour.is_some(){2}else{1}}
+    fn rgb_capture(&self)->Vec<u8>{
+        if let Some(frame)=self.colour.as_ref(){
+            frame.front.iter().flat_map(|c|{let p=c.to_le_bytes();[p[0],p[1],p[2]]}).collect()
+        }else{
+            self.front.iter().flat_map(|&c|rvm::display_rgb565::rgb565_to_rgb888(c)).collect()
+        }
+    }
+    fn raster_width(&self)->u32{self.width*self.backing_scale}
+    fn raster_height(&self)->u32{self.height*self.backing_scale}
+    fn presentation_size(&self)->(u32,u32){presentation_size(self.width,self.height,self.zoom_percent)}
+    fn fit_presentation(&mut self,monitor:Option<(u32,u32)>){
+        self.presentation_monitor=monitor;
+        let zoom=fitted_zoom(self.width,self.height,self.requested_zoom,monitor);
+        if self.zoom_percent!=zoom{
+            self.zoom_percent=zoom;
+            self.configuration=self.configuration.wrapping_add(1);
+        }
+    }
+    fn request_presentation(&mut self,percent:u32,nested:bool){
+        self.requested_zoom=percent;
+        if nested {
+            // The initial desktop profile presents clients at their logical
+            // size. Report its actual effective zoom instead of accepting a
+            // native-window enlargement which the compositor cannot display.
+            if self.zoom_percent!=100{
+                self.zoom_percent=100;
+                self.configuration=self.configuration.wrapping_add(1);
+            }
+        }else{self.fit_presentation(self.presentation_monitor);}
+    }
+    fn prefer_scale(&mut self,scale:u32){
+        self.preferred_scale=scale.clamp(1,2);
+        if self.automatic_scale&&self.backing_scale!=self.preferred_scale{
+            /* A fixed logical window still needs new backing pixels. */
+            self.resize=Some(self.resize.or(self.resize_in_flight).unwrap_or((self.width,self.height)));
+        }
+    }
     // Hosted edit commands share the ordered input queue, but never manufacture
     // Ctrl+C (SIGINT) or a printable command-key letter in the guest.
     pub(super) fn action(&mut self, code: u16) {
         self.transition(InputTransition::Edit { command: code });
     }
+    #[cfg(target_os="macos")]
+    pub(super) fn close(&mut self) { self.transition(InputTransition::Close); }
     fn transition(&mut self, event: InputTransition) {
         if matches!(event, InputTransition::Close) {
             if self.closed {
@@ -56,7 +200,8 @@ impl Surface {
             && width > 0
             && height > 0
             && (dimensions != (self.width, self.height)
-                || self.resize.is_some() || self.resize_in_flight.is_some())
+                || self.resize.is_some() || self.resize_in_flight.is_some()
+                ||(self.automatic_scale&&self.backing_scale!=self.preferred_scale))
         {
             self.resize = Some(dimensions);
         }
@@ -70,6 +215,7 @@ pub(super) struct Shared {
     next: u32,
     pub(super) finished: bool,
     pub(super) new_terminals: u16,
+    desktop: Option<desktop::Session>,
 }
 #[derive(Default)]
 pub(super) struct Graphics {
@@ -78,7 +224,7 @@ pub(super) struct Graphics {
 fn span(ptr: u32, count: usize) -> Result<usize> {
     let bank = (ptr >> 16) as usize;
     let offset = (ptr & 65535) as usize;
-    if bank >= 256 || offset >= BANK || ptr == 0 {
+    if bank >= BANKS || offset >= BANK || ptr == 0 {
         return Err(14);
     }
     let start = bank * BANK + offset;
@@ -114,18 +260,19 @@ fn pair(out: &mut Vec<u16>, n: u32) {
 }
 // Optional acceptance-test captures use the same immutable published frames.
 // Atomic replacement lets the external test observe a coherent registry.
-fn capture(shared: &Shared) -> Result<()> {
+fn capture(shared: &mut Shared) -> Result<()> {
     let Some(directory) = std::env::var_os("FUSE_X_FRAMES") else {
         return Ok(());
     };
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).map_err(|_| 5u16)?;
     let windows:Vec<_>=shared.windows.iter().map(|(&id,w)|serde_json::json!({
-        "id":id,"title":w.title,"width":w.width,"height":w.height,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence,"configuration":w.configuration
+        "id":id,"title":w.title,"format":w.format(),"width":w.width,"height":w.height,"scale":w.backing_scale,"pixel_width":w.raster_width(),"pixel_height":w.raster_height(),"zoom_percent":w.zoom_percent,"presentation_width":w.presentation_size().0,"presentation_height":w.presentation_size().1,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence,"configuration":w.configuration
     })).collect();
     let temporary = directory.join("windows.json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&windows).unwrap()).map_err(|_| 5u16)?;
     std::fs::rename(temporary, directory.join("windows.json")).map_err(|_| 5u16)?;
+    if desktop::enabled()&&std::env::var_os("RCC_NATIVE_HEADLESS").is_some(){desktop::headless_capture(shared)?;}
     Ok(())
 }
 // Opt-in acceptance fixture: deliver the same owned host resize/close requests
@@ -144,14 +291,17 @@ fn test_event(shared: &Arc<Mutex<Shared>>) -> Result<()> {
     let id=number(&command["window"])?;
     let resize=command.get("resize");let close=command.get("close");
     let action=command.get("action");let input=command.get("input");
-    if [resize,close,action,input].iter().filter(|v|v.is_some()).count()!=1 { return Err(22); }
+    let density=command.get("density");
+    if [resize,close,action,input,density].iter().filter(|v|v.is_some()).count()!=1 { return Err(22); }
     let mut state=shared.lock().unwrap();
     if let Some(text)=command.get("clipboard") {
         let text=text.as_str().filter(|s|s.len()<=CLIPBOARD_MAX&&!s.contains('\0')).ok_or(22u16)?;
         state.clipboard=text.into();
     }
+    if id==0&&desktop::enabled(){desktop::headless_event(&mut state,&command)?;std::fs::remove_file(path).map_err(|_|5u16)?;return Ok(());}
     let window=state.windows.get_mut(&id).ok_or(22u16)?;
-    if let Some(size)=resize {
+    if let Some(scale)=density{let n=number(scale)?;if !(1..=2).contains(&n){return Err(22);}window.prefer_scale(n);}
+    else if let Some(size)=resize {
         let size=size.as_array().filter(|a|a.len()==2).ok_or(22u16)?;
         window.request_resize(number(&size[0])?,number(&size[1])?);
     } else if let Some(action)=action { window.action(number(action)?.try_into().map_err(|_|22u16)?); }
@@ -166,6 +316,10 @@ fn test_event(shared: &Arc<Mutex<Shared>>) -> Result<()> {
 }
 impl Runtime {
     fn graphics_call(&mut self, op: u64, a: &mut [u32; 12]) -> Result<u32> {
+        if op==25{return raster::blend(self,a);}
+        if op==29{return coverage::raster(self,a);}
+        if op==30 && a.iter().all(|&n| n==0){return Ok(0);}
+        if op==26{a[1]=2;a[2]=3;return Ok(0);}
         let shared = self.graphics.shared.clone();
         if op==21 {
             #[cfg(target_os="macos")]
@@ -240,7 +394,8 @@ impl Runtime {
         }
         if op == 1 {
             let (w, h) = (a[0], a[1]);
-            if w == 0 || h == 0 || w > MAX_WIDTH || h > MAX_HEIGHT {
+            // a[4]=0 is the historical host call, predating format discovery.
+            if w == 0 || h == 0 || w > MAX_WIDTH || h > MAX_HEIGHT || a[4]>2 {
                 return Err(22);
             }
             let title = title(self, a[2])?;
@@ -250,7 +405,7 @@ impl Runtime {
             }
             let id = s.next.checked_add(1).ok_or(12u16)?;
             s.next = id;
-            let pixels = vec![0; (w * h) as usize];
+            let pixels = if a[4]==2{Vec::new()}else{vec![0; (w * h) as usize]};
             s.windows.insert(
                 id,
                 Surface {
@@ -259,6 +414,8 @@ impl Runtime {
                     title,
                     front: Arc::new(pixels.clone()),
                     back: pixels,
+                    colour: (a[4]==2).then(||colour::TrueColour::new((w*h) as usize)),
+                    render: render::State::default(),
                     sequence: 1,
                     input: InputState::default(),
                     closed: false,
@@ -267,6 +424,12 @@ impl Runtime {
                     resize_in_flight: None,
                     activation: 0,
                     configuration: 0,
+                    backing_scale:1,
+                    preferred_scale:if cfg!(target_os="macos"){2}else{1},
+                    automatic_scale:false,
+                    requested_zoom:100,
+                    zoom_percent:100,
+                    presentation_monitor:None,
                     pointer_requested: false,
                     desktop_pointer: None,
                     #[cfg(target_os="macos")]
@@ -274,7 +437,7 @@ impl Runtime {
                 },
             );
             a[0] = id;
-            capture(&s)?;
+            capture(&mut s)?;
             drop(s);
             self.host.request_hosted_window();
             return Ok(0);
@@ -306,12 +469,13 @@ impl Runtime {
             return Ok(0);
         }
         let window = s.windows.get_mut(&a[0]).ok_or(22u16)?;
+        if op==30{return render::call(self,window,a);}
         #[cfg(target_os="macos")]
         if op==22 {
             use super::hosted_terminal::{Cell,Frame};
             let (cols,rows,row,length)=(a[1],a[2],a[3],a[5] as usize);
             let (cw,ch)=super::hosted_terminal::metrics();
-            if cols==0||cols>240||rows==0||rows>100||row>=rows||length>cols as usize*67
+            if window.colour.is_some()||window.backing_scale!=1||cols==0||cols>240||rows==0||rows>100||row>=rows||length>cols as usize*67
                 ||window.width!=cols*cw||window.height!=rows*ch||a[8]>1||a[9]>6
                 ||(a[8]!=0&&(a[6]>=cols||a[7]>=rows)){return Err(22);}
             let start=span(a[4],length)?;let mut data=vec![0;length];self.memory.read_into(start,&mut data);
@@ -338,6 +502,32 @@ impl Runtime {
             return Ok(0);
         }
         match op {
+            28=>{
+                if !(100..=300).contains(&a[1]){return Err(22);}
+                // The UI thread supplies monitor bounds once a native window
+                // exists. Headless sessions deliberately use the requested size.
+                window.request_presentation(a[1],desktop::enabled());
+                a[1]=window.zoom_percent;
+            }
+            24=>{
+                if a[1]>2{return Err(22);}
+                let scale=if a[1]==0{window.preferred_scale}else{a[1]};
+                window.automatic_scale=a[1]==0;
+                let mut reset=scale!=window.backing_scale;
+                #[cfg(target_os="macos")]
+                {reset|=window.terminal.is_some();}
+                if reset{
+                    #[cfg(target_os="macos")]
+                    {window.terminal=None;}
+                    window.backing_scale=scale;
+                    let count=(window.raster_width()*window.raster_height()) as usize;
+                    if window.colour.is_some(){window.colour=Some(colour::TrueColour::new(count));}
+                    else{window.back=vec![0;count];window.front=Arc::new(window.back.clone());}
+                    window.sequence=window.sequence.wrapping_add(1);
+                    window.configuration=window.configuration.wrapping_add(1);
+                }
+                a[1]=scale;a[2]=window.raster_width();a[3]=window.raster_height();
+            }
             17 | 18 => {
                 let (width, height, stride) = (a[3], a[4], a[5]);
                 if a[1] != 0 || a[2] != 0 || width == 0 || height == 0
@@ -359,31 +549,62 @@ impl Runtime {
                         source.push(palette.as_ref().map_or(pixel, |p| p[(pixel & 255) as usize]));
                     }
                 }
-                let (mut vw, mut vh) = (window.width, window.width * height / width);
-                if vh > window.height { vh = window.height; vw = window.height * width / height; }
+                let (mut vw, mut vh) = (window.raster_width(), window.raster_width() * height / width);
+                if vh > window.raster_height() { vh = window.raster_height(); vw = window.raster_height() * width / height; }
                 vw = vw.max(1); vh = vh.max(1);
-                let (left, top) = ((window.width - vw) / 2, (window.height - vh) / 2);
+                let (left, top) = ((window.raster_width() - vw) / 2, (window.raster_height() - vh) / 2);
                 let columns: Vec<_> = (0..vw).map(|x| (x * width / vw) as usize).collect();
                 #[cfg(target_os="macos")]
                 {window.terminal=None;}
-                window.back.fill(0);
+                if let Some(frame)=window.colour.as_mut(){frame.back.fill(colour::rgba(0));}
+                else{window.back.fill(0);}
                 for y in 0..vh {
                     let row = (y * height / vh * width) as usize;
-                    let dest = ((top + y) * window.width + left) as usize;
+                    let dest = ((top + y) * window.raster_width() + left) as usize;
                     for (x, &column) in columns.iter().enumerate() {
-                        window.back[dest + x] = source[row + column];
+                        let c=source[row+column];
+                        if let Some(frame)=window.colour.as_mut(){frame.back[dest+x]=colour::rgba565(c);}
+                        else{window.back[dest+x]=c;}
                     }
                 }
             }
             2 => {
                 s.windows.remove(&a[0]);
             }
-            3 | 5 | 6 => {
+            23 => {
+                let (x,y,w,h,stride)=(a[1],a[2],a[3],a[4],a[5]);
+                if x>window.raster_width()||y>window.raster_height()||w>window.raster_width()-x||h>window.raster_height()-y {
+                    return Err(22);
+                }
+                let row=w.checked_mul(3).ok_or(22u16)?;
+                if stride<row{return Err(22);}
+                if w==0||h==0{return Ok(0);}
+                let count=(h-1).checked_mul(stride).and_then(|n|n.checked_add(row)).ok_or(14u16)?;
+                let start=span(a[6],count as usize)?;
+                let mut line=vec![0;row as usize];
+                #[cfg(target_os="macos")]
+                {window.terminal=None;}
+                for dy in 0..h {
+                    self.memory.read_into(start+(dy*stride) as usize,&mut line);
+                    let dest=((y+dy)*window.raster_width()+x) as usize;
+                    if let Some(frame)=window.colour.as_mut(){
+                        for (out,bgr) in frame.back[dest..dest+w as usize].iter_mut().zip(line.chunks_exact(3)){
+                            *out=u32::from_le_bytes([bgr[2] as u8,bgr[1] as u8,bgr[0] as u8,255]);
+                        }
+                    }else{
+                        for (out,bgr) in window.back[dest..dest+w as usize].iter_mut().zip(line.chunks_exact(3)){
+                            *out=((bgr[2]&248)<<8)|((bgr[1]&252)<<3)|((bgr[0]&255)>>3);
+                        }
+                    }
+                }
+            }
+            3 | 5 | 6 | 27 => {
                 let (x, y, w, h) = (a[1], a[2], a[3], a[4]);
-                if x > window.width
-                    || y > window.height
-                    || w > window.width - x
-                    || h > window.height - y
+                if op==27&&a[5]>0xffffff{return Err(22);}
+                if x > window.raster_width()
+                    || y > window.raster_height()
+                    || w > window.raster_width() - x
+                    || h > window.raster_height() - y
                 {
                     return Err(22);
                 }
@@ -404,37 +625,35 @@ impl Runtime {
                 };
                 if op == 6 {
                     let (dx, dy) = (a[5], a[6]);
-                    if dx > window.width
-                        || dy > window.height
-                        || w > window.width - dx
-                        || h > window.height - dy
+                    if dx > window.raster_width()
+                        || dy > window.raster_height()
+                        || w > window.raster_width() - dx
+                        || h > window.raster_height() - dy
                     {
                         return Err(22);
                     }
                     #[cfg(target_os="macos")]
                     {window.terminal=None;}
-                    // Snapshot the whole source rectangle for overlapping copies.
-                    let mut copy = Vec::with_capacity((w * h) as usize);
-                    for row in 0..h {
-                        let at = ((y + row) * window.width + x) as usize;
-                        copy.extend_from_slice(&window.back[at..at + w as usize]);
-                    }
-                    for row in 0..h {
-                        let at = ((dy + row) * window.width + dx) as usize;
-                        window.back[at..at + w as usize]
-                            .copy_from_slice(&copy[(row * w) as usize..((row + 1) * w) as usize]);
-                    }
+                    let stride=window.raster_width();
+                    if let Some(frame)=window.colour.as_mut(){colour::copy_rect(&mut frame.back,stride,x,y,w,h,dx,dy);}
+                    else{colour::copy_rect(&mut window.back,stride,x,y,w,h,dx,dy);}
                 } else {
                     #[cfg(target_os="macos")]
                     {window.terminal=None;}
+                    let mut line=vec![0;w as usize];
                     for row in 0..h {
-                        for col in 0..w {
-                            let colour = if let Some(start) = source {
-                                self.memory.read(start + (row * a[5] + col) as usize)
-                            } else {
-                                a[5] as u16
-                            };
-                            window.back[((y + row) * window.width + x + col) as usize] = colour;
+                        let dest=((y+row)*window.raster_width()+x) as usize;
+                        if let Some(start)=source{
+                            self.memory.read_into(start+(row*a[5]) as usize,&mut line);
+                            if let Some(frame)=window.colour.as_mut(){
+                                for (out,&c) in frame.back[dest..dest+w as usize].iter_mut().zip(&line){*out=colour::rgba565(c);}
+                            }else{window.back[dest..dest+w as usize].copy_from_slice(&line);}
+                        }else if let Some(frame)=window.colour.as_mut(){
+                            let c=if op==27{colour::rgba(a[5])}else{colour::rgba565(a[5] as u16)};
+                            frame.back[dest..dest+w as usize].fill(c);
+                        }else{
+                            let c=if op==27{colour::rgb565(a[5])}else{a[5] as u16};
+                            window.back[dest..dest+w as usize].fill(c);
                         }
                     }
                 }
@@ -443,23 +662,20 @@ impl Runtime {
                 #[cfg(target_os="macos")]
                 if let Some(frame)=window.terminal.as_mut(){frame.front=Arc::new(frame.back.clone());}
                 window.front = Arc::new(window.back.clone());
+                if let Some(frame)=window.colour.as_mut(){frame.present();}
                 window.sequence = window.sequence.wrapping_add(1);
                 if let Some(path) = std::env::var_os("FUSE_X_FRAME") {
                     let mut bytes =
-                        format!("P6\n{} {}\n255\n", window.width, window.height).into_bytes();
-                    for c in window.front.iter() {
-                        bytes.extend(rvm::display_rgb565::rgb565_to_rgb888(*c));
-                    }
+                        format!("P6\n{} {}\n255\n", window.raster_width(), window.raster_height()).into_bytes();
+                    bytes.extend(window.rgb_capture());
                     std::fs::write(path, bytes).map_err(|_| 5u16)?;
                 }
                 if let Some(directory) = std::env::var_os("FUSE_X_FRAMES") {
                     let directory = std::path::Path::new(&directory);
                     std::fs::create_dir_all(directory).map_err(|_| 5u16)?;
                     let mut bytes =
-                        format!("P6\n{} {}\n255\n", window.width, window.height).into_bytes();
-                    for c in window.front.iter() {
-                        bytes.extend(rvm::display_rgb565::rgb565_to_rgb888(*c));
-                    }
+                        format!("P6\n{} {}\n255\n", window.raster_width(), window.raster_height()).into_bytes();
+                    bytes.extend(window.rgb_capture());
                     let temporary = directory.join(format!("{}.ppm.tmp", a[0]));
                     std::fs::write(&temporary, bytes).map_err(|_| 5u16)?;
                     std::fs::rename(temporary, directory.join(format!("{}.ppm", a[0])))
@@ -532,19 +748,19 @@ impl Runtime {
                 if (width, height) != (window.width, window.height) {
                     #[cfg(target_os="macos")]
                     {window.terminal=None;}
-                    let mut pixels = vec![0; (width * height) as usize];
-                    for row in 0..height.min(window.height) {
-                        let count = width.min(window.width) as usize;
-                        pixels[(row * width) as usize..(row * width) as usize + count]
-                            .copy_from_slice(
-                                &window.back[(row * window.width) as usize
-                                    ..(row * window.width) as usize + count],
-                            );
+                    let rw=width*window.backing_scale;
+                    let rh=height*window.backing_scale;
+                    let old_width=window.raster_width();
+                    let old_height=window.raster_height();
+                    if let Some(frame)=window.colour.as_mut(){
+                        frame.back=colour::resized(&frame.back,old_width,old_height,rw,rh,colour::rgba(0));
+                        frame.present();
+                    }else{
+                        window.back=colour::resized(&window.back,old_width,old_height,rw,rh,0);
+                        window.front=Arc::new(window.back.clone());
                     }
                     window.width = width;
                     window.height = height;
-                    window.back = pixels;
-                    window.front = Arc::new(window.back.clone());
                     window.sequence = window.sequence.wrapping_add(1);
                 }
                 if window.resize == Some((width, height)) {
@@ -569,8 +785,8 @@ impl Runtime {
             }
             _ => return Err(42),
         }
-        if matches!(op, 2 | 4 | 7 | 12) {
-            capture(&s)?;
+        if matches!(op, 2 | 4 | 7 | 12 | 24 | 28) {
+            capture(&mut s)?;
         }
         Ok(0)
     }
@@ -603,6 +819,7 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_gx(ctx: *mut Runtime, op: u64, re
 pub(super) fn run(
     shared: Arc<Mutex<Shared>>,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    if desktop::enabled(){return desktop::run(shared);}
     use pixels::{Pixels, SurfaceTexture};
     use winit::{
         dpi::LogicalSize,
@@ -622,6 +839,25 @@ pub(super) fn run(
         activation: u64,
         configuration: u64,
         pixel_scale:u32,
+        zoom_percent:u32,
+        presentation_renderer:Option<PresentationRenderer>,
+    }
+    impl View{
+        fn window_pixel(&self,position:(f32,f32))->(i32,i32){
+            if self.zoom_percent==100{
+                return match self.pixels.window_pos_to_pixel(position){
+                    Ok((x,y))=>(x as i32,y as i32),Err((x,y))=>(x as i32,y as i32),
+                };
+            }
+            let size=self.window.inner_size();
+            presentation_pixel(position,(self.dimensions.0*self.pixel_scale,self.dimensions.1*self.pixel_scale),(size.width,size.height))
+        }
+    }
+    fn monitor_size(window:&winit::window::Window)->Option<(u32,u32)>{
+        window.current_monitor().map(|m|{
+            let size=m.size().to_logical::<u32>(m.scale_factor());
+            (size.width,size.height)
+        })
     }
     let mut event_loop = EventLoopBuilder::new().build();
     #[cfg(target_os = "macos")]
@@ -639,6 +875,18 @@ pub(super) fn run(
         let result: std::result::Result<(), Box<dyn std::error::Error>> = (|| {
             match event {
                 Event::MainEventsCleared => {
+                    {
+                        let mut s=shared.lock().unwrap();
+                        let mut changed=false;
+                        for (&id,view) in &views{
+                            if let Some(w)=s.windows.get_mut(&id){
+                                let previous=w.zoom_percent;
+                                w.fit_presentation(monitor_size(&view.window));
+                                changed|=previous!=w.zoom_percent;
+                            }
+                        }
+                        if changed{capture(&mut s).map_err(|e|format!("GX capture failed: {e}"))?;}
+                    }
                     let descriptions: Vec<_> = {
                         let s = shared.lock().unwrap();
                         s.windows
@@ -656,6 +904,7 @@ pub(super) fn run(
                                     w.configuration,
                                     w.resize.is_some() || w.resize_in_flight.is_some(),
                                     w.pixel_scale(),
+                                    w.zoom_percent,
                                 )
                             })
                             .collect()
@@ -669,20 +918,50 @@ pub(super) fn run(
                         sequence,
                         resizable,
                         activation,
-                        configuration,
+                        mut configuration,
                         resize_pending,
                         pixel_scale,
+                        mut zoom_percent,
                     ) in descriptions
                     {
                         if !views.contains_key(&id) {
+                            let monitor=target.primary_monitor().or_else(||target.available_monitors().next()).map(|m|{
+                                let size=m.size().to_logical::<u32>(m.scale_factor());(size.width,size.height)
+                            });
+                            {
+                                let mut s=shared.lock().unwrap();
+                                if let Some(w)=s.windows.get_mut(&id){
+                                    w.fit_presentation(monitor);zoom_percent=w.zoom_percent;configuration=w.configuration;
+                                }
+                            }
+                            let (pw,ph)=presentation_size(width,height,zoom_percent);
+                            let (minw,minh)=presentation_size(8,16,zoom_percent);
+                            let (maxw,maxh)=presentation_size(MAX_WIDTH,MAX_HEIGHT,zoom_percent);
                             let window = WindowBuilder::new()
                                 .with_title(&title)
-                                .with_inner_size(LogicalSize::new(width, height))
-                                .with_min_inner_size(LogicalSize::new(8, 16))
-                                .with_max_inner_size(LogicalSize::new(MAX_WIDTH, MAX_HEIGHT))
+                                .with_inner_size(LogicalSize::new(pw,ph))
+                                .with_min_inner_size(LogicalSize::new(minw,minh))
+                                .with_max_inner_size(LogicalSize::new(maxw,maxh))
                                 .with_resizable(resizable)
                                 .build(target)?;
                             window.set_ime_allowed(true);
+                            {
+                                let mut s=shared.lock().unwrap();
+                                if let Some(w)=s.windows.get_mut(&id){
+                                    w.prefer_scale(if window.scale_factor()>=1.5{2}else{1});
+                                    w.fit_presentation(monitor_size(&window));
+                                    zoom_percent=w.zoom_percent;
+                                    configuration=w.configuration;
+                                }
+                                capture(&mut s).map_err(|e|format!("GX capture failed: {e}"))?;
+                            }
+                            let (pw,ph)=presentation_size(width,height,zoom_percent);
+                            let current=window.inner_size().to_logical::<u32>(window.scale_factor());
+                            if (current.width,current.height)!=(pw,ph){window.set_inner_size(LogicalSize::new(pw,ph));}
+                            let (minw,minh)=presentation_size(8,16,zoom_percent);
+                            let (maxw,maxh)=presentation_size(MAX_WIDTH,MAX_HEIGHT,zoom_percent);
+                            window.set_min_inner_size(Some(LogicalSize::new(minw,minh)));
+                            window.set_max_inner_size(Some(LogicalSize::new(maxw,maxh)));
                             let size = window.inner_size();
                             let pixels = Pixels::new(
                                 width*pixel_scale,
@@ -702,10 +981,23 @@ pub(super) fn run(
                                     activation: 0,
                                     configuration,
                                     pixel_scale,
+                                    zoom_percent,
+                                    presentation_renderer:None,
                                 },
                             );
                         }
                         let view = views.get_mut(&id).unwrap();
+                        if zoom_percent!=100&&view.presentation_renderer.is_none(){
+                            view.presentation_renderer=Some(PresentationRenderer::new(view.pixels.device(),view.pixels.surface_texture_format()));
+                        }
+                        if view.zoom_percent!=zoom_percent{
+                            let (minw,minh)=presentation_size(8,16,zoom_percent);
+                            let (maxw,maxh)=presentation_size(MAX_WIDTH,MAX_HEIGHT,zoom_percent);
+                            view.window.set_min_inner_size(Some(LogicalSize::new(minw,minh)));
+                            view.window.set_max_inner_size(Some(LogicalSize::new(maxw,maxh)));
+                            view.zoom_percent=zoom_percent;
+                            view.window.request_redraw();
+                        }
                         if view.activation != activation {
                             view.window.set_minimized(false);
                             view.window.focus_window();
@@ -722,8 +1014,9 @@ pub(super) fn run(
                             // Restore native geometry even when pixels did not change.
                             let current = view.window.inner_size()
                                 .to_logical::<u32>(view.window.scale_factor());
-                            if !resize_pending && (current.width, current.height) != (width, height) {
-                                view.window.set_inner_size(LogicalSize::new(width, height));
+                            let (pw,ph)=presentation_size(width,height,zoom_percent);
+                            if !resize_pending && (current.width, current.height) != (pw,ph) {
+                                view.window.set_inner_size(LogicalSize::new(pw,ph));
                             }
                             view.configuration = configuration;
                         }
@@ -755,10 +1048,7 @@ pub(super) fn run(
                                     p.0 * view.window.scale_factor() as f32,
                                     p.1 * view.window.scale_factor() as f32,
                                 );
-                                let (x, y) = match view.pixels.window_pos_to_pixel(position) {
-                                    Ok((x, y)) => (x as i32, y as i32),
-                                    Err((x, y)) => (x as i32, y as i32),
-                                };
+                                let (x,y)=view.window_pixel(position);
                                 if let Some(w) = shared.lock().unwrap().windows.get_mut(&id) {
                                     w.desktop_pointer = Some((x/view.pixel_scale as i32, y/view.pixel_scale as i32));
                                 }
@@ -808,7 +1098,14 @@ pub(super) fn run(
                                 }}
                                 view.sequence = sequence;
                             }
-                            view.pixels.render()?;
+                            if view.zoom_percent!=100{
+                                let size=view.window.inner_size();
+                                if let Some(renderer)=view.presentation_renderer.as_ref(){
+                                    view.pixels.render_with(|encoder,target,context|{
+                                        renderer.render(encoder,target,context,(size.width,size.height));Ok(())
+                                    })?;
+                                }
+                            }else{view.pixels.render()?;}
                         }
                     }
                 }
@@ -910,13 +1207,7 @@ pub(super) fn run(
                                 }
                             }
                             WindowEvent::CursorMoved { position, .. } => {
-                                let (x, y) = match view
-                                    .pixels
-                                    .window_pos_to_pixel((position.x as f32, position.y as f32))
-                                {
-                                    Ok((x, y)) => (x as i32, y as i32),
-                                    Err((x, y)) => (x as i32, y as i32),
-                                };
+                                let (x,y)=view.window_pixel((position.x as f32,position.y as f32));
                                 w.transition(InputTransition::Motion { x:x/view.pixel_scale as i32, y:y/view.pixel_scale as i32 });
                             }
                             WindowEvent::MouseInput { state, button, .. } => {
@@ -950,7 +1241,8 @@ pub(super) fn run(
                             }
                             WindowEvent::Resized(size) => {
                                 let logical = size.to_logical::<u32>(view.window.scale_factor());
-                                w.request_resize(logical.width, logical.height);
+                                let (width,height)=guest_size(logical.width,logical.height,view.zoom_percent);
+                                w.request_resize(width,height);
                                 drop(s);
                                 view.visible = size.width > 0 && size.height > 0;
                                 if view.visible {
@@ -958,7 +1250,12 @@ pub(super) fn run(
                                     view.window.request_redraw();
                                 }
                             }
-                            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            WindowEvent::ScaleFactorChanged { scale_factor,new_inner_size } => {
+                                w.prefer_scale(if scale_factor>=1.5{2}else{1});
+                                let previous=w.zoom_percent;
+                                w.fit_presentation(monitor_size(&view.window));
+                                let changed=previous!=w.zoom_percent;
+                                if changed{capture(&mut s).map_err(|e|format!("GX capture failed: {e}"))?;}
                                 drop(s);
                                 view.visible =
                                     new_inner_size.width > 0 && new_inner_size.height > 0;
@@ -1002,6 +1299,210 @@ mod tests {
         a[2] = title;
         rt.graphics_call(1, &mut a).unwrap();
         a[0]
+    }
+    #[test]
+    fn nested_presentation_returns_actual_one_hundred_without_resizing_pixels_or_input(){
+        let mut rt=Runtime::new();let id=create(&mut rt,640,400);
+        let mut shared=rt.graphics.shared.lock().unwrap();let w=shared.windows.get_mut(&id).unwrap();
+        let front=w.front.clone();let back=w.back.clone();
+        w.transition(InputTransition::Motion{x:17,y:-3});
+        w.request_presentation(200,false);
+        assert_eq!((w.requested_zoom,w.zoom_percent,w.presentation_size()),(200,200,(1280,800)));
+        w.request_presentation(300,true);
+        assert_eq!((w.requested_zoom,w.zoom_percent,w.presentation_size()),(300,100,(640,400)));
+        assert_eq!((w.width,w.height,w.backing_scale,w.input.x,w.input.y),(640,400,1,17,-3));
+        assert_eq!(w.resize,None);assert_eq!(w.resize_in_flight,None);assert_eq!(w.back,back);
+        assert!(Arc::ptr_eq(&front,&w.front));
+        let configuration=w.configuration;w.request_presentation(150,true);
+        assert_eq!((w.requested_zoom,w.zoom_percent,w.configuration),(150,100,configuration));
+        w.request_presentation(150,false);
+        assert_eq!((w.requested_zoom,w.zoom_percent),(150,150));
+    }
+    #[test]
+    fn presentation_zoom_fits_monitor_points_without_changing_the_request(){
+        assert_eq!(fitted_zoom(800,600,150,None),150);
+        assert_eq!(presentation_size(800,600,150),(1200,900));
+        assert_eq!(fitted_zoom(800,600,150,Some((1440,900))),135);
+        assert_eq!(presentation_size(800,600,135),(1080,810));
+        assert_eq!(fitted_zoom(800,600,150,Some((1920,1080))),150);
+        assert_eq!(fitted_zoom(800,600,153,Some((1920,1080))),153);
+        assert_eq!(fitted_zoom(800,600,150,Some((640,480))),100);
+        assert_eq!(presentation_size(8,16,150),(12,24));
+        assert_eq!(presentation_size(MAX_WIDTH,MAX_HEIGHT,150),(2880,1620));
+    }
+    #[test]
+    fn presentation_zoom_rounding_does_not_feed_back_into_guest_resize(){
+        for percent in 100..=300{
+            for width in 1..=MAX_WIDTH{
+                let (pw,ph)=presentation_size(width,601,percent);
+                assert_eq!(guest_size(pw,ph,percent),(width,601));
+            }
+        }
+        assert_eq!(guest_size(1200,900,150),(800,600));
+        assert_eq!(guest_size(1350,1050,150),(900,700));
+    }
+    #[test]
+    fn presentation_zoom_fractional_render_and_pointer_use_the_same_viewport(){
+        assert_eq!(presentation_viewport((800,600),(2160,1620)),(0.0,0.0,2160.0,1620.0));
+        assert_eq!(presentation_pixel((1080.0,810.0),(800,600),(2160,1620)),(400,300));
+        assert_eq!(presentation_pixel((2159.0,1619.0),(800,600),(2160,1620)),(799,599));
+        // Resizing can temporarily change the aspect ratio before the guest
+        // acknowledges it. Drawing and input share the same letterbox margins.
+        assert_eq!(presentation_viewport((800,600),(2160,1800)),(0.0,90.0,2160.0,1620.0));
+        assert_eq!(presentation_pixel((1080.0,900.0),(800,600),(2160,1800)),(400,300));
+        assert_eq!(presentation_pixel((0.0,0.0),(800,600),(2160,1800)),(0,-34));
+        assert_eq!(presentation_pixel((1080.0,810.0),(1600,1200),(2160,1620)),(800,600));
+    }
+    #[cfg(target_os="macos")]
+    #[test]
+    #[ignore="requires a native Metal GPU adapter"]
+    fn presentation_zoom_shader_validates_on_metal(){
+        use pixels::wgpu as w;
+        fn complete<F:std::future::Future>(future:F)->F::Output{
+            struct Wake(std::thread::Thread);
+            impl std::task::Wake for Wake{fn wake(self:Arc<Self>){self.0.unpark();}}
+            let waker=std::task::Waker::from(Arc::new(Wake(std::thread::current())));
+            let mut context=std::task::Context::from_waker(&waker);
+            let mut future=std::pin::pin!(future);
+            loop{match future.as_mut().poll(&mut context){
+                std::task::Poll::Ready(result)=>return result,
+                std::task::Poll::Pending=>std::thread::park(),
+            }}
+        }
+        let instance=w::Instance::new(w::InstanceDescriptor{backends:w::Backends::METAL,..Default::default()});
+        let adapter=complete(instance.request_adapter(&w::RequestAdapterOptions::default())).expect("Metal adapter");
+        let (device,_queue)=complete(adapter.request_device(&w::DeviceDescriptor{label:None,features:w::Features::empty(),limits:w::Limits::downlevel_defaults()},None)).unwrap();
+        device.push_error_scope(w::ErrorFilter::Validation);
+        let _renderer=PresentationRenderer::new(&device,w::TextureFormat::Bgra8UnormSrgb);
+        device.poll(w::Maintain::Wait);
+        assert!(complete(device.pop_error_scope()).is_none());
+    }
+    #[test]
+    fn presentation_zoom_is_per_window_and_preserves_pixels_backing_and_input(){
+        let mut rt=Runtime::new();let id=create(&mut rt,4,3);let other=create(&mut rt,4,3);
+        rt.graphics_call(24,&mut [id,2,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        rt.graphics_call(5,&mut [id,0,0,8,6,0xabcd,0,0,0,0,0,0]).unwrap();
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let shared=rt.graphics.shared.clone();
+        let (front,back,sequence,configuration)={
+            let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            w.transition(InputTransition::Motion{x:3,y:2});
+            (w.front.clone(),w.back.clone(),w.sequence,w.configuration)
+        };
+        let mut zoom=[id,150,0,0,0,0,0,0,0,0,0,0];
+        assert_eq!(rt.graphics_call(28,&mut zoom),Ok(0));assert_eq!(zoom[1],150);
+        {
+            let s=shared.lock().unwrap();let w=&s.windows[&id];
+            assert_eq!((w.width,w.height,w.raster_width(),w.raster_height(),w.pixel_scale()),(4,3,8,6,2));
+            assert_eq!((w.requested_zoom,w.zoom_percent,w.presentation_size()),(150,150,(6,5)));
+            assert!(Arc::ptr_eq(&front,&w.front));assert_eq!(back,w.back);
+            assert_eq!(sequence,w.sequence);assert_eq!(configuration+1,w.configuration);
+            assert_eq!((w.input.x,w.input.y),(3,2));assert_eq!(w.resize,None);
+            assert_eq!(s.windows[&other].zoom_percent,100);
+        }
+        rt.graphics_call(12,&mut [id,4,3,0,0,0,0,0,0,0,0,0]).unwrap();
+        {
+            let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            let (pw,ph)=w.presentation_size();let (gw,gh)=guest_size(pw,ph,w.zoom_percent);
+            w.request_resize(gw,gh);assert_eq!(w.resize,None);
+            assert!(Arc::ptr_eq(&front,&w.front));assert_eq!(back,w.back);
+        }
+        for percent in [0,99,301,u32::MAX]{
+            assert_eq!(rt.graphics_call(28,&mut [id,percent,0,0,0,0,0,0,0,0,0,0]),Err(22));
+            let s=shared.lock().unwrap();let w=&s.windows[&id];
+            assert_eq!((w.requested_zoom,w.zoom_percent,w.configuration),(150,150,configuration+2));
+            assert!(Arc::ptr_eq(&front,&w.front));assert_eq!(back,w.back);
+        }
+        assert_eq!(rt.graphics_call(28,&mut [other+1,150,0,0,0,0,0,0,0,0,0,0]),Err(22));
+    }
+    #[test]
+    fn presentation_zoom_refits_on_monitor_change_and_preserves_true_colour(){
+        let mut rt=Runtime::new();let id=create_colour(&mut rt,800,600);
+        rt.graphics_call(27,&mut [id,0,0,800,600,0x123456,0,0,0,0,0,0]).unwrap();
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let shared=rt.graphics.shared.clone();
+        let front=shared.lock().unwrap().windows[&id].rgba().unwrap();
+        rt.graphics_call(28,&mut [id,150,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        {
+            let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            w.fit_presentation(Some((1440,900)));
+            assert_eq!((w.requested_zoom,w.zoom_percent,w.presentation_size()),(150,135,(1080,810)));
+            assert!(Arc::ptr_eq(&front,&w.rgba().unwrap()));
+        }
+        let mut a=[id,150,0,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(28,&mut a).unwrap();assert_eq!(a[1],135);
+        {
+            let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            w.fit_presentation(Some((1920,1080)));assert_eq!(w.zoom_percent,150);
+            w.fit_presentation(None);assert_eq!(w.zoom_percent,150);
+            assert_eq!((w.width,w.height,w.backing_scale,w.raster_width(),w.raster_height()),(800,600,1,800,600));
+            assert!(Arc::ptr_eq(&front,&w.rgba().unwrap()));
+            assert!(w.colour.as_ref().unwrap().back.iter().all(|&p|p==colour::rgba(0x123456)));
+        }
+    }
+    #[test]
+    fn backing_density_keeps_logical_input_and_resizes_physical_surfaces(){
+        let mut rt=Runtime::new();let id=create(&mut rt,4,3);let shared=rt.graphics.shared.clone();
+        let mut a=[id,2,0,0,0,0,0,0,0,0,0,0];
+        assert_eq!(rt.graphics_call(24,&mut a),Ok(0));assert_eq!(&a[1..4],&[2,8,6]);
+        rt.memory.write(2*BANK,0xffff);
+        assert_eq!(rt.graphics_call(3,&mut [id,7,5,1,1,1,0x20000,0,0,0,0,0]),Ok(0));
+        assert_eq!(rt.graphics_call(3,&mut [id,8,5,1,1,1,0x20000,0,0,0,0,0]),Err(22));
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let old=shared.lock().unwrap().windows[&id].front.clone();assert_eq!(old.len(),48);assert_eq!(old[47],0xffff);
+        rt.graphics_call(12,&mut [id,6,4,0,0,0,0,0,0,0,0,0]).unwrap();
+        {let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            assert_eq!((w.width,w.height,w.back.len()),(6,4,96));assert_eq!(w.back[5*12+7],0xffff);
+            w.transition(InputTransition::Motion{x:3,y:2});assert_eq!((w.input.x,w.input.y),(3,2));
+            w.prefer_scale(2);
+        }
+        a[1]=0;rt.graphics_call(24,&mut a).unwrap();assert_eq!(&a[1..4],&[2,12,8]);
+        shared.lock().unwrap().windows.get_mut(&id).unwrap().prefer_scale(1);
+        assert_eq!(shared.lock().unwrap().windows[&id].resize,Some((6,4)));
+        a[1]=0;rt.graphics_call(24,&mut a).unwrap();assert_eq!(&a[1..4],&[1,6,4]);
+        a[1]=3;assert_eq!(rt.graphics_call(24,&mut a),Err(22));
+        {let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            w.flags=1;w.resize=Some((9,7));w.prefer_scale(2);
+            assert_eq!(w.resize,Some((9,7)),"density must preserve a pending logical resize, even for fixed windows");
+        }
+        assert_eq!(old[47],0xffff);
+    }
+    #[cfg(target_os="macos")]
+    #[test]
+    fn explicit_backing_switch_clears_terminal_texture_even_at_one(){
+        let mut rt=Runtime::new();let id=create(&mut rt,4,3);let shared=rt.graphics.shared.clone();
+        {let mut s=shared.lock().unwrap();let w=s.windows.get_mut(&id).unwrap();
+            w.terminal=Some(super::super::hosted_terminal::Frame::from_surface(w.width,w.height,&w.back,&w.front));
+            assert_eq!(w.pixel_scale(),2);
+        }
+        let mut a=[id,1,0,0,0,0,0,0,0,0,0,0];rt.graphics_call(24,&mut a).unwrap();
+        let s=shared.lock().unwrap();assert_eq!(s.windows[&id].pixel_scale(),1);assert!(s.windows[&id].rgba().is_none());
+    }
+    #[test]
+    fn bgr_raster_matches_mask_opacity_math_and_preserves_padding(){
+        let mut rt=Runtime::new();let start=3*BANK-2;let dst=super::super::memory::pointer(start) as u32;
+        let mask_start=4*BANK-1;let mask=super::super::memory::pointer(mask_start) as u32;
+        let mut a=[dst,mask,256,1,770,256,30,60,90,255,0,0];
+        let values:Vec<u16>=(0..256).collect();rt.memory.write_from(mask_start,&values);
+        for opacity in 0..256{
+            let mut background=vec![0x55;770];for p in background[..768].chunks_exact_mut(3){p.copy_from_slice(&[100,150,200]);}
+            rt.memory.write_from(start,&background);a[9]=opacity;
+            assert_eq!(rt.graphics_call(25,&mut a),Ok(0));
+            let mut actual=vec![0;770];rt.memory.read_into(start,&mut actual);
+            for (i,p) in actual[..768].chunks_exact(3).enumerate(){
+                let mix=if opacity>=253{i as u32}else{(i as u32*opacity)>>8};
+                for c in 0..3{let bg=[100,150,200][c];let fg=[30,60,90][c];
+                    let expected=if mix>=253{fg}else if mix==0{bg}else{(fg*mix+bg*(255-mix))>>8};
+                    assert_eq!(p[c],expected as u16,"opacity {opacity}, mask {i}, channel {c}");
+                }
+            }
+            assert_eq!(&actual[768..],&[0x55,0x55]);
+        }
+        let before:Vec<_>=rt.memory.cells(start..start+770).collect();
+        for(index,value,error)in [(0,0,14),(1,dst,22),(4,767,22),(8,256,22)]{
+            let old=a[index];a[index]=value;assert_eq!(rt.graphics_call(25,&mut a),Err(error));a[index]=old;
+            assert_eq!(rt.memory.cells(start..start+770).collect::<Vec<_>>(),before);
+        }
     }
     #[cfg(target_os="macos")]
     #[test]
@@ -1171,6 +1672,110 @@ mod tests {
         rt.graphics_call(2, &mut a).unwrap();
         assert_eq!(rt.graphics_call(4, &mut a), Err(22));
         assert!(create(&mut rt, 1, 1) > second);
+    }
+    #[test]
+    fn bgr888_upload_preserves_padding_snapshots_and_validates_spans() {
+        let mut rt=Runtime::new();let id=create(&mut rt,4,3);
+        let start=3*BANK-2;let ptr=super::super::memory::pointer(start) as u32;
+        rt.memory.write_from(start,&[0,0,255,0,255,0,999,999,255,0,0,255,255,255]);
+        let mut a=[id,1,1,2,2,8,ptr,0,0,0,0,0];
+        let shared=rt.graphics.shared.clone();
+        let before=shared.lock().unwrap().windows[&id].front.clone();
+        assert_eq!(rt.graphics_call(23,&mut a),Ok(0));
+        assert_eq!(shared.lock().unwrap().windows[&id].back,
+            vec![0,0,0,0,0,0xf800,0x07e0,0,0,0x001f,0xffff,0]);
+        assert!(before.iter().all(|&p|p==0));
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let committed=shared.lock().unwrap().windows[&id].front.clone();
+        for (index,value,error) in [(0,id+1,22),(1,4,22),(5,5,22),(6,0,14),(5,u32::MAX,14)] {
+            let old=a[index];a[index]=value;assert_eq!(rt.graphics_call(23,&mut a),Err(error));a[index]=old;
+            assert_eq!(shared.lock().unwrap().windows[&id].back,**committed);
+        }
+        a[3]=0;a[5]=0;a[6]=0;assert_eq!(rt.graphics_call(23,&mut a),Ok(0));
+        assert!(before.iter().all(|&p|p==0));
+    }
+    fn create_colour(rt:&mut Runtime,w:u32,h:u32)->u32{
+        rt.memory.write(BANK,0);
+        let mut a=[w,h,0x10000,0,2,0,0,0,0,0,0,0];
+        rt.graphics_call(1,&mut a).unwrap();a[0]
+    }
+    #[test]
+    fn true_colour_discovery_upload_and_publication_preserve_all_channel_bits(){
+        let mut rt=Runtime::new();let mut formats=[0;12];
+        assert_eq!(rt.graphics_call(26,&mut formats),Ok(0));assert_eq!(&formats[1..3],&[2,3]);
+        assert_eq!(rt.graphics_call(1,&mut [1,1,0x10000,0,3,0,0,0,0,0,0,0]),Err(22));
+        let id=create_colour(&mut rt,256,2);let shared=rt.graphics.shared.clone();
+        let start=3*BANK-2;let ptr=super::super::memory::pointer(start) as u32;
+        let mut cells=Vec::new();let mut expected=Vec::new();
+        for row in 0..2{
+            for i in 0..256u16{
+                let (r,g,b)=(i as u8,(255-i) as u8,(i.wrapping_mul(17)+row) as u8);
+                cells.extend([b as u16,g as u16,r as u16]);expected.extend([r,g,b]);
+            }
+            if row==0{cells.extend([999,999]);}
+        }
+        rt.memory.write_from(start,&cells);
+        let mut upload=[id,0,0,256,2,770,ptr,0,0,0,0,0];
+        rt.graphics_call(23,&mut upload).unwrap();
+        {
+            let s=shared.lock().unwrap();let w=&s.windows[&id];
+            assert!(w.back.is_empty()&&w.front.is_empty());assert_eq!(w.format(),2);
+            assert_eq!(w.pixel_scale(),1);assert_eq!(w.rgb_capture(),vec![0;256*2*3]);
+        }
+        let back=shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back.clone();
+        for (index,value,error) in [(0,id+1,22),(1,256,22),(5,767,22),(6,0,14),(5,u32::MAX,14)]{
+            let old=upload[index];upload[index]=value;
+            assert_eq!(rt.graphics_call(23,&mut upload),Err(error));upload[index]=old;
+            assert_eq!(shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back,back);
+        }
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let snapshot=shared.lock().unwrap().windows[&id].rgba().unwrap();
+        assert_eq!(shared.lock().unwrap().windows[&id].rgb_capture(),expected);
+        assert!(snapshot.iter().all(|c|c.to_le_bytes()[3]==255));
+        assert_eq!(rt.graphics_call(27,&mut [id,0,0,1,1,0x1000000,0,0,0,0,0,0]),Err(22));
+        rt.graphics_call(27,&mut [id,0,0,256,2,0x123456,0,0,0,0,0,0]).unwrap();
+        assert_eq!(shared.lock().unwrap().windows[&id].rgba().unwrap(),snapshot);
+        assert_ne!(shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back,*snapshot);
+        assert_eq!(snapshot[0].to_le_bytes(),[0,255,0,255]);
+    }
+    #[test]
+    fn true_colour_copy_resize_and_density_keep_precision_and_legacy_sources(){
+        let mut rt=Runtime::new();let id=create_colour(&mut rt,3,2);let shared=rt.graphics.shared.clone();
+        rt.memory.write_from(2*BANK,&[3,2,1,6,5,4,9,8,7,12,11,10,15,14,13,18,17,16]);
+        rt.graphics_call(23,&mut [id,0,0,3,2,9,0x20000,0,0,0,0,0]).unwrap();
+        rt.graphics_call(6,&mut [id,0,0,2,2,1,0,0,0,0,0,0]).unwrap();
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let snapshot=shared.lock().unwrap().windows[&id].rgba().unwrap();
+        assert_eq!(*snapshot,[0x010203,0x010203,0x040506,0x0a0b0c,0x0a0b0c,0x0d0e0f].map(colour::rgba));
+        rt.graphics_call(12,&mut [id,4,3,0,0,0,0,0,0,0,0,0]).unwrap();
+        let rgb=shared.lock().unwrap().windows[&id].rgb_capture();
+        assert_eq!(&rgb[..12],&[1,2,3,1,2,3,4,5,6,0,0,0]);
+        assert_eq!(&rgb[24..],&[0;12]);
+        assert_eq!(snapshot.len(),6);
+        rt.memory.write(2*BANK,0xabcd);
+        rt.graphics_call(3,&mut [id,0,0,1,1,1,0x20000,0,0,0,0,0]).unwrap();
+        assert_eq!(shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back[0],colour::rgba565(0xabcd));
+        rt.graphics_call(5,&mut [id,1,0,1,1,0x1357,0,0,0,0,0,0]).unwrap();
+        assert_eq!(shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back[1],colour::rgba565(0x1357));
+        rt.graphics_call(17,&mut [id,0,0,1,1,1,0x20000,0,0,0,0,0]).unwrap();
+        assert!(shared.lock().unwrap().windows[&id].colour.as_ref().unwrap().back.iter()
+            .all(|&p|p==colour::rgba(0)||p==colour::rgba565(0xabcd)));
+        let mut density=[id,2,0,0,0,0,0,0,0,0,0,0];
+        rt.graphics_call(24,&mut density).unwrap();assert_eq!(&density[1..4],&[2,8,6]);
+        rt.graphics_call(27,&mut [id,7,5,1,1,0x222324,0,0,0,0,0,0]).unwrap();
+        assert_eq!(rt.graphics_call(27,&mut [id,8,5,1,1,0x222324,0,0,0,0,0,0]),Err(22));
+        rt.graphics_call(4,&mut [id,0,0,0,0,0,0,0,0,0,0,0]).unwrap();
+        let s=shared.lock().unwrap();let w=&s.windows[&id];
+        assert_eq!(w.pixel_scale(),2);assert_eq!(w.rgba().unwrap().len(),48);
+        assert_eq!(&w.rgb_capture()[47*3..],&[0x22,0x23,0x24]);
+    }
+    #[test]
+    fn full_colour_fill_quantizes_only_when_explicitly_using_rgb565(){
+        let mut rt=Runtime::new();let legacy=create(&mut rt,1,1);let wide=create_colour(&mut rt,1,1);
+        for id in [legacy,wide]{rt.graphics_call(27,&mut [id,0,0,1,1,0x222324,0,0,0,0,0,0]).unwrap();}
+        let s=rt.graphics.shared.lock().unwrap();
+        assert_eq!(s.windows[&legacy].back,[colour::rgb565(0x222324)]);
+        assert_eq!(s.windows[&wide].colour.as_ref().unwrap().back,[colour::rgba(0x222324)]);
     }
     #[test]
     fn input_is_per_window_focus_releases_keys_and_close_keeps_session_alive() {

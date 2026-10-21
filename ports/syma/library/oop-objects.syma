@@ -1,0 +1,23 @@
+; Adapted from the author's OOP notebook. See PROVENANCE.txt.
+{Module OOP/Objects
+ {Import OOP/Desugar OOP/Transform}
+ {Export Run Output}
+ {Rules
+  {R "Run/Entry" {Run {Program code..}} {Execute {OOP/Transform/Transform {OOP/Desugar/Desugar code..}}}}
+  {R "Run" {Execute Ok(..)} {Dequalify ..}}
+  {R "Dequalify/Commands" {OOP/Transform/Commands ..} {Commands ..} :scope Dequalify :innermost}
+  {R "Dequalify/Instances" {OOP/Transform/Instances ..} {Instances ..} :scope Dequalify :innermost}
+  {R "Dequalify/InheritanceChains" {OOP/Transform/InheritanceChains ..} {InheritanceChains ..} :scope Dequalify :innermost}
+  {R "Dequalify/Bodies" {OOP/Transform/Bodies ..} {Bodies ..} :scope Dequalify :innermost}
+  {R "Dequalify/Calls" {OOP/Desugar/Call ..} {Call ..} :scope Dequalify :innermost}
+  {R "Dequalify/End" {Dequalify ..} {Running {Output} {Scratch} ..}}
+  {R "Running/Pick" {Running .. {Commands c_ ..} ..} {Executing {Current c_} .. {Commands ..} ..}}
+  {R "Executing/Print/Call" {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch                                } .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..} {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(class_ classes..)} .. {Instances .. {var_ class_    _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..}}
+  {R "Executing/Print/Call/TraverseChain/Found" {Executing .. {Current {:print {Call var_ method_}}} {Output ..} {Scratch method_ Chain(class_ classes..)} .. {Bodies .. {class_ .. method_ arrow_ return_ ..} ..} ..} {Running .. {Output .. return_} {Scratch} .. {Bodies .. {class_ .. method_ arrow_ return_ ..} ..} ..} :guard NormalEq(arrow_ Sym("=>"))}
+  {R "Executing/Print/Call/TraverseChain/Next" {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(class_ classes..)} ..} {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(       classes..)} ..}}
+  {R "Executing/Print/Call/Is" {Executing .. {Current {:print var_ is_ testclass_}} .. {Scratch} .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..} {Executing .. {Current {:print var_ is_ testclass_}} .. {Scratch Chain(class_ classes..)} .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..}..} :guard NormalEq(is_ Sym("is"))}
+  {R "Executing/Print/Call/Is/Found" {Executing .. {Current {:print var_ is_ testclass_}} {Output ..} {Scratch Chain(drop1.. testclass_ drop2..)} ..} {Running .. {Output .. Sym("true")} {Scratch} ..} :guard NormalEq(is_ Sym("is"))}
+  {R "Executing/Print/Call/Is/NotFound" {Executing .. {Current {:print var_ is_ testclass_}} {Output ..} ..} {Running .. {Output .. Sym("false")} {Scratch} ..} :guard NormalEq(is_ Sym("is"))}
+  {R "Executing/Drop" {Executing .. {Current _} ..} {Running .. ..}}
+  {R "Running/End" {Running .. {Output out..} .. {Commands} ..} {Output out..}}
+ }}

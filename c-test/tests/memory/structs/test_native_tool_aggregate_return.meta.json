@@ -1,0 +1,5 @@
+{
+  "expected": "YYY\n",
+  "use_runtime": true,
+  "description": "Struct return snapshots and by-value calls used by the guest native assembler"
+}

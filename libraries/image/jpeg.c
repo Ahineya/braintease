@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 #include "internal.h"
 #include "jpeg-codec.inc"
+#include "jpeg-progressive.inc"
 /* Validate the bounded baseline container before the small MCU decoder sees
  * it. In particular its original permissive marker/table paths are unsuitable
  * for untrusted web images. JPEG coefficient decoding remains picojpeg. */
@@ -90,25 +91,37 @@ static unsigned char jpeg_read(unsigned char *buf,unsigned char count,unsigned c
     struct jpeg_input *in=opaque;size_t n=in->size-in->at;
     if(n>count)n=count;memcpy(buf,in->data+in->at,n);in->at+=n;*got=n;return 0;
 }
-int ri_jpeg(const RiByte *p,size_t n,const RiLimits *limits,RiImage **out) {
-    unsigned w=0,h=0,mx,my,x,y,index,px,py;int status;
+int ri_jpeg_fit(const RiByte *p,size_t n,const RiLimits *source,const RiLimits *limits,RiImage **out) {
+    unsigned w=0,h=0,mx,my,x,y,index,px,py,progressive=0,scale=1,reduce,ow,oh;int status;
     RiJpegState *state;pjpeg_image_info_t info;RiImage *im=NULL;
     struct jpeg_input in={p,n,0};RiByte *dest;
+    status=jpeg_envelope(p,n,&w,&h,&progressive);if(status)return status;
+    status=ri_size(w,h,source);if(status)return status;
+    while(ri_size((w+scale-1)/scale,(h+scale-1)/scale,limits)) {
+        if(scale>=4096)return RI_LIMIT;
+        scale*=2;
+    }
+    ow=(w+scale-1)/scale;oh=(h+scale-1)/scale;
+    if(progressive)return ri_jpeg_progressive(p,n,w,h,scale,limits,out);
     status=jpeg_header(p,n,&w,&h);if(status)return status;
-    status=ri_size(w,h,limits);if(status)return status;
+    reduce=scale>=8;
     if(sizeof(*state)>limits->work)return RI_LIMIT;
     state=calloc(1,sizeof(*state));if(!state)return RI_MEMORY;
-    status=pjpeg_decode_init(state,&info,jpeg_read,&in,0);
+    status=pjpeg_decode_init(state,&info,jpeg_read,&in,reduce);
     if(status||info.m_width!=(int)w||info.m_height!=(int)h){free(state);return RI_CORRUPT;}
-    im=ri_image_new(w,h,limits);if(!im){free(state);return RI_MEMORY;}
+    im=ri_image_new(ow,oh,limits);if(!im){free(state);return RI_MEMORY;}
     for(my=0;my<(unsigned)info.m_MCUSPerCol;my++)for(mx=0;mx<(unsigned)info.m_MCUSPerRow;mx++) {
         if(pjpeg_decode_mcu(state)){ri_image_free(im);free(state);return RI_CORRUPT;}
-        for(y=0;y<(unsigned)info.m_MCUHeight;y++)for(x=0;x<(unsigned)info.m_MCUWidth;x++) {
-            px=mx*info.m_MCUWidth+x;py=my*info.m_MCUHeight+y;if(px>=w||py>=h)continue;
+        for(y=0;y<(unsigned)info.m_MCUHeight;y+=reduce?8:1)for(x=0;x<(unsigned)info.m_MCUWidth;x+=reduce?8:1) {
+            px=mx*info.m_MCUWidth+x;py=my*info.m_MCUHeight+y;if(px>=w||py>=h||px%scale||py%scale)continue;
             index=(y/8)*128+(x/8)*64+(y%8)*8+x%8;
-            dest=im->rgba+((size_t)py*w+px)*4;
+            dest=im->rgba+((size_t)(py/scale)*ow+px/scale)*4;
             dest[0]=info.m_pMCUBufR[index];dest[1]=info.m_pMCUBufG[index];dest[2]=info.m_pMCUBufB[index];dest[3]=255;
         }
     }
-    free(state);*out=im;return RI_OK;
+    free(state);im->source_width=w;im->source_height=h;*out=im;return RI_OK;
+}
+
+int ri_jpeg(const RiByte *p,size_t n,const RiLimits *limits,RiImage **out) {
+    return ri_jpeg_fit(p,n,limits,limits,out);
 }

@@ -6,7 +6,7 @@ static int send_flight(NetTcp *tcp) {
     if (size && size > tcp->mss) size = tcp->mss;
     if (size && tcp->window && size > tcp->window) size = tcp->window;
     if (size && !tcp->window) { size = 1; net_count(&tcp->probes); }
-    status = tcp_send(tcp, tcp->flight_seq, tcp->flight_flags, tcp->tx, size, 1);
+    status = tcp_send(tcp, tcp->flight_seq, tcp->flight_flags, NET_TCP_TX_DATA(tcp), size, 1);
     if (status == NET_AGAIN || status == NET_UNREACHABLE) return NET_AGAIN;
     if (status) return tcp_fail(tcp, status);
     if (tcp->flight_flags & TCP_ACK) tcp->ack_pending = 0;
@@ -17,6 +17,11 @@ static int flight_progress(NetTcp *tcp) {
     if (tcp->now - tcp->sent_at < tcp->rto) return NET_AGAIN;
     if (tcp->window || !tcp->flight_data) {
         if (++tcp->retries > 7) return tcp_fail(tcp, NET_TIMEOUT);
+    }
+    if (tcp->send_buffer && tcp->flight_data) {
+        tcp->ssthresh = tcp->flight_data / 2;
+        if (tcp->ssthresh < tcp->mss * 2) tcp->ssthresh = tcp->mss * 2;
+        tcp->cwnd = tcp->mss; tcp->recovering = 0; tcp->duplicate_acks = 0;
     }
     tcp->sample_valid = 0; tcp->retransmitted = 1; tcp->flight_sent = 0;
     if (tcp->rto < 60000UL) tcp->rto = tcp->rto > 30000UL ? 60000UL : tcp->rto * 2;
@@ -33,7 +38,7 @@ static int fin_window_probe(NetTcp *tcp) {
     return status;
 }
 int net_tcp_poll(NetTcp *tcp, unsigned long now_ms) {
-    unsigned short size;
+    unsigned short size, burst = 8;
     int status = tcp_lifecycle(tcp);
     if (status) return status;
     tcp->now = now_ms; tcp->net->now = now_ms;
@@ -64,6 +69,24 @@ int net_tcp_poll(NetTcp *tcp, unsigned long now_ms) {
             tcp_flight(tcp, TCP_FIN | TCP_ACK, 0);
             status = send_flight(tcp); if (status != NET_OK && status != NET_AGAIN) return status;
         }
+    }
+    /* Windowed streams append a bounded burst of segments per poll. snd_nxt may
+     * include a locally queued segment; sent_nxt only advances on NIC acceptance.
+     * Never count that unsent data as remotely acknowledged or restart the
+     * oldest outstanding segment's loss timer when extending a flight. */
+    while (burst-- && tcp->send_buffer && tcp->inflight && tcp->flight_data && tcp->flight_sent &&
+        tcp->sent_nxt == tcp->snd_nxt && !tcp->queued && !tcp->net->pending &&
+        !tcp->recovering && tcp->window > tcp->flight_data && tcp->cwnd > tcp->flight_data &&
+        tcp->tx_used > tcp->flight_data) {
+        size = tcp->tx_used - tcp->flight_data;
+        if (size > tcp->mss) size = tcp->mss;
+        if (size > tcp->window - tcp->flight_data) size = tcp->window - tcp->flight_data;
+        if (size > tcp->cwnd - tcp->flight_data) size = tcp->cwnd - tcp->flight_data;
+        status = tcp_send(tcp, tcp->snd_nxt, TCP_ACK | TCP_PSH,
+            NET_TCP_TX_DATA(tcp) + tcp->flight_data, size, 1);
+        if (!status) { tcp->flight_data += size; tcp->snd_nxt += size; tcp->ack_pending = 0; }
+        else if (status != NET_AGAIN && status != NET_UNREACHABLE) return tcp_fail(tcp, status);
+        else break;
     }
     if (tcp->ack_pending && !tcp->queued && !tcp->net->pending) {
         status = tcp_send(tcp, tcp->snd_nxt, TCP_ACK, 0, 0, 0);

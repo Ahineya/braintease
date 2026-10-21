@@ -9,6 +9,11 @@
 #define GX_HOSTED_MAX_WIDTH 1920
 #define GX_HOSTED_MAX_HEIGHT 1080
 #define GX_RGB565 1
+/* Opaque eight-bit RGB channels. Colour values are 0x00RRGGBB; the
+ * representation of a host framebuffer is deliberately not part of GX. */
+#define GX_XRGB8888 2
+#define GX_FORMAT_RGB565 1UL
+#define GX_FORMAT_XRGB8888 2UL
 #define GX_CAP_COPY 1
 #define GX_CAP_FILL 2
 #define GX_CAP_INPUT 4
@@ -21,6 +26,10 @@
 #define GX_CAP_INDEXED_UPLOAD 512
 #define GX_CAP_CLIPBOARD 1024
 #define GX_CAP_TERMINAL 2048
+#define GX_CAP_BGR888_UPLOAD 4096
+#define GX_CAP_BACKING_SCALE 8192
+#define GX_CAP_BGR888_RASTER 16384
+#define GX_CAP_PRESENTATION_ZOOM 32768UL
 #define GX_INFO 0x4700
 #define GX_CREATE 0x4701
 #define GX_UPLOAD 0x4702
@@ -53,6 +62,127 @@
  * or process-local grapheme IDs cross the ABI. */
 #define GX_TERMINAL_METRICS 0x4715
 #define GX_TERMINAL_DRAW 0x4716
+/* Optional GX upload using gx_upload: three logical octet cells per pixel,
+ * B,G,R order, stride in source cells. Retains all eight channel bits on an
+ * XRGB8888 surface; quantizes only on RGB565. Does not publish the surface.
+ * The source is borrowed only during this call. */
+#define GX_UPLOAD_BGR888 0x4717
+/* Opt into 1x/2x backing pixels while window geometry and events stay logical.
+ * scale=0 follows display density; 1/2 select a fixed scale. Returns the
+ * effective scale and physical surface dimensions. Resize requests also
+ * report display-density changes; reapply after acknowledging GX_CONFIGURE. */
+#define GX_BACKING_SCALE 0x4718
+struct gx_backing {uint16_t version;uint32_t window;uint16_t scale,width,height;};
+/* Synchronous BGR logical-octet fill/blend in the caller's RAM. Optional A8
+ * mask; row strides count cells, colours and opacity are 0..255. */
+#define GX_RASTER_BGR888 0x4719
+struct gx_raster_bgr888 {
+    uint16_t version,width,height,dst_stride,mask_stride,blue,green,red,opacity;
+    uint8_t *dst;const uint8_t *mask;
+};
+/* Optional format discovery. GX_INFO stays compatible with legacy RGB565
+ * clients. If unsupported, use RGB565. formats is a GX_FORMAT_* bit mask;
+ * preferred is a GX_* format identifier to request at creation. */
+#define GX_FORMATS 0x471a
+struct gx_formats {uint16_t version,preferred;uint32_t formats;};
+/* Opaque RGB fill, colour=0x00RRGGBB (upper byte must be zero). Quantization
+ * occurs only if the destination was explicitly created as RGB565. */
+#define GX_FILL_RGB888 0x471b
+struct gx_fill_rgb888 {
+    uint16_t version;uint32_t surface;
+    uint16_t x,y,width,height;uint32_t colour;
+};
+/* Optional native-window presentation zoom, 100..300 percent. Guest window,
+ * raster, upload and input coordinates retain their original dimensions.
+ * The host may reduce zoom to fit its monitor; percent returns the effective
+ * value. This is independent of GX_BACKING_SCALE and does not resample RAM. */
+#define GX_PRESENTATION_ZOOM 0x471c
+struct gx_presentation { uint16_t version;uint32_t window;uint16_t percent; };
+/* Optional synchronous coverage rasterization into the caller's A8 RAM.
+ * Samples are logical octets, one per C16 cell. Coordinates are signed
+ * physical pixels and may lie outside the mask; clipping bounds the work.
+ * Primitives combine coverage with max(), preserving joins. dot=0 draws an
+ * antialiased line (size=1..8); dot=1 a filled circle (radius size=0..8).
+ * No window, colour, presentation or application semantics are involved.
+ *
+ * Version 1 with all other fields zero probes support. Real requests allow
+ * at most 8192 primitives, width <= GX_HOSTED_MAX_WIDTH*2 and height <=
+ * GX_HOSTED_MAX_HEIGHT*2. Stride counts cells. GX_A8_CLEAR clears the active
+ * width of each row before rasterization; padding is never modified. Source
+ * and destination spans must be disjoint. All parameters and spans are
+ * checked before any destination write; pointers are never retained. */
+#define GX_RASTER_A8 0x471d
+#define GX_A8_CLEAR 1
+struct gx_a8_primitive {
+    int32_t x0,y0,x1,y1;
+    uint16_t dot,size;
+};
+struct gx_raster_a8 {
+    uint16_t version,width,height,stride,flags;
+    uint32_t count;
+    uint8_t *dst;
+    const struct gx_a8_primitive *primitives;
+};
+/* Optional retained software rendering. This structure is the C16 ioctl
+ * adapter, not a native/LP64 wire layout. Commands contain numeric uint32_t
+ * words and payload-relative offsets, never pointers or toolkit objects.
+ * A future native adapter must decode its own envelope and preserve these
+ * command semantics, pixel formats, ownership and synchronous borrowing.
+ *
+ * Targets belong to one owned window; destroying the window releases them.
+ * Resizing the window does not resize targets. No call presents implicitly.
+ * Dimensions/coordinates count physical pixels. Payload lengths/strides count
+ * logical octets (one C16 cell each), not host bytes. Only low eight bits of
+ * payload cells are used. Complete requests are checked before mutation. */
+#define GX_RENDER 0x471e
+#define GX_RENDER_PROBE 0
+#define GX_RENDER_CREATE 1
+#define GX_RENDER_DESTROY 2
+#define GX_RENDER_BATCH 3
+#define GX_RENDER_RASTER_A8 4
+#define GX_RENDER_UPLOAD 5
+#define GX_RENDER_READBACK 6
+#define GX_RENDER_BLIT 7
+#define GX_RENDER_A8 3
+#define GX_RENDER_MAX_COMMANDS 256
+#define GX_RENDER_MAX_DATA (8UL * 1024UL * 1024UL)
+#define GX_RENDER_FILL 1
+#define GX_RENDER_A8_DATA 2
+#define GX_RENDER_A8_TARGET 3
+#define GX_RENDER_COPY 4
+#define GX_RENDER_COMMAND_WORDS 12
+/* PROBE has version=1, all other fields zero. CREATE takes window,
+ * width/height and format (GX_XRGB8888 or GX_RENDER_A8), returning target.
+ * DESTROY takes window/target. Unused fields of every request must be zero.
+ *
+ * BATCH takes window/target, count commands and optional data/data_length.
+ * Each command has 12 numeric words: opcode,x,y,width,height,colour,opacity,
+ * source,data_stride_or_source_x,source_y,0,0. Rectangles must be in bounds.
+ * FILL uses colour=0x00RRGGBB and opacity 0..255; words 7..9 are zero.
+ * A8_DATA uses word 7 as payload offset, word 8 as mask stride, word 9 zero.
+ * A8_TARGET uses words 7..9 as A8 target handle/source x/source y.
+ * COPY uses words 7..9 as colour target handle/source x/source y; colour and
+ * opacity are zero. Commands execute in order after complete validation;
+ * self-copy has memmove semantics at its position in that order. Count <=256.
+ *
+ * RASTER_A8 takes an A8 target, flags (GX_A8_CLEAR or zero), count <=8192 and
+ * six words per primitive: signed x0,y0,x1,y1, then dot,size, with the same
+ * coverage rules as GX_RASTER_A8. It retains coverage in renderer memory.
+ *
+ * UPLOAD/READBACK take x/y,width/height,stride,data/data_length. A8 uses one
+ * logical octet/sample; colour uses three B,G,R logical octets/pixel. Padding
+ * is preserved. READBACK does not expose or retain native pointers.
+ * BLIT copies x/y,width/height from a colour target to dx/dy in its window,
+ * quantizing only for an explicitly RGB565 window. Both rectangles must fit. */
+struct gx_render {
+    uint16_t version,operation;
+    uint32_t window,target;
+    uint16_t width,height,format,flags,x,y,dx,dy;
+    uint32_t count,stride;
+    const uint32_t *commands;
+    uint8_t *data;
+    uint32_t data_length;
+};
 struct gx_terminal_metrics { uint16_t version, width, height; };
 struct gx_terminal_draw {
     uint16_t version;uint32_t window;
@@ -120,6 +250,9 @@ struct gx_upload {
     uint16_t x, y, width, height, stride;
     const uint16_t *pixels;
 };
+/* GX_UPLOAD, GX_UPLOAD_SCALED, GX_UPLOAD_INDEXED and GX_FILL retain their
+ * RGB565 source/colour semantics on every surface. GX_COPY preserves the
+ * destination's native precision. No existing request changes meaning. */
 /* Same fit/letterbox operation, with one 0..255 palette index per source
  * cell and a borrowed 256-entry RGB565 palette. Neither pointer is retained. */
 struct gx_indexed_upload { struct gx_upload image; const uint16_t *palette; };

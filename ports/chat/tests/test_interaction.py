@@ -64,7 +64,7 @@ def run(target, ui_only=False):
         # Old VM runs may leave PID-named NIC directories in the shared TMPDIR.
         # A private temp root also keeps those artifacts inside this test's cleanup.
         with patch.dict(os.environ, TMPDIR=str(work)):
-            guest = Guest(work, target, apps, files, peer, blocks=24576, disk_sectors=131072)
+            guest = Guest(work, target, apps, files, peer, blocks=65536, disk_sectors=393216)
         active = False
         try:
             guest.shell('chmod 700 /chat')
@@ -90,8 +90,18 @@ def run(target, ui_only=False):
 
             send((env + 'chat\r').encode()); active = True
             shown('COMPACT_REPLY_VISIBLE', absent='TOOL_TAIL_SENTINEL')
-            send(b'\x1bOS'); shown('TOOL_TAIL_SENTINEL')  # F4 expands.
-            send(b'\x1bOS'); shown('COMPACT_REPLY_VISIBLE', absent='TOOL_TAIL_SENTINEL')
+            send(b'\x1b[<0;33;24M'); shown('TOOL_TAIL_SENTINEL')  # Click F4 tools.
+            send(b'\x1b[<64;40;5M'); shown('Reference text', absent='TOOL_TAIL_SENTINEL')
+            send(b'\x1b[<65;40;5M'); shown('TOOL_TAIL_SENTINEL')
+            send(b'\x1b[<0;33;24M'); shown('COMPACT_REPLY_VISIBLE', absent='TOOL_TAIL_SENTINEL')
+            # Composer clicks place its caret without sending a request.
+            send(b'mouse click')
+            shown('mouse click')
+            send(b'\x1b[<0;8;20MX'); shown('mouseX click')
+            send(b'\x15\x0b')
+            # Sidebar mouse focus/open and footer panel controls.
+            send(b'\x1b[<0;43;24M'); shown('Conversations')
+            send(b'\x1b[<0;5;4M'); shown('COMPACT_REPLY_VISIBLE')
             send(b'alpha beta\x17gamma'); shown('alpha gamma', absent='alpha beta')
             send(b'\x01\x0b'); shown('COMPACT_REPLY_VISIBLE', absent='alpha gamma')
             send(b'\x19'); shown('alpha gamma')
@@ -101,8 +111,8 @@ def run(target, ui_only=False):
             # Clear both lines using kill-before; then preserve controls during paste.
             send(b'\x15\x1b[200~PASTE\x17END\x1b[201~'); shown('PASTEEND', absent='done')
             send(b'\x15Inspect @doc'); shown('docs dir/'); shown('Files (@)')
-            send(b'\t'); shown('note.txt')
-            send(b'\t'); shown('@"docs dir/note.txt"', absent='Files (@)')
+            send(b'\x1b[<0;7;13M'); shown('note.txt')
+            send(b'\x1b[<0;7;13M'); shown('@"docs dir/note.txt"', absent='Files (@)')
             send(b'and @al'); shown('alpha.txt'); shown('Files (@)')
             send(b'\r'); shown('@alpha.txt', absent='Files (@)')
             assert not peer.calls, 'Enter accepted a mention but also sent the message'

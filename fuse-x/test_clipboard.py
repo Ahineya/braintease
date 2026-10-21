@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Real hosted GX -> Nano-X -> browser/PTY clipboard integration, no OS pasteboard changes."""
-import json,os,re,shutil,sys,tempfile,time
+import argparse,json,os,re,shutil,sys,tempfile,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT/'ports/tls/tests'))
@@ -12,6 +12,9 @@ def fnv(data):
     return value
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--terminals-only',action='store_true',help='test both terminals and mux without browser fixtures')
+    args=parser.parse_args()
     build=ROOT/'fuse-x/build';apps={n:build/'apps'/f'{n}.fxe' for n in ('nano-X','nxterm','gterm','mux','nxhostcheck','netsurf','htget','kill')}
     with tempfile.TemporaryDirectory(prefix='fuse-x-clipboard-') as folder:
         work=Path(folder);mailbox=work/'event.json';frames=work/'frames'
@@ -52,7 +55,9 @@ def main():
                     g.shell(f'{terminal} nxhostcheck paste-check {path} {len(payload)} {int(bracketed)} &');g.shell('term=$!')
                     w=window('Terminal');wid=w['id']
                     # Wait for raw-mode child greeting to be painted.
-                    wait(lambda:f'CLIPBOARD_FILE 5 {fnv(b"ready"):08x}' in g.shell('nxhostcheck file-check '+path+'.ready'))
+                    # Do not concurrently exec the probe while its first image
+                    # is still loading; cat can observe its readiness marker.
+                    wait(lambda:'\nready'+g.prompt.decode() in g.shell('cat '+path+'.ready'))
                     event(wid,action=2,clipboard=text)
                     wait(lambda:'CLIPBOARD_FILE' in g.shell('nxhostcheck file-check '+path) and f'CLIPBOARD_FILE {len(payload)} ' in g.log[-1000:].decode(errors='replace'),seconds=30)
                     file(path,payload)
@@ -73,6 +78,7 @@ def main():
                     return int(found[-1]) if found else 0
                 wait(lambda:ticks()>=4)
                 y=ch//2+(ch if in_mux else 0)
+                if in_mux:event(wid,input=dict(type='key',key=225,down=True))
                 event(wid,input=dict(type='button',button=0,down=True,x=cw//2,y=y))
                 event(wid,input=dict(type='motion',x=13*cw+cw//2,y=y))
                 before=ticks();wait(lambda:ticks()>=before+6)
@@ -80,6 +86,7 @@ def main():
                 assert 'CLIPBOARD_CHECK 0' in g.shell('nxhostcheck clipboard get /tmp/live-copy')
                 file('/tmp/live-copy','Clipboard Ж 🙂'.encode())
                 event(wid,input=dict(type='button',button=0,down=False,x=13*cw+cw//2,y=y))
+                if in_mux:event(wid,input=dict(type='key',key=225,down=False))
                 before=ticks();wait(lambda:ticks()>=before+6)
                 event(wid,action=1,clipboard='NOT_SELECTED')
                 assert 'CLIPBOARD_CHECK 0' in g.shell('nxhostcheck clipboard get /tmp/live-copy')
@@ -87,6 +94,9 @@ def main():
                 event(wid,close=True);g.shell('wait $term')
                 if in_mux:g.shell('mux kill selecting')
                 print(f'{terminal}{" + mux" if in_mux else ""}: mouse drag and released selection survive live fragmented redraws; host clipboard matches',flush=True)
+            if args.terminals_only:
+                print('Terminal clipboard: large Unicode paste, selection, Shift-drag in mux and live redraw preservation passed',flush=True)
+                return
             g.shell('netsurf --trace /page.html &');g.shell('browser=$!')
             if b'NETSURF_GUI_LOADED Clipboard page' not in g.log:g.read(b'NETSURF_GUI_LOADED Clipboard page')
             wid=window('NetSurf: Clipboard page')['id']

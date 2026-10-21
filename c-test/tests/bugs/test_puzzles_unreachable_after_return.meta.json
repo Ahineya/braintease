@@ -1,0 +1,5 @@
+{
+  "expected": "Y\n",
+  "use_runtime": true,
+  "description": "An unreachable declaration after return does not make a function fall through"
+}

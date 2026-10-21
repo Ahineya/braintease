@@ -1,0 +1,89 @@
+{Module Core/Test
+  {Import Core/Plumb as CP open macro}
+  {Export Suite Test Expect SuiteRunner TestResult ToNormalString}
+
+  {Rules
+    {R Test/Suite/Start
+      {Plumb {Suite n_ t..}}
+      {PlumbEnd {SuiteRunner Pick n_ {Results} {CurrentExpect} {CurrentTest} t..}}
+    }
+
+    {R Test/Suite/End
+      {Plumb {SuiteRunner Running n_ {Results r..} {CurrentExpect} {CurrentTest}}}
+      {PlumbEnd {SuiteRunner End n_ {Results r..} {CurrentExpect} {CurrentTest}}}
+    }
+
+    {R Test/Test/Pick
+      {Plumb {SuiteRunner Pick n_ {Results r..} {CurrentExpect} {CurrentTest} {Test t_ e_} tests..}}
+      {PlumbEnd {SuiteRunner Running n_ {Results r..} {CurrentExpect e_} {CurrentTest t_} tests..}}
+    }
+
+    {R Test/Test/Expect/Normalizing
+      {Plumb {SuiteRunner Running n_ {Results r..} {CurrentExpect {Expect a_ b_}} {CurrentTest curt_} tests..}}
+      {PlumbEnd {SuiteRunner Normalizing n_ {Results r.. {TestResult curt_ ToNormalString(a_) ToString(b_)}} {CurrentExpect {Expect a_ b_}} {CurrentTest curt_} tests..}}
+    }
+
+    {R Test/Test/Expect/Normalizing/End
+      {Plumb {SuiteRunner Normalizing n_ {Results r.. {TestResult curt_ a_ b_}} {CurrentExpect e_} {CurrentTest t_} tests..}}
+      {PlumbEnd {SuiteRunner Normalized n_ {Results r.. {TestResult curt_ a_ b_}} {CurrentExpect e_} {CurrentTest t_} tests..}}
+      :guard And(IsStr({Inert a_}), IsStr({Inert b_}))
+    }
+
+    {R Test/Test/Expect/Pass
+      {Plumb {SuiteRunner Normalized n_ {Results r.. {TestResult curt_ ..}} {CurrentExpect {Expect a_ b_}} {CurrentTest curt_} tests..}}
+      {PlumbEnd {SuiteRunner Pick n_ {Results r.. {TestResult curt_ Pass}} {CurrentExpect} {CurrentTest} tests..}}
+      :guard Eq({Inert a_}, {Inert b_})
+    }
+    
+    {R Test/Test/Expect/Fail
+      {Plumb {SuiteRunner Normalized n_ {Results r.. {TestResult curt_ a_ b_}} {CurrentExpect e..} {CurrentTest curt_} tests..}}
+      {PlumbEnd {SuiteRunner Pick n_ {Results r.. {TestResult curt_ Fail(a_, b_)}} {CurrentExpect} {CurrentTest} tests..}}
+      :guard Not(Eq({Inert a_}, {Inert b_}))
+    }
+
+    {R Test/Test/Expect/ToNormal
+      {ToNormalString {realhead_ rest..}}
+      {ToNormalString End ToString({realhead_ rest..})}
+      :guard Eq(Ok, {Inert realhead_})
+    }
+
+    {R Test/Test/Expect/ToNormal/Err
+      {ToNormalString {realhead_ rest..}}
+      {ToNormalString End ToString({realhead_ rest..})}
+      :guard Eq(Err, {Inert realhead_})
+    }
+
+    {R Test/Test/Expect/ToNormal/End
+      {ToNormalString End s_}
+      s_
+    }
+
+    ; -- Printing --
+    {R Test/Test/Pick/End
+      {Plumb {SuiteRunner Pick n_ {Results r..} {CurrentExpect} {CurrentTest}}}
+      {PlumbEnd {SuiteRunner Printing/Start n_ {Results r..}}}
+    }
+    
+    ; On start we want to print the suite name
+    {R Test/Test/Print/Start
+      {Plumb {SuiteRunner Printing/Start n_ {Results r..}} {Effects {Pending p..} inbox_}}
+      {PlumbEnd {SuiteRunner Printing n_ {Results r..}} {Effects {Pending p.. {Print {FreshId} {Message Concat("Running suite: ", n_, "\n")}}} inbox_}}
+    }
+
+    {R Test/Test/Print/Pass
+      {Plumb {SuiteRunner Printing n_ {Results {TestResult test_ res_} r..}} {Effects {Pending p..} inbox_}}
+      {PlumbEnd {SuiteRunner Printing n_ {Results r..}} {Effects {Pending p.. {Print {FreshId} {Message Concat("- [PASS] ", test_, "\n")}}} inbox_}}
+      :guard Eq(res_, Pass)
+    }
+
+    {R Test/Test/Print/Fail
+      {Plumb {SuiteRunner Printing n_ {Results {TestResult test_ Fail(a_, b_)} r..}} {Effects {Pending p..} inbox_}}
+      {PlumbEnd {SuiteRunner Printing n_ {Results r..}} {Effects {Pending p.. {Print {FreshId} {Message Concat("- [FAIL] ", test_, "\n         Expected: ", b_, "\n         Actual:   ", a_, "\n")}}} inbox_}}
+    }
+
+    {R Test/Test/Print/End
+      {Plumb {SuiteRunner Printing n_ {Results}} {Effects {Pending p..} inbox_}}
+      {PlumbEnd {SuiteRunner End n_ {Results}} {Effects {Pending p.. {Print {FreshId} {Message "\n"}}} {Inbox}}}
+    }
+  }
+}

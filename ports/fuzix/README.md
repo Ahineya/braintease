@@ -77,12 +77,21 @@ repository and the separate native Fuse-X platform are unaffected.
 `select()` and the standard descriptor-set macros are available through
 `<sys/select.h>`. Programs can sleep until files, pipes, terminals, PTYs or
 sockets are ready, a monotonic timeout expires, or a signal interrupts the wait.
-Both targets support 32 process descriptors with the same two-word C16 set layout. TCP clients can inspect asynchronous
+The maintained kernels support 128 process descriptors with eight-word C16
+sets. Legacy two-word select requests remain accepted. TCP clients can inspect asynchronous
 connection completion using `getsockopt(SOL_SOCKET, SO_ERROR)`.
 
 RVM `gterm` uses select for graphics events and PTY I/O. The older `GX_WAIT`
 ioctl remains compatible. Unix-domain streams and `socketpair()` provide local
 IPC on both targets; multiple windows remain a separate Nano-X milestone. See the [API, semantics and tests](../../docs/networking/select.md).
+
+Libc allocates additional FILE streams and popen records on demand, retaining
+the public FILE layout. The kernel open-file table and per-process select
+registration storage allocate from supervisor memory at boot. Descriptor flags
+use word bitmaps so close-on-exec also works above descriptor 31. The small
+physical Brainfuck profile keeps its existing descriptor limits. See the
+[file-limit tests](tools/test_file_limits.py) for exhaustion/recovery,
+fork/exec, high-descriptor readiness and stream-lifetime acceptance.
 
 ## RFL applications
 
@@ -215,8 +224,8 @@ all 64 slots, timeout readiness, reporting, recovery and 40 background shell
 jobs on a disposable disk.
 
 The default RVM build uses [MMU ABI 1](../../docs/arch/mmu.md), 256 physical RAM
-banks (32,000 KiB), and 64 process slots. It allows 32 descriptors per process,
-192 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
+banks (32,000 KiB), and 64 process slots. It allows 128 descriptors per process,
+1,024 system-wide open files, and 128 cached inodes. A 16,000 KiB physical page pool
 backs user memory and pinned network allocations. Each process has up to 23 data/heap banks (1,472,000 C characters,
 roughly 2.8 MiB of physical memory) and a separate 64,000-cell stack. Static
 globals can span the first 16 banks of this window; the heap begins after them, so large tables
@@ -1172,8 +1181,8 @@ inode numbers. The shared FAT builder retains its default rOS layout.
 
 Run `scripts/run-riplix.sh --visual`, then `gterm` at the console. This starts
 an 80×30 PTY shell in an RGB565 window; `gterm COMMAND ARG...` runs a command.
-The protected profile has 64 process slots, 32 descriptors per process,
-192 system open-file slots, 128 cached inodes and sixteen PTYs. Closing the graphics window
+The protected profile has 64 process slots, 128 descriptors per process,
+1,024 system open-file slots, 128 cached inodes and sixteen PTYs. Closing the graphics window
 hangs up that terminal session while Riplix remains available on the console.
 `exit` returns to the console; `shutdown` saves the disk and stops the kernel.
 
@@ -1197,3 +1206,54 @@ guests to verify allocation above 128 MiB, sparse triple-indirect mapping,
 exact name, and `pkill -9 -x lynx` sends KILL. Patterns are regular expressions
 over the eight-character names shown by `ps`, not full command lines.
 `pkill -e PATTERN` prints the selected names/PIDs; see `man pkill`.
+
+### Tree, option parsing and scheduled jobs
+
+`tree [-ad] [-L LEVEL] [DIRECTORY ...]` provides a sorted physical directory
+walk; links show their targets and are never descended. `getopt OPTSTRING ...`
+normalizes short options into Bourne-shell-quoted arguments. Use
+`args=`getopt ab: "$@"` || exit 1; eval "set -- $args"` to retain spaces,
+empty values and apostrophes. The shell now supports `set --`, including clearing
+positional arguments without changing its option flags.
+
+`cal [-jy] [[MONTH] YEAR]` retains upstream's BSD calendar rules, including the
+British 1752 reform. `cron` (also `crond`) is a foreground scheduler suitable
+for `svcd`; `at` submits one-shot jobs and `atrun` processes due jobs.
+
+Scheduling files are seeded by both full image installers, with no enabled
+background jobs or services. Edit `/etc/crontab` for recurring commands:
+
+```
+# minute hour day-of-month month day-of-week command
+*/5 * * * * echo Scheduled hello
+```
+
+Fields support lists, ranges and steps. There is no username column; jobs run
+as the supervisor account. Validate with `cron -t`. To enable on Fuse-X, retain
+any existing entries and add `cron` to `enabled=` in `/etc/boot/services.ini`.
+The installed `/etc/services/cron.ini` definition is available to an already
+running supervisor through `svc --runtime /var/run/svcd start cron`. Other
+platforms can launch the same service explicitly; this port does not add x64
+boot activation. Cron reloads configuration each minute and also invokes atrun.
+
+```
+echo 'echo Hello later' | at now + 5 minutes
+at -l
+at -r JOB_ID
+```
+
+`at -f SCRIPT -t 202802291430` schedules an explicit local timestamp. It captures
+cwd, exported variables and umask. Results are retained in
+`/var/spool/at/output/JOB_ID`. Queue directories are private, with atomic
+publication and claiming so competing runners cannot execute the same job.
+Interrupted claimed jobs require inspection before manual resubmission; they
+are never automatically replayed. This first version has no setuid submission,
+mail delivery, per-user crontabs or crontab-management command. See `man cron`,
+`man at` and `man atrun` for the exact syntax and limits.
+
+`python3 ports/fuzix/tools/test_unix_batch.py --target native` (or `ripple`)
+checks the real kernels on disposable images. For freestanding x64, build the
+fixture with `python3 tools/x86_64/unix_check.py build`, then run the same suite
+with `--target x64`. The x64 offline/system profiles include these utilities and
+their disabled scheduling configuration. `--target host` compiles and checks
+portable command behavior without booting an OS.

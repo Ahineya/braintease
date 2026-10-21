@@ -19,6 +19,7 @@ mod native_tui;
 mod image_bindings;
 mod images;
 mod memory;
+mod memview;
 mod process;
 mod strings;
 pub use host::rcc_native_start;
@@ -28,12 +29,15 @@ use std::collections::BTreeMap;
 use std::io::Write;
 
 const BANK: usize = DataLayout::RIPPLE16.bank_cells as usize;
-const CELLS: usize = BANK * 256;
+// Full 16-bit bank field. Higher banks are sparse, not a physical RAM reservation.
+const BANKS: usize = 1 << 16;
+const CELLS: usize = BANK * BANKS;
 
 pub struct Runtime {
     #[cfg(feature = "host-tui")]
     native_os: native_os::NativeOs,
     memory: address_space::Memory,
+    read_view: memview::ReadView,
     stack: usize,
     free: BTreeMap<usize, usize>,
     allocated: BTreeMap<usize, usize>,
@@ -69,6 +73,7 @@ impl Runtime {
             #[cfg(feature = "host-tui")]
             native_os: native_os::NativeOs::default(),
             memory: address_space::Memory::new(),
+            read_view: memview::ReadView::default(),
             stack: 2 * BANK + 1,
             free: BTreeMap::from([(heap, CELLS - heap)]),
             allocated: BTreeMap::new(),
@@ -133,6 +138,9 @@ impl Runtime {
     }
     #[inline]
     fn poll(&mut self) {
+        // memview v1 contract: normal return cannot mutate/remap guest backing,
+        // invoke guest callbacks or switch/suspend processes. Cached private
+        // read pages may survive this call, unlike scheduling checkpoints.
         self.poll_count = self.poll_count.wrapping_add(1);
         if self.poll_count & 1023 == 0 {
             self.poll_slow();

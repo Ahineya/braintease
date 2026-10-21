@@ -1,0 +1,27 @@
+.TH TREE 1
+.SH NAME
+tree \- display a sorted directory tree
+.SH SYNOPSIS
+.B tree
+[\-ad] [\-L level] [\-\-] [directory ...]
+.SH DESCRIPTION
+List directory entries in bytewise name order using ASCII branches.
+The default root is the current directory. Symbolic links show their targets
+and are never recursively traversed. The final report counts displayed
+subdirectories and files, including links but excluding the starting roots.
+.SH OPTIONS
+.TP
+.B \-a
+Include names beginning with a dot, except . and ...
+.TP
+.B \-d
+Show directories only; symbolic links to directories are still links.
+.TP
+.B \-L level
+Limit displayed levels below each root. The first level is 1.
+.SH LIMITS
+Paths including their terminator must fit 256 native characters.
+Each directory is read and closed before descending; sorted names remain in
+memory until its children have been visited. Memory and path length bound traversal.
+.SH EXIT STATUS
+0 on success, 1 on traversal or output failure, 2 for invalid options.

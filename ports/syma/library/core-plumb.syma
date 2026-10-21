@@ -1,0 +1,26 @@
+{Module
+  Core/Plumb
+  {Export Plumb PlumbEnd State}
+  {RuleRules
+    R(
+      "PlumbThroughProgram",
+      R(SYMARULENAME_, {Plumb SYMAACTS...}, {PlumbEnd SYMAENDACTS...}, SYMARULEREST...),
+      R(
+        SYMARULENAME_,
+        {Program {/ ...} SYMAACTS... {/ ...}},
+        {Program {/ ...} SYMAENDACTS... {/ ...}},
+        SYMARULEREST...
+      )
+    )
+    R(
+      "PlumbThroughProgramAndState",
+      R(SYMARULENAME_, {State SYMAACTS...}, {State SYMAENDACTS...}, SYMARULEREST...),
+      R(
+        SYMARULENAME_,
+        {Program {/ ...} {State SYMAACTS...} {/ ...}},
+        {Program {/ ...} {State SYMAENDACTS...} {/ ...}},
+        SYMARULEREST...
+      )
+    )
+  }
+}

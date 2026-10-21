@@ -89,7 +89,7 @@ extern arg_t _setpgid(void), _setsid(void), _getsid(void);
 #define in_group(x)	0
 #endif
 
-/* Maximum UFTSIZE can be is 16, then you need to alter the O_CLOEXEC code */
+/* Large Ripple profiles use a word bitmap for close-on-exec, below. */
 
 #ifdef CONFIG_SMALL
 #ifndef UFTSIZE
@@ -143,7 +143,15 @@ extern arg_t _setpgid(void), _setsid(void), _getsid(void);
 
 #define OS_BANK 0
 #define NO_DEVICE (0xFFFFU)
-#define NO_FILE   (0xFF)
+#if OFTSIZE > 255
+typedef uint16_t oft_index_t;
+typedef int16_t oft_result_t;
+#define NO_FILE 0xFFFFU
+#else
+typedef uint8_t oft_index_t;
+typedef int_fast8_t oft_result_t;
+#define NO_FILE 0xFF
+#endif
 
 #if !defined(CONFIG_INDIRECT_QUEUES)
 typedef unsigned char * queueptr_t;
@@ -334,9 +342,9 @@ typedef struct cinode {
     uint16_t   c_dev;           /* Inode's device */
     uint16_t   c_num;           /* Inode # */
     dinode     c_node;		/* On disk inode data */
-    uint8_t    c_refs;          /* In-core reference count */
-    uint8_t    c_readers;	/* Count of readers by oft entry */
-    uint8_t    c_writers;	/* Count of writers by oft entry */
+    oft_index_t c_refs;         /* In-core reference count */
+    oft_index_t c_readers;      /* Count of readers by oft entry */
+    oft_index_t c_writers;      /* Count of writers by oft entry */
     uint8_t    c_flags;
 #define CDIRTY		0x80	/* Modified flag. */
 #define CRDONLY		0x40	/* On a read only file system */
@@ -420,7 +428,7 @@ typedef struct oft {
     off_t     o_ptr;      /* File position pointer */
     inoptr    o_inode;    /* Pointer into in-core inode table */
     uint8_t   o_access;   /* O_RDONLY, O_WRONLY, or O_RDWR + flag bits */
-    uint8_t   o_refs;     /* Reference count: depends on # of active children */
+    oft_index_t o_refs;   /* Handles across active children, including dup. */
 } oft;
 
 /* Mount table entries */
@@ -627,8 +635,10 @@ typedef struct u_data {
     char        u_name[8];      /* Name invoked with */
 
     /* This section is not written out except as padding */
-    uint8_t     u_files[UFTSIZE];       /* Process file table: indices into open file table, or NO_FILE. */
-#if UFTSIZE > 16
+    oft_index_t u_files[UFTSIZE];       /* Open-file table indices, or NO_FILE. */
+#if UFTSIZE > 32
+    uint16_t    u_cloexec[(UFTSIZE + 15) / 16];
+#elif UFTSIZE > 16
     uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
 #else
     uint16_t	u_cloexec;	/* Close on exec flags */
@@ -667,6 +677,19 @@ typedef struct u_data {
      struct fpu_context u_fpu;
 #endif
 } u_data;
+
+/* Descriptor flags belong to handles, not shared open-file entries. Keep the
+ * legacy scalar layout for small ports and avoid shifts wider than a C16 word. */
+#if UFTSIZE > 32
+#define uf_cloexec_test(u,n) ((u)->u_cloexec[(n) >> 4] & (1U << ((n) & 15)))
+#define uf_cloexec_set(u,n) ((u)->u_cloexec[(n) >> 4] |= (1U << ((n) & 15)))
+#define uf_cloexec_clear(u,n) ((u)->u_cloexec[(n) >> 4] &= ~(1U << ((n) & 15)))
+#else
+#define uf_cloexec_test(u,n) ((u)->u_cloexec & (1UL << (n)))
+#define uf_cloexec_set(u,n) ((u)->u_cloexec |= (1UL << (n)))
+#define uf_cloexec_clear(u,n) ((u)->u_cloexec &= ~(1UL << (n)))
+#endif
+#define uf_cloexec_reset(u) memset(&(u)->u_cloexec, 0, sizeof((u)->u_cloexec))
 
 
 /* This is the user data structure, padded out to 512 bytes with the
@@ -1071,9 +1094,9 @@ extern uint16_t i_alloc(uint16_t devno);
 extern void i_free(uint16_t devno, uint16_t ino);
 extern blkno_t blk_alloc(uint16_t devno);
 extern void blk_free(uint16_t devno, blkno_t blk);
-extern int_fast8_t oft_alloc(void);
+extern oft_result_t oft_alloc(void);
 extern void deflock(struct oft *ofptr);
-extern void oft_deref(uint_fast8_t of);
+extern void oft_deref(oft_index_t of);
 /* returns index of slot, or -1 on failure */
 extern int_fast8_t uf_alloc(void);
 /* returns index of slot, or -1 on failure */
@@ -1163,6 +1186,9 @@ extern void selwake_dev(uint_fast8_t major, uint_fast8_t minor, uint16_t mask);
 extern arg_t _select(void);
 #ifdef CONFIG_SELECT
 extern void ripple_select_exit(ptptr p);
+#ifdef CONFIG_DYNAMIC_OFT
+extern void ripple_select_init(void);
+#endif
 #endif
 #else
 #define selwait_inode(i,smask,setit) do {} while(0)

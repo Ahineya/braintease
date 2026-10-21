@@ -1,0 +1,187 @@
+:clear
+
+; First, let's create a desugar module.
+; let's desugar symbols that have dots in them to {Call variable method} terms.
+; Desugarer module is a fine example of mutating the insides of an existing structure.
+:module multiline
+{Module OOP/Desugar
+  {Rules
+    {R Desugar {Program ..} {Desugar ..}}
+
+    ; Let the party started. If there is a compound with only one symbol in it, it may be a call.
+    {R Desugar/Calls/Split
+        {.. { symbol_ } ..}
+        ; Splitting the symbol by pretending it is a string.
+        {.. {Desugaring SplitBy("." ToString(symbol_))} ..} 
+        :scope Desugar ; Scoping makes this run only when there is an ancestor with this symbol in head position
+        :guard IsSym(symbol_)
+        :innermost
+    }
+
+    ; If after SplitBy we got only one string, let's just say it is desugared, and transform it back to be a symbol
+    {R Desugar/Calls/Plain
+        {.. {Desugaring Strings(s_)} ..}
+        {.. {Desugared      Sym(s_)} ..}
+        :scope Desugar
+        :innermost
+    }
+
+    ; Otherwise, we desugar
+    {R Desugar/Calls/Call
+        {.. {Desugaring  Strings(var_      method_)} ..}
+        {.. {Desugared {Call Sym(var_) Sym(method_)}} ..}
+        :scope Desugar
+        :innermost
+    }
+
+    ; Because we used :innermost on the desugaring rules, we can be sure that this runs when all of them finished
+    {R Desugar/End {Desugar ..} {Desugar/Clean ..}}
+
+    ; And since we are sure everything is desugared, and we are not in the Desugar scope, we can safely clean up
+    {R Desugar/Clean
+        {.. {Desugared term_} ..}
+        {.. term_ ..}
+        :scope Desugar/Clean
+        :innermost
+    }
+
+    ; We gate the Desugarer output with an {Ok} compound, so the transformer will know desugarer finished.
+    {R Desugar/Clean/End {Desugar/Clean ..} {Ok ..}}
+  }
+}
+:end
+
+:module multiline
+{Module OOP/Transform
+  {Rules
+    {R Transform
+      ; Gated start — if we didn't use the Ok() sentinel, this rule would match from the very start, without waiting the desugarer to do its stuff in the program inner terms.
+      {Transform Ok(..)}
+      ; Transformer prepares a structure to hold knowledge about classes
+      {Parse Classes {InheritanceChains} {Bodies} ..}
+    }
+
+    ; We know there are to possible shapes that define classes.
+    ; If it is just a :class Animal {..}, we put it into the inheritance chain without specifying a parent class
+    {R Classes
+      {Parse Classes {InheritanceChains ..        } {Bodies                ..} .. :class name_ {body..} ..}
+      {Parse Classes {InheritanceChains .. {name_}} {Bodies {name_ body..} ..} ..                       ..}
+    }
+
+    ; But if it has the :extends clause, we put it into the inheritance chain together
+    {R Classes/Extends
+      {Parse Classes {InheritanceChains                 ..} {Bodies                ..} .. :class name_ :extends parent_ {body..} ..}
+      {Parse Classes {InheritanceChains {name_ parent_} ..} {Bodies {name_ body..} ..} ..                                   ..}
+    }
+
+    ; We now know, that because of the program structure, parent classes are always on the "right" of their children.
+    ; This allows us to recursively enrich children chains to hold the full inheritance chain.
+    ; Let me translate. "If a child has a parent which also has a parent, put the grandparent into the child inheritance chain"
+    {R ParseClass/NormalizeInheritanceChains
+      {Parse Classes {InheritanceChains .. {name_ .. parent_             } .. {parent_ grandparent_} ..} ..}
+      {Parse Classes {InheritanceChains .. {name_ .. parent_ grandparent_} .. {parent_ grandparent_} ..} ..}
+    }
+
+    ; And we are done with classes, let's now enrich our structure with {Instances} to hold the mapping
+    ; of variables to their classes. Type inference for the poor.
+    {R ParseClass/End
+      {Parse Classes                    ..}
+      {Parse Instantiations {Instances} ..}
+    }
+
+    ; Same trick — if something quacks like a duck — it is a duck.
+    {R ParseInstance
+      {Parse Instantiations {Instances ..                     } .. :var name_ := :new {class_} ..}
+      {Parse Instantiations {Instances .. {name_ class_ name_}} ..                             ..}
+    }
+
+    ; And now we treat everything that is left out as an imperative commands, and put them to the very "left".
+    ; You know why to the "left"? To do something like the inner join with our metadata in the VM, of course.
+    ; We also gate it with {Ok}, so our VM will know when it is ready to start.
+    {R ParseInstance/End
+      {Parse Instantiations {Instances ..} {InheritanceChains ..} {Bodies ..} rest..}
+      {Ok {Commands rest..} {Instances ..} {InheritanceChains ..} {Bodies ..}}
+    }
+  }
+}
+:end
+
+:import OOP/Desugar open
+:import OOP/Transform open
+
+; So this is a dance I do to dequalify symbols like OOP/Transform/Commands that we got after transformer worked.
+; I want to use not qualified names in the following rules, but the notebook always qualifies things from the imported module.
+:rule Run {Run Ok(..)} -> {Dequalify ..}
+
+:rule Dequalify/Commands {OOP/Transform/Commands ..} -> {Commands ..} :scope Dequalify :innermost
+:rule Dequalify/Instances {OOP/Transform/Instances ..} -> {Instances ..} :scope Dequalify :innermost
+:rule Dequalify/InheritanceChains {OOP/Transform/InheritanceChains ..} -> {InheritanceChains ..} :scope Dequalify :innermost
+:rule Dequalify/Bodies {OOP/Transform/Bodies ..} -> {Bodies ..} :scope Dequalify :innermost
+:rule Dequalify/Calls {OOP/Desugar/Call ..} -> {Call ..} :scope Dequalify :innermost
+
+; The {Running} compound will have the output accumulator, and a marked scratch space to reuse differently in different cases. In the perfect world I would make more specific symbols per each command, but we have only the :print with two cases.
+:rule Dequalify/End {Dequalify ..} -> {Running {Output} {Scratch} ..}
+
+; VM will bounce between {Running} and {Executing}. Running picks the next command, Executing executes it, and rewrites to the {Running} again.
+:rule Running/Pick {Running .. {Commands c_ ..} ..} -> {Executing {Current c_} .. {Commands ..} ..}
+
+; Here I will cheat and treat everything as print command, and work on the inners.
+; Now you can see why the structure I chose is commands on the "left", then instances, then inheritance chains.
+; var_ from the current command must have a corresponding term in {Instances}, from which we can bind a class_, which should have its corresponding term in {InheritanceChains}. SQL inner join, sort of, but with leftmost linear var constraint.
+; We fill the {Scratch} with a method and an inheritance chain, to be able to match them on each class bodies.
+:rule multiline
+Executing/Print/Call
+   {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch                                } .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..} 
+-> {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(class_ classes..)} .. {Instances .. {var_ class_    _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..} 
+:end
+
+; And if the current class in the chain has the method, we put its "return value" to the output,
+; and flip the switch to {Running} state.
+:rule multiline
+Executing/Print/Call/TraverseChain/Found
+   {Executing .. {Current {:print {Call var_ method_}}} {Output ..} {Scratch method_ Chain(class_ classes..)} .. {Bodies .. {class_ .. method_ => return_ ..} ..} ..}
+-> {Running .. {Output .. return_} {Scratch} .. {Bodies .. {class_ .. method_ => return_ ..} ..} ..}
+:end
+
+; But if it does not, we just remove the class from the chain in the scratch to check the next one.
+:rule multiline
+Executing/Print/Call/TraverseChain/Next
+   {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(class_ classes..)} ..}
+-> {Executing .. {Current {:print {Call var_ method_}}} .. {Scratch method_ Chain(       classes..)} ..}
+:end
+
+; Same shenanigans for :print(some is SomeClass)
+; Since we already have the full inheritance chains, we can easily check them.
+; We put the corresponding chain to the scratch, and one of the following rules will fire.
+:rule multiline
+Executing/Print/Call/Is
+   {Executing .. {Current {:print var_ is testclass_}} .. {Scratch} .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..} ..}
+-> {Executing .. {Current {:print var_ is testclass_}} .. {Scratch Chain(class_ classes..)} .. {Instances .. {var_ class_ _} .. } .. {InheritanceChains .. {class_ classes..} ..}..} 
+:end
+
+:rule multiline
+Executing/Print/Call/Is/Found
+   {Executing .. {Current {:print var_ is testclass_}} {Output ..} {Scratch Chain(drop1.. testclass_ drop2..)} ..}
+-> {Running .. {Output .. true} {Scratch} ..}
+:end
+
+:rule multiline
+Executing/Print/Call/Is/NotFound
+   {Executing .. {Current {:print var_ is testclass_}} {Output ..} ..}
+-> {Running .. {Output .. false} {Scratch} ..}
+:end
+
+; And if we have no clue what we are executing right now, we just ignore it.
+; Don't do this if you ever make a VM.
+:rule multiline
+Executing/Drop
+   {Executing .. {Current _} ..}
+-> {Running .. ..}
+:end
+
+; When there are no commands left, we are done.
+:rule multiline
+Running/End
+   {Running .. {Output out..} .. {Commands} ..}
+-> {Output out..}
+:end

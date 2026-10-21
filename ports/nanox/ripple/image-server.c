@@ -13,9 +13,19 @@
 #define DRAW_WIDTH 1024
 #define DRAW_HEIGHT 768
 #endif
+#ifdef NXR_HOSTED
+#define IMAGE_LIMIT 256
+#define IMAGE_CELLS 524288UL
+#define TOTAL_CELLS 16777216UL
+#define OWNER_LIMIT 64
+#define OBJECT_LIMIT 512
+#else
 #define IMAGE_LIMIT 16
 #define IMAGE_CELLS 65536UL
 #define TOTAL_CELLS 131072UL
+#define OWNER_LIMIT 4
+#define OBJECT_LIMIT 16
+#endif
 struct image {
     unsigned long id, cells, received;
     unsigned short *data;
@@ -67,7 +77,7 @@ static unsigned create(int fd, struct nxr_image_req *q, unsigned long *id) {
         if (!images[n].id) slot = images + n;
     }
     for (p = listpp; p; p = p->next) if (!nxr_internal_pixmap(p)) ++objects;
-    if (!slot || owned >= 4 || objects >= 16 || cells > TOTAL_CELLS - allocated || serial == 0xffffffffUL)
+    if (!slot || owned >= OWNER_LIMIT || objects >= OBJECT_LIMIT || cells > TOTAL_CELLS - allocated || serial == 0xffffffffUL)
         return NXR_IMAGE_QUOTA;
     slot->data = malloc(cells * sizeof(unsigned short));
     if (!slot->data) return NXR_IMAGE_NOMEM;

@@ -44,6 +44,25 @@ static void scan_checks(void) {
     errno = 0;
     check(sscanf("1.5", "%f", &a) == 0 && errno == EINVAL && a == 99);
 }
+static void mouse_checks(int master) {
+    MEVENT mouse;mmask_t old;uint32_t value,data[3];int x=1,y=1;
+    WINDOW *w=newwin(2,3,1,2);
+    check(w!=NULL);if(!w)return;
+    check(mousemask(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION,&old)==(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION)&&old==0);
+    check(write(master,"\033[<0;4;3M",9)==9&&getch()==KEY_MOUSE&&getmouse(&mouse)==OK);
+    check(mouse.x==3&&mouse.y==2&&mouse.bstate==BUTTON1_PRESSED&&getmouse(&mouse)==ERR);
+    check(wenclose(w,2,3)&&!wenclose(w,3,3)&&wmouse_trafo(w,&y,&x,TRUE)&&y==2&&x==3);
+    check(wmouse_trafo(w,&y,&x,FALSE)&&y==1&&x==1);
+    check(write(master,"\033[<48;4;3M",10)==10&&wget_wch(stdscr,&value)==KEY_CODE_YES&&value==KEY_MOUSE);
+    check(getmouse(&mouse)==OK&&mouse.bstate==(BUTTON1_PRESSED|BUTTON_CTRL|REPORT_MOUSE_POSITION));
+    check(write(master,"\033[<0;4;3m",9)==9&&getch()==KEY_MOUSE&&getmouse(&mouse)==OK&&mouse.bstate==BUTTON1_RELEASED);
+    check(write(master,"\033[<64;4;3M",10)==10&&getch()==KEY_MOUSE&&getmouse(&mouse)==OK&&mouse.bstate==BUTTON4_PRESSED);
+    check(write(master,"\033[<65;4;3M",10)==10&&getch()==KEY_MOUSE&&rfl_curses_getmouse(data)==0&&data[0]==3&&data[1]==2&&data[2]==BUTTON5_PRESSED);
+    check(write(master,"\033[<35;4;3M",10)==10&&getch()==KEY_MOUSE&&getmouse(&mouse)==OK&&mouse.bstate==REPORT_MOUSE_POSITION);
+    check(mousemask(0,&old)==0&&old==(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION));
+    check(write(master,"\033[<0;4;3MX",10)==10&&getch()=='X');
+    check(delwin(w)==OK);
+}
 static void unicode_checks(int master) {
     uint32_t value;WINDOW *w=newwin(2,6,0,0);
     static const unsigned char title[]={0xd0,0x96,'e',0xcc,0x81,0};
@@ -137,6 +156,7 @@ int main(void) {
     check(write(master, "\033[A", 3) == 3 && getch() == 27 && getch() == '[' && getch() == 'A');
     keypad(stdscr, TRUE);
     unicode_checks(master);
+    mouse_checks(master);
     check(write(master, "abcd\177Z\n", 7) == 7 && wgetnstr(stdscr, bounded.text, 3) == OK &&
           !strcmp(bounded.text, "abZ") && bounded.before == 'L' && bounded.after == 'R');
     check(wgetstr(stdscr, bounded.text) == ERR);

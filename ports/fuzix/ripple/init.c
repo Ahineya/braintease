@@ -11,7 +11,7 @@
 #include "root-home.h"
 int main(void) {
     char *args[] = {"sh", NULL};
-    char *env[] = {"PATH=/bin:/usr/bin", root_home_environment, "USER=root", "TERM=ansi",
+    char *env[] = {"PATH=/usr/bin:/bin", root_home_environment, "USER=root", "TERM=ansi",
                    "PS1=riplix# ", "SHELL=/bin/sh", "EDITOR=/bin/vi", "LOGNAME=root", NULL};
     if (open("/dev/tty1", O_RDWR) != 0 || dup(0) != 1 || dup(0) != 2)
         return 1;

@@ -1,6 +1,12 @@
-# FuseDE desktop plan
+# Earlier FuseDE desktop investigation
 
-FuseDE is the planned custom desktop for Riplix on RVM. Its shared application UI,
+The current successor is the [Graphite application and desktop roadmap](../graphics/graphite-roadmap.md).
+It uses shared LVGL components and the portable single-window desktop policy,
+with Fuse-X first and Riplix x64 when its graphics services are ready. The
+Nano-X/Slate work below is retained for existing RVM support, reusable assets
+and historical decisions; it is no longer the framework for new applications.
+
+The original FuseDE plan targeted a custom desktop for Riplix on RVM. Its shared application UI,
 applications and dock must also compile for Fuse-X. The agreed direction on
 October 17, 2026 is to port NXDSKTOP and its
 companion applications first, giving us a useful lightweight desktop while we

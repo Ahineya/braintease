@@ -115,3 +115,5 @@ $(BUILD)/nanox/app/fdectl.asm: $(FDE)/workspace.c $(FDE)/tests/workspacecheck.in
 include $(ROOT)/ports/netsurf/package.mk
 include $(ROOT)/ports/kolf/package.mk
 include $(ROOT)/ports/klotski/package.mk
+
+include $(ROOT)/ports/shikaku/package.mk

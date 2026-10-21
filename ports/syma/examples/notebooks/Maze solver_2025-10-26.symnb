@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "name": "Maze solver",
+    "created": "2025-10-26T01:44:16.276Z",
+    "modified": "2025-10-26T02:36:35.757Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "c5SSKZrDuN9VFofofJjbA",
+      "type": "code",
+      "content": "",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "j1Xu11ffjBmIFT_5c3QHq",
+      "type": "code",
+      "content": "{\n    1 1 1 1 1 1 1 1 1 1\n    1 1 1 1 1 1 1 1 1 1\n    1 1 1 1 1 1 1 0 0 0\n    1 1 1 1 1 1 1 0 1 1\n    1 1 0 0 0 1 1 0 1 1\n    1 1 0 1 0 1 1 0 1 1\n    0 0 0 1 0 1 0 0 1 1\n    1 1 1 1 0 0 0 1 1 1\n    1 1 1 1 1 1 1 1 1 1\n    1 1 1 1 1 1 1 1 1 1\n}",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  0\n  0\n  0\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  0\n  1\n  1\n  1\n  1\n  0\n  0\n  0\n  1\n  1\n  0\n  1\n  1\n  1\n  1\n  0\n  1\n  0\n  1\n  1\n  0\n  1\n  1\n  0\n  0\n  0\n  1\n  0\n  1\n  0\n  0\n  1\n  1\n  1\n  1\n  1\n  1\n  0\n  0\n  0\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n  1\n}"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "dn37uS93wLwux13Bflgkt",
+      "type": "code",
+      "content": "Solve({\n    1 1 1 1 1 1 1 1 1 1 .\n    1 1 1 1 1 1 1 1 1 1 .\n    1 1 0 0 0 0 1 0 0 0 .\n    1 1 1 0 1 1 1 0 1 1 .\n    1 1 0 0 0 1 1 0 1 1 .\n    1 1 0 1 0 1 1 0 1 1 .\n    0 0 0 1 0 1 0 0 1 1 .\n    1 1 0 1 0 0 0 1 1 1 .\n    1 1 1 1 1 1 1 1 1 1 .\n    1 1 1 1 1 1 1 1 1 1 .\n    . . . . . . . . . . .\n})\n\n; Becomes\n\n{Solved {\n    1 1 1 1 1 1 1 1 1 1 . \n    1 1 1 1 1 1 1 1 1 1 . \n    1 1 1 1 1 1 1 0 0 0 . \n    1 1 1 1 1 1 1 0 1 1 . \n    1 1 0 0 0 1 1 0 1 1 . \n    1 1 0 1 0 1 1 0 1 1 . \n    0 0 0 1 0 1 0 0 1 1 . \n    1 1 1 1 0 0 0 1 1 1 . \n    1 1 1 1 1 1 1 1 1 1 . \n    1 1 1 1 1 1 1 1 1 1 . \n    . . . . . . . . . . . \n} }",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Solved\n  {1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    .\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    .\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    0\n    0\n    0\n    .\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    0\n    1\n    1\n    .\n    1\n    1\n    0\n    0\n    0\n    1\n    1\n    0\n    1\n    1\n    .\n    1\n    1\n    0\n    1\n    0\n    1\n    1\n    0\n    1\n    1\n    .\n    0\n    0\n    0\n    1\n    0\n    1\n    0\n    0\n    1\n    1\n    .\n    1\n    1\n    1\n    1\n    0\n    0\n    0\n    1\n    1\n    1\n    .\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    .\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    1\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n    .\n  }\n}"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "bcm6cB6kReVkQcsW5kOe5",
+      "type": "code",
+      "content": ":clear\n:rule multiline\nA Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n; :rule multiline\n; A/2 Solve({..\n;     1 0 1 _ _ _ _ _ _ _ _ \n;     1 0 1 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;   ..})\n;   ->\n;   Solve({..\n;     1 1 1 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;   ..})\n; :end\n\n:rule multiline\nB Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 0 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\n; B/2 Solve({..\n;     1 1 1 _ _ _ _ _ _ _ _ \n;     1 0 0 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;   ..})\n;   ->\n;   Solve({..\n;     1 1 1 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;     1 1 1 _ _ _ _ _ _ _ _ \n;   ..})\n; :end\n\n\n:rule multiline\nC Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nC/2 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nD Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    0 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nD/2 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    0 0 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nE/1 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    1 1 0 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nE/2 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 0 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nE/3 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    0 1 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nE/4 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    0 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nF/1 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    1 1 0 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nF/2 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    0 1 0 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nF/3 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    0 1 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n:rule multiline\nF/4 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    0 1 0 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nF Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    0 1 0 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nG/1 Solve({..\n    1 0 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 0 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule multiline\nG/2 Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    0 1 0 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n  ->\n  Solve({..\n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n    1 1 1 _ _ _ _ _ _ _ _ \n  ..})\n:end\n\n:rule Solved Solve(..) -> Solved(..)",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 9 rules\n"
+        }
+      ],
+      "metadata": {}
+    }
+  ]
+}

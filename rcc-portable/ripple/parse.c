@@ -24,13 +24,64 @@ union arena_cell {
 };
 static union arena_cell *arena;
 static size_t arena_left;
-static struct vec temporary_values;
+
+/* SSA IDs are labels, not allocation sizes. A sparse ID such as %1000000
+ * must not append a million entries or force a multi-megabyte guest array. */
+struct temporary_value {
+    unsigned long id;
+    struct value *value;
+    struct temporary_value *next;
+};
+static struct temporary_value *temporary_values[1024];
 
 struct interned {
     struct interned *next;
     char *text;
 };
 static struct interned *strings[1024];
+
+/* Parsed types are immutable. Text IR repeats complete aggregate types at
+ * every load/GEP/cast, so keeping a new tree per occurrence can dwarf the
+ * actual instructions. Children are canonical before their parent is read. */
+struct interned_type {
+    struct interned_type *next;
+    struct type type;
+};
+static struct interned_type *types[4096];
+
+static unsigned type_hash(unsigned hash, struct type *t)
+{
+    uintptr_t p = (uintptr_t)t;
+    return ((hash * 33) ^ (unsigned)(p >> 3) ^ (unsigned)(p >> 13)) & 4095;
+}
+
+static struct type *intern_type(struct type *t)
+{
+    struct interned_type *entry;
+    struct type **fields = t->fields.data;
+    size_t i;
+    unsigned h = type_hash((unsigned)t->kind ^ (unsigned)t->size, t->base);
+    for (i = 0; i < t->fields.count; i++)
+        h = type_hash(h, fields[i]);
+    for (entry = types[h]; entry; entry = entry->next) {
+        struct type *p = &entry->type;
+        if (p->kind != t->kind || p->size != t->size || p->bits != t->bits || p->base != t->base ||
+            p->fields.count != t->fields.count)
+            continue;
+        for (i = 0; i < t->fields.count; i++)
+            if (((struct type **)p->fields.data)[i] != fields[i])
+                break;
+        if (i == t->fields.count) {
+            free(t->fields.data);
+            return p;
+        }
+    }
+    entry = allocate(sizeof(*entry));
+    entry->type = *t;
+    entry->next = types[h];
+    types[h] = entry;
+    return &entry->type;
+}
 
 void fail(const char *fmt, ...)
 {
@@ -233,13 +284,14 @@ static struct type *type(void)
 {
     /* Scalar types are immutable. Reusing them avoids a heap allocation for
      * almost every instruction in a compiler-sized translation unit. */
-    static struct type scalars[6];
+    static struct type scalars[8];
+    struct type candidate = {0};
     struct type *t;
     if (take("void"))
         t = &scalars[0];
     else if (take("[")) {
         unsigned long long n = integer();
-        t = allocate(sizeof(*t));
+        t = &candidate;
         t->kind = TYARRAY;
         expect("x");
         t->base = type();
@@ -247,8 +299,9 @@ static struct type *type(void)
         if (n > 0xffffffffUL || (t->base->size && n > 0xffffffffUL / t->base->size))
             fail("type is too large");
         t->size = (unsigned long)n * t->base->size;
+        t = intern_type(t);
     } else if (take("struct")) {
-        t = allocate(sizeof(*t));
+        t = &candidate;
         t->kind = TYSTRUCT;
         if (strcmp(token, "{"))
             next();
@@ -262,29 +315,35 @@ static struct type *type(void)
             if (strcmp(token, "}"))
                 expect(",");
         }
+        t = intern_type(t);
     } else {
         if (!strcmp(token, "i1") || !strcmp(token, "i8") || !strcmp(token, "i16")) {
-            t = &scalars[1];
+            unsigned at = !strcmp(token, "i1") ? 6 : !strcmp(token, "i8") ? 7 : 1;
+            t = &scalars[at];
             t->kind = TYINT;
             t->size = 1;
+            t->bits = at == 6 ? 1 : at == 7 ? 8 : 16;
         } else if (!strcmp(token, "i32") || !strcmp(token, "i64")) {
             t = &scalars[!strcmp(token, "i32") ? 2 : 3];
             t->kind = TYINT;
             t->size = !strcmp(token, "i32") ? 2 : 4;
+            t->bits = (unsigned)t->size * 16;
         } else if (!strcmp(token, "f32") || !strcmp(token, "f64")) {
             t = &scalars[!strcmp(token, "f32") ? 4 : 5];
             t->kind = TYFLOAT;
             t->size = !strcmp(token, "f32") ? 2 : 4;
+            t->bits = (unsigned)t->size * 16;
         } else
             fail("unsupported IR type '%s'", token);
         next();
     }
     while (take("*")) {
-        struct type *p = allocate(sizeof(*p));
-        p->kind = TYPOINTER;
-        p->size = 2;
-        p->base = t;
-        t = p;
+        struct type pointer = {0};
+        pointer.kind = TYPOINTER;
+        pointer.size = 2;
+        pointer.bits = 32;
+        pointer.base = t;
+        t = intern_type(&pointer);
     }
     return t;
 }
@@ -299,16 +358,19 @@ static struct value *value(void)
     struct value *v;
     if (take("%")) {
         unsigned long id = index_value();
-        struct value **cached;
-        while (temporary_values.count <= id)
-            append(&temporary_values, sizeof(v));
-        cached = temporary_values.data;
-        if (cached[id])
-            return cached[id];
+        unsigned bucket = (unsigned)(id ^ (id >> 10)) & 1023;
+        struct temporary_value *cached;
+        for (cached = temporary_values[bucket]; cached; cached = cached->next)
+            if (cached->id == id)
+                return cached->value;
         v = allocate(sizeof(*v));
         v->kind = VTEMP;
         v->id = id;
-        cached[id] = v;
+        cached = allocate(sizeof(*cached));
+        cached->id = id;
+        cached->value = v;
+        cached->next = temporary_values[bucket];
+        temporary_values[bucket] = cached;
         return v;
     }
     v = allocate(sizeof(*v));
@@ -518,10 +580,11 @@ static void function(void)
     }
 }
 
-struct module *parse(FILE *file, const char *unit)
+struct module *parse_target(FILE *file, const char *unit, const char *target)
 {
     struct symbol *s;
     char *n;
+    bool target_seen = false;
     input = file;
     hash = 2166136261UL;
     ch = 0;
@@ -535,8 +598,11 @@ struct module *parse(FILE *file, const char *unit)
     expect("{");
     while (!take("}")) {
         if (take("target")) {
-            if (strcmp(token, "ripple"))
-                fail("portable Ripple backend cannot compile target '%s'", token);
+            if (target_seen)
+                fail("duplicate IR target");
+            target_seen = true;
+            if (strcmp(token, target))
+                fail("portable %s backend cannot compile target '%s'", target, token);
             next();
         } else if (take("function"))
             function();
@@ -562,6 +628,8 @@ struct module *parse(FILE *file, const char *unit)
                 init = value();
             s = symbol(module, n);
             s->internal |= internal;
+            if (!s->type)
+                s->type = t;
             if (!declaration) {
                 if (s->defined)
                     fail("duplicate global '%s'", n);
@@ -574,6 +642,8 @@ struct module *parse(FILE *file, const char *unit)
     }
     if (*token)
         fail("trailing IR input '%s'", token);
+    if (!target_seen && strcmp(target, "ripple"))
+        fail("portable %s backend requires an explicit IR target", target);
     {
         unsigned long identity = 2166136261UL;
         const unsigned char *p = (const unsigned char *)unit;
@@ -599,4 +669,9 @@ struct module *parse(FILE *file, const char *unit)
         }
     }
     return module;
+}
+
+struct module *parse(FILE *file, const char *unit)
+{
+    return parse_target(file, unit, "ripple");
 }

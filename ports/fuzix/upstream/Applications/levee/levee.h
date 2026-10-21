@@ -195,6 +195,14 @@ extern long gemdos();
 #define DLE	16	/* Space compression lead-in */
 #define ESC	27	/* Escape */
 
+/* Unix ANSI navigation tokens use otherwise unbound control characters.
+ * Keeping them below 128 also preserves the editor's macro/motion table ABI. */
+#define KEY_UP    14
+#define KEY_DOWN  15
+#define KEY_LEFT  16
+#define KEY_RIGHT 17
+#define KEY_IGNORE 18
+
 /* hardwired line kill and erase character for non-unix machines */
 #define DEL	21	/* ^U */
 #if RMX

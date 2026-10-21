@@ -1,0 +1,17 @@
+.TH CAL 1
+.SH NAME
+cal \- display a calendar
+.SH SYNOPSIS
+.B cal
+[\-jy] [[month] year]
+.SH DESCRIPTION
+Print the current local month, a selected month and year, or an entire year
+when only year is given. Years are 1 through 9999; months are 1 through 12.
+-y selects a full current year when no operands are supplied.
+-j prints day-of-year numbers.
+.PP
+This is the upstream BSD-derived calendar: weeks start Sunday and the British
+September 1752 reform omits September 3 through 13. Earlier dates follow its
+Julian calendar rules; this is not a proleptic Gregorian calendar.
+.SH EXIT STATUS
+0 on success, 1 for invalid operands/options or output failure.

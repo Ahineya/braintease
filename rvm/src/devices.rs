@@ -287,6 +287,13 @@ pub trait GuestMemory {
     fn len(&self) -> usize;
     fn read(&self, index: usize) -> u16;
     fn write(&mut self, index: usize, value: u16);
+    /// A validated ordinary-RAM span. Backends can amortize paging and locks.
+    fn read_cells(&self, start: usize, dest: &mut [u16]) {
+        for (i, value) in dest.iter_mut().enumerate() { *value = self.read(start + i); }
+    }
+    fn write_cells(&mut self, start: usize, values: &[u16]) {
+        for (i, &value) in values.iter().enumerate() { self.write(start + i, value); }
+    }
     /// Optional runner transcript of raw bytes accepted by console DMA.
     fn record_console_output(&mut self, _bytes: &[u8]) {}
     /// A runner which owns console delivery may accept the entire batch here.
@@ -321,6 +328,12 @@ impl GuestMemory for [u16] {
     fn write(&mut self, index: usize, value: u16) {
         self[index] = value;
     }
+    fn read_cells(&self, start: usize, dest: &mut [u16]) {
+        dest.copy_from_slice(&self[start..start + dest.len()]);
+    }
+    fn write_cells(&mut self, start: usize, values: &[u16]) {
+        self[start..start + values.len()].copy_from_slice(values);
+    }
 }
 
 impl GuestMemory for Vec<u16> {
@@ -332,6 +345,12 @@ impl GuestMemory for Vec<u16> {
     }
     fn write(&mut self, index: usize, value: u16) {
         self[index] = value;
+    }
+    fn read_cells(&self, start: usize, dest: &mut [u16]) {
+        dest.copy_from_slice(&self[start..start + dest.len()]);
+    }
+    fn write_cells(&mut self, start: usize, values: &[u16]) {
+        self[start..start + values.len()].copy_from_slice(values);
     }
 }
 

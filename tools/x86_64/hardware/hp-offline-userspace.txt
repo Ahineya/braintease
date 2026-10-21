@@ -1,0 +1,103 @@
+HP OFFLINE CLI USERSPACE — PHYSICALLY ACCEPTED
+=============================================
+2026-10-19
+
+USER CONFIRMED: the HP booted, recovered HP_NVME_SURVIVED, reached the final
+OFFLINE_APPS_OK and ran Sokoban interactively. This accepts the new offline
+payload on hardware. The historical preparation/checklist below is retained;
+its pending statements are superseded by this confirmation. Next work is
+networking, with BUILT-IN AX211 WI-FI as the physical target; see hp-wifi.txt.
+
+Installed 105 selected CLI command names plus appcheck/abicheck/timercheck/
+diskcheck, retaining prelinked hello/check/pipecheck. GUI/network clients,
+separate RFL editor packaging and the graphics-dependent multiplexer remain
+excluded. The portable guest toolchain is not installed by this milestone.
+Compilation covers the selected inventory; runtime tests cover the smoke script
+and core process suite, not every interactive UI or command option.
+
+The verified old 16MiB root was backed up before growing a regular copy to
+128MiB/1024 inodes. All unmanaged full C16 file cells, inode identities, modes,
+owner/group/link counts and sizes matched; original marker, saved-echo and wide
+file are preserved. New image has 63203328 free octets. The existing
+30GiB Riplix p3 reservation and GPT layout are unchanged.
+
+While Ubuntu ran, only the freshly identified, unmounted p3 was opened writable.
+Original root hash was checked again and an additional rollback copy saved.
+The 128MiB write was fsynced, p3's block cache flushed, and its complete readback
+matched. Both captured GPT headers/arrays/MBR remained byte-identical. Our
+installer did not open either Ubuntu partition writable; Ubuntu itself stayed
+running. No firmware entry, internal EFI install or reboot was performed.
+
+Installed root SHA256:
+c26ee7086b868709cf910607a1d1797d84ed695f10645d66396426a6504cbd49
+Original 16MiB root/rollback SHA256:
+17e0c067dc8830698fa3fee6659428eb566e6aebefbccf89f6440201f7ff95d5
+Production BOOTX64.EFI SHA256:
+9f5157ad92eb303e8646cac70715690fc4c7a909a955ce21c768bfe93e32d379
+Production regular GPT/FAT32 USB image SHA256:
+a3a5ff904f2a48ea777557d2a1c389bbd4d12a9315aac9fcb2d23180b257325c
+
+The byte-identical production payload passed TWO QEMU boots with exact HP GPT
+metadata/geometry in a NEW sparse regular disk and the actual preserved user
+root. Both boots passed the offline smoke. Existing shell/app/process/pipe/
+timer, failed-exec, copied executable and wide-cell persistence checks passed;
+shutdown reclaimed images/pages and synced. Both GPT copies plus seven named
+4KiB canary pages matched. This is sampled outside-root coverage for the ~1TB
+fixture, not a whole-disk hash. A separate production boot passed fractional
+power and nonzero sine/cosine output plus subsequent exec/shutdown. Host loader
+UBSan, RXE1 alignment, math contract and native stack-guard fault tests pass.
+
+Native arithmetic uses x86/SSE2; a freestanding no_std libm provides the existing
+IEEE-bit service without OS/libc calls. The C16 data/call ABI is unchanged.
+RXE1 now preserves ELF page load bias, with all native offsets/addends adjusted.
+Large native frames (awk 348944, BASIC 242832, dc 167392 bytes in the entry scan)
+exceeded the old 64KiB bootstrap stack. Stack is now 1MiB with a 1MiB unmapped
+guard; kernel text/constants are supervisor-readonly. That scan is not a general
+stack-bound proof; arbitrary-frame probing/metadata remains coordinated work.
+
+Known compiler issue: test_native_recursive_double_power is expected-YY RED
+on native. Integer literal return 1 in a double function is emitted as raw bits.
+The owned generated awk copy uses 1.0 in its power base case. Shared compiler
+and imported awk source are untouched; no full compiler repair is claimed.
+
+SDK snapshot boundary: the canonical shared qsort repair landed AFTER these
+apps were compiled/frozen/tested. This USB still has that earlier static SDK
+snapshot. Record: build/x86_64-offline/hardware/sdk-snapshot.json. A subsequent
+coordinated SDK refresh should use the repaired canonical source and rerun
+acceptance; no guest SDK completion/self-rebuild is claimed here. Larger heap
+backing/profile and native stack probing are acknowledged in the coordination
+note. Current build retains checked/bounded memory and cooperative checkpoints.
+
+Both freshly identified SanDisk volumes passed offline FAT checks and readback
+after fresh read-only remounts. Current EFI/BOOT slots on BOTH volumes:
+  BOOTX64.EFI  new offline-app kernel (SHA above)
+  BOOTOLD.EFI  physically accepted minimal persistent-root kernel
+                94912ca636400bcb12a686010b24197c2e72a8610d7f4b55f20f562b43fbab4c
+  BOOTRO.EFI   accepted read-only NVMe/GPT probe with RAM root
+                756f33a5ada94dfcc8b54da4dfd6bf5f24d2d2b294855ade6458618d82685529
+  BOOTRAM.EFI  accepted fast-console RAM root, no NVMe probe
+                36d7157e93cabd00aaed7cd03cc4da6e2b1ff16c4d8ee29f2d15f8aeda502748
+EFI/RESCUE/BOOTX64.EFI is unchanged. Rescue remains text-console/nmtui with
+maintenance-key SSH port22; no private key was copied. Updated root/rollback
+files and audit/install evidence are on the data volume. BOOTOLD mounts the
+upgraded root but lacks the new math helper; use it for basic recovery, and
+use rescue plus the original root backup for full rollback. USB safely ejected.
+
+PHYSICAL ACCEPTANCE OF THIS NEW APP PAYLOAD IS STILL PENDING.
+Move the USB to the HP; boot its normal UEFI USB entry. Try:
+  cat /root/persist            # require HP_NVME_SURVIVED
+  /root/saved-echo after-upgrade
+  pwd
+  ps
+  df
+  sh /offline-check.sh         # require final OFFLINE_APPS_OK
+  shutdown
+The smoke uses a unique directory and removes it only after success. Use
+shutdown before power-off. Existing physical NVMe two-boot persistence and
+Ubuntu coexistence are already accepted; the new larger-stack/math/apps
+payload still needs this actual HP boot/check. Keep USB boot for now.
+
+Evidence: build/x86_64-offline/{production-check,math-check,hardware}/;
+build/x86_64-offline-stack-guard/result.json. Earlier failed attempts/logs are
+retained as diagnosis, not passes. Next: networking/remote shell in QEMU, then
+an actual HP network driver; AX211 Wi-Fi still needs device/firmware/802.11 work.

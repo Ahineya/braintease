@@ -26,11 +26,13 @@ int reset_prog_mode(void) {
     if (!stdscr || tcsetattr(0, TCSANOW, &_tty) < 0) return ERR;
     if (ended) { fputs("\033[?1049h", stdout); fflush(stdout); }
     if (ended && bracketed_paste) { fputs("\033[?2004h", stdout); fflush(stdout); }
+    if (ended) ripple_curses_mouse_restore(1);
     ended = 0; clearok(stdscr, TRUE); ripple_curses_invalidate(); return OK;
 }
 int endwin(void) {
     if (ended) return OK;
     if (bracketed_paste) fputs("\033[?2004l", stdout);
+    ripple_curses_mouse_restore(0);
     fflush(stdout);
     /* Exit paths must restore attributes/cursor and input, even when screen
      * allocations or rendering have failed. Windows survive suspend/resume. */

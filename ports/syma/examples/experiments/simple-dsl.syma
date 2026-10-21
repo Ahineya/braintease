@@ -1,0 +1,38 @@
+:clear
+:rule var {Program {Run {Val v_ = val_} .. } {Context {Vars ..}}} -> {Program {Run .. } {Context {Vars .. {Val v_ val_}}}}
+:rule ret {Program {Run {Return parts.. } } .. } -> {Program {Check {Errors} {CheckVars parts..}} {Parts parts..} ..}
+
+:rule strip {.. + ..} -> {.. ..} :scope Check :innermost
+:rule strip {.. - ..} -> {.. ..} :scope Check :innermost
+
+:rule succ {Program {Check {Errors ..} {CheckVars a_ ..}} {Parts parts..} {Context {Vars .. {Val a_ val_} ..}}} -> {Program {Check {Errors ..} {CheckVars ..}} {Parts parts..} {Context {Vars .. {Val a_ val_} ..}}}
+:rule succ/num {Program {Check {Errors ..} {CheckVars a_ ..}} ..} -> {Program {Check {Errors ..} {CheckVars ..}} ..} :guard IsNum(a_)
+:rule err  {Program {Check {Errors ..} {CheckVars p_ ..}} {Parts parts..} ..} -> {Program {Check {Errors .. p_} {CheckVars  ..}} {Parts parts..} ..}
+
+:rule err/collect {Program {Check {Errors e_ rest..} ..} ..} -> {Errors {Map} e_ rest..}
+:rule succ/collect {Program {Check {Errors} {CheckVars}} ..} -> {Eval 0 .. }
+
+:rule err/map {Errors {Map ..} e_ rest..} -> {Errors {Map .. Concat("Undefined variable: " ToString(e_))} rest..}
+:rule err/end {Errors {Map ..}} -> {Errors ..}
+
+:rule eval/plus {Eval acc_ {Parts + a_ parts..} {Context {Vars .. {Val a_ val_} ..}}} -> {Eval Add(acc_ val_) {Parts parts..} {Context {Vars .. {Val a_ val_} ..}}}
+:rule eval/plus/num {Eval acc_ {Parts + a_ parts..} ..} -> {Eval Add(acc_ a_) {Parts parts..} ..} :guard IsNum(a_)
+:rule eval/minus {Eval acc_ {Parts - a_ parts..} {Context {Vars .. {Val a_ val_} ..}}} -> {Eval Sub(acc_ val_) {Parts parts..} {Context {Vars .. {Val a_ val_} ..}}}
+:rule eval/munus/num {Eval acc_ {Parts - a_ parts..} ..} -> {Eval Sub(acc_ a_) {Parts parts..} ..} :guard IsNum(a_)
+:rule eval/first {Eval acc_ {Parts a_ parts..} {Context {Vars .. {Val a_ val_} ..}}} -> {Eval Add(acc_ val_) {Parts parts..} {Context {Vars .. {Val a_ val_} ..}}}
+:rule eval/first/num {Eval acc_ {Parts a_ parts..} ..} -> {Eval Add(acc_ a_) {Parts parts..} ..} :guard IsNum(a_)
+:rule eval/end {Eval acc_ {Parts} {Context {Vars .. {Val a_ val_} ..}}} -> {Result acc_}
+
+:rule invariant {Vars .. {Val a_ _} .. {Val a_ last_} ..} -> {Vars .. .. {Val a_ last_} ..} :innermost
+
+{Program
+    {Run
+        {Val a = 1}
+        {Val a = 5}
+        {Val b = 2}
+        {Val c = 20}
+        {Return 2 + a + b + 10 - c - 2}
+    }
+    {Context {Vars}}
+}
+

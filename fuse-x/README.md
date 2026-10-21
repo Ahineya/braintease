@@ -2,7 +2,7 @@
 
 Fuse-X runs a native Riplix kernel, bootstrap programs, and independently
 compiled applications loaded from the guest filesystem. It boots `/init`, starts
-an interactive shell, and uses the Riplix process, scheduler, descriptor and filesystem machinery.
+its primary console policy (mux with the normal launcher profile), and uses the Riplix process, scheduler, descriptor and filesystem machinery.
 Riplix is derived from FUZIX; original source credits and licenses are retained.
 No Ripple instruction interpreter or host `fork` is involved.
 
@@ -27,6 +27,15 @@ The [guest C toolchain](../rcc-portable/README.md) is installed as `/bin/cc`
 with headers and libraries under `/usr/lib/rcc`. It currently produces Ripple
 RXE programs for Riplix/RVM; native Fuse-X executable generation still uses the
 host compiler.
+
+The normal launcher installs a once-per-boot mux policy for the primary
+console. Press **Ctrl+B, then d** to detach mux and reach the outer shell;
+exiting that shell starts another plain shell. Additional graphical terminals
+and remote shells do not automatically start mux. Use
+`scripts/run-fuse-x.sh --run-only --rescue` to skip boot services and the console
+policy. The shipped background-service profile enables no applications. Edited
+policies are preserved across upgrades. See [boot services](../docs/boot-services.md)
+for configuration and shutdown behavior.
 
 The default shell is the existing FUZIX Bourne shell. Try `help`, `ls /bin`,
 `echo hello | cat`, `echo saved > /tmp/note`, `cat /tmp/note`, `jobs`, and `levee`.
@@ -286,13 +295,21 @@ the 16-bit cell and logical bank/offset pointer ABI while generating host machin
 code. Disk layout remains compatible with the Ripple C16 filesystem.
 
 The hosted configuration has 64 Riplix process slots, including init, the shell
-and unreaped children, with 192 system-wide open-file entries and 128 cached
+and unreaped children, with 1,024 system-wide open-file entries and 128 cached
 inodes. Private RAM uses 1 KiB copy-on-write pages. Banks 1–4
 hold small globals and continuation stacks, 31 holds arguments, and larger
 applications reserve banks 32–47 for globals. Current SDK allocators select
-banks 48–239 for up to 24,000 KiB of private heap; old packages retain the
-bounded 8–30 heap window. Shared kernel globals and allocations use banks
-240–255. The arena switch preserves arguments, globals and legacy allocations.
+sparse banks 256–32767 for about 3.88 GiB of addressable private heap per
+process. Pages allocate on demand and fork shares them copy-on-write; exec
+releases the previous sparse heap. Old packages retain their bounded 8–30 or
+48–239 heap windows. Shared kernel globals and allocations use banks 240–255
+and 32768–65535, about 3.91 GiB of shared address space. Host RAM and OS limits
+still apply; these are logical ceilings, not reservations at startup. Connection,
+image and other resource quotas are separate policies.
+The freestanding x86_64 runtime currently selects a bounded heap profile until
+its physical-memory backing supports high banks; see
+[SDK profiles](EXECUTABLES.md). The arena switch preserves arguments, globals
+and legacy allocations.
 The shared shell tracks up to 64 jobs and pipeline members.
 `make -C fuse-x test-process-capacity` checks all process slots, high-slot
 timeouts, process snapshots, cleanup and 40 simultaneous background jobs using
@@ -335,8 +352,10 @@ PTYs and internet/local guest sockets. Unix-domain stream sockets and
 `socketpair()` work without Ethernet. Both targets have 64 internet socket
 endpoints, 64 active TCP connections, 16 TCP listeners, 16 bound UDP ports and a separate
 pool of thirty-two local endpoints. See [local IPC](../docs/networking/local-ipc.md).
-Both targets provide 32 descriptors per process; sets
-have the same two-word C16 layout as RVM. Waiting suspends the native
+The maintained kernels provide 128 descriptors per process. New descriptor
+sets have eight C16 words; the original two-word syscall/library entry remains
+available for legacy binaries. Libc streams and popen records allocate on demand
+instead of imposing a separate 16-stream ceiling. Waiting suspends the native
 continuation while other sessions and host idle processing proceed. TCP
 asynchronous connect exposes `getsockopt(SOL_SOCKET, SO_ERROR)`. Both graphics
 backends expose per-owner input readiness through `select()`.

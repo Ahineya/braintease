@@ -1,0 +1,9 @@
+# Example only. Copy to a private definitions directory as hello.ini to use.
+# Installing a definition does not enable it.
+[service]
+type=oneshot
+program=/bin/echo
+restart=no
+
+[arguments]
+1=Service management is ready

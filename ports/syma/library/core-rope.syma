@@ -1,0 +1,26 @@
+{Module Core/Rope
+  {Export RopeEmit RopeCat RopeCat3 Cat4}
+  {Rules
+    {:rule Rope/id/left  {RopeCat "" x_}              -> x_}
+    {:rule Rope/id/right {RopeCat x_ ""}              -> x_}
+    {:rule Rope/assoc    {RopeCat a_ {RopeCat b_ c_}} -> {RopeCat {RopeCat a_ b_} c_}}
+    {:rule Rope/emit/cat {RopeEmit {RopeCat a_ b_}}   -> {Concat {RopeEmit a_} {RopeEmit b_}}}
+    {:rule Rope/emit/str {RopeEmit s_}                -> s_ :guard IsStr({Inert s_})}
+    {:rule Rope/emit/num {RopeEmit n_}                -> ToString(n_) :guard IsNum({Inert n_})}
+    {:rule Rope/cat3     {RopeCat3 a_ b_ c_}          -> {RopeCat a_ {RopeCat b_ c_}}}
+    {:rule Rope/cat4     {RopeCat4 a_ b_ c_ d_}       -> {RopeCat {RopeCat a_ b_} {RopeCat c_ d_}}}
+
+    {:rule Rope/catN/0   {RopeCatN}                   -> ""}
+    {:rule Rope/catN/1   {RopeCatN x_}                -> x_}
+    {:rule Rope/catN/2   {RopeCatN x_ y_}             -> {RopeCat x_ y_}}
+    {:rule Rope/catN/k   {RopeCatN a_ b_ rest..}     -> {RopeCat {RopeCat a_ b_} {RopeCatN rest..}}}
+
+    {:rule Rope/join/0   {RopeJoin _}                   -> ""}
+    {:rule Rope/join/1   {RopeJoin sep_ x_}             -> x_}
+    {:rule Rope/join/N   {RopeJoin sep_ x_ y_ rest..}  -> {RopeCatN x_ sep_ {RopeJoin sep_ y_ rest..}}}
+
+    {:rule Rope/nl       {RopeNL}                       -> "\n"}
+    {:rule Rope/indent/0 {RopeIndent 0 s_}              -> s_}
+    {:rule Rope/indent   {RopeIndent n_ s_}             -> {RopeCat {Spaces {Mul n_ 2}} s_}}
+  }
+}

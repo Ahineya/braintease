@@ -34,11 +34,11 @@ static void styled_line(const plot_style_t *style, int x0, int y0, int x1, int y
     long dx, dy, error, twice;
     int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
     unsigned step = 0, dash = style->stroke_type == PLOT_OP_TYPE_DOT ? 1 : 4;
-    if (style->stroke_type == PLOT_OP_TYPE_SOLID) { GrLine(wid,gc,x0,y0,x1,y1); return; }
+    if (style->stroke_type == PLOT_OP_TYPE_SOLID) { GrLine(draw_target,gc,x0,y0,x1,y1); return; }
     dx = labs((long)x1-x0); dy = -labs((long)y1-y0); error = dx+dy;
     if (dx > 16384 || dy < -16384) return;
     for (;;) {
-        if ((step++ / dash) % 2 == 0) GrPoint(wid,gc,x0,y0);
+        if ((step++ / dash) % 2 == 0) GrPoint(draw_target,gc,x0,y0);
         if (x0 == x1 && y0 == y1) break;
         twice = 2*error;
         if (twice >= dy) { error += dy; x0 += sx; }
@@ -51,7 +51,7 @@ static nserror plot_rectangle(const struct redraw_context *ctx, const plot_style
     struct rect r = *area;
     if (style->fill_type != PLOT_OP_TYPE_NONE && style->fill_colour != NS_TRANSPARENT && intersect(&r, &p->limit)) {
         GrSetGCForeground(gc, nano_colour(style->fill_colour));
-        GrFillRect(wid, gc, r.x0, r.y0, r.x1-r.x0, r.y1-r.y0); p->rectangles++;
+        GrFillRect(draw_target, gc, r.x0, r.y0, r.x1-r.x0, r.y1-r.y0); p->rectangles++;
     }
     if (style->stroke_type != PLOT_OP_TYPE_NONE && area->x1 > area->x0 && area->y1 > area->y0) {
         int inset, width = plot_style_fixed_to_int(style->stroke_width);
@@ -101,7 +101,7 @@ static nserror plot_polygon(const struct redraw_context *ctx, const plot_style_t
         for (i = 0; i < count; i++) {
             if (!winding) start = xs[i];
             winding += signs[i];
-            if (!winding && xs[i] > start) GrLine(wid,gc,start,y,xs[i]-1,y);
+            if (!winding && xs[i] > start) GrLine(draw_target,gc,start,y,xs[i]-1,y);
         }
     }
     return NSERROR_OK;
@@ -114,8 +114,8 @@ static nserror plot_disc(const struct redraw_context *ctx, const plot_style_t *s
     if (style->fill_type != PLOT_OP_TYPE_NONE) {
         GrSetGCForeground(gc, nano_colour(style->fill_colour));
         while (dx >= dy) {
-            GrLine(wid,gc,x-dx,y+dy,x+dx,y+dy); GrLine(wid,gc,x-dx,y-dy,x+dx,y-dy);
-            GrLine(wid,gc,x-dy,y+dx,x+dy,y+dx); GrLine(wid,gc,x-dy,y-dx,x+dy,y-dx);
+            GrLine(draw_target,gc,x-dx,y+dy,x+dx,y+dy); GrLine(draw_target,gc,x-dx,y-dy,x+dx,y-dy);
+            GrLine(draw_target,gc,x-dy,y+dx,x+dy,y+dx); GrLine(draw_target,gc,x-dy,y-dx,x+dy,y-dx);
             dy++;
             if (error < 0) error += 2*dy+1; else { dx--; error += 2*(dy-dx)+1; }
         }
@@ -123,10 +123,10 @@ static nserror plot_disc(const struct redraw_context *ctx, const plot_style_t *s
     if (style->stroke_type != PLOT_OP_TYPE_NONE) {
         dx=radius; dy=0; error=1-radius; stroke(style);
         while (dx >= dy) {
-            GrPoint(wid,gc,x+dx,y+dy); GrPoint(wid,gc,x-dx,y+dy);
-            GrPoint(wid,gc,x+dx,y-dy); GrPoint(wid,gc,x-dx,y-dy);
-            GrPoint(wid,gc,x+dy,y+dx); GrPoint(wid,gc,x-dy,y+dx);
-            GrPoint(wid,gc,x+dy,y-dx); GrPoint(wid,gc,x-dy,y-dx);
+            GrPoint(draw_target,gc,x+dx,y+dy); GrPoint(draw_target,gc,x-dx,y+dy);
+            GrPoint(draw_target,gc,x+dx,y-dy); GrPoint(draw_target,gc,x-dx,y-dy);
+            GrPoint(draw_target,gc,x+dy,y+dx); GrPoint(draw_target,gc,x-dy,y+dx);
+            GrPoint(draw_target,gc,x+dy,y-dx); GrPoint(draw_target,gc,x-dy,y-dx);
             dy++;
             if(error<0) error+=2*dy+1; else { dx--; error+=2*(dy-dx)+1; }
         }
@@ -143,7 +143,7 @@ static nserror plot_bitmap(const struct redraw_context *ctx, struct bitmap *b, i
     struct RiClip clip={p->clip.x0,p->clip.y0,p->clip.x1,p->clip.y1};
     int result;
     if(!images_enabled||w<=0||h<=0)return NSERROR_OK;
-    result=ri_nano_draw_cached((RiImage *)b,wid,gc,x,y,w,h,&clip,
+    result=ri_nano_draw_cached((RiImage *)b,draw_target,gc,x,y,w,h,&clip,
         (f&BITMAPF_REPEAT_X?RI_REPEAT_X:0)|(f&BITMAPF_REPEAT_Y?RI_REPEAT_Y:0));
     return result==RI_OK?NSERROR_OK:result==RI_MEMORY?NSERROR_NOMEM:NSERROR_BAD_SIZE;
 }

@@ -340,8 +340,8 @@ static arg_t rx_exec(inoptr inode) {
     udata.u_top=PROGTOP;udata.u_ptab->p_top=PROGTOP;udata.u_break=end;udata.u_codebase=PROGBASE;
     ripple_argc=argc;ripple_argv=(uint32_t)av;ripple_envp=(uint32_t)ev;
     ripple_gfx_exit(udata.u_ptab);ripple_pcm_exit(udata.u_ptab);
-    for(i=0;i<UFTSIZE;i++)if(udata.u_cloexec&(1UL<<i))doclose(i);
-    udata.u_cloexec=0;memset(udata.u_sigvec,0,sizeof(udata.u_sigvec));udata.u_sigtramp=0;udata.u_cursig=0;udata.u_error=0;
+    for(i=0;i<UFTSIZE;i++)if(uf_cloexec_test(&udata,i))doclose(i);
+    uf_cloexec_reset(&udata);memset(udata.u_sigvec,0,sizeof(udata.u_sigvec));udata.u_sigtramp=0;udata.u_cursig=0;udata.u_error=0;
     memset(udata.u_name,0,sizeof(udata.u_name));
     if(argc){uint8_t *name=(uint8_t *)ugetp(av);for(i=0;i<sizeof(udata.u_name);i++){int c=ugetc(name+i);if(c<0)break;udata.u_name[i]=c;if(!c)break;}}
     udata.u_ptab->p_flags|=PFL_EXECED;memcpy(udata.u_ptab->p_name,udata.u_name,sizeof(udata.u_name));

@@ -1,0 +1,77 @@
+{Module Demo/Input
+  {Import Core/Effect open}
+  {Program
+    App(
+      State({Input ""}, {Phase "PromptName"}),
+      {UI
+        Div(
+          {H1 "Console Input Demo"},
+          {P "Check console for input prompts"},
+          {P "Last input: " {Show Input}}
+        )
+      }
+    )
+    {Effects {Pending} {Inbox}}
+    {Eff {Print "prompt-name" {Message "Enter your name: \n"}}}
+  }
+  {Rules
+    {R AfterNamePrompt
+      {Program
+        {App {State {Input input_} {Phase "PromptName"}} ..}
+        {Effects pending_ {Inbox {PrintComplete "prompt-name" _} ..}}
+      }
+      {Program
+        {App {State {Input input_} {Phase "WaitingForName"}} ..}
+        {Effects pending_ {Inbox ..}}
+        {Eff {ReadLine "readline-1"}}
+      }
+    }
+
+    {R ProcessReadLine
+      {Program
+        {App {State _ {Phase "WaitingForName"}} ..}
+        {Effects .. {Inbox {ReadLineComplete "readline-1" {Text input_}} ..}}
+      }
+      {Program
+        {App {State {Input input_} {Phase "PromptChar"}} ..}
+        {Effects .. {Inbox ..}}
+        {Eff {Print "prompt-char" {Message Concat("Hello ", input_, "!\nPress any key: ")}}}
+      }
+    }
+
+    {R AfterCharPrompt
+      {Program
+        {App {State .. {Phase "PromptChar"}} ..}
+        {Effects .. {Inbox {PrintComplete "prompt-char" _} ..}}
+      }
+      {Program
+        {App {State .. {Phase "WaitingForChar"}} ..}
+        {Effects .. {Inbox ..}}
+        {Eff {GetChar "getchar-1"}}
+      }
+    }
+
+    {R ProcessGetChar
+      {Program
+        {App {State .. {Phase "WaitingForChar"}} ..}
+        {Effects .. {Inbox {GetCharComplete "getchar-1" {Char ch_}} ..}}
+      }
+      {Program
+        {App {State .. {Phase "ShowResult"}} ..}
+        {Effects .. {Inbox ..}}
+        {Eff {Print "print-1" {Message Concat("You pressed: ", ch_, "\n")}}}
+      }
+    }
+
+    {R PrintComplete
+      {Program {App {State .. {Phase phase_}} ..} {Effects pending_ {Inbox {PrintComplete "print-1" _} ..}}}
+      {Program {App {State .. {Phase phase_}} ..} {Effects pending_ {Inbox ..}}}
+    }
+
+    {R ShowInput
+      {:project Input}
+      val_
+      :with {Program .. {App .. {State {Input val_} ..} ..} ..}
+    }
+  }
+}

@@ -146,6 +146,21 @@ extern "C" fn edit_action(_: &Object, selector: Sel, _: *mut Object) {
         }
     });
 }
+extern "C" fn close_window(_: &Object, _: Sel, _: *mut Object) {
+    MENUS.with(|slot| {
+        if let Some(m) = slot.borrow().as_ref() {
+            for &(id, window) in &m.windows {
+                let focused: BOOL = unsafe { msg_send![window, isKeyWindow] };
+                if focused != NO {
+                    if let Some(w) = m.shared.lock().unwrap().windows.get_mut(&id) {
+                        w.close();
+                    }
+                    break;
+                }
+            }
+        }
+    });
+}
 unsafe fn string(text: &str) -> *mut Object {
     let bytes = CString::new(text).unwrap();
     let value: *mut Object =
@@ -201,6 +216,10 @@ unsafe fn initialize(shared: Arc<Mutex<Shared>>) -> Menus {
         decl.add_method(
             sel!(showFuseXWindow:),
             show_window as extern "C" fn(&Object, Sel, *mut Object),
+        );
+        decl.add_method(
+            sel!(closeFuseXWindow:),
+            close_window as extern "C" fn(&Object, Sel, *mut Object),
         );
         for selector in [sel!(copyFuseX:), sel!(pasteFuseX:), sel!(cutFuseX:), sel!(selectAllFuseX:)] {
             decl.add_method(selector, edit_action as extern "C" fn(&Object, Sel, *mut Object));
@@ -273,8 +292,8 @@ unsafe fn initialize(shared: Arc<Mutex<Shared>>) -> Menus {
             file,
             "Close Window",
             "w",
-            sel!(performClose:),
-            std::ptr::null_mut(),
+            sel!(closeFuseXWindow:),
+            actions,
             std::ptr::null_mut(),
         );
         submenu(bar, "Fuse-X", application);

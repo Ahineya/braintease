@@ -63,7 +63,10 @@ def main():
             os.write(guest.master,server.password+b'\r')
             visible('Existing Saved Messages history')
             visible('Archived friend')
-            os.write(guest.master,b'/bob\r\r')
+            # Click the search field and open the filtered chat with the mouse.
+            os.write(guest.master,b'\x1b[<0;6;3M\x1b[<0;6;3mbob')
+            visible('Bob')
+            os.write(guest.master,b'\x1b[<0;8;5M\x1b[<0;8;5m')
             visible('Bob history')
             server.push()
             visible('Live incoming fixture text')
@@ -71,7 +74,9 @@ def main():
             visible('Earliest fixture history')
             os.write(guest.master,b'\x1b[15~')
             visible('Bob history')
-            os.write(guest.master,b'reject fixture draft\r')
+            # Click history/input independently; the wheel doesn't steal focus.
+            os.write(guest.master,b'\x1b[<64;40;5M\x1b[<65;40;5M')
+            os.write(guest.master,b'\x1b[<0;34;28M\x1b[<0;34;28mreject fixture draft\r')
             visible('Send failed 403')
             visible('reject fixture draft')
             os.write(guest.master,b'\x15')

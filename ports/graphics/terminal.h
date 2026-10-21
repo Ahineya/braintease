@@ -17,14 +17,18 @@ struct vt {
     unsigned cols,rows;
     unsigned x,y,sx,sy,primary_x,primary_y,top,bottom;
     unsigned fg,bg,bold,reverse,visible,wrap,pending,alternate,appcursor;
-    unsigned parser,private_mode,count,params[16],intermediate;
+    unsigned parser,private_mode,count,params[16],intermediate,osc_active;
     unsigned underline,blink,cursor_shape,bracketed_paste;
     unsigned synchronized;
+    unsigned mouse_mode,mouse_sgr,mouse_buttons,mouse_known,mouse_x,mouse_y,mouse_code;
     unsigned g0,g1,shift,charset_target;
     struct ru_decoder utf8;
     struct ru_break grapheme;
     unsigned last_at; /* Last grapheme head plus one; zero after cursor controls. */
     unsigned char dirty[VT_MAX_ROWS];
+    /* Optional streaming OSC observer: -1 starts/aborts, 0 is a payload octet,
+     * 1 completes BEL/ST. Consumers impose their own bounded payload policy. */
+    void (*osc)(struct vt *,unsigned,int);
     void (*scroll)(struct vt *,int);
     void (*reply)(struct vt *,const char *);
     void *user;
@@ -40,4 +44,8 @@ int vt_resize(struct vt *,unsigned cols,unsigned rows);
 void vt_feed(struct vt *,const char *,unsigned);
 void vt_dirty(struct vt *);
 struct vt_cell *vt_cells(struct vt *);
+/* Encode an xterm button (0 left, 1 middle, 2 right, 3 none, 64..67 wheel).
+ * Coordinates are zero-based cells; modifiers use xterm bits 4/8/16.
+ * Returns zero for disabled/filtered/redundant motion. out needs 40 bytes. */
+unsigned vt_mouse_report(struct vt *,char *,unsigned,int,int,int,int,unsigned);
 #endif

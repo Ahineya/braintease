@@ -283,6 +283,9 @@ static void exfile(BOOL prof)
 				}
 				mailtime = statb.st_mtime;
 			}
+#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
+            shell_mux_report(NULL);
+#endif
 			const char *primary = prompt_text(ps1nod.namval);
 			if (line_input(primary) < 0)
 			{

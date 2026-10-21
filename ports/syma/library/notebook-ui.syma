@@ -1,0 +1,7 @@
+{Module Notebook/UI
+  {Export}
+  {Rules
+    {:rule "EnrichProgramWithAppStateAndUI" {Program {Effects e...} rest...} -> {Program App({InitialState}, {InitialUI}) {Effects e...} rest...}}
+    {:rule "LiftApplyThroughProgramAndApp" Apply(act_, {Program App(st_, ui_) eff_}) -> {Program App(Apply(act_, st_), ui_) eff_}}
+  }
+}

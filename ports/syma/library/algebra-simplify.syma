@@ -1,0 +1,242 @@
+{Module Algebra/Simplify
+  {Export Simplify}
+
+  {Rules
+
+    {R "Simplify"
+       {Simplify x_}
+       {Simp x_}}
+
+    {R "Simp/Atom"
+       {Simp x_}
+       x_
+       {Or {IsNum x_} {Or {IsStr x_} {IsSym x_}}}}
+
+    {R "Simp/Add/Empty"
+       {Simp {Add}}
+       0}
+
+    {R "Simp/Add/One"
+       {Simp {Add x_}}
+       {Simp x_}}
+
+    {R "Simp/Add/Two"
+       {Simp {Add a_ b_}}
+       {SimplifyAdd {Simp a_} {Simp b_}}}
+
+    {R "Simp/Add/Many"
+       {Simp {Add a_ b_ rest...}}
+       {Simp {Add {Add a_ b_} rest...}}}
+
+    {R "Simp/Mul/Empty"
+       {Simp {Mul}}
+       1}
+
+    {R "Simp/Mul/One"
+       {Simp {Mul x_}}
+       {Simp x_}}
+
+    {R "Simp/Mul/Two"
+       {Simp {Mul a_ b_}}
+       {SimplifyMul {Simp a_} {Simp b_}}}
+
+    {R "Simp/Mul/Many"
+       {Simp {Mul a_ b_ rest...}}
+       {Simp {Mul {Mul a_ b_} rest...}}}
+
+    {R "Simp/Pow"
+       {Simp {Pow base_ exp_}}
+       {Pow {Simp base_} {Simp exp_}}}
+
+    {R "Simp/Neg"
+       {Simp {Neg x_}}
+       {Neg {Simp x_}}}
+
+
+    ;; ===================== HANDLE UNEVALUATED SIMP =====================
+    ;; If SimplifyAdd/Mul receive Simp expressions, wait for them to evaluate
+
+    {R "SimplifyAdd/WaitForSimpLeft"
+       {SimplifyAdd {Simp a_} rest...}
+       {SimplifyAdd a_ rest...}
+       -100}
+
+    {R "SimplifyAdd/WaitForSimpRight"
+       {SimplifyAdd a_ {Simp b_} rest...}
+       {SimplifyAdd a_ b_ rest...}
+       -100}
+
+    {R "SimplifyAdd/WaitForSimpMiddle"
+       {SimplifyAdd a_ b_ {Simp c_} rest...}
+       {SimplifyAdd a_ b_ c_ rest...}
+       -100}
+
+    {R "SimplifyMul/WaitForSimpLeft"
+       {SimplifyMul {Simp a_} b_}
+       {SimplifyMul a_ b_}
+       -100}
+
+    {R "SimplifyMul/WaitForSimpRight"
+       {SimplifyMul a_ {Simp b_}}
+       {SimplifyMul a_ b_}
+       -100}
+
+    ;; ===================== ADD: FLATTEN & CLEAN =====================
+    ;; Flatten nested Add
+    {R "Add/Flatten/Left"
+       {SimplifyAdd {Add a...} rest...}
+       {SimplifyAdd a... rest...}
+       5}
+    {R "Add/Flatten/Right"
+       {SimplifyAdd x_ {Add a...} rest...}
+       {SimplifyAdd x_ a... rest...}
+       -5}
+
+    ;; Remove neutral element 0
+    {R "Add/DropZero/Head"
+       {SimplifyAdd 0 rest...}
+       {SimplifyAdd rest...}
+       5}
+    {R "Add/DropZero/Mid"
+       {SimplifyAdd a_ 0 rest...}
+       {SimplifyAdd a_ rest...}
+       5}
+
+    ;; If empty → 0
+    {R "Add/Empty" {SimplifyAdd} 0}
+
+    ;; Single arg passthrough
+    {R "Add/Single" {SimplifyAdd x_} x_}
+
+    ;; Constant folding across many args: combine first two constants
+    {R "Add/CombineConstants"
+       {SimplifyAdd c1_ c2_ rest...}
+       {SimplifyAdd {Add c1_ c2_} rest...}
+       {And {IsNum c1_} {IsNum c2_}}}
+
+    ;; Canonical order (lexicographic by ToString)
+    {R "Add/Order/Swap"
+       {SimplifyAdd a_ b_ rest...}
+       {SimplifyAdd b_ a_ rest...}
+       {Gt {ToString a_} {ToString b_}}}
+
+    ;; Cancellation: x + (-x) → 0  (we model -x as Mul(-1, x) or Neg x)
+    {R "Add/Cancel/MulNeg"
+       {SimplifyAdd x_ {Mul -1 x_} rest...}
+       {SimplifyAdd rest...}}
+    {R "Add/Cancel/Neg"
+       {SimplifyAdd x_ {Neg x_} rest...}
+       {SimplifyAdd rest...}}
+
+    ;; Like-term collection (linear): ax + bx → (a+b)x
+    ;; detect Mul coeff var and sum coeffs when same var structure
+    {R "Add/CollectLike/Two"
+       {SimplifyAdd {Mul a_ v_} {Mul b_ v_} rest...}
+       {SimplifyAdd {Simp {Mul {Add a_ b_} v_}} rest...}
+       {And {IsNum a_} {IsNum b_}}}
+
+    ;; Also handle naked variable as 1*v   (v + v → 2*v)
+    {R "Add/CollectLike/Naked"
+       {SimplifyAdd v_ v_ rest...}
+       {SimplifyAdd {Simp {Mul 2 v_}} rest...}
+       {Not {Or {IsNum v_} {IsStr v_}}}}
+
+
+    ;; ===================== MUL: FLATTEN & CLEAN =====================
+    ;; Flatten nested Mul
+    {R "Mul/Flatten/Left"
+       {SimplifyMul {Mul a...} rest...}
+       {SimplifyMul a... rest...}
+       5}
+    {R "Mul/Flatten/Right"
+       {SimplifyMul x_ {Mul a...} rest...}
+       {SimplifyMul x_ a... rest...}
+       -5}
+
+    ;; Absorbing element 0: if any factor is 0 → 0
+    {R "Mul/Zero/Head"
+       {SimplifyMul 0 rest...}
+       0
+       10}
+    {R "Mul/Zero/Mid"
+       {SimplifyMul a_ 0 rest...}
+       0
+       10}
+
+    ;; Remove neutral element 1
+    {R "Mul/DropOne/Head"
+       {SimplifyMul 1 rest...}
+       {SimplifyMul rest...}
+       5}
+    {R "Mul/DropOne/Mid"
+       {SimplifyMul a_ 1 rest...}
+       {SimplifyMul a_ rest...}
+       5}
+
+    ;; Empty → 1
+    {R "Mul/Empty" {SimplifyMul} 1}
+
+    ;; Single arg passthrough
+    {R "Mul/Single" {SimplifyMul x_} x_}
+
+    ;; Numeric folding across many: combine first two numbers
+    {R "Mul/CombineConstants"
+       {SimplifyMul c1_ c2_ rest...}
+       {SimplifyMul {Mul c1_ c2_} rest...}
+       {And {IsNum c1_} {IsNum c2_}}}
+
+    ;; Canonical order
+    {R "Mul/Order/Swap"
+       {SimplifyMul a_ b_ rest...}
+       {SimplifyMul b_ a_ rest...}
+       {Gt {ToString a_} {ToString b_}}}
+
+    ;; Powers from repeated factors: x*x → Pow(x,2)
+    {R "Mul/PowPair"
+       {SimplifyMul v_ v_ rest...}
+       {SimplifyMul {Pow v_ 2} rest...}
+       {Not {Or {IsNum v_} {IsStr v_}}}}
+
+    ;; Combine powers: x^a * x^b → x^(a+b)
+    {R "Mul/PowCombine"
+       {SimplifyMul {Pow v_ a_} {Pow v_ b_} rest...}
+       {SimplifyMul {Pow v_ {Add a_ b_}} rest...}}
+
+    ;; Pull numeric coefficient: (a*x) * (b*y) → (a*b) * x * y (handled by combining constants + flatten)
+
+    ;; Distribute (optional, controlled): c * (u + v) → c*u + c*v
+    ;; Turn on only when explicitly asked via {NormalizeDist expr}
+    {R "NormalizeDist"
+       {NormalizeDist {Mul c_ {Add u_ v_ rest...}}}
+       {Add {Mul c_ u_} {NormalizeDist {Mul c_ {Add v_ rest...}}}}}
+    {R "NormalizeDist/Pass/Add"
+       {NormalizeDist {Add a_ b_ rest...}}
+       {Add {NormalizeDist a_} {NormalizeDist {Add b_ rest...}}}}
+    {R "NormalizeDist/Pass/Leaf"
+       {NormalizeDist x_}
+       x_}
+
+
+    ;; ===================== NEGATION CONVENTIONS =====================
+    ;; Neg x → Mul(-1, x)
+    {R "Neg/Lower"
+       {Neg x_}
+       {Mul -1 x_}}
+
+    ;; -(a+b) → -a + -b  (via Neg lowering + Distribute rules if NormalizeDist used)
+    ;; -(a*b) handled by neg coefficient folding naturally
+
+    ;; ===================== TOP-LEVEL REBUILD =====================
+    ;; After SimplifyAdd/SimplifyMul finish, rebuild into Add/Mul
+    ;; Very low priority so all simplification happens first!
+    {R "SimplifyAdd/Rebuild"
+       {SimplifyAdd items...}
+       {Add items...}
+       -1000}
+
+    {R "SimplifyMul/Rebuild"
+       {SimplifyMul items...}
+       {Mul items...}
+       -1000}
+  }
+}

@@ -246,7 +246,8 @@ impl NetworkDevice {
         descriptor: Range<usize>,
         bank_size: u16,
     ) -> Result<(), u16> {
-        let mut d: Vec<u16> = descriptor.clone().map(|i| memory.read(i)).collect();
+        let mut d = vec![0; descriptor.len()];
+        memory.read_cells(descriptor.start, &mut d);
         if d[2] != 0 {
             return Err(STATUS_BAD_DESCRIPTOR);
         }
@@ -284,8 +285,10 @@ impl NetworkDevice {
                 if command == COMMAND_NET_TX {
                     // Validate even while link-down/full: malformed input must
                     // not be hidden by a transient queue outcome.
-                    let frame: Vec<u8> = buffer
-                        .map(|i| u8::try_from(memory.read(i)))
+                    let mut cells = [0; MAX_FRAME];
+                    memory.read_cells(buffer.start, &mut cells[..length]);
+                    let frame: Vec<u8> = cells[..length].iter().copied()
+                        .map(u8::try_from)
                         .collect::<Result<_, _>>()
                         .map_err(|_| STATUS_BAD_DESCRIPTOR)?;
                     d[6] = if !state.link {
@@ -306,9 +309,11 @@ impl NetworkDevice {
                             NET_BUFFER_TOO_SMALL
                         } else {
                             let frame = state.rx.pop_front().unwrap();
-                            for (index, octet) in frame.into_iter().enumerate() {
-                                memory.write(buffer.start + index, u16::from(octet));
+                            let mut cells = [0; MAX_FRAME];
+                            for (cell, &octet) in cells.iter_mut().zip(&frame) {
+                                *cell = u16::from(octet);
                             }
+                            memory.write_cells(buffer.start, &cells[..frame.len()]);
                             state.counters.rx_delivered =
                                 state.counters.rx_delivered.saturating_add(1);
                             NET_OK
@@ -345,9 +350,7 @@ impl NetworkDevice {
             }
             _ => unreachable!("network command dispatch was validated"),
         }
-        for (index, value) in descriptor.zip(d) {
-            memory.write(index, value);
-        }
+        memory.write_cells(descriptor.start, &d);
         Ok(())
     }
 }

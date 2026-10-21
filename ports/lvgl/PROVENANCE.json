@@ -1,0 +1,60 @@
+{
+  "purpose": "Pinned sources for the Fuse-X LVGL port and separate graphics investigations",
+  "lvgl": {
+    "repository": "https://github.com/lvgl/lvgl",
+    "version": "v9.6.0",
+    "released": "2026-09-16",
+    "archive": "https://codeload.github.com/lvgl/lvgl/tar.gz/refs/tags/v9.6.0",
+    "sha256": "b20ee3acc1bba13c62d854f9ebd62e4c51e0b443b1e0225892e86442defa84df",
+    "license": "MIT; see LICENCE.txt in the unmodified archive",
+    "extraction": "src, include, lvgl.h, lv_conf_template.h, README.md, LICENCE.txt under the ignored build directory",
+    "adaptation": "Generated C16 RGB888/A8 profile and checked source adaptations in adapt.py; pristine archive and source tree are retained separately. See build/lvgl/adaptation.json.",
+    "font_notices": [
+      "scripts/generators/built_in_font/font_license/Montserrat/OFL.txt",
+      "scripts/generators/built_in_font/font_license/FontAwesome5/LICENSE.txt"
+    ]
+  },
+  "xserver": {
+    "version": "21.1.25",
+    "archive": "https://www.x.org/releases/individual/xserver/xorg-server-21.1.25.tar.xz",
+    "sha256": "6ad4e3c7b59a309b32c92e5c15ce1267110f9e13f1ac78da62361a628da1a0eb",
+    "license": "See COPYING and per-file notices in the official source archive",
+    "extraction": "Selected unmodified build files and headers for dependency and backend inspection only"
+  },
+  "xml_reference": {
+    "version": "v9.4.0",
+    "source": "https://raw.githubusercontent.com/lvgl/lvgl/v9.4.0/src/others/xml/lv_xml.c",
+    "sha256": "638486b538a70956de840b08a47bf8a2ac13b344a6130ebefa91eebab3ed9dd6",
+    "usage": "Read-only dependency inspection. No XML loader source imported or built.",
+    "current_policy": "https://lvgl.io/blog/announcement-lv_xml-removal-from-v9-5"
+  },
+  "noto_sans": {
+    "source_manifest": "fonts/source.json",
+    "license": "OFL-1.1; fonts/LICENSE.NotoSans.txt",
+    "generated_tables": [
+      "fonts/font-12.c",
+      "fonts/font-14.c",
+      "fonts/font-16.c",
+      "fonts/font-24.c",
+      "fonts/font-28.c",
+      "fonts/font-32.c"
+    ],
+    "generator": "fonts/generate.py (build-time Pillow/FreeType; no guest rasterizer dependency)",
+    "coverage_manifest": "fonts/generated.json",
+    "bitmap_storage": "Static A8 masks; identical glyph images are interned within each size"
+  },
+  "lucide_icons": {
+    "source_manifest": "../fusede/icons/lucide/UPSTREAM.json",
+    "generated_manifest": "icons/source.json",
+    "generated_table": "icons/data.c",
+    "license": "ISC plus Feather-derived MIT notice; icons/LICENSE.Lucide.txt",
+    "representation": "21 named A8 masks at 16/32 pixels; arrow-up is a clockwise quarter-turn of arrow-left",
+    "generation": "Maintainer-only sharp/librsvg supersampling; ordinary builds verify checked-in masks and sources"
+  },
+  "font_awesome_checkmark": {
+    "source_manifest": "fonts/symbols.json",
+    "generated_table": "fonts/symbols.c",
+    "license": "OFL-1.1; LICENSE.FontAwesome5.txt from the pinned LVGL archive",
+    "representation": "Static A8 masks expanded exactly from the original 4-bit glyphs"
+  }
+}

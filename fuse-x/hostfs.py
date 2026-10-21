@@ -79,7 +79,36 @@ def adapt(unit, source):
                 '        m = fs_tab_get(ino->c_dev);')
     else:
         raise ValueError('unknown hosted filesystem unit: ' + unit)
-    return '#include "hostfs.h"\n' + source
+    source = source.replace('fuse_host_', 'fuse_external_')
+    source = source.replace('dev==FUSE_HOST_DEV', '(dev==FUSE_HOST_DEV || fuse_remote_device(dev))')
+    source = source.replace('m->m_dev != FUSE_HOST_DEV', 'm->m_dev != FUSE_HOST_DEV && !fuse_remote_device(m->m_dev)')
+    source = source.replace('fuse_external_sync()', 'fuse_external_sync(dev)')
+    if unit == 'inode':
+        # Closing a remote dirty handle must report a failed remote fsync.
+        begin=source.index('int16_t doclose(')
+        end=source.index('inoptr rwsetup(',begin)
+        region=source[begin:end]
+        region=region.replace('uint8_t m;', 'uint8_t m;\n    unsigned remote_close;')
+        region=region.replace('oftindex = udata.u_files[uindex];', 'remote_close=fuse_remote_inode(ino);\n\toftindex = udata.u_files[uindex];')
+        region=region.replace('return (0);', 'return remote_close && udata.u_error ? -1 : 0;')
+        source=source[:begin]+region+source[end:]
+    if unit == 'filesys':
+        # Path parser scratch must survive another task entering n_open while an RPC sleeps.
+        source += '''
+void fuse_path_save(void *buffer) {
+    unsigned long *p=buffer;
+    p[0]=(unsigned long)name;p[1]=(unsigned long)nameend;
+    p[2]=n_open_fault;p[3]=n_fault_type;
+    memcpy(p+4,lastname,sizeof(lastname));
+}
+void fuse_path_restore(void *buffer) {
+    unsigned long *p=buffer;
+    name=(void *)p[0];nameend=(void *)p[1];
+    n_open_fault=p[2];n_fault_type=p[3];
+    memcpy(lastname,p+4,sizeof(lastname));
+}
+'''
+    return '#include "externalfs.h"\n' + source
 
 
 if __name__ == '__main__':

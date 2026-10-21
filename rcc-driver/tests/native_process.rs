@@ -620,3 +620,45 @@ fn nonsuspending_variadic_helpers_have_both_direct_and_token_entry_points() {
         }
     "#, 42);
 }
+
+#[test]
+fn read_groups_keep_private_pages_and_barriers_correct_across_fork() {
+    Fixture::new().run(
+        r#"
+        #include <native_process.h>
+        #include <stdlib.h>
+        unsigned a[600];
+        unsigned sum4(unsigned *p) { return p[0]+p[1]+p[2]+p[3]; }
+        unsigned sum2(unsigned *p) { return p[0]+p[1]; }
+        unsigned change(unsigned *p) { p[0]=99; return sum4(p); }
+        int main(void) {
+            for(unsigned i=0;i<600;i++)a[i]=i;
+            unsigned *p=a+510;
+            unsigned *high=(unsigned *)0x01000010UL;
+            high[0]=3; high[1]=5; high[2]=7; high[3]=11;
+            if(sum4(p)!=2046 || sum4(high)!=26)return 1;
+            unsigned *shared=rcc_process_kernel_alloc(2);
+            if(!shared)return 2;
+            shared[0]=13; shared[1]=17;
+            if(sum2(shared)!=30)return 3;
+            int child=rcc_process_fork();
+            if(child<0)return 4;
+            if(child==0) {
+                p[0]=1;high[0]=1;shared[0]=19;
+                if(sum4(p)!=1537 || sum4(high)!=24)return 5;
+                rcc_process_exit(7);
+            }
+            int status;
+            if(rcc_process_wait(child,&status)!=child||status!=7)return 6;
+            if(sum4(p)!=2046 || sum4(high)!=26 || sum2(shared)!=36)return 7;
+            unsigned (*callback)(unsigned *)=change;
+            if(callback(high)!=122 || sum4(high)!=122)return 8;
+            rcc_process_yield();
+            if(sum4(p)!=2046 || sum4(high)!=122)return 9;
+            rcc_process_kernel_free(shared);
+            return 42;
+        }
+        "#,
+        42,
+    );
+}

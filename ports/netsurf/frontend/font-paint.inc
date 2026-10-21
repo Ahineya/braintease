@@ -1,7 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include <fde_nano.h>
-/* Text and photographs share the image library's three-resource LRU. One
- * protocol slot remains available for its bounded oversized-image fallback. */
+/* Native builds reserve eight retained text resources independently of photos.
+ * Keep their glyph atlases alive across the common body/heading/UI styles. */
+#ifdef RIPPLE_NETSURF_HOSTED
+#define NF_ATLASES 8
+#else
+#define NF_ATLASES 3
+#endif
 struct nf_atlas {
     struct nf_style style;
     unsigned page,count;uint32_t fallback;
@@ -10,12 +15,12 @@ struct nf_atlas {
     struct nf_glyph glyphs[96];
     unsigned xs[96],ys[96];
 };
-static struct nf_atlas nf_atlases[3];
+static struct nf_atlas nf_atlases[NF_ATLASES];
 static unsigned long nf_clock;
 static void nf_atlas_free(struct nf_atlas *a)
 { if(a->image){ri_nano_forget(a->image);ri_image_free(a->image);}memset(a,0,sizeof(*a)); }
 static void nf_atlas_clear(void)
-{ unsigned i;for(i=0;i<3;i++)nf_atlas_free(nf_atlases+i); }
+{ unsigned i;for(i=0;i<NF_ATLASES;i++)nf_atlas_free(nf_atlases+i); }
 static void nf_raster(struct nf_style f,uint32_t cp,struct nf_glyph *g,RiImage *image,unsigned x,unsigned y)
 {
     unsigned char source[4096];unsigned sw,sh,xx,yy,i=0,run,a,b,c,d;
@@ -55,7 +60,7 @@ static struct nf_atlas *nf_atlas(struct nf_style f,uint32_t cp,unsigned cells,un
     int index=nf_index(cp);unsigned page=index<0?0:(unsigned)index/count;
     struct nf_atlas *a=nf_atlases;uint32_t fallback=index<0?cp:0;
     *slot=index<0?0:(unsigned)index%count;
-    for(i=0;i<3;i++) {
+    for(i=0;i<NF_ATLASES;i++) {
         struct nf_atlas *p=nf_atlases+i;
         if(p->image&&p->style.face==f.face&&p->style.size==f.size&&p->page==page&&p->fallback==fallback) { p->used=++nf_clock;return p; }
         if(!p->image|| (a->image&&p->used<a->used))a=p;
@@ -95,7 +100,7 @@ static nserror nf_paint(const struct redraw_context *ctx,const plot_font_style_t
             if(count) {
                 int index=nf_index(cp);unsigned per=nf_page_size(f.size);
                 if(batch->fallback!=(index<0?cp:0)||batch->page!=(index<0?0:(unsigned)index/per)||count==9) {
-                    if(ri_nano_draw_rects(batch->image,wid,gc,rects,count,1)!=RI_OK)return NSERROR_NOMEM;
+                    if(ri_nano_draw_rects(batch->image,draw_target,gc,rects,count,1)!=RI_OK)return NSERROR_NOMEM;
                     p->text_runs++;count=0;
                 }
             }
@@ -106,7 +111,7 @@ static nserror nf_paint(const struct redraw_context *ctx,const plot_font_style_t
         if((long)x+g.advance>32760)break;x+=g.advance;
     }
     if(count) {
-        if(ri_nano_draw_rects(batch->image,wid,gc,rects,count,1)!=RI_OK)result=NSERROR_NOMEM;
+        if(ri_nano_draw_rects(batch->image,draw_target,gc,rects,count,1)!=RI_OK)result=NSERROR_NOMEM;
         p->text_runs++;
     }
     return result;

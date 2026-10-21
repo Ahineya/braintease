@@ -46,8 +46,9 @@ waiter maps and wake helpers; its legacy single-word syscall is excluded on
 Ripple. Both targets use the same guest wait core and socket bridge.
 
 The public [`sys/select.h`](../../ports/fuzix/ripple/include/sys/select.h)
-provides the conventional API. `fd_set` has two 16-bit words and capacity 32.
-Both RVM and native Fuse-X accept `nfds` through 32 and return `EINVAL` above that limit. Descriptor bits at or above `nfds` are ignored.
+provides the conventional API. New `fd_set` values have eight 16-bit words
+and capacity 128. RVM, Fuse-X and freestanding x86 accept `nfds` through 128
+and return `EINVAL` above that limit. Descriptor bits at or above `nfds` are ignored.
 `poll()` and `pselect()` remain unimplemented.
 
 Wait registrations live in in-memory inode maps, separate from filesystem
@@ -61,11 +62,21 @@ inode scans when there are no selectors.
 [`select-abi.h`](../../ports/fuzix/ripple/select-abi.h) defines syscall 72's
 versioned request: one version cell followed by three descriptor-set pointers
 and a timeout pointer (nine C16 cells total). The first syscall argument is
-`nfds`; the second points at this request. Each non-null set points at two
-mask cells; a non-null timeout points at two 32-bit fields matching the target
+`nfds`; the second points at this request. Version 1 keeps exactly two mask
+cells and accepts at most 32 descriptors; version 2 uses eight mask cells and
+accepts 128. The request itself keeps the same nine-cell shape. Each non-null
+set is copied using its version's exact size; a non-null timeout points at two 32-bit fields matching the target
 `timeval`. The kernel validates and copies these buffers before registering
 waits, so invalid public pointers return `EFAULT` instead of being dereferenced
 by the libc wrapper. Public timeout storage is never written.
+
+The updated header maps source calls to `ripple_select_wide`; libc retains
+the original `select` symbol with its two-word contract for legacy clients.
+Low-descriptor calls from the new wrapper still use version 1, so they remain
+usable on an older kernel. High-descriptor calls require the updated kernel.
+Existing statically linked programs keep their original wrapper. Shared SDK
+packages and their consumers follow the normal coordinated rebuild/install
+policy. No guest-to-host networking ABI or device-driver change is involved.
 
 Timeout seconds accept `0..0x7fffffff`, and microseconds `0..999999`; wrapped
 negative assignments to the existing unsigned timeval fields are rejected.
@@ -110,9 +121,9 @@ before a split desktop server.
 1. Provide the conventional `select()` and `FD_ZERO`, `FD_SET`, `FD_CLR` and
    `FD_ISSET` API through `sys/select.h`. Reuse the existing `struct timeval`
    declaration in `sys/time.h`; do not introduce an incompatible duplicate.
-2. Use a C16 `fd_set` with capacity 32 on both targets, represented by two
-   16-bit mask words. Keep `FD_SETSIZE` distinct from the active process limit.
-   Both kernels support all 32 process descriptors. Do not shift a 16-bit `int` by 16 or more.
+2. Use a C16 `fd_set` with capacity 128, represented by eight 16-bit mask
+   words. Keep `FD_SETSIZE` distinct from the active process limit. Both
+   maintained kernels support all 128 process descriptors. Do not shift a 16-bit `int` by 16 or more.
 3. Keep the public interface independent of the internal syscall representation.
    Syscall 72 uses the versioned C16 pointer request described above, replacing
    the old 16-descriptor payload and byte-offset assumptions. No host `fd_set`,
@@ -279,3 +290,27 @@ interleaving or a completed browser/Nano-X integration test.
 Unix-domain stream sockets and `socketpair()` now share this readiness contract
 on both targets, independently of Ethernet. See [local IPC and expanded
 networking capacity](local-ipc.md) for queues, ownership and limits.
+
+The file-capacity regression in `ports/fuzix/tools/fdcheck.c` additionally
+checks all 128 handles, both select versions and legacy copy canaries,
+descriptors 31/32/63/64/95/96/126/127 across fork/exec, high pipe/socket
+readiness, blocked high-descriptor wakeups, 20 concurrent popen streams,
+stream flushing/errors/exit, and repeated 1,024-entry global exhaustion and
+recovery. The larger open-file and select-registration tables allocate from
+supervisor memory at boot; they do not consume the fixed kernel-global bank.
+`test_file_limits.py` and `test_file_limits_x86.py` run on disposable roots.
+
+For a private bounded Fuse-X build (from the repository root):
+
+```sh
+make -C fuse-x BUILD="$PWD/build/fd-limits/kernel" FUSE_X_HEAP_PROFILE=bounded -j4 "$PWD/build/fd-limits/kernel/fuse-x"
+FUSE_X_HEAP_PROFILE=bounded FUSE_X_SHARED_LIBRARIES=0 python3 fuse-x/apps.py sh echo cat --build build/fd-limits/kernel
+python3 fuse-x/cc.py ports/fuzix/tools/fdcheck.c --static --heap-profile bounded --build build/fd-limits/sdk -o build/fd-limits/fdcheck.fxe
+python3 ports/fuzix/tools/test_file_limits.py --kernel build/fd-limits/kernel/fuse-x --build build/fd-limits/kernel --program build/fd-limits/fdcheck.fxe
+make -C ports/fuzix BUILD="$PWD/build/fd-limits/rvm" -j4 test-file-limits
+```
+
+Using a private matching seed avoids borrowing an application/shared-library
+pair that another workstream may rebuild during the test. The x86 harness
+accepts a separately built `--program` and `--output` with normal boot assets;
+`RCC_TEST_ACCEL=kvm` uses hardware acceleration on Linux.

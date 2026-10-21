@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn linear(pointer: u64) -> usize {
     let bank = pointer >> 16;
     let offset = pointer & 65535;
-    if bank >= 256 || offset >= BANK as u64 {
+    if bank >= BANKS as u64 || offset >= BANK as u64 {
         fatal(&format!(
             "pointer outside native compatibility memory: 0x{pointer:x}"
         ));
@@ -48,22 +48,15 @@ impl Runtime {
         release_from(&mut self.free, &mut self.allocated, ptr)
     }
     pub(super) fn enable_process_memory(&mut self) {
-        let end = address_space::KERNEL_START;
-        if self
-            .allocated
-            .iter()
-            .any(|(&start, &size)| start + size > end)
-        {
+        if self.allocated.iter().any(|(&start, &size)| !address_space::private_span(start, size)) {
             fatal("private allocation overlaps native kernel arena");
         }
-        self.free.retain(|start, size| {
-            if *start >= end {
-                false
-            } else {
-                *size = (*size).min(end - *start);
-                true
-            }
-        });
+        self.free = self.free.iter().flat_map(|(&start, &size)| {
+            address_space::private_free().into_iter().filter_map(move |(base, length)| {
+                let lo = start.max(base); let hi = (start + size).min(base + length);
+                (lo < hi).then_some((lo, hi - lo))
+            })
+        }).collect();
         self.memory.enable_processes();
     }
 }
@@ -488,6 +481,20 @@ mod tests {
         let large = runtime.allocate((BANK * 3) as u64);
         assert_ne!(large, 0);
         runtime.release(large);
+    }
+    #[test]
+    fn pointer_round_trip_and_wide_access_use_all_sixteen_bank_bits() {
+        let mut rt = Runtime::new();
+        for bank in [255, 256, 4096, 65535] {
+            let index = bank * BANK + BANK - 4;
+            assert_eq!(linear(pointer(index)), index);
+            assert_eq!(pointer(index) >> 16, bank as u64);
+            unsafe {
+                rcc_native_store(&mut rt, pointer(index), 0xfedc_ba98_7654_3210, 4);
+                assert_eq!(rcc_native_load(&mut rt, pointer(index), 4), 0xfedc_ba98_7654_3210);
+            }
+        }
+        assert_eq!(pointer(CELLS - 1), 0xffff_f9ff);
     }
     #[test]
     fn wide_memory_and_gep_normalize_bank_crossings() {

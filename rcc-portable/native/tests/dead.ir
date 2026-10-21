@@ -1,0 +1,17 @@
+module dead_blocks {
+ target native
+ function external i16 @absent() {}
+ function i16 @main() {
+  block 0:
+   br label 2
+  block 1:
+   %9 = call i16 func @absent()
+   br label 2
+  block 2:
+   %10 = phi i16 [7, label 0], [%9, label 1]
+   %11 = ne i16 %10, 7
+   ret %11
+  block 3:
+   br label 3
+ }
+}

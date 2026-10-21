@@ -2,6 +2,7 @@
 """Macro/directive regressions, Clang differential checks and C16 bootstrap."""
 from pathlib import Path
 import re
+import resource
 import subprocess
 import sys
 import tempfile
@@ -12,8 +13,12 @@ ROOT = HERE.parent
 CC = HERE / 'build/rcc-c'
 
 
-def run(args, *, text=None, success=True):
-    p = subprocess.run(list(map(str, args)), input=text, capture_output=True, text=True, timeout=30)
+def run(args, *, text=None, success=True, fd_limit=None):
+    def limit_files():
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(soft, fd_limit), hard))
+    p = subprocess.run(list(map(str, args)), input=text, capture_output=True, text=True, timeout=30,
+                       preexec_fn=limit_files if fd_limit is not None else None)
     assert (p.returncode == 0) == success, (args, p.stdout, p.stderr)
     return p
 
@@ -26,6 +31,8 @@ def tokens(text):
 # Compare after feeding Clang's output through our scanner too. This avoids
 # treating formatting differences as token changes, including quoted spaces.
 CASES = [
+    '#define A 1 + \\\r\n2\r\nA\r\n',
+    '#define A 7\rA\r',
     '#define A B\n#define B 9\nA A_suffix "A B" \'A\'\n',
     '#define I(x) ((x)+1)\n#define W(x) I(x)\nW(I(2))\n',
     '#define W(x) x\n#define A 5\nW(W(W(A)))\n',
@@ -71,6 +78,11 @@ def main():
             canonical = run([CC, '-E'], text=reference).stdout
             assert tokens(actual) == tokens(canonical), (i, source, actual, canonical)
         print(f'{len(CASES)} macro/conditional cases agree with Clang', flush=True)
+        deep = ROOT / 'c-test/tests/bugs/test_preprocessor_deep_includes.c'
+        actual = run([CC, '-E', deep], fd_limit=12).stdout
+        reference = run(['clang', '-E', '-P', '-undef', '-std=c11', deep]).stdout
+        assert tokens(actual) == tokens(run([CC, '-E'], text=reference).stdout)
+        print('32 nested includes agree with Clang with only 12 file descriptors', flush=True)
         local = directory / 'local'
         search = directory / 'search'
         local.mkdir(); search.mkdir()
@@ -109,6 +121,15 @@ def main():
         (local / 'bad.h').write_text('#if 1\n')
         (local / 'bad.c').write_text('#include "bad.h"\n#endif\n')
         assert 'unterminated conditional' in run([CC,'-E',local/'bad.c'],success=False).stderr
+        (local / 'large.h').write_bytes(b'/*' + b' ' * 35000 + b'*/\r\n#define LARGE(x) x + \\\r\n1\r\n')
+        (local / 'large.c').write_text('#include "large.h"\nLARGE(2)\n')
+        assert tokens(run([CC, '-E', local / 'large.c']).stdout) == ['2', '+', '1']
+        (local / 'zero.h').write_bytes(b'int before;\0int after;\n')
+        (local / 'zero.c').write_text('#include "zero.h"\n')
+        run([CC, local / 'zero.c'], success=False)
+        (local / 'directory.h').mkdir()
+        (local / 'directory.c').write_text('#include "directory.h"\n')
+        assert 'cannot read include' in run([CC, '-E', local / 'directory.c'], success=False).stderr
         print('header lookup, guards, pragma once, line tracking, CLI definitions, C16 characters and diagnostics passed',flush=True)
         # Compile all compiler translation units directly, using the same C16
         # headers as the guest. No Rust preprocessor participates here.

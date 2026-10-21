@@ -1,0 +1,63 @@
+{Module Todo/TodoList
+  {Export TodoListView RenderList DeleteTodo ToggleDone}
+  {Rules
+    {R "TodoListView"
+      {/@ TodoListView {App {State {NextId n_} {Todos todos...} {Filter f_}} _}}
+      {Div :class "flex flex-col gap-2" {RenderList f_ todos...}}
+    }
+
+    {R "RenderList/End"
+      {RenderList f_}
+      Empty
+    }
+
+    {R "RenderList/Item"
+      {RenderList f_ {Todo {Id id_} {Text text_} {Done done_}} rest...}
+      {...! 
+        {Div 
+          // :key id_
+          :class If(done_, "flex items-center gap-2 bg-green-100 p-2 rounded", "flex items-center gap-2 bg-yellow-100 p-2 rounded")
+          {Button 
+            :onClick ToggleDone(id_, done_) 
+            {If done_ "✅" "⬜"}
+          }
+          {Span 
+            :class If(done_, "line-through text-gray-500", "") 
+            text_
+          }
+          {Button 
+            :class "ml-auto bg-red-500 text-white px-2 py-1 rounded"
+            :onClick DeleteTodo(id_)
+            "Delete"
+          }
+        }
+        {RenderList f_ rest...}
+      }
+      :guard Or(Eq(f_, All), And(Eq(f_, Active), Not(done_)), And(Eq(f_, Completed), done_))
+    }
+
+    {R "RenderList/Skip"
+      {RenderList f_ {Todo {Id id_} {Text text_} {Done done_}} rest...}
+      {RenderList f_ rest...}
+      :guard Not(Or(Eq(f_, All), And(Eq(f_, Active), Not(done_)), And(Eq(f_, Completed), done_)))
+    }
+
+    {R "DeleteTodo"
+      Apply(DeleteTodo(id_), {State {NextId n_} {Todos before... {Todo {Id id_} ...} after...} {Filter f_}})
+      {State 
+        {NextId n_} 
+        {Todos before... after...} 
+        {Filter f_}
+      } 
+    }
+
+    {R "ToggleDone"
+      Apply(ToggleDone(id_, done_), {State {NextId n_} {Todos before... {Todo {Id id_} {Text text_} {Done done_}} after...} {Filter f_}})
+      {State 
+        {NextId n_} 
+        {Todos before... {Todo {Id id_} {Text text_} {Done Not(done_)}} after...} 
+        {Filter f_}
+      } 
+    }
+  }
+}

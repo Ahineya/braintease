@@ -1,0 +1,1 @@
+{"expected":"Y\n","use_runtime":true,"description":"Inline-asm output remains typed and defined in native continuation lowering, as used by MMIO read helpers"}

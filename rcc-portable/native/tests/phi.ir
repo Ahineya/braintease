@@ -1,0 +1,38 @@
+module phi_probe {
+ target native
+ function i32 @identity(i32 %1000000) {
+  block 0:
+   ret %1000000
+ }
+ function i16 @argument_reload(i16 %99) {
+  block 0:
+   %1 = call i32 func @identity(0)
+   br %99, label 1, label 2
+  block 1:
+   ret 9
+  block 2:
+   ret 0
+ }
+ function i16 @main() {
+  block 0:
+   %77 = call i16 func @argument_reload(65536)
+   %78 = eq i16 %77, 0
+   br %78, label 1, label 4
+  block 1:
+   %1000 = phi i32 [1, label 0], [%2000, label 2]
+   %2000 = phi i32 [2, label 0], [%1000, label 2]
+   %3000 = phi i32 [0, label 0], [%3001, label 2]
+   %4000 = call i32 func @identity(%1000)
+   %4001 = eq i16 %4000, %1000
+   br %4001, label 2, label 4
+  block 2:
+   %3001 = add i32 %3000, 1
+   %3002 = ult i16 %3001, 1000
+   br %3002, label 1, label 3
+  block 3:
+   %5000 = ne i16 %1000, 2
+   ret %5000
+  block 4:
+   ret 7
+ }
+}

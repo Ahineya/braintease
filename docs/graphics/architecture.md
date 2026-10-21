@@ -1,5 +1,150 @@
 # Graphics architecture
 
+## Terminal mouse interaction
+
+Mouse input is an opt-in terminal capability shared by Fuse-X and Riplix;
+applications keep their keyboard controls. The path is host pointer -> terminal
+emulator -> PTY mouse reports -> curses -> application/widgets. No application
+reads the desktop pointer behind its terminal's back.
+
+Use xterm SGR reporting (1006), with 1000 for buttons/wheel, 1002 for button
+motion, and 1003 for hover. Coordinates on the wire are one-based terminal cells;
+C and RFL APIs expose zero-based cells. Wheel events are discrete steps. Keep
+button transitions ordered, suppress redundant motion within a cell, and retain
+bounded input queues. Shift-drag remains terminal text selection. The terminal
+owns the graphical arrow pointer independently of the text insertion caret.
+
+The C interface follows ncurses: mousemask, KEY_MOUSE, getmouse, wenclose and
+wmouse_trafo. RFL extends InputEvent with optional MouseEvent data and explicit
+mouse subscription; existing key-only callers remain supported. Reusable hit
+testing and selection belong in lib/tui widgets. Suspend/exit disable reporting;
+resume restores the application's subscription. Unsupported terminals retain
+keyboard operation. These escape sequences do not imply complete xterm support.
+
+mux owns its tab bar, splitters and floating desktop window frames/task bar. It decodes outer mouse reports, selects the
+topmost target pane, translates coordinates and re-encodes according to that pane's
+terminal modes. Drags retain their initial owner until release/cancellation.
+Each pane retains independent reporting modes. See [desktop tabs](../terminal-multiplexer.md#floating-desktop-tabs) for window controls and composition. Resize, detach and reconnect
+cancel capture; terminal selection remains available through Shift. Terminal
+output from a pane must not directly alter the outer terminal's mouse modes.
+
+Implementation sequence:
+
+1. Shared terminal modes/report encoder, gterm and Nano-X terminal integration;
+   C curses input/lifecycle support and RFL event bindings.
+2. A mouse/widget probe, Commander click selection and wheel navigation;
+   mux click focus, tab selection, splitter dragging and pane-local forwarding.
+3. Reusable list/input/dialog interaction and adoption in Rift, Music,
+   Telegram, Fuse Chat and Commander dialogs.
+4. Reusable hover/capture widgets and richer interactions. Optional pointer-shape
+   requests may use OSC 22 with capability discovery; plain terminals retain
+   their default pointer.
+
+The initial milestone uses the existing host-native arrow; movement never
+requires redrawing the terminal. Pixel-granular reporting and pointer-shape
+negotiation are follow-ups. On future bare metal, the display/input backend
+supplies the pointer and the same terminal protocol remains applicable.
+
+Images are explicitly out of scope for this milestone. A later design should
+evaluate Kitty graphics/Sixel, reuse libraries/image, negotiate capabilities,
+bound decoded memory and define clipping, scrolling, alternate-screen cleanup
+and mux pane ownership before enabling image transport.
+
+The RVM text-console host reader also re-encodes decoded host mouse events as
+SGR input for the guest. Without that adapter, its keyboard event parser consumes
+the mouse packets before curses sees them. Console shutdown/signal/panic cleanup
+disables host mouse reporting. The graphical gterm path uses GX input directly.
+
+References: [xterm mouse protocols](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html),
+[ncurses mouse API](https://invisible-island.net/ncurses/man/curs_mouse.3x.html),
+[pointer shapes](https://sw.kovidgoyal.net/kitty/pointer-shapes/).
+
+### First implementation and verification
+
+The first three stages are implemented with cell-coordinate reporting. Shift-drag
+is the sole selection override; Command-drag is not assigned. The existing
+native arrow remains independent of the terminal's insertion cursor. Custom
+pointer shapes and images remain future work.
+The C compatibility subset exposes raw transitions, not synthesized double or
+triple clicks. Vertical wheel pulses map to buttons 4/5; smooth/pixel scrolling
+and horizontal wheel handling in curses are future extensions.
+
+RFL applications call `screen.mouse(MOUSE_DRAG)`, selecting **one** of
+`MOUSE_BUTTONS`, `MOUSE_DRAG`, `MOUSE_HOVER` or `MOUSE_OFF` (not a bitwise mask).
+`Screen.event()` / `Window.event()` return `kind == 2` and `Some(MouseEvent)`
+for mouse events; `event.key()` returns `NO_KEY` for them. Mouse coordinates are
+screen-relative even when read through a Window. `Rect.contains` provides hit
+testing, and `FilePanel.mouse(area, event)` shares geometry with its painter.
+
+Application controls now include:
+
+- Rift: click a text cell to place the caret, drag for a vi visual selection,
+  wheel to scroll three visual rows while keeping the caret visible, and click tabs, menu headings or footer
+  shortcuts. Insert mode survives a caret click; dragging enters Visual mode.
+  Hit testing uses the text engine's wrapped, tab-expanded Unicode layout.
+- Music: click a file/playlist row to select it; click the selected row again
+  to open/play it. Wheel navigates the pane under the pointer. Click transport
+  buttons or Shuffle; click/drag the progress line to seek. Wheel over the
+  time/volume row changes volume. A drag survives idle audio polling ticks.
+- Telegram: click to open a chat, position the search/message caret, or use
+  footer actions. Wheel over chats navigates selection; wheel over history
+  scrolls three lines and requests older history at the top. Sending remains
+  an explicit Enter/Send action.
+- Fuse Chat: click conversations, position the multiline composer caret, choose
+  `@file` completions and activate footer shortcuts. Wheel scrolls history by
+  three rows, navigates the conversation chooser or moves completion selection.
+  Input placement uses the existing Unicode wrapping engine and adapts to
+  narrow mux panes. A completion click never sends the draft.
+- Shared dialogs: click choices, position text-field carets, scroll text/menus,
+  and click accept/cancel/close hints. The file picker supports list selection,
+  wheel navigation and clicking the selected row again to open it. Popup mouse
+  coordinates are translated from screen space before widget hit testing.
+- Commander: its theme/About dialogs reuse the shared widgets; confirmation
+  hints are clickable and the file viewer accepts wheel scrolling.
+
+`Selection.mouse(area, event, count)` consumes list hits without indexing empty
+rows. `LineEdit.mouse(area, event)` places a caret on a grapheme boundary,
+including wide characters and horizontally scrolled fields. Neither widget
+presents frames or chooses an application's activation policy. Shift-drag
+continues to belong exclusively to terminal text selection in all these apps.
+The applications subscribe to button or drag reporting; continuous hover
+repainting is not enabled for these controls.
+
+Build the interactive hover/button probe:
+
+```sh
+target/release/rfl build rfl/examples/mouse.rfl --os fuse-x -o build/tui-mouse/mouse-demo.fxe
+target/release/rfl build rfl/examples/mouse.rfl --os macos -o build/tui-mouse/mouse-demo
+```
+
+Rebuild curses consumers together with their SDK libraries: independent native
+packages validate shared-library ABI fingerprints. Old packages paired with a
+new library are rejected. The regular Fuse-X build/install workflow handles
+the full collection; the commands above only build the probe, without updating
+a disk image. Shut down a guest before updating its image.
+
+Verification entry points:
+
+```sh
+python3 ports/graphics/tests/run.py
+python3 ports/fuzix/tools/test_mux_mouse.py
+python3 ports/fuzix/tools/test_curses.py --native
+python3 ports/fuzix/tools/test_curses.py
+python3 fuse-x/test_terminal_mouse.py
+python3 fuse-x/test_clipboard.py --terminals-only
+python3 rfl/tools/test_mouse.py
+python3 rfl/tools/test_apps_mouse.py --target both
+python3 ports/telegram/tests/test_ui.py
+python3 ports/chat/tests/test_interaction.py --ui-only
+cargo test -p rfl --test tui_widgets
+python3 ports/fuzix/tools/test_mux.py --system fuse-x
+```
+
+The RFL probe/Commander test expects the freshly built standalone probe and
+`fuse-x/build/apps/rfl-fm.fxe`. Graphical transport tests inject opt-in headless
+host events into both real terminal frontends, including Shift-drag clipboard
+selection. Tests use private disposable disks; no running user image is updated.
+
 ## Ownership and boundaries
 
 Riplix owns processes, PTYs, permissions and window ownership. A graphics service
@@ -13,21 +158,29 @@ window.
 sh / vi / top                  graphical applications
      │ PTY stream                       │ drawing
      ▼                                  ▼
-gterm: terminal model           Nano-X clients → server
-     │ RGB565 upload/copy/fill/present   │
+gterm: terminal model           LVGL / GX apps; Nano-X clients → server
+     │ upload/copy/fill/present         │
      └────────────────┬─────────────────┘
                 GX window/surface/event interface
                          │
         ┌────────────────┴────────────────┐
  RVM: kernel /dev/gfx              Fuse-X hosted backend
  physical scanout + DEVICE         native top-level windows
- one guest desktop              one macOS app identity
+ one guest desktop              or optional nested desktop
+                                one macOS app identity
 ```
 
 Keep terminal parsing and painting independent of the window manager. Nano-X
 is a source of graphics algorithms and a small application API, rather than a
 requirement to put an entire virtual desktop inside every Mac window. There is
 no X11 protocol or X server in this first milestone.
+
+Fuse-X's optional `--desktop` mode composes independent GX clients inside one
+host window. The portable window policy and opaque compositor live in
+`libraries/graphics/desktop.rs`; the host adapter supplies macOS presentation
+and input. Applications retain their own processes, PTYs and surfaces. This is
+a test desktop foundation; a Graphite shell and application launcher remain
+separate work. See [Fuse-X desktop](../fuse-x/desktop.md).
 
 ## GX version 1
 
@@ -41,11 +194,19 @@ structures to host structs or retain translated pointers after an operation.
 | Operation | Contract |
 | --- | --- |
 | INFO | Version, formats, capability flags and maximum dimensions/window count |
+| FORMATS | Optional format bit mask and preferred surface format; unsupported backends retain RGB565 |
 | CREATE | Checked dimensions/format, title metadata, opaque window and surface handles |
 | UPLOAD | Copy a caller-owned RGB565 rectangle synchronously, with a pixel stride |
+| UPLOAD_BGR888 | Optional synchronous B,G,R logical-octet source upload, with a source-cell stride; preserves all channel bits on XRGB8888 and quantizes on RGB565; advertised by GX_CAP_BGR888_UPLOAD |
+| BACKING_SCALE | Opt into 1×/2× physical surfaces while window geometry and input stay logical; zero follows display density, advertised by GX_CAP_BACKING_SCALE |
+| PRESENTATION_ZOOM | Optional per-window native presentation enlargement, 100–300 percent; the backend may reduce it to fit the monitor and returns the effective percentage; guest geometry, backing pixels and input coordinates remain unchanged; advertised by GX_CAP_PRESENTATION_ZOOM |
 | FILL | Fill a surface rectangle with one RGB565 colour |
+| FILL_RGB888 | Optional opaque fill with a 0x00RRGGBB colour; retains eight-bit channels on XRGB8888 |
 | COPY | Copy a rectangle on the same surface with memmove overlap semantics |
 | RASTER_FILL / RASTER_COPY | Bulk fill/copy in caller RAM, with validated strides and complete ranges; COPY requires disjoint spans |
+| RASTER_BGR888 | Optional BGR caller-RAM fill/blend with an A8 mask and opacity; complete spans and colours are checked before writes, overlapping mask/destination spans are rejected |
+| RASTER_A8 | Optional antialiased line/circle coverage in caller RAM, combining coverage with maximum; version 1 with all other fields zero probes support |
+| RENDER | Optional renderer-owned A8/colour targets with validated ordered drawing batches, explicit upload/readback and target-to-window blits; a zero-fields version-one request probes support |
 | PRESENT | Publish a completed surface snapshot; no retained userspace pointer |
 | EVENT | Nonblocking per-window event; type zero means no event |
 | STATE | Recover held keys, buttons, focus and pointer state after overflow |
@@ -56,12 +217,44 @@ structures to host structs or retain translated pointers after an operation.
 
 Handles are opaque and generation-checked. Applications must not assume the
 window and its surface always share a handle, even though this backend does so.
-Unknown/unsupported operations fail. Capability flags are the source of truth:
+Unknown/unsupported operations fail. Use capability flags or an operation's
+explicitly documented probe to discover support:
 the initial backend advertises RGB565, copy, fill and input, one window, and a
 640×480 maximum. It does not advertise multiple windows, resizing or title
 updates. CREATE accepts a title as metadata; the initial RVM window still uses
 its host title. A future backend should implement the same requests and add
 capabilities, rather than change application pointer or pixel conventions.
+
+Surface precision is a backend capability, independent of the CPU or C data
+model. `GX_INFO.format` retains its legacy RGB565 value. New clients query
+`GX_FORMATS`, whose `formats` is a 32-bit `GX_FORMAT_*` bit mask and `preferred`
+is a format identifier accepted by CREATE. An unsupported query means RGB565.
+Fuse-X advertises both RGB565 and opaque `GX_XRGB8888`, preferring the latter;
+RVM/RBF retain their existing RGB565 devices and requests. No VM driver or
+scanout buffer is widened by the hosted implementation.
+
+The full-colour ABI specifies eight bits per R/G/B channel, not a host memory
+layout. Existing UPLOAD/scaled/indexed sources and FILL colours remain RGB565,
+including on a full-colour surface; the backend expands them once. BGR888
+upload and FILL_RGB888 provide full precision, COPY preserves it, and PRESENT
+publishes an immutable snapshot. The hosted backend stores opaque RGBA32
+pixels directly for presentation and does not round-trip them through RGB565.
+Resize preserves overlapping pixels in their original precision; backing-scale
+changes allocate a fresh surface for repaint. There is no alpha-compositing
+contract in this extension.
+
+Presentation zoom is independent of backing density. Fuse-X normally maps one
+guest logical pixel to one native window point. `GX_PRESENTATION_ZOOM` enlarges
+that mapping for bitmap applications such as LGeneral without reallocating or
+resampling the guest surface. Native input and resize events map back through
+the same scale. The requested zoom is retained when fitting to a smaller
+monitor, so moving the window to a larger display can restore it. Applications
+that do not request this capability keep the existing presentation path.
+
+Future Riplix x64 graphics should implement this format discovery and choose
+its preferred full-colour scanout/storage independently. LP64 buffer adapters
+will still need their own pointer/stride contract: the current C16 BGR888 source
+uses three logical octet cells per pixel, not a castable host byte buffer.
 
 Events carry the target window, sequence, type and typed payload. Keyboard codes
 are USB HID usages, pointer coordinates are content pixels, wheel values are
@@ -197,6 +390,27 @@ DMA spans. Fuse-X performs page-aware bulk operations on its guest memory.
 Neither backend retains guest pointers or presents automatically. The driver
 uses these operations for large fills and copies, with scalar fallbacks. General
 raster modes retain their software implementation.
+
+Fuse-X additionally implements optional `GX_RASTER_A8` for bounded generic
+geometry. It copies and validates up to 8192 line/circle records before writing
+the destination, clips extreme signed coordinates before rasterization, and
+preserves strided padding. Source/destination spans must be disjoint. A8 samples
+use the low eight bits of each C16 cell; `GX_A8_CLEAR` clears only active pixels,
+otherwise new coverage combines with existing samples using maximum. The host
+keeps no caller pointer and performs no window presentation. This operation
+has an explicit all-zero-fields version-1 probe, leaving the existing 16-bit
+capability flags unchanged. Older backends reject it and applications retain
+their portable rasterizer. LVGL plots use this path to prepare one coverage
+image per changed viewport, then blend that image through `GX_RASTER_BGR888`.
+
+The optional [retained rendering contract](retained-rendering.md) removes the
+colour-buffer round trip for supported LVGL primary-layer drawing. Targets use
+packed native pixels behind window-owned handles; the portable software core
+has no C16, macOS or hardware dependency. The C16 ioctl envelope remains a
+separate adapter from future native ABI interfaces. Existing raster/upload
+operations and software fallbacks remain available. The first implementation
+is hosted Fuse-X; it does not modify or implement the ongoing x64 kernel or
+framebuffer work.
 
 Heap growth can use virtual banks 8–30 (23 banks), leaving stack bank 31 and the
 C ABI unchanged. Initial executable data remains capped at 16 banks. This gives

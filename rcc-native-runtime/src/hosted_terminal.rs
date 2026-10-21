@@ -294,6 +294,81 @@ pub(super) fn metrics() -> (u32, u32) {
         (r.width, r.height)
     })
 }
+
+/// Bake the same profile-selected glyphs into a small boot-console atlas.
+/// Only this build-time exporter needs CoreText; consumers blend alpha bytes.
+#[allow(dead_code)]
+pub(super) fn boot_atlas(height: u32) -> Result<Vec<u8>, String> {
+    if !(12..=48).contains(&height) {
+        return Err("boot font height must be between 12 and 48 pixels".into());
+    }
+    RENDERER.with(|renderer| {
+        let mut r = renderer.borrow_mut();
+        if r.width == 0 || r.width > 64 || r.height == 0 || r.height > 128 {
+            return Err("unsupported terminal font metrics".into());
+        }
+        let chars = ['i' as u16, 'M' as u16, 'W' as u16];
+        let mut glyphs = [0; 3];
+        let mut advances = [Size { width: 0.0, height: 0.0 }; 3];
+        let monospaced = unsafe {
+            CTFontGetGlyphsForCharacters(r.font, chars.as_ptr(), glyphs.as_mut_ptr(), 3)
+                && {
+                    CTFontGetAdvancesForGlyphs(r.font, 0, glyphs.as_ptr(), advances.as_mut_ptr(), 3);
+                    advances[0].width > 0.0 && advances.iter().all(|a| (a.width - advances[0].width).abs() < 0.001)
+                }
+        };
+        if !monospaced {
+            return Err("boot font must be monospaced; check FUSE_X_TERM_FONT and access to macOS's font service (or use --font-atlas/--font rom)".into());
+        }
+        let width = (height * r.width).div_ceil(r.height);
+        let (sw, sh) = (r.width as usize * 2, r.height as usize * 2);
+        let (w, h) = (width as usize, height as usize);
+        let mut atlas = b"GTF1".to_vec();
+        for value in [width, height, 256] {
+            atlas.extend(value.to_le_bytes());
+        }
+        for code in 0..256 {
+            // Keep the boot console's ASCII/CP437 slots, including its banner.
+            let scalar = match code {
+                32..=126 => char::from_u32(code).unwrap(),
+                0xdb => '█',
+                0xbb => '╗',
+                0xc9 => '╔',
+                0xc8 => '╚',
+                0xbc => '╝',
+                0xcd => '═',
+                0xba => '║',
+                _ => ' ',
+            };
+            let mask = r.mask(&scalar.to_string(), 1);
+            // Area-average the Retina masks, retaining grayscale coverage
+            // rather than enlarging the old one-bit font's individual pixels.
+            for y in 0..h {
+                for x in 0..w {
+                    let (left, right) = (x * sw, (x + 1) * sw);
+                    let (top, bottom) = (y * sh, (y + 1) * sh);
+                    let mut sum = 0usize;
+                    for sy in top / h..bottom.div_ceil(h) {
+                        let wy = bottom.min((sy + 1) * h) - top.max(sy * h);
+                        for sx in left / w..right.div_ceil(w) {
+                            let wx = right.min((sx + 1) * w) - left.max(sx * w);
+                            sum += mask[sy * sw + sx] as usize * wx * wy;
+                        }
+                    }
+                    atlas.push(((sum + sw * sh / 2) / (sw * sh)) as u8);
+                }
+            }
+        }
+        let name = unsafe {
+            let name = CTFontCopyPostScriptName(r.font);
+            let result = text(name as *mut Object).unwrap_or_default();
+            CFRelease(name);
+            result
+        };
+        eprintln!("Boot console: gterm font {name}, {width}x{height} pixels");
+        Ok(atlas)
+    })
+}
 #[derive(Clone, Debug)]
 pub(super) struct Cell {
     pub text: String,

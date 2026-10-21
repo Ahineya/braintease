@@ -1,0 +1,40 @@
+{
+  "revision": "1ef60af944de207e0d5176905a0759ba12e6ee8d",
+  "source_manifest": "../../fusede/icons/lucide/UPSTREAM.json",
+  "sizes": [
+    16,
+    32
+  ],
+  "names": [
+    "arrow-left",
+    "arrow-right",
+    "arrow-up",
+    "calculator",
+    "file",
+    "file-code",
+    "folder",
+    "grid-2x2",
+    "house",
+    "info",
+    "maximize",
+    "minus",
+    "play",
+    "power",
+    "refresh-cw",
+    "save",
+    "search",
+    "settings",
+    "terminal",
+    "trash",
+    "x"
+  ],
+  "representation": "Static A8 masks; private glyph transport behind named icon widgets",
+  "rasterizer": {
+    "sharp": "0.35.5",
+    "vips": "8.18.7",
+    "rsvg": "2.63.2",
+    "supersampling": 4
+  },
+  "masks_sha256": "9395fcec5467519dca8bea82de720faf15dfa1a6be2b388a848b5fb883e61faa",
+  "generated_sha256": "4a51ed6f8fab3ea834b9941f4a37a3a8304fe7fa5bda27b21e4cdc08f6a003eb"
+}

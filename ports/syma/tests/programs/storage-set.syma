@@ -1,0 +1,7 @@
+{Universe
+ {Program {Effects {Pending {StorageSet s {Store Local} {Key "test"} {Value {List 42 "ї"}}}} {Inbox}}}
+ {Rules
+  {R done {Program {Effects p_ {Inbox {StorageSetComplete s Ok}}}}
+   {Program {Effects {Pending {Exit 0}} {Inbox}}}}
+ }
+}

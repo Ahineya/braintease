@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y",
+  "description": "Static compound literal arrays have backing storage and pointer initializers"
+}

@@ -2,6 +2,9 @@
 /* Prompt escapes shared by the Ripple and hosted V7 shells. */
 #include "shell-prompt.h"
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <termios.h>
 #include <string.h>
 #include <pwd.h>
 #include <utsname.h>
@@ -166,4 +169,42 @@ const char *shell_prompt_tail(const char *text) {
     const char *tail;
     geometry(text,&tail);
     return tail;
+}
+
+/* Hex keeps control bytes and shell quoting out of the terminal protocol.
+ * Fixed storage does not allocate from the Bourne shell's brk/stak arena. */
+void shell_mux_report(const char **argv) {
+    static char packet[2600], command[1024], directory[256];
+    const char *mux=getenv("MUX"),*base,*part;
+    unsigned i,j,n=0,at=0;int fd,saved_errno=errno,group;
+    if(!mux||strcmp(mux,"1"))return;
+    group=tcgetpgrp(0);
+    if(group<=0||group!=getpgrp()||!isatty(0)||!isatty(1)||!getcwd(directory,sizeof(directory)))goto done;
+    if(argv&&argv[0]){
+        base=strrchr(argv[0],'/');base=base?base+1:argv[0];
+        /* Session management must not restart mux recursively on restore. */
+        if(!strcmp(base,"mux"))argv=NULL;
+    }
+    if(argv)for(i=0;argv[i];i++){
+        if(n+3>=sizeof(command))goto done;
+        if(i)command[n++]=' ';command[n++]='\'';
+        for(j=0;argv[i][j];j++){
+            part=argv[i][j]=='\''?"'\\''":NULL;
+            if(n+(part?4:1)+2>=sizeof(command))goto done;
+            if(part){memcpy(command+n,part,4);n+=4;}else command[n++]=argv[i][j];
+        }
+        command[n++]='\'';
+    }
+    command[n]=0;
+    at=snprintf(packet,sizeof(packet),"\033]777;mux;1;%d;",group);
+    for(i=0;i<2;i++){
+        part=i?command:directory;
+        if(!*part)packet[at++]='-';
+        while(*part){unsigned c=(unsigned char)*part++;packet[at++]="0123456789abcdef"[c>>4];packet[at++]="0123456789abcdef"[c&15];}
+        packet[at++]=i?7:';';
+    }
+    fd=1;i=0;
+    while(i<at){int count=write(fd,packet+i,at-i);if(count>0)i+=count;else if(count<0&&errno==EINTR)continue;else break;}
+done:
+    errno=saved_errno;
 }

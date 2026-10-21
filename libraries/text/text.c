@@ -387,6 +387,18 @@ int text_indent(TextBuffer *b, unsigned long first, unsigned long last, unsigned
 static int identifier(int c);
 static unsigned long structural_skip(TextBuffer *b, unsigned long p) {
     unsigned long q, len = text_length(b); int c = text_byte(b, p), next = text_byte(b, p + 1), close = 0, two = 0;
+    if (b->language == 15) {
+        int raw = c == 'r' && next == '"';
+        if (raw || c == '"') {
+            for (q = p + (raw ? 2 : 1); q < len; ++q) {
+                c = text_byte(b, q);
+                if (!raw && c == '\\') { if (q + 1 < len) ++q; continue; }
+                if (c == '"') return q + 1;
+            }
+            return len;
+        }
+        if (c != ';' && !(c == '/' && (next == '/' || next == '*'))) return p;
+    }
     if (b->language == 13) {
         if (c=='\'' || ((c=='R'||c=='r') && (next=='E'||next=='e') &&
             (text_byte(b,p+2)=='M'||text_byte(b,p+2)=='m') &&
@@ -402,14 +414,14 @@ static unsigned long structural_skip(TextBuffer *b, unsigned long p) {
         }
         return len;
     }
-    if ((b->language == 1 || b->language == 14 || b->language == 10 || b->language == 4) && c == '/' && next == '/') {
+    if ((b->language == 1 || b->language == 14 || b->language == 15 || b->language == 10 || b->language == 4) && c == '/' && next == '/') {
         for (q = p + 2; q < len && text_byte(b, q) != '\n'; ++q) {} return q;
     }
     if (((b->language == 2 || b->language == 3 || b->language == 6 || b->language == 9 || b->language == 12) && c == '#') ||
-        ((b->language == 6 || b->language == 11 || b->language == 12) && c == ';')) {
+        ((b->language == 6 || b->language == 11 || b->language == 12 || b->language == 15) && c == ';')) {
         for (q = p + 1; q < len && text_byte(b, q) != '\n'; ++q) {} return q;
     }
-    if ((b->language == 1 || b->language == 14 || b->language == 10) && c == '/' && next == '*') { close = '/'; two = 1; }
+    if ((b->language == 1 || b->language == 14 || b->language == 15 || b->language == 10) && c == '/' && next == '*') { close = '/'; two = 1; }
     else if (b->language == 4 && c == '(' && next == '*') { close = ')'; two = 1; }
     else if (b->language == 4 && c == '{') close = '}';
     if (close) {

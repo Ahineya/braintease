@@ -66,6 +66,9 @@ static unsigned keyword(TextBuffer *b, unsigned long at, unsigned long end) {
         "return", "set", "static", "super", "switch", "this", "throw", "true", "try", "typeof",
         "undefined", "var", "void", "while", "with", "yield"
     };
+    static const char *const syma[] = {
+        "Apply", "Args", "Defs", "Effects", "Export", "False", "Import", "Inert", "MetaSafe", "Module", "Open", "Program", "R", "RuleRules", "Rules", "True", "Unbound", "Universe", "Var", "VarRest", "as", "from", "macro", "open"
+    };
     static const char *const json[] = {"false", "null", "true"};
     static const char *const basic[] = {
         "abs", "and", "append", "as", "call", "case", "close", "cls", "color", "declare",
@@ -74,6 +77,7 @@ static unsigned keyword(TextBuffer *b, unsigned long at, unsigned long end) {
         "or", "output", "print", "randomize", "rem", "right", "rnd", "select", "sgn", "sleep",
         "step", "stop", "str", "sub", "tab", "then", "timer", "to", "ucase", "wend", "while", "write", "xor"
     };
+    if (b->language == 15) return word_in(b, at, end, syma, sizeof(syma) / sizeof(syma[0]), 0) ? 2 : 0;
     if (b->language == 14) return word_in(b, at, end, javascript, sizeof(javascript) / sizeof(javascript[0]), 0) ? 2 : 0;
     if (b->language == 13) return word_in(b, at, end, basic, sizeof(basic) / sizeof(basic[0]), 1) ? 2 : 0;
     if (b->language == 4) return word_in(b, at, end, pascal, sizeof(pascal) / sizeof(pascal[0]), 1) ? 2 : 0;
@@ -99,9 +103,11 @@ static void paint(TextBuffer *b, struct Paint *out, unsigned long at, unsigned k
     }
 }
 #include "javascript.inc"
+#include "syma.inc"
 static unsigned lex_line(TextBuffer *b, unsigned long row, unsigned state, struct Paint *out) {
     unsigned long p = text_start(b, row), end = text_endline(b, row), q;
     unsigned lang = b->language, kind; int c, quote, escaped;
+    if (lang == 15) return syma_line(b, row, state, out);
     if (lang == 14) return javascript_line(b, row, state, out);
     if (!lang) { while (p < end) paint(b, out, p++, 0); return 0; }
     if (lang == 8) {

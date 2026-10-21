@@ -1,0 +1,122 @@
+{
+  "metadata": {
+    "name": "Untitled",
+    "created": "2025-11-12T00:18:09.249Z",
+    "modified": "2025-11-12T03:28:10.616Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "bUeG-DVbm1-gQkFAqoT7a",
+      "type": "code",
+      "content": ":clear\n:module multiline\n{Module R\n    {Rules\n        {fn id(x_) => x_}\n        \n        {fn if(True a_ b_) => a_}\n        {fn if(False a_ b_) => b_}\n\n        {fn apply(composed(Inert(fna_ fnb_)) args..) => apply(fna_ apply(fnb_ args..))}\n        {fn apply(carried(Inert(fn_(carg_))) args..) => apply(fn_ carg_ args..)}\n        {fn apply(carriedLast(Inert(fn_(carg_))) args..) => apply(fn_ args.. carg_)}\n        {fn apply(fn_ args..) => fn_(args..)}\n\n        {fn map(fn_ {}) => {/!}}\n        {fn map(fn_ {item_ ..}) => {apply flatten {{apply fn_ item_} {apply map fn_ {..}}}}}\n\n        {fn reduce(fn_ {} acc_) => acc_}\n        {fn reduce(fn_ {curr_ ..} acc_) => {apply reduce fn_ {..} {apply fn_ acc_ curr_}}}\n\n        {fn filter(fn_ {}) => {/!}}\n        {fn filter(fn_ {item_ ..}) => {apply flatten {\n            {apply if {apply fn_ item_} item_ {}} \n            {apply filter fn_ {..}}\n        }}}\n\n        {fn take(0 list_) => {/!}}\n        {fn take(n_ {item_ ..}) => {apply flatten {\n            item_\n            {apply take Sub(n_ 1) {..}}\n        }}}\n\n        {fn skip(0 list_) => list_}\n        {fn skip(n_ {item_ ..}) => {apply flatten {\n            {apply skip Sub(n_ 1) {..}}\n        }}}\n\n        {fn flatten({}) => {/!}}\n        {fn flatten({.. {things..} ..}) => {apply flatten {.. things.. ..}}}\n        {fn flatten({..}) => {..}}\n\n        {fn both(fna_ fnb_ arg_) => {{apply fna_ arg_} {apply fnb_ arg_}}}\n\n        {fn partial(fn_ arg_) => carried(Inert(fn_(arg_)))}\n        {fn partialLast(fn_ arg_) => carriedLast(Inert(fn_(arg_)))}\n        {fn pipe(fna_ fnb_) => composed(Inert(fnb_ fna_))}\n        {fn compose(fna_ fnb_) => composed(Inert(fna_ fnb_))}\n\n        {fn pipeMany(fns..) => reduce(pipe {fns..} id)}\n    }\n\n    {RuleRules\n      R(\n        \"Sugar/RuleShorthand\",\n            {fn SYMAWHAT_ => SYMAREPLACE_},\n            {R ReplaceAll(ToString(SYMAWHAT_), \" \", \"/\") SYMAWHAT_ SYMAREPLACE_ :innermost}\n        )\n    }\n}\n:end\n:import R macro\n",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Module R defined successfully\n"
+        },
+        {
+          "type": "text",
+          "content": "You can now import it with: :import R\n"
+        },
+        {
+          "type": "text",
+          "content": "Importing notebook module R (with macros)...\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 1 meta-rules\n"
+        },
+        {
+          "type": "text",
+          "content": "Notebook module R imported successfully\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 27 rules\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 1 meta-rules\n"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "kq5B3btERlBd4pgOJ0F2I",
+      "type": "code",
+      "content": "R/map(ToUpper {\"a\" \"b\"}) ; {\"A\" \"B\"}\n\nR/apply(R/partial(Concat \"hello\") \" \" \"world\") ; \"hello world\"\n\nR/apply(\n    R/compose(\n        R/partial(Add 5) \n        R/compose(\n            R/partial(Add 5) \n            R/partial(Add 5)\n        )\n    )\n    2\n) ; 17\n\nR/map(\n    R/pipeMany(\n        ToUpper \n        R/partial(Concat \"hello\")\n        ToLower\n    ) \n    {\"a\" \"b\"}\n)     ; {\"helloA\" \"helloB\"}\n\nR/map(\n    R/compose(\n        ToUpper \n        R/partial(Concat \"hello\")\n    ) \n    {\"a\" \"b\"}\n)  ; {\"HELLOA\" \"HELLOB\"}\n\n\n\n",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Bundle\n  {\"A\" \"B\"}\n  \"hello world\"\n  17\n  {Inert\n    ToLower\n    Inert\n    R/carried\n    Inert\n    Concat\n    \"hello\"\n    Inert\n    ToUpper\n    R/pipeMany\n    \"a\"\n    Inert\n    ToLower\n    Inert\n    R/carried\n    Inert\n    Concat\n    \"hello\"\n    Inert\n    ToUpper\n    R/pipeMany\n    \"b\"\n  }\n  {\"HELLOA\" \"HELLOB\"}\n}"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "R6uVz-V3njWnQd-Cxj7II",
+      "type": "code",
+      "content": "R/reduce(Concat R/apply(R/pipeMany(\n    ToUpper \n    R/partial(Concat \"hello \")\n    R/partial(SplitBy \"\")\n    R/partial(R/filter IsStr)\n    R/partial(\n        R/partial(R/both R/pipe(\n            R/partial(R/take 1)\n            R/partial(R/map ToUpper)\n        )) \n        R/partial(R/skip 1)\n    )\n    R/flatten\n) \"world!\") \"\")\n",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "\"Hello WORLD!\""
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "aEaP7xVIuenX_EN_4PDGO",
+      "type": "code",
+      "content": "R/apply(R/both(\n    R/pipe(\n        R/partial(R/take 1)\n        R/partial(R/map ToUpper)\n    )\n    R/partial(R/skip 1)\n    {\"a\" 2 3 4}\n))",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{{{\"A\"} {2 3 4}}}"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "uMJ8V2fC2fCvlIQPrXmgJ",
+      "type": "code",
+      "content": "\nR/apply(R/partial(R/both\n    R/partial(R/take 1)\n) {1 2 3 4})\n",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{R/both\n  {R/carried {Inert {R/take 1}}}\n  {1 2 3 4}\n}"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "uWGt1ONxJ7YPbU5bhFaGz",
+      "type": "code",
+      "content": "; R/reduce(Add {1 2 3} 0)\n\nR/apply(R/reduce(R/pipe {ToUpper R/partial(Concat \"hello\") ToLower} R/id) \"world\")",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "\"helloworld\""
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    }
+  ]
+}

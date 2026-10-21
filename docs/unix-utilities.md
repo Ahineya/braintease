@@ -11,7 +11,28 @@ assume an interactive development system on both Riplix/RVM and Fuse-X. This is
 a source and packaging audit; candidate effort estimates are not compilation or
 runtime acceptance results. No utilities were ported during the audit.
 
-## Current coverage
+## Updates after the original audit
+
+The 2026-10-21 batch adds **tree, getopt, cron/crond, at, atrun and cal** to
+the RVM/Fuse-X builds and image installers, plus the x64 offline/system
+profiles. Cron has a foreground
+svcd definition, installed but disabled, and runs atrun once per minute when
+explicitly enabled. See the [userspace guide](../ports/fuzix/README.md#tree-option-parsing-and-scheduled-jobs)
+for configuration, queue ownership and recovery details. The shell also now
+supports `set --`, preserves empty arguments in quoted "$@", and uses kernel
+append mode for `>>` so concurrent jobs do not overwrite each other's output.
+
+The `[` alias is already installed; tar now extracts symbolic links. The shared
+`libraries/deflate/gzip.c` decoder supplies streaming gzip infrastructure, though
+standalone gunzip/zcat commands remain future work. Real experimental SSH tools
+live under `ports/ssh`, separately from upstream's unrelated local shell.
+Guest fsck remains deferred while the filesystem migration is being planned;
+mount/unmount administration is still useful independent of that choice.
+
+Counts and missing-command tables below record the **original October 18 audit**;
+the completed commands above should not be interpreted as remaining work.
+
+## Audit-time coverage
 
 The [shared utility inventory](../fuse-x/apps.py) contains **115 programs and
 aliases**, and the current native application report marks all 115 built, with

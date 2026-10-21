@@ -1,12 +1,32 @@
 # Self hosted development toolchain
 
 Decision: build a portable C toolchain around a cproc-derived frontend that
-emits RCC IR. Preserve the existing C16 data model and both Ripple and native
-Fuse-X targets. Full compiler capabilities and independent guest builds are the
+emits RCC IR. Preserve the existing C16 data model and Ripple/native targets.
+The native guest-toolchain priority is now freestanding x86_64 Riplix; hosted
+Fuse-X output follows later. Full capabilities and independent guest builds are the
 destination; restricted early implementations are milestones, not a permanent
 language subset.
 
+The C16 contract remains the basis of the implemented bootstrap stages below.
+The accepted [native x64 migration](../arch/native-x64.md) adds a separate LP64
+application ABI, then a native kernel build, while retaining Ripple/C16.
+Conventional x64 applications initially use host Clang; this lets native process
+and syscall acceptance proceed independently of RCC/RFL layout changes.
+
+Hosting RFL is also distinct from its output ABI: a cross-compiled native RFL
+CLI can initially emit the existing compatibility IR and use guest backend
+tools. It needs Rust platform/standard-library support and feature separation;
+the current Rust-to-RCC prototype is not a general compiler-hosting solution.
+Running that CLI does not require guest rustc/Cargo. Rebuilding RFL itself
+inside the guest requires a further Rust toolchain milestone.
+
 ## Architecture
+
+Application distribution is separate from compiler bootstrapping. The accepted
+[package-management plan](../packages/README.md) adds shared host/guest package
+creation and repository installation, so individual application updates do not
+require reinstalling a complete OS image. It preserves explicit target/ABI
+identity while the native x64 migration proceeds.
 
 ```text
 C source -> portable C preprocessor -> C16 C frontend -> RCC IR
@@ -90,10 +110,12 @@ correctness or executable generation. Temporary probes are not a supported SDK.
    assembler, linker and SDK installation. Rebuild the compiler with itself,
    compare subsequent bootstrap generations, run the compatibility suite and
    build libc, applications and the C kernel inside the guest.
-4. **Independent native Fuse-X toolchain.** Implement native emission and
-   packaging with the hosted continuation ABI. Build and execute FXE programs
-   without host RCC, Cranelift or platform linker services. Exercise fork,
-   scheduling, signals, exec and GUI applications.
+4. **Independent native x86_64 toolchain, then hosted Fuse-X.** Lower RCC IR
+   through the checked C16 continuation ABI into QBE, followed by a guest x86
+   assembler and linker. Build and execute native Riplix applications without
+   host RCC, Cranelift or platform linker services. Exercise process exit,
+   scheduling, fork, signals, exec and applications. Hosted native output and
+   GUI acceptance follow the x86 milestone.
 5. **Optimization and language expansion.** Bring guest tool quality toward
    host RCC and expand tested C11 support. RFL continues to share RCC IR; a
    self-hosted RFL frontend is separate work using the same backend toolchain.
@@ -217,3 +239,104 @@ three-generation bootstrap remains unverified.
 Further gates include correctly rounded floating-literal conversion (the SDK's
 decimal parser can differ from the host by one ULP), response files for links
 that exceed the exec argument budget, and rebuilding startup/libc from source.
+
+## Native x86 feasibility milestone
+
+Latest OS milestone (2026-10-20): a guest-built C frontend compiles the current
+71-unit C16 kernel/embedded-program inventory inside x64 Riplix. Its IR matches
+the host reference exactly and boots successfully after host backend emission
+and linking with recorded native platform objects. Process, pipe, shell, timer
+and two-boot persistence checks pass. This does not yet replace the host kernel
+backend, platform objects, independent application packages or EFI/image tools.
+See the [guest-assisted OS bootstrap and remaining gates](../../rcc-portable/native-sdk/OS_BOOTSTRAP.md).
+
+The portable frontend, an initial RCC IR-to-QBE lowering tool, C16 QBE 1.3,
+a standalone ELF64 x86 assembler, an RXE1 linker and a native driver now have
+freestanding guest builds. QEMU acceptance runs raw C with headers/macros
+through all stages, final linking and application execution inside the x86
+guest. `rcc-native-cc source.c -o program` orchestrates this path; seed tools,
+kernel and SDK are still host-built. The installed Ripple `cc` stays unchanged.
+Relocatable object metadata, separate C compilation, cross-file callbacks and
+logical globals/initializers are now implemented. Archive creation/selection and packed numeric initializers are implemented. Full
+language/SDK integration and rebuilding native compiler tools remain the next
+gates. See the
+[implementation and commands](../../rcc-portable/README.md#native-x86-feasibility-tools).
+
+The lowering retains logical memory, function tokens, compact live continuation
+slots, parameter reloads and loop checkpoints. This is a scalar/FP/control-flow
+vertical slice with relocatable globals and scalar/array/struct/string initializers;
+variadic scalar calls/definitions and va_list are implemented; aggregate
+call/SSA lowering and numeric FP conversions remain explicit errors. Its minimal startup uses the real process
+exit syscall. It does not activate cproc's ordinary platform ABI backend or
+claim an LP64 migration. QBE supplies native instruction selection/register
+allocation below these platform rules.
+
+Broader performance work must add portable IR optimization and direct leaf
+calls, not just tune QBE: checked logical-memory helpers conceal scalar-local
+promotion opportunities from an ordinary native optimizer. Retain the current
+host backend as a correctness/performance comparison. Full self-hosting also
+needs the bootstrap compiler defects and numeric-conversion gaps listed in the
+implementation README resolved, plus larger real translation units.
+
+The native driver accepts `-c`, multiple sources and reusable ELF objects.
+`RCCMOD01` metadata survives QBE/assembly inside each object; the linker assigns
+final function tokens and global addresses, scopes private names by owning
+object, validates represented IR ABIs and emits existing RXE1 initializer rows.
+Only the unit defining main supplies startup. Globals retain the existing small
+bank-1 or large bank-32..47 layouts; function initializer tokens are remapped by
+the existing loader. There is no new executable/runtime ABI. Aggregate source
+declarations are erased to storage extents in RCC IR, so aggregate ABI checking
+can validate those extents, not complete source field/pointee/qualifier types.
+
+Packed numeric initializer runs and C16-aware archive extraction now remove
+much of the data overhead and keep unused library members out of executables.
+The guest can create deterministic ordinary `.a` files and link them without
+host services. Main startup accepts argc/argv/envp using the existing kernel
+argument block. A 4,096-cell table's object shrank from 300,696 to 14,048 octets.
+
+The native variadic ABI now uses caller-owned packed C16 cells and a hidden
+logical cursor, matching the existing continuation ABI. Mixed scalar/pointer/
+callback/64-bit/double tails, default float promotion, copied and forwarded
+lists, recursion, empty tails, more than 64 extra arguments and bank boundaries
+have focused coverage. Function metadata distinguishes variadic declarations
+from an explicit pointer parameter.
+
+`rcc-portable/native-sdk` prepares a source SDK, its guest Makefile, ordinary
+`libc.a` and three startup variants. `rcc-native-cc --sdk DIR` selects its headers,
+existing bounded heap profile and libc startup. The entry initializes stdio and
+arguments/environment, then uses libc exit/atexit flushing. The syscall bridge
+yields the existing process request; no new runtime import or package ABI is
+introduced. Dead CFG blocks and their phi inputs are pruned before lowering,
+and the scanner normalizes CRLF before line splicing.
+
+Host assessment compiles all 78 bootstrap libc/startup units and all 22 native
+tool units (with the existing private strtoull declaration shim). This is not
+full libc or a compiler self-rebuild. Math/decimal floating formatting, numeric
+conversions, aggregate lowering and nonlocal jumps remain coverage gates. The
+private QEMU SDK workflow rebuilds every listed raw source, creates the archive,
+links and executes programs, compares host/guest linking of identical objects
+and reexecutes after a fresh boot. Reports state completion separately from
+host bootstrapping.
+
+That complete bootstrap SDK acceptance now passes: all 78 units are rebuilt
+from raw C in x86, archived and used by executed programs, including process,
+variadic, argument, cell-memory and qsort checks. Fresh-boot execution and
+independent same-object host-link parity pass. The frontend now buffers and
+closes included headers, so include nesting no longer consumes one open stream
+per header; the nested-include regression passes in the real guest as well.
+
+`native-sdk/source_tools.py` now prepares a movable source bundle and guest
+Makefile for four native tools, including the parser conversion support. Its
+23 translation units build through the portable pipeline on the host and give
+identical executables to the four already run in x86. Guest Make header lists
+use bounded stamp groups, preserving incremental builds without its macro
+buffer overflow. Full native guest source rebuilding and generation comparison
+remain acceptance gates. Native installation and kernel rebuilding remain
+subsequent milestones. Native ELF storage and logical C16 globals remain
+separate even though both have relocation/initialization support.
+
+Actual x86 guest Make also passes both generated rule sets and rebuilds a
+working archiver from raw C against the bootstrap SDK. It creates a library,
+does no work on an unchanged rebuild and executes after a fresh boot. The
+remaining tool stages and subsequent generations still need guest source
+rebuilding; this single-tool check does not establish full self-hosting.

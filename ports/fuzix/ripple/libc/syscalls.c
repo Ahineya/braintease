@@ -131,7 +131,7 @@ int execvp(const char *p, char *const a[]) {
     if (strchr(p, '/'))
         return execv(p, a);
     if (!search)
-        search = "/bin:/usr/bin";
+        search = "/usr/bin:/bin";
     do {
         end = strchr(search, ':');
         n = end ? end - search : strlen(search);
@@ -298,7 +298,20 @@ int tcsetpgrp(int fd, int group) {
 
 /* Keep validation and user-buffer access in the kernel, including EFAULT for
  * invalid fd_set/timeval pointers. The public timeout is never modified. */
-int select(int nfds, fd_set *r, fd_set *w, fd_set *x, struct timeval *timeout) {
+int ripple_select_wide(int nfds, fd_set *r, fd_set *w, fd_set *x, struct timeval *timeout) {
+    struct ripple_select_request req;
+    /* Keep low-FD calls usable on older kernels, including networking tools
+     * rebuilt while their independent kernel workstream is in progress. */
+    req.version=nfds>RIPPLE_SELECT_WORDS*16 ? RIPPLE_SELECT_VERSION_WIDE : RIPPLE_SELECT_VERSION;
+    req.sets[0]=r;req.sets[1]=w;req.sets[2]=x;req.timeout=timeout;
+    return call(72,nfds,(long)&req,0,0);
+}
+
+/* Retain the original shared-library entry, including its validation and exact
+ * mask size. Old executables may still import select from the updated libc. */
+#undef select
+int select(int nfds, struct ripple_fd_set *r, struct ripple_fd_set *w,
+           struct ripple_fd_set *x, struct timeval *timeout) {
     struct ripple_select_request req;
     req.version=RIPPLE_SELECT_VERSION;
     req.sets[0]=r;req.sets[1]=w;req.sets[2]=x;req.timeout=timeout;

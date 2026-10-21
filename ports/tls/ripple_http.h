@@ -2,7 +2,7 @@
  * Octets occupy native char cells on C16, just like socket/file buffers.
  * Request: u16 big-endian length then URL LF, up to four header LF, blank LF.
  * Response: kind octet, u16 big-endian length, payload. H = final HTTP headers
- * including CRLF separator; B = dechunked body; D (zero length) = success;
+ * including CRLF separator; B = decoded body; D (zero length) = success;
  * E = diagnostic/failure. Exactly one D or E terminates each request. A caller
  * cancelling mid-response must close/kill the worker rather than resync it.
  * Neither native layouts nor TLS objects cross this interface. */

@@ -1,0 +1,9 @@
+{Module Core/JSON
+  {Import Core/ToJSON as To}
+  {Import Core/FromJSON as From}
+  {Export FromJSON ToJSON}
+  {Rules
+    {R FromJSON {FromJSON s_} {From/FromJSON s_} :guard IsStr({Inert s_})}
+    {R ToJSON {ToJSON x_} {To/ToJSON x_} :guard True}
+  }
+}

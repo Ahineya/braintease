@@ -101,6 +101,13 @@ def main():
         check_root(image)
         # An older bootstrap root has no mount directory. The native kernel
         # must create it through ordinary guest mkdir, without image import.
+        # This intentionally old root has no guest shared libraries. Ordinary
+        # installed cat now imports libc, so use a static test program here.
+        static_cat = directory / 'static-cat.fxe'
+        subprocess.run(['python3', str(HERE / 'cc.py'),
+                        str(HERE.parent / 'ports/fuzix/upstream/Applications/util/cat.c'),
+                        '--static', '--compiler', str(compiler), '--build', str(build),
+                        '-o', str(static_cat)], check=True)
         old = directory / 'old-root.img'
         builder = (HERE.parent / 'ports/fuzix/tools/disk.mjs').as_uri()
         source = ('import fs from "node:fs";import {rootImage,atomicWrite} from ' + repr(builder) + ';'
@@ -108,7 +115,7 @@ def main():
                   '({name:id==="init"?"/init":"/bin/sh",mode:0o100755,'
                   'data:Buffer.from("FXN1:"+id+":1\\n")})),{name:"/bin/cat",mode:0o100755,'
                   'data:fs.readFileSync(process.argv[2])}],2048,128));')
-        subprocess.run(['node', '--input-type=module', '-e', source, str(old), str(build / 'apps/cat.fxe')], check=True)
+        subprocess.run(['node', '--input-type=module', '-e', source, str(old), str(static_cat)], check=True)
         result = subprocess.run([str(executable), '--run', str(old), '--share', str(share)],
             input='cat /mnt/host/host-note\nshutdown\n', text=True, capture_output=True,
             env=environment, timeout=20)

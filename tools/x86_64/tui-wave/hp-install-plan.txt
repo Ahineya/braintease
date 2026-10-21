@@ -1,0 +1,84 @@
+HP package integration sequence (prepared, not executed by this workstream)
+=========================================================================
+
+Precondition: boot the accepted 32 MiB-loader EFI before installing Rift.
+Publish only catalog/catalog.json from this wave through the normal signer.
+All nine archive hashes must still match that catalog and package-transaction.json.
+
+In each fresh guest SSH session use the V7-compatible environment form:
+  PATH=/usr/bin:/bin; export PATH
+
+Capture Wi-Fi/service state before starting. Refresh the authenticated index:
+  pkg update
+  pkg search levee
+  pkg search rift
+
+Install one named package per recorded operation, stopping on failure:
+  pkg --adopt-seed add levee
+  pkg --adopt-seed add keycheck
+  pkg --adopt-seed add mux
+  pkg --adopt-seed add rfl-fm
+  pkg --adopt-seed add rift
+
+The first migration needs --adopt-seed for existing raw binaries and resources.
+The manager resolves the four data/license dependencies itself. Avoid adding
+the broad apps collection. Keep the managed previous versions during acceptance;
+do not clean/discard rollback content as part of this test.
+
+Verification queries (do not change package ownership):
+  pkg list
+  pkg info levee
+  pkg info keycheck
+  pkg info mux
+  pkg info rfl-fm
+  pkg info rift
+  pkg info commander-data
+  pkg info rift-data
+  pkg info unicode-data
+  pkg info system-licenses
+  pkg hash /usr/bin/levee
+  pkg hash /usr/bin/keycheck
+  pkg hash /usr/bin/mux
+  pkg hash /usr/bin/rfl-fm
+  pkg hash /usr/bin/mc
+  pkg hash /usr/bin/rift
+  pkg hash /usr/bin/vi
+  pkg hash /usr/share/doc/levee/levee.1
+  cat /bin/levee
+  cat /bin/vi
+
+Expected native hash / octet count:
+levee   26a5bdb19cd24eac191128ef8540afaa6d4c5515e8847aadf23db60df9bc2142 675344
+keycheck 4acbeb9608f147faf9289a0c42161294563c04d313ec39025eb6b05e6528412e 626512
+mux     48e77810b68a5bdd2157912265b37b9521c0ef2002bbb11d6f1ae3abc5ba96a5 2787696
+rfl-fm  3148f705e706a473b42cb1a1bd4cd2a2f9268276a0c50504179507470cabcd09 13068016
+rift    e513651bc05b85c921cdc1d28f903893116ddaf871c2c8085972b93de9133279 23459056
+mc equals rfl-fm; vi equals rift.
+Levee doc SHA-256: 3b0a510d3164598c6e300d3bda082e8d358331ef89e9d9ba78356e944c1c5254
+
+Safe noninteractive native-entry probes:
+  mux --help
+    Expected status 0 and usage. Does not create a mux session directory.
+  rift /
+    Expected status 1: Only regular text files can be edited.
+    Rejects the directory before starting curses; also tests the 23.5 MB image.
+  mc /bin/echo /
+    Expected status 1: directory-open error, before starting curses.
+  keycheck --capture 0
+    Expected status 2 and usage, before starting curses.
+
+Use separate commands with an explicit following echo of $? for the expected
+failure probes; do not chain them with &&. These are entry/loader probes, not
+interactive feature acceptance. Host-side timeouts should bound remote commands.
+
+Levee has no reliable --help/batch interface: a filename-like argument can enter
+the editor. Do not launch it in ordinary non-PTY SSH. Its fixed bytes already
+passed actual QEMU right-arrow/delete/save acceptance. Use a controlled PTY or
+local keyboard for the physical interactive check. Likewise, do not call mux
+without arguments as a read-only probe; it creates/attaches sessions. Even mux
+list creates /tmp/mux-UID if absent, so --help is the no-mutation probe.
+
+After the installation wave, recapture Wi-Fi generation/rekey counters and
+service state, and compare native hashes. A later reboot persistence test is a
+separate integration-owner operation. Canonical /usr/man pages stay with shared
+man-pages; this wave adds only Levee's app-specific documentation copy.

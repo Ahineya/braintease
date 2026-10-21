@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {fatFile} from './fat.mjs';
 import {installRoot, growRoot} from './install.mjs';
 import {rootHomeFiles} from './home.mjs';
+import {scheduleFiles} from './schedule.mjs';
 import {manualFiles} from './manuals.mjs';
 import {sokobanFiles} from './sokoban.mjs';
 import {commanderFiles, riftFiles} from '../../../rfl/os/files.mjs';
@@ -17,6 +18,7 @@ import {tlsFiles} from '../../tls/files.mjs';
 import {fuseDEFiles} from '../../fusede/files.mjs';
 import {kolfFiles} from '../../kolf/files.mjs';
 import {klotskiFiles} from '../../klotski/files.mjs';
+import {shikakuFiles} from '../../shikaku/files.mjs';
 import {compilerFiles} from '../../../rcc-portable/files.mjs';
 import {unicodeFiles} from '../../../libraries/unicode/files.mjs';
 import {netsurfFiles} from '../../netsurf/files.mjs';
@@ -77,7 +79,7 @@ export function seedNames(build) {
 }
 export function buildDisk(build, filename, fresh = false, install = false) {
   const compiler = compilerFiles(path.join(build, 'compiler'));
-  const aliases = {vi: '/bin/rift', mc: '/bin/rfl-fm', mv: '/bin/cp', ln: '/bin/cp',
+  const aliases = {crond: '/bin/cron', vi: '/bin/rift', mc: '/bin/rfl-fm', mv: '/bin/cp', ln: '/bin/cp',
                    tcl: '/bin/picol', tclsh: '/bin/picol', sokoban: '/bin/sok', nslookup: '/bin/host'};
   // Switch aliases immediately after their target. This releases an older
   // shared executable before allocating the next large program during upgrades.
@@ -113,6 +115,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
              ...(aliases[name] ? {symlink: path.basename(aliases[name])} :
                   {data : fs.readFileSync(path.join(build, `${name}.rxe`))})
            })),
+       ...(installedNames.includes('test') ? [{name:'/bin/[',symlink:'test'}] : []),
        {
          name : '/tmp',
          directory : true,
@@ -155,7 +158,7 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        {name: '/etc/resolv.conf', mode: 0o100644, preserve: true,
         data: Buffer.from('nameserver 1.1.1.1\nnameserver 8.8.8.8\n')},
        {name: '/etc/nxlaunch.cnf', mode: 0o100644, preserve: true,
-        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\nTetris - /bin/nxtetris\nImages - /bin/nxview\nKlotski - /bin/klotski\n')},
+        data: Buffer.from('Terminal - /bin/nxterm\nEditor - /bin/nxterm /bin/vi\nProcesses - /bin/nxterm /bin/top\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nRoaches - /bin/nxroach\nTetris - /bin/nxtetris\nImages - /bin/nxview\nKlotski - /bin/klotski\nShikaku - /bin/shikaku\n')},
        {name: '/etc/hosts', mode: 0o100644, preserve: true,
         data: Buffer.from('192.168.64.250 ripple riplix\n')},
        {
@@ -174,11 +177,13 @@ export function buildDisk(build, filename, fresh = false, install = false) {
        ...(installedNames.includes('basic') ? basicFiles() : []),
        ...(installedNames.includes('kolf') ? kolfFiles() : []),
        ...(installedNames.includes('klotski') ? klotskiFiles() : []),
+       ...(installedNames.includes('shikaku') ? shikakuFiles() : []),
        ...(installedNames.includes('lynx') ? lynxFiles() : []),
        ...(installedNames.includes('netsurf') ? netsurfFiles() : []),
        ...((installedNames.includes('htget') || installedNames.includes('lynx') || installedNames.includes('chat')) ? tlsFiles() : []),
        ...(installedNames.includes('fdeshowcase') ? fuseDEFiles(path.join(build,'fusede')) : []),
        ...sokobanFiles(),
+       ...(installedNames.includes('cron') ? scheduleFiles() : []),
        ...sharedLibraries.values(), ...manualFiles(), ...kernelCredits(), ...compiler, ...rootHomeFiles()];
   const kernel = {
     name : 'FUZIX.SYS',

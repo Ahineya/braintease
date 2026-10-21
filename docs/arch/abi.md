@@ -2,6 +2,12 @@
 
 This is the calling convention the compiler (`rcc-backend`) and `crt0` actually use. Source: `rcc-backend/src/function/calling_convention.rs`, `rcc-backend/src/function/internal.rs`, `runtime/crt0.asm`.
 
+This remains the Ripple C16 contract. Native machine-code targets currently
+preserve its data model through a separate private runtime calling convention.
+The accepted [native x64 migration](native-x64.md) introduces a distinct LP64
+application path and later a native kernel build; it does not replace this ABI
+or establish that those planned paths are implemented.
+
 ## Data model (16-bit C bytes)
 
 A C byte is **one 16-bit addressable VM cell** (`CHAR_BIT == 16`). `sizeof`,

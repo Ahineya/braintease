@@ -2,7 +2,11 @@
 use super::*;
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-pub(super) fn emit_entry(compiler: &mut Compiler, kernel_cells: u64) -> Result<(), String> {
+pub(super) fn emit_entry(
+    compiler: &mut Compiler,
+    kernel_cells: u64,
+    freestanding: bool,
+) -> Result<(), String> {
     let main = compiler
         .ir
         .get_function("main")
@@ -16,7 +20,15 @@ pub(super) fn emit_entry(compiler: &mut Compiler, kernel_cells: u64) -> Result<(
     context.func.signature = compiler.signature(0);
     let id = compiler
         .object
-        .declare_function("rcc_native_entry", Linkage::Local, &context.func.signature)
+        .declare_function(
+            "rcc_native_entry",
+            if freestanding {
+                Linkage::Export
+            } else {
+                Linkage::Local
+            },
+            &context.func.signature,
+        )
         .map_err(|e| e.to_string())?;
     let mut frontend = FunctionBuilderContext::new();
     {
@@ -142,6 +154,9 @@ pub(super) fn emit_entry(compiler: &mut Compiler, kernel_cells: u64) -> Result<(
         .object
         .define_function(id, &mut context)
         .map_err(|e| e.to_string())?;
+    if freestanding {
+        return Ok(());
+    }
     let mut context = compiler.object.make_context();
     context
         .func

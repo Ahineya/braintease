@@ -162,6 +162,16 @@ int main(int argc,char **argv){
      if(!rejected(&bitmap,sizeof(bitmap))){puts("NXCHECK_BITMAP_SIZE_FAILED");return 1;}
      bitmap.width=16;
      if(!rejected(&bitmap,sizeof(bitmap))){puts("NXCHECK_BITMAP_PAYLOAD_FAILED");return 1;}}
+    {char packet[sizeof(nxSetGCDashReq)+2];nxSetGCDashReq *dash=(nxSetGCDashReq *)packet;
+     memset(packet,0,sizeof(packet));dash->reqType=GrNumSetGCDash;dash->length=sizeof(packet);dash->count=1;
+     packet[sizeof(*dash)]=2;packet[sizeof(*dash)+1]=3;
+     if(!rejected(packet,sizeof(packet))){puts("NXCHECK_DASH_PAYLOAD_FAILED");return 1;}
+     dash->count=2;packet[sizeof(*dash)]=32;
+     if(!rejected(packet,sizeof(packet))){puts("NXCHECK_DASH_WIDTH_FAILED");return 1;}
+     packet[sizeof(*dash)]=0;
+     if(!rejected(packet,sizeof(packet))){puts("NXCHECK_DASH_ZERO_FAILED");return 1;}}
+    {nxSetGCLineAttributesReq line;memset(&line,0,sizeof(line));line.reqType=GrNumSetGCLineAttributes;line.length=sizeof(line);line.linestyle=123;
+     if(!rejected(&line,sizeof(line))){puts("NXCHECK_LINE_STYLE_FAILED");return 1;}}
     {int slow=raw_peer();nxOpenReq open;nxGetScreenInfoReq burst[512];unsigned i;
      if(slow<0){puts("NXCHECK_SLOW_OPEN_FAILED");return 1;}
      memset(&open,0,sizeof(open));open.reqType=GrNumOpen;open.length=sizeof(open);open.c16_magic=0x4e583102UL;

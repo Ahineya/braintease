@@ -388,7 +388,7 @@ impl Runtime {
         // to globals/heap retain their values, just as for a machine setjmp.
         if request.op == 13 {
             let address = linear(request.a);
-            if address < BANK || address + 4 > address_space::KERNEL_START {
+            if address < BANK || !address_space::private_span(address, 4) {
                 fatal("invalid native jump buffer");
             }
             self.processes.next_jump = self
@@ -416,7 +416,7 @@ impl Runtime {
         }
         if request.op == 14 {
             let address = linear(request.a);
-            if address < BANK || address + 4 > address_space::KERNEL_START {
+            if address < BANK || !address_space::private_span(address, 4) {
                 fatal("invalid native jump buffer");
             }
             let cookie = (0..4).fold(0u64, |n, i| {
@@ -576,10 +576,8 @@ impl Runtime {
                     self.processes.active.as_mut().unwrap().module = owner;
                     self.memory.fill(2 * BANK..5 * BANK, 0);
                     self.stack = 2 * BANK + 1;
-                    self.free = BTreeMap::from([(
-                        5 * BANK + 1,
-                        address_space::KERNEL_START - 5 * BANK - 1,
-                    )]);
+                    self.memory.reset_private_heap();
+                    self.free = address_space::private_free();
                     self.allocated.clear();
                     if let Some(range) = global_range {
                         self.exclude_globals(range);

@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y",
+  "description": "Nested structure tag definition completes the file-scope forward declaration"
+}

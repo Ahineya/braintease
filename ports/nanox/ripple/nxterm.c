@@ -126,8 +126,35 @@ static void key(GR_EVENT_KEYSTROKE *e){
     if(e->modifiers&MWKMOD_ALT)queue("\033");
     if(k){s[0]=k;queue(s);}else {char zero=0;clear_selection();if(vt_input_put(&pending,&zero,1))fputs("nxterm: input queue full\n",stderr);}
 }
+static void report_mouse(unsigned button,int x,int y,int released,int motion,unsigned modifiers) {
+    if(motion&&pending.length>VT_INPUT_MAX-128)return;
+    char text[40];unsigned n=vt_mouse_report(&terminal,text,button,x,y,released,motion,modifiers);
+    if(n&&vt_input_put(&pending,text,n))fputs("nxterm: mouse input queue full\n",stderr);
+}
+static void cancel_mouse(void) {
+    unsigned i;for(i=0;i<3;i++)if(terminal.mouse_buttons&(1U<<i))report_mouse(i,terminal.mouse_x,terminal.mouse_y,1,0,0);
+    terminal.mouse_buttons=terminal.mouse_known=0;selection.dragging=0;
+}
+static int application_mouse(GR_EVENT *e) {
+    unsigned mods,bits,button,i;int x,y,motion=e->type==GR_EVENT_TYPE_MOUSE_POSITION;
+    if(!motion&&e->type!=GR_EVENT_TYPE_BUTTON_DOWN&&e->type!=GR_EVENT_TYPE_BUTTON_UP)return 0;
+    mods=motion?e->mouse.modifiers:e->button.modifiers;
+    if(!terminal.mouse_mode||selection.dragging||((mods&MWKMOD_SHIFT)&&!terminal.mouse_buttons))return 0;
+    x=(motion?e->mouse.x:e->button.x)/8;y=(motion?e->mouse.y:e->button.y)/16;
+    mods=(mods&MWKMOD_SHIFT?4:0)|(mods&MWKMOD_ALT?8:0)|(mods&MWKMOD_CTRL?16:0);
+    if(motion){button=terminal.mouse_buttons&1?0:terminal.mouse_buttons&2?1:terminal.mouse_buttons&4?2:3;report_mouse(button,x,y,0,1,mods);}
+    else {
+        bits=e->button.changebuttons;
+        for(i=0;i<5;i++) {
+            button=i==0?GR_BUTTON_L:i==1?GR_BUTTON_M:i==2?GR_BUTTON_R:i==3?GR_BUTTON_SCROLLUP:GR_BUTTON_SCROLLDN;
+            if(bits&button){if(e->type==GR_EVENT_TYPE_BUTTON_DOWN)clear_selection();report_mouse(i<3?i:i==3?64:65,x,y,e->type==GR_EVENT_TYPE_BUTTON_UP,0,mods);}
+        }
+    }
+    return 1;
+}
 static void event(GR_EVENT *e){
     struct winsize size;unsigned cols,rows;
+    if(application_mouse(e))return;
     if(e->type==GR_EVENT_TYPE_EXPOSURE)invalidate();
     else if(e->type==GR_EVENT_TYPE_KEY_DOWN)key(&e->keystroke);
     else if((e->type==GR_EVENT_TYPE_BUTTON_DOWN||e->type==GR_EVENT_TYPE_BUTTON_UP)&&(e->button.changebuttons&GR_BUTTON_L)) {
@@ -138,7 +165,9 @@ static void event(GR_EVENT *e){
         selection.end=vt_selection_at(&terminal,e->mouse.x/8,e->mouse.y/16);invalidate();
     }
     else if(e->type==GR_EVENT_TYPE_CLOSE_REQ)stopping=SIGHUP;
+    else if(e->type==GR_EVENT_TYPE_FOCUS_OUT)cancel_mouse();
     else if(e->type==GR_EVENT_TYPE_UPDATE&&e->update.utype==GR_UPDATE_SIZE){
+        cancel_mouse();
         vt_selection_clear(&selection);
         cols=e->update.width/8;rows=e->update.height/16;
         if(cols>GRAPHICS_COLS)cols=GRAPHICS_COLS;if(rows>GRAPHICS_ROWS)rows=GRAPHICS_ROWS;
@@ -176,7 +205,7 @@ int main(int argc,char **argv){
     memset(&props,0,sizeof(props));props.flags=GR_WM_FLAGS_TITLE|GR_WM_FLAGS_PROPS;
     props.title="Terminal";props.props=GR_WM_PROPS_APPWINDOW;
     GrSetWMProperties(window,&props);gc=GrNewGC();GrSetGCUseBackground(gc,GR_TRUE);GrSetGCGraphicsExposure(gc,GR_FALSE);
-    GrSelectEvents(window,GR_EVENT_MASK_EXPOSURE|GR_EVENT_MASK_KEY_DOWN|GR_EVENT_MASK_CLOSE_REQ|GR_EVENT_MASK_UPDATE|GR_EVENT_MASK_BUTTON_DOWN|GR_EVENT_MASK_BUTTON_UP|GR_EVENT_MASK_MOUSE_POSITION);
+    GrSelectEvents(window,GR_EVENT_MASK_EXPOSURE|GR_EVENT_MASK_KEY_DOWN|GR_EVENT_MASK_CLOSE_REQ|GR_EVENT_MASK_UPDATE|GR_EVENT_MASK_BUTTON_DOWN|GR_EVENT_MASK_BUTTON_UP|GR_EVENT_MASK_MOUSE_POSITION|GR_EVENT_MASK_FOCUS_OUT);
     for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]=RIPPLE_PTY_DIGIT(i);master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("nxterm");return 1;}}
     if(master<0){fputs("nxterm: no free terminals\n",stderr);return 1;}
     /* Backspace sends DEL. Raw-mode applications such as Levee read VERASE

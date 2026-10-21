@@ -172,6 +172,17 @@ static void scroll_pixels(struct vt *t,int amount) {
     f.colour=palette[t->reverse?t->fg:t->bg];request(GX_FILL,&f);
 }
 static int down(unsigned key){return held[key>>4]&(1U<<(key&15));}
+static void report_mouse(unsigned button,int x,int y,int released,int motion,unsigned modifiers) {
+    /* Reserve room for releases when a slow application backs up its PTY. */
+    if(motion&&pending.length>VT_INPUT_MAX-128)return;
+    char text[40];unsigned n=vt_mouse_report(&terminal,text,button,x,y,released,motion,modifiers);
+    if(n&&vt_input_put(&pending,text,n))fputs("gterm: mouse input queue full\n",stderr);
+}
+static void cancel_mouse(void) {
+    unsigned i;
+    for(i=0;i<3;i++)if(terminal.mouse_buttons&(1U<<i))report_mouse(i,terminal.mouse_x,terminal.mouse_y,1,0,0);
+    terminal.mouse_buttons=terminal.mouse_known=0;selection.dragging=0;
+}
 static void key(unsigned code) {
     unsigned shift=down(225)||down(229),ctrl=down(224)||down(228);char text[8]={0};unsigned c=0;
     static const char normal[]="1234567890",shifted[]="!@#$%^&*()";
@@ -325,6 +336,16 @@ int main(int argc,char **argv) {
             if(trace_input)fprintf(stderr,"gterm input: type=%u code=%u flags=%u\n",event.type,event.code,event.flags);
             if(event.type==GX_CLOSE){stopping=SIGHUP;break;}
             if(event.type==GX_ACTION){clipboard_action(event.code);continue;}
+            if((event.type==GX_BUTTON||event.type==GX_MOTION||event.type==GX_WHEEL)&&terminal.mouse_mode&&!selection.dragging&&
+               (!(down(225)||down(229))||terminal.mouse_buttons)) {
+                unsigned modifiers=(down(225)||down(229)?4:0)|(down(226)||down(230)?8:0)|(down(224)||down(228)?16:0);
+                unsigned button=event.code==1?2:event.code==2?1:0;
+                int x=event.x/(int)cell_width,y=event.y/(int)cell_height;
+                if(event.type==GX_BUTTON&&event.code<3){if(event.flags&GX_DOWN)clear_selection();report_mouse(button,x,y,!(event.flags&GX_DOWN),0,modifiers);}
+                else if(event.type==GX_MOTION){button=terminal.mouse_buttons&1?0:terminal.mouse_buttons&2?1:terminal.mouse_buttons&4?2:3;report_mouse(button,x,y,0,1,modifiers);}
+                else if(event.type==GX_WHEEL){if(event.wheel_y)report_mouse(event.wheel_y>0?64:65,x,y,0,0,modifiers);}
+                continue;
+            }
             if(event.type==GX_BUTTON&&event.code==0) {
                 unsigned at=vt_selection_at(&terminal,event.x/cell_width,event.y/cell_height);
                 if(event.flags&GX_DOWN)vt_selection_begin(&terminal,&selection,at);
@@ -332,8 +353,8 @@ int main(int argc,char **argv) {
                 invalidate();continue;
             }
             if(event.type==GX_MOTION&&selection.dragging){selection.end=vt_selection_at(&terminal,event.x/cell_width,event.y/cell_height);invalidate();continue;}
-            if(event.type==GX_RESIZE){resize_terminal(event.x,event.y);continue;}
-            if(event.type==GX_OVERFLOW||(event.type==GX_FOCUS&&!(event.flags&GX_FOCUSED))){memset(held,0,sizeof(held));repeat_key=0;}
+            if(event.type==GX_RESIZE){cancel_mouse();resize_terminal(event.x,event.y);continue;}
+            if(event.type==GX_OVERFLOW||(event.type==GX_FOCUS&&!(event.flags&GX_FOCUSED))){cancel_mouse();memset(held,0,sizeof(held));repeat_key=0;}
             if(event.type==GX_TEXT) {
                 char encoded[5];unsigned n=ru_encode((uint32_t)event.dx,(unsigned char *)encoded);
                 if(down(226)||down(230))queue("\033");

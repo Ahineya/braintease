@@ -9,6 +9,13 @@ export struct Rect {
     columns: i16
 }
 
+impl Rect {
+    /// Hit tests terminal cells without overflowing rectangle end coordinates.
+    export fn contains(&self, row: i16, column: i16) -> bool {
+        row >= self.row && column >= self.column && (row as i32 - self.row as i32) < self.rows as i32 && (column as i32 - self.column as i32) < self.columns as i32
+    }
+}
+
 /// Small drawing contract for reusable widgets. Calls are statically dispatched;
 /// widgets borrow the surface and never acquire a terminal or present a frame.
 export trait Canvas {
@@ -57,7 +64,11 @@ impl Canvas for Window {
 
 /// Clips UTF-8 at a complete grapheme boundary, measured in terminal cells.
 export fn fitted(value: String, width: i16) -> String {
-    if (width <= 0) { "" } else { value[0..prefix(value, width as usize)] }
+    if (width <= 0) {
+        ""
+    } else {
+        value[0..prefix(value, width as usize)]
+    }
 }
 
 /// Decimal count for widget labels; does not change application formatting policy.

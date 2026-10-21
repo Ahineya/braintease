@@ -27,6 +27,15 @@ fn to_lower(value: String) -> String {
 
 export fn detect(path: String) -> Language {
     let name = to_lower(basename(path));
+    if (ends_with(name, ".symws")) {
+        return language("syma", 15, "syma", "SYMA", "worksheet {file} --run");
+    }
+    if (ends_with(name, ".syma")) {
+        return language("syma", 15, "syma", "SYMA", "run {file}");
+    }
+    if (ends_with(name, ".symnb")) {
+        return language("json", 5, "", "", "");
+    }
     if (ends_with(name, ".bas")) {
         return language("basic", 13, "basic", "BASIC", "{file}");
     }

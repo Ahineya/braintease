@@ -24,6 +24,7 @@ fn install_signal_handlers() {
         thread::spawn(move || {
             for _ in signals.forever() {
                 // Restore terminal before exiting
+                let _ = io::stderr().execute(crossterm::event::DisableMouseCapture);
                 let _ = terminal::disable_raw_mode();
                 let _ = io::stderr().execute(cursor::Show);
                 let _ = io::stderr().execute(terminal::LeaveAlternateScreen);
@@ -359,6 +360,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Unconditional LeaveAlternateScreen writes CSI sequences to stderr
     // and pollutes captured test output.
     if tui_mode || debug_mode || visual_mode {
+        let _ = io::stderr().execute(crossterm::event::DisableMouseCapture);
         let _ = terminal::disable_raw_mode();
         let _ = io::stderr().execute(cursor::Show);
         let _ = io::stderr().execute(terminal::LeaveAlternateScreen);

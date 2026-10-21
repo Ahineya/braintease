@@ -1,0 +1,29 @@
+{
+    admin off
+    auto_https off
+    persist_config off
+    log default {
+        output file /Users/ahineya/.local/share/riplix-repo/logs/server.log {
+            roll_size 5MiB
+            roll_keep 3
+            roll_keep_for 168h
+        }
+    }
+}
+
+http://:8088 {
+    respond /_ready "Riplix repository server\n" 200
+    root * /Volumes/Ahineya/RiplixRepo/public
+    header X-Content-Type-Options nosniff
+    header Cache-Control "no-cache"
+    file_server {
+        hide .DS_Store .git
+    }
+    log {
+        output file /Users/ahineya/.local/share/riplix-repo/logs/access.log {
+            roll_size 5MiB
+            roll_keep 3
+            roll_keep_for 168h
+        }
+    }
+}

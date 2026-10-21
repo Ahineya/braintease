@@ -1,10 +1,10 @@
-import { start, Screen, BOLD, REVERSE, LEFT, RIGHT, CLOSED, NO_KEY, function_key } from "std/curses";
+import { start, Screen, MouseEvent, MOUSE_DRAG, BOLD, REVERSE, LEFT, RIGHT, CLOSED, NO_KEY, function_key } from "std/curses";
 import { arguments, working_directory, metadata, DIRECTORY, REGULAR, error_message, environment, open_read, process_id } from "std/posix";
 import { file_panel, FilePanel } from "lib/tui_files";
 import { player, Player } from "lib/music";
 import { loader, Config, Role } from "lib/tui_theme";
 import { install } from "lib/tui_curses";
-import { fitted, number } from "lib/tui";
+import { Rect, fitted, number } from "lib/tui";
 import { parent, joined, basename } from "lib/path";
 import {} from "std/result";
 import {} from "std/option";
@@ -52,6 +52,45 @@ fn home(cwd: String) -> String {
     match environment("HOME") {
         Ok(Some(value)) if (!value.is_empty()) => joined(cwd, value),
         _ => "/"
+    }
+}
+
+fn buttons(upper: bool) -> Vec<String> {
+    if (upper) {
+        ["Tab Panes", "a Add", "A Folder", "d Remove", "s Shuffle"]
+    } else {
+        ["p Prev", "Space Pause", "n Next", "- Vol", "+ Vol", "F10 Quit"]
+    }
+}
+
+fn button_key(upper: bool, column: i16, width: i16) -> i16 {
+    let labels = buttons(upper);
+    let keys: Vec<i16> = if (upper) {
+        [9, 97, 65, 100, 115]
+    } else {
+        [112, 32, 110, 45, 43, function_key(10)]
+    };
+    let mut x: i16 = 1;
+    for (i in 0..labels.len()) {
+        let end = x + labels[i].len() as i16;
+        if (column >= x && column < end && end <= width) {
+            return keys[i];
+        }
+        x = end + 2;
+    }
+    NO_KEY
+}
+
+fn draw_buttons(screen: &Screen, row: i16, upper: bool, style: u32) {
+    screen.fill(row, 0, screen.columns(), ' ', style);
+    let labels = buttons(upper);
+    let mut x: i16 = 1;
+    for (i in 0..labels.len()) {
+        if (x + labels[i].len() as i16 > screen.columns()) {
+            break;
+        }
+        screen.text(row, x, labels[i], style);
+        x += labels[i].len() as i16 + 2;
     }
 }
 
@@ -143,10 +182,8 @@ fn paint(screen: &Screen, styles: Vec<u32>, panel: &FilePanel, music: &Player, s
         screen.text(rows - 4, 2, fitted(status, cols - 4), styles[2]);
         screen.text(rows - 3, 2, fitted(number(music.rate() as usize) + " Hz  " + number(music.channels() as usize) + " channels  Missing frames: " + number(music.underruns() as usize), cols - 4), styles[0]);
     }
-    screen.fill(rows - 2, 0, cols, ' ', styles[1]);
-    screen.text(rows - 2, 1, fitted("Tab panes | a add | A folder | d remove | s shuffle | n/p next/previous", cols - 2), styles[1]);
-    screen.fill(rows - 1, 0, cols, ' ', styles[1]);
-    screen.text(rows - 1, 1, fitted("Enter open/play | Space pause | Left/Right seek | +/- volume | F10 quit", cols - 2), styles[1]);
+    draw_buttons(screen, rows - 2, true, styles[1]);
+    draw_buttons(screen, rows - 1, false, styles[1]);
     screen.present();
 }
 
@@ -265,6 +302,8 @@ fn main() -> i16 {
     cursor.selected = saved.selected;
     let mut in_playlist = false;
     screen.timeout(20);
+    screen.mouse(MOUSE_DRAG);
+    let mut seeking = false;
     let mut repaint = true;
     let mut last_elapsed: u32 = 0;
     let mut last_state: u16 = 0;
@@ -303,7 +342,76 @@ fn main() -> i16 {
             });
             repaint = false;
         }
-        let key = screen.key();
+        let event = screen.event();
+        let mut key = event.key();
+        match event.mouse {
+            Some(pointer) => {
+                if (pointer.released()) {
+                    seeking = false;
+                }
+                if (screen.rows() >= 16 && screen.columns() >= 60) {
+                    let rows = screen.rows();
+                    let cols = screen.columns();
+                    let left = (cols - 6) / 2;
+                    let right = left + 4;
+                    let files = Rect { row: 4, column: 2, rows: height as i16, columns: left };
+                    let tracks = Rect { row: 4, column: right, rows: height as i16, columns: cols - right - 2 };
+                    let previous_file = panel.cursor.selected;
+                    let previous_track = cursor.selected;
+                    let was_playlist = in_playlist;
+                    let file_count = panel.entries.len();
+                    if (pointer.pressed()) {
+                        seeking = pointer.row == rows - 6 && pointer.column >= 2 && pointer.column < cols - 2;
+                    }
+                    if (seeking && (pointer.pressed() || pointer.motion())) {
+                        let column = if (pointer.column < 2) {
+                            0
+                        } else if (pointer.column >= cols - 2) {
+                            cols - 5
+                        } else {
+                            pointer.column - 2
+                        };
+                        let seconds = (music.duration() / 1000) * column as u32 / (cols - 5) as u32;
+                        music.seek(seconds as i32 - (music.elapsed() / 1000) as i32);
+                        repaint = true;
+                    } else if (pointer.row == rows - 7 && pointer.wheel() != 0) {
+                        key = if (pointer.wheel() < 0) {
+                            43
+                        } else {
+                            45
+                        };
+                    } else if (panel.cursor.mouse(files, pointer, file_count)) {
+                        // Click once to select, again to open/play; wheel only selects.
+                        if (pointer.pressed() && !was_playlist && previous_file == panel.cursor.selected) {
+                            key = 13;
+                        }
+                        in_playlist = false;
+                        repaint = true;
+                    } else if (cursor.mouse(tracks, pointer, count)) {
+                        if (pointer.pressed() && was_playlist && previous_track == cursor.selected) {
+                            key = 13;
+                        }
+                        in_playlist = true;
+                        repaint = true;
+                    } else if (pointer.pressed() && pointer.row == 2) {
+                        in_playlist = pointer.column >= right;
+                        repaint = true;
+                    } else if (pointer.pressed() && pointer.row >= rows - 2) {
+                        key = button_key(pointer.row == rows - 2, pointer.column, cols);
+                    } else if (pointer.pressed() && pointer.row == 0 && pointer.column >= cols - 16) {
+                        key = 115;
+                    }
+                }
+                if (key == NO_KEY) {
+                    continue;
+                }
+            },
+            None => {
+                if (event.kind != NO_KEY) {
+                    seeking = false;
+                }
+            }
+        }
         if (key == CLOSED || key == 27 || key == function_key(10) || key == 113) {
             break;
         }

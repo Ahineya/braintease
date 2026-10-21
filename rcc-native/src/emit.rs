@@ -24,6 +24,8 @@ pub(super) struct Cg<'a, 'b> {
     pub(super) va_input: Option<ClValue>,
     pub(super) var_area: u64,
     pub(super) bound_globals: BTreeMap<String, ClValue>,
+    pub(super) read_view: Option<super::memory::ReadView>,
+    pub(super) read_region: bool,
 }
 impl Cg<'_, '_> {
     pub(super) fn bind_globals(&mut self, function: &Function) -> Result<(), String> {
@@ -103,13 +105,22 @@ impl Cg<'_, '_> {
             Value::AddressOffset { base, cells } => {
                 let base = self.value(base)?;
                 let cells = self.k(*cells);
-                self.runtime("rcc_native_gep", &[base, cells])?
+                self.logical_gep(base, cells)?
             }
             Value::Undef => self.k(0),
             _ => return Err(format!("aggregate used as native scalar: {value:?}")),
         })
     }
     pub fn runtime(&mut self, name: &str, args: &[ClValue]) -> Result<ClValue, String> {
+        if name != "rcc_native_poll" {
+            if self.read_view.is_some() {
+                // End the grant, but remember this region already attempted
+                // acquisition. Hidden helpers in pointer expressions must not
+                // turn a denied region into one acquisition per scalar load.
+                let zero = self.k(0);
+                self.read_view = Some(super::memory::ReadView::from_values(&[zero; 4]));
+            }
+        }
         let id = self.compiler.import(name, args.len())?;
         let reference = self.compiler.object.declare_func_in_func(id, self.b.func);
         let mut values = vec![self.context];
@@ -274,6 +285,8 @@ pub(super) fn emit_direct_function(
             va_input,
             var_area,
             bound_globals: BTreeMap::new(),
+            read_view: None,
+            read_region: false,
         };
         cg.bind_globals(function)?;
         if owns_stack {
@@ -293,13 +306,17 @@ pub(super) fn emit_direct_function(
         cg.b.ins().jump(cg.blocks[&first.id], &[]);
         for block in &function.blocks {
             cg.b.switch_to_block(cg.blocks[&block.id]);
+            cg.read_view = None;
             if !block.has_terminator() {
                 return Err(format!(
                     "native function {} block {} has no terminator",
                     function.name, block.id
                 ));
             }
-            for instruction in &block.instructions {
+            let regions = super::memory::read_regions(&block.instructions);
+            for (instruction, region) in block.instructions.iter().zip(regions) {
+                cg.read_region = region;
+                if !region { cg.read_view = None; }
                 cg.instruction(instruction, block.id)
                     .map_err(|e| format!("{} block {}: {e}", function.name, block.id))?;
             }

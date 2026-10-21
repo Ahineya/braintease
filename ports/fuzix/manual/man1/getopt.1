@@ -1,0 +1,26 @@
+.TH GETOPT 1
+.SH NAME
+getopt \- normalize short options into shell-quoted arguments
+.SH SYNOPSIS
+.B getopt
+optstring [argument ...]
+.SH DESCRIPTION
+Parse classic short options. A colon after an option letter requires a value.
+Clustered flags and attached values are accepted. Parsing stops at the first
+non-option or an explicit --. Output contains each parsed option, its value,
+a -- separator and remaining operands, all quoted for the Bourne shell.
+Spaces, empty arguments, apostrophes and shell punctuation are preserved.
+No argument vector is written if parsing or allocation fails.
+.PP
+Use eval to interpret the quotes emitted by getopt, not unquoted set alone.
+.SH EXAMPLE
+.nf
+args=`getopt ab: "$@"` || exit 1
+eval "set -- $args"
+.fi
+.SH LIMITS
+This is the classic OPTSTRING interface, not GNU getopt. Long options,
+optional option values and operand permutation are not provided.
+The invoking shell and exec argument/environment budget still apply.
+.SH EXIT STATUS
+0 on success, 1 on option/allocation/output error, 2 when optstring is missing.

@@ -1,0 +1,36 @@
+{Module Core/FromJSON/Annotate
+  {Rules
+    ;; ---------- Annotating braces and brackets -----------
+    {R FromJSON/Parsing/Annotate/Skip
+      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at..} {Curr f_} {Tokens next_ t..}}}
+      {Parsing {Annotate {NestId nid_ stack_} {Depth depth_} {AnnotatedTokens at.. f_} {Curr next_} {Tokens t..}}}
+      :guard Not(Or(Eq(f_, {TOKLBRACK}), Eq(f_, {TOKLCURLY}), Eq(f_, {TOKRBRACK}), Eq(f_, {TOKRCURLY})))
+    }
+
+    {R FromJSON/Parsing/Annotate/Nest
+      {Parsing {Annotate {NestId nid_ {Stack s..}} {Depth depth_} {AnnotatedTokens at..} {Curr {tok_ rest..}} {Tokens next_ t..}}}
+      {Parsing {Annotate {NestId Add(nid_, 1) {Stack s.. nid_}} {Depth Add(depth_, 1)} {AnnotatedTokens at.. {tok_ nid_ rest..}} {Curr next_} {Tokens t..}}}
+      :guard Or(Eq(tok_, TOKLBRACK), Eq(tok_, TOKLCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out
+      {Parsing {Annotate {NestId nid_ {Stack s.. last_}} {Depth depth_} {AnnotatedTokens at..} {Curr {tok_ rest..}} {Tokens next_ t..}}}
+      {Parsing {Annotate {NestId nid_ {Stack s..}} {Depth Sub(depth_, 1)} {AnnotatedTokens at.. {tok_ last_ rest..}} {Curr next_} {Tokens t..}}}
+      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out/Leaf
+      {Parsing {Annotate {NestId nid_ {Stack s.. last_}} {Depth depth_} {AnnotatedTokens at..} {Curr {tok_ rest..}} {Tokens}}}
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth Sub(depth_, 1)} {AnnotatedTokens at.. {tok_ last_ rest..}}}}
+      :guard Or(Eq(tok_, TOKRBRACK), Eq(tok_, TOKRCURLY))
+    }
+    {R FromJSON/Parsing/Annotate/Out/End
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at..}}}
+      {Parsing Ok({AnnotatedTokens at..})}
+      :guard Eq(depth_, 0)
+    }
+    {R FromJSON/Parsing/Annotate/Out/Err
+      {Parsing {CheckNestingDepth {NestId nid_} {Depth depth_} {AnnotatedTokens at..}}}
+      {Parsing {Error "Not balanced [] or {}" {AnnotatedTokens at..}}}
+      :guard Neq(depth_, 0)
+    }
+  }
+}

@@ -13,5 +13,6 @@ int ri_size(unsigned, unsigned, const RiLimits *);
 int ri_png(const RiByte *, size_t, const RiLimits *, RiImage **);
 int ri_gif(const RiByte *, size_t, const RiLimits *, RiImage **);
 int ri_bmp(const RiByte *, size_t, const RiLimits *, RiImage **);
+int ri_jpeg_fit(const RiByte *, size_t, const RiLimits *, const RiLimits *, RiImage **);
 int ri_jpeg(const RiByte *, size_t, const RiLimits *, RiImage **);
 #endif

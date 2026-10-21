@@ -49,6 +49,8 @@ def main():
         curses = "@rfl_curses_" in ir.read_text()
         unicode = "@ru_" in ir.read_text()
         bridges = [bridge] + ([ROOT / "rfl/os/curses.c"] if curses else [])
+        if "@rfl_sftp_" in ir.read_text():
+            bridges.append(ROOT / "ports/ssh/commander.c")
         telegram = "@tg_client_" in ir.read_text()
         if "@music_new" in ir.read_text():
             bridges.extend(ROOT / "ports/music" / name for name in ("wav.c", "music.c"))

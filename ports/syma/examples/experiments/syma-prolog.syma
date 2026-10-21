@@ -1,0 +1,66 @@
+; :clear
+; :module multiline
+{Module SymaProlog
+  {Rules
+
+    {R Symaprolog/Sugar {SymaProlog program...} {Desugaring {Facts} {Relations} {Question} {Program program...}}}
+    {R Symaprolog/Desugaring/Skip
+      {Desugaring {Facts t...} {Relations r...} {Question} {Program prev... .}}
+      {Desugaring {Facts t...} {Relations r...} {Question} {Program prev...}}
+    }
+    {R Symaprolog/Desugaring/Question
+      {Desugaring {Facts t...} {Relations r...} {Question} {Program prev... . ?- {q_ qprev... X qnext...}}}
+      {Desugaring {Facts t...} {Relations r...} {Question {q_ qprev... ?x qnext... }} {Program prev...}}
+    }
+    {R Symaprolog/Desugaring/Rule
+      {Desugaring {Facts t...} {Relations r...} {Question q_} {Program prev... . left_ :- right_}}
+      {Desugaring {Facts t...} {Relations r... {left_ -> right_} } {Question q_} {Program prev...}}
+    }
+    {R Symaprolog/Desugaring/Fact
+      {Desugaring {Facts t...} {Relations r...} {Question q_} {Program prev... . fact_}}
+      {Desugaring {Facts t... fact_} {Relations r...} {Question q_} {Program prev...}}
+    }
+    {R Symaprolog/Desugaring/Fact/Leaf
+      {Desugaring {Facts t...} {Relations r...} {Question q_} {Program fact_}}
+      {Desugaring {Facts t... fact_} {Relations r...} {Question q_} {Program}}
+    }
+    {R Symaprolog/Formulating
+      {Desugaring {Facts t...} {Relations r...} {Question {head_ q...}} {Program}}
+      {head_ q... {Relations r...} {Facts t...}}
+    }
+
+    {R Question/First {q_ ?x a_ relations_ facts_} {Working q_ a_ relations_ facts_}}
+    {R Working  {Working q_ a_ relations_ {Facts r...}} {Working q_ a_ {Results} relations_ {Facts r...}}}
+    {R Working/PickAndRewrite/Fact
+      {Working q_ a_ {Results n...} relations_ {Facts {q_ p_ a_} rest...}}
+      {Working q_ a_ {Results n... ToString(p_)} relations_ {Facts rest...}}
+    }
+    {R Working/ProcessRelations
+      {Working q_ a_ {Results n...} {Relations prev... {{rel_ arel_ brel_} -> {other_ brel_ arel_}} next...} {Facts {rel_ rela_ relb_} rest...}}
+      {Working q_ a_ {Results n...} {Relations prev... {{rel_ arel_ brel_} -> {other_ brel_ arel_}} next...} {Facts {other_ relb_ rela_} rest...}}
+    }
+    {R Working/Skip
+      {Working q_ a_ {Results n...} relations_ {Facts r_ rest...}}
+      {Working q_ a_ {Results n...} relations_ {Facts rest...}}
+    }
+    {R Working/End
+      {Working q_ a_ {Results n...} relations_ {Facts}}
+      {Ok Concat("?x = ", Join(", ?x = ", n...))}
+    }
+  }
+}
+; :end
+
+/*
+{SymaProlog
+
+    Parent(John, Mary).
+    Child(Mary, Susan).
+    Parent(John, Tom).
+    Parent(Susan, Tom).
+
+    Child(C, P) :- Parent(P, C).
+
+    ?- Parent(X, Mary).
+}
+*/

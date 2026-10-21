@@ -34,7 +34,11 @@ extern struct blkbuf *bufpool_end;
 
 extern struct p_tab ptab[PTABSIZE];
 extern struct p_tab *ptab_end;
+#ifdef CONFIG_DYNAMIC_OFT
+extern struct oft *of_tab;
+#else
 extern struct oft of_tab[OFTSIZE];       /* Open File Table */
+#endif
 extern struct cinode i_tab[ITABSIZE];    /* In-core inode table */
 extern struct mount fs_tab[NMOUNTS];	 /* Mount table */
 

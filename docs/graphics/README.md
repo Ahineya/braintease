@@ -2,20 +2,28 @@
 
 The destination is a small, extensible desktop with graphical terminals and
 native applications. RVM owns a guest desktop; Fuse-X uses
-macOS top-level windows under one application identity. Applications use
+macOS top-level windows or an optional desktop inside one host window.
+Applications use
 the same window/surface/event contract on either backend.
 
 The current implementation includes the Nano-X server/client library,
 NanoWM, graphical terminals, Eyes, Clock and Roaches. NXDSKTOP supplies the
 basic RVM desktop, with message boxes, file selection, a calculator and Tetris.
-The [FuseDE plan](../fusede/README.md) describes the custom desktop direction.
+The [Graphite roadmap](graphite-roadmap.md) describes the current FuseDE
+direction. The earlier [Nano-X/Slate investigation](../fusede/README.md)
+is retained as historical context and for existing RVM support.
 
 * [Architecture and current contract](architecture.md)
+* [Retained rendering targets and portable software core](retained-rendering.md)
 * [Milestones and acceptance criteria](roadmap.md)
 * [Nano-X audit and adaptation work](nanox-audit.md)
 * [Nano-X provenance](../../ports/nanox/UPSTREAM.md)
+* [LVGL and X11 assessment for Fuse-X and future Riplix x64](lvgl-and-x11.md)
+* [Graphite widgets, applications and desktop roadmap](graphite-roadmap.md)
+* [SDL software foundation, Fuse-X acceptance and x64 portability](../../ports/sdl/README.md)
+* [LGeneral strategy game, free K.u.k. campaign and Fuse-X port](../../ports/lgeneral/README.md)
 * [Fuse-X desktop requirements](../fuse-x/desktop.md)
-* [FuseDE desktop and application plan](../fusede/README.md)
+* [Earlier FuseDE desktop investigation](../fusede/README.md)
 
 ## Nano-X desktop
 
@@ -28,6 +36,13 @@ windows; left-drag the extreme bottom-right corner to resize supported clients.
 
 On Fuse-X, `scripts/run-fuse-x.sh --gui` provides independent native windows.
 Its `startx` keeps the native launcher/session model.
+
+The [Graphite apps](../../ports/lvgl/README.md)—calculator, file selector,
+gallery, Data Viewer and Text Editor—open GX windows directly on Fuse-X
+without `startx`. Their test executables are
+staged separately in `fuse-x-shared`; optional package distribution is planned.
+Use `scripts/run-fuse-x.sh --run-only --desktop` to try them together inside
+the single-window desktop.
 
 Client repaints now use retained buffers: a completed `GrFlush()` publishes the
 window and its child widgets together, so synchronous colour/size queries do
@@ -80,7 +95,13 @@ pixels are handled by macOS. It has a bitmap font, 16 colours, a US keyboard map
 operations, scroll regions, an alternate screen and shared Unicode bitmap glyphs.
 On Fuse-X, both terminals support mouse selection, Command-C/V/A and
 Ctrl-Shift-C/V using the [shared text clipboard](../fuse-x/desktop.md#text-clipboard).
-Scrollback and application mouse reporting remain follow-ups.
+Applications can opt into mouse buttons, wheel, dragging and hover through
+the shared curses library. Shift-drag always selects terminal text; plain drag
+also selects text when the application has not requested mouse reporting.
+mux supports click focus, tab clicks and splitter dragging, with pane-local
+reports; Commander supports file selection, wheel navigation, clickable function
+buttons and divider dragging. See [terminal mouse architecture](architecture.md#terminal-mouse-interaction).
+Scrollback in the terminal frontends remains a follow-up.
 The shared terminal model supports resizing both screens while preserving
 their top-left contents, clamping saved cursors, clearing new cells and
 resetting scroll margins. The Nano-X terminal connects this to interactive

@@ -21,6 +21,7 @@ extern unsigned long line_number;
 struct type {
     int kind;
     unsigned long size;
+    unsigned bits;
     struct type *base;
     struct vec fields;
 };
@@ -81,7 +82,7 @@ struct function {
 
 struct symbol {
     char *name, *label;
-    bool internal, function, defined;
+    bool internal, function, defined, shared;
     struct type *type;
     struct value *init;
 };
@@ -92,6 +93,8 @@ struct module {
     unsigned long serial;
 };
 struct module *parse(FILE *, const char *);
+/* The same grammar/layout, with explicit backend target validation. */
+struct module *parse_target(FILE *, const char *, const char *);
 struct symbol *symbol(struct module *, const char *);
 unsigned int slots(struct type *);
 void emit_module(struct module *, FILE *);

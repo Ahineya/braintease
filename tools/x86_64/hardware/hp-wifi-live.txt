@@ -1,0 +1,402 @@
+HP AX211 LIVE ETHERNET / IP HANDOFF — 2026-10-20
+================================================
+
+LATEST PHYSICAL RESULT — sustained local Wi-Fi accepted, 2026-10-20
+-----------------------------------------------------------------
+After the user booted the corrected USB and reported Telnet up, the Mac ran
+real TCP sessions to192.168.100.107:23. Both simultaneous PTYs remained usable;
+a shared RAM file and pipeline passed. Guest netcheck downloaded4372 bytes
+from a bounded temporary Mac HTTP server, and cat returned every octet exactly
+through Wi-Fi/TCP/PTY/Telnet (including NUL and escaped IAC). Payload SHA256:
+a07292d467056fa927f1697c18d2d76f5818064ad80cb23a00abe73bcd0993c7.
+
+320 unique echo commands alternated between the two sessions, each sent ONLY
+after the previous command's actual output and prompt had arrived. This proves
+at least320 separate guest response packets, beyond the256-entry DMA boundary;
+it is not a direct capture of hardware SSN/counter values. Ctrl-C interrupted
+a sleeping job with status130 while the other PTY remained usable. Three fresh
+connections worked afterward, followed by3/3 gateway replies and link-up status.
+The complete test took72.422 seconds; this is bounded sustained acceptance,
+not a long-duration/rekey/reconnect or throughput qualification.
+
+Evidence under build/x86_64-wifi-start-shell/:
+  hp-live-corrected-result.json / hp-live-corrected-transcript.txt
+  hp-live-accept.py (physical test helper)
+  usb-install.json (updated acceptance, preserved original install hashes)
+Expected installed EFI60720f36e43a085df0133904c770881408d33b87e4d545903fc19e9a650a2c91
+comes from the verified USB receipt and the user's retry; there is no remote
+running-EFI attestation. Earlier failed-image and pending-test records below
+are historical. No radio restart, key renegotiation, DHCP, services/SSH, storage
+or scheduler integration is implied.
+A follow-up shell also resolved example.com through configured DNS (status0)
+and received1/1 external ICMP reply from1.1.1.1, ttl51. Exact transcript is
+hp-live-external-result.json; this is DNS/ICMP proof, not external TCP/TLS.
+ The temporary HTTP listener and our Telnet
+sessions were closed; the user's running HP and daemon were left available.
+
+
+Physical prerequisite accepted
+-------------------------------
+User's HP photograph confirms the stopped protected-ARP checkpoint DATA_OK:
+TX1/RX1/ARP1/complete1, drops0/replays0, status0x7a5f/PN1, clean QUIESCED0x3f4000
+and RAM shell. Auth/assoc/WPA2 had already passed. Its private accepted-data.EFI
+is preserved, SHA256 a13e5d39b18fba50d9d570591b8205cc52e6d67364d4fa774e0d376aded05c23.
+Receipt/photo/result under build/x86_64-wifi-start-shell/ retain provenance.
+This is one protected unicast exchange, not sustained IP acceptance.
+
+Live profile
+-------------
+Explicit --network wifi attaches the same native Ethernet NIC boundary as
+QEMU virtio to AX211. It requires the isolated RAM-root, pinned firmware/PNVM,
+scan/exact SSID/auth/assoc/WPA2 profile and explicit network-config JSON.
+The optional --wifi-data-probe retains the accepted unicast ARP startup gate.
+Only a successful live handoff skips controller stop; startup failure and normal
+session shutdown still stop/reset, verify PCI mastering off, then wipe keys.
+No internal NVMe/block driver is compiled into this image. The accepted default
+persistent/offline USB entry is independently preserved.
+
+Example (use a private passphrase file; derived PMK remains in the EFI):
+  python3 tools/x86_64/boot.py build --ram-root --network wifi \
+    --network-config /path/to/private-network-test.json \
+    --wifi-firmware build/x86_64-network/wifi-reference/iwlwifi-ma-b0-gf-a0-89.ucode \
+    --wifi-pnvm build/x86_64-network/wifi-reference/iwlwifi-ma-b0-gf-a0.pnvm \
+    --wifi-scan --wifi-prepare-ssid 'YOUR SSID' --wifi-auth --wifi-assoc \
+    --wifi-psk-file /path/to/private-test-passphrase \
+    --wifi-data-probe 192.168.100.1 \
+    --font-atlas build/x86_64-offline/normal/font.atlas \
+    --output build/x86_64-wifi-start-shell
+
+Configuration JSON has exactly address/netmask/gateway/dns numeric IPv4 strings.
+Current private lab config reuses the HP's known Ubuntu address192.168.100.107/24,
+gateway/DNS192.168.100.1. It is manual static configuration, not a DHCP lease
+renewal or complete duplicate-address-detection implementation. Ubuntu and
+Riplix cannot run concurrently on the HP; do not assign that address elsewhere.
+No IP address or gateway is hardcoded in the radio driver.
+
+At the HP: F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI/BOOT/BOOTWIFI.EFI.
+Expected AX211_NIC_READY, then the RAM shell. Run:
+  sh /network.sh
+The script explicitly configures eth0 address/netmask/gateway/up. eth0 is the
+current generic stack interface name even though its hardware backend is Wi-Fi.
+It pings the configured gateway3 times; only success prints AX211_IP_OK and
+launches the existing Telnet daemon. Its status prints the address/port23.
+Use that address directly from a host on the LAN; QEMU's localhost2323 NAT
+forwarding does not apply to physical Wi-Fi. shutdown stops the NIC and keys.
+No init/service/default boot activation changes are installed by this test.
+
+Source-first queue and security review
+--------------------------------------
+Pinned OpenBSD if_iwx.c1.230 / if_iwxreg.h1.75, plus Linuxv6.12 iwl-trans.h,
+fw/api/{rx,tx,mac}.h, mvm/rxmq.c and mac80211/wpa.c consumers were inspected.
+Local URL/SHA records: build/x86_64-network/wifi-reference/live-wifi-sources.json,
+protected-data-sources.json and earlier manifests. Michael uses OpenBSD
+sys/crypto/michael.c1.2 with retained ISC notice and native unsigned octet loads.
+Adaptation/SHA record: boot/wifi-crypto-sources.json. Notices accompany the EFI.
+
+- Polled single-CPU NIC; no ISR runs guest code or changes scheduling.
+- Permanent6MiB DMA pool; reusable256-slot native TX pages/TFH/byte-count ring.
+  Hardware head/tail/SSN are16-bit counters; only native DMA indexing wraps
+  at256. Ownership releases through bounded cumulative payload queue/SSN replies.
+  Native copies never borrow C16 buffers. MAC sequence is12 bits, independent
+  of the256-slot ring index. TX caps64 frames/64KiB, returning backpressure.
+- Fixed-order512-buffer RX, one packet per buffer for AX210+ as iwx_rx_pkt does.
+  Producer mask follows iwx_notif_intr. Refill publishes only processed buffers,
+  aligned by8, with a64-buffer per-poll budget. Delivery caps64 frames/64KiB.
+  No lifetime one-ring exhaustion remains in live mode; checkpoints retain it.
+- Protected ToDS CCMP TX; firmware generates crypto IV/PN/MIC. RX requires the
+  selected AP/channel, FromDS, valid hardware cipher/integrity/CRC, correct key
+  index and increasing per-key/TID PN. No fragments/A-MSDU/HT/PMF are advertised.
+- GTK CCMP/TKIP RX is supported. Gen2 TKIP requires ICV/MIC success; RADA bit26
+  means firmware stripped ICV/Michael. Without RADA, trim indicated MAC trailer,
+  verify retained Michael over DA/SA/priority/LLC with AP-to-STA GTK RX MIC key,
+  and strip Michael/ICV. GTK replay floor starts at authenticated M3 RSC.
+  Malformed/bad crypto never commits PN or output. Firmware integrity bits are
+  actual consumer requirements; unknown status/padding bits stay opaque.
+- Firmware/hardware/radio-kill errors, malformed ownership, a5s oldest-TX
+  watchdog, changed country profile, AP disconnect or API4 beacon loss stop the
+  interface. API4 missed-beacon layout is pinned and checked before startup.
+  MIC failure and EAPOL retry/rekey after handoff also stop fail-closed.
+  Automatic rekey/reconnect, full TKIP countermeasure recovery and user radio
+  up/down/SSID selection are NOT implemented. Reboot reconnects with fresh nonce.
+  ifconfig up/down currently controls the existing IP stack, not radio power.
+
+Validation and remaining hardware gate
+---------------------------------------
+Run all16 production Wi-Fi host suites plus virtio/mailbox and profile/package
+checks with fatal UBSan (no radio access):
+  python3 tools/x86_64/wifi_check.py \
+    --firmware build/x86_64-network/wifi-reference/iwlwifi-ma-b0-gf-a0-89.ucode \
+    --pnvm build/x86_64-network/wifi-reference/iwlwifi-ma-b0-gf-a0.pnvm \
+    --sysroot /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk \
+    --output build/x86_64-wifi-start-shell/live-host-check
+Includes68 independent pinned-OpenBSD Michael oracle fixtures; GTK RADA/pad/
+trailer/MIC/key/replay checks; full fake startup-to-live handoff;700 TX and over
+1400 RX buffers with wrap, quotas, copy ownership, cumulative/repeated SSNs,
+watchdog/failure/stop and retained-DMA-on-unconfirmed-stop tests. Existing
+startup/PNVM/NVM/scan/setup/auth/assoc/WPA/ARP regressions remain included.
+
+Host/QEMU/staging status and exact hashes are recorded after final acceptance
+in live-host-check/result.json, live-production-check/result.json and
+usb-install.json. QEMU checks the exact production USB image through normal
+shell/apps/process/pipe/timer/shutdown; absent AX211 is explicitly skipped.
+The separate virtio network regression exercises real host HTTP/DNS/ping and
+Telnet PTYs; it does not certify the physical radio or GTK path.
+The next HP acceptance is NIC_READY -> manual network script -> gateway replies
+and incoming remote shell with sustained traffic. No live HP IP pass is claimed
+by host mocks, source review, QEMU, or the earlier stopped DATA_OK.
+
+Services / SSH coordination
+---------------------------
+ports/services svcd/svc supply explicit profiles, dependencies and readiness;
+ports/ssh supplies foreground wolfSSH with readiness notification, OpenSSH/SCP/
+SFTP acceptance on hosted Fuse-X/RVM. X64 has acknowledged their handoff in
+native-memory-coordination.txt. Future address/lease management belongs above
+the NIC; local boot must not depend on internet or DNS. No supervisor/SSH ABI
+changes are required here. Standalone SSH still needs checked/bounded executable,
+guest entropy/crypto devices, PTY/select and real-network acceptance. Private
+WPA CPU entropy is not an implementation of /dev/urandom. Keep key provisioning
+explicit; install/enable services only in their own reviewed integration stage.
+
+Historical first live production candidate (failed sustained test)
+-----------------------------------
+BOOTWIFI.EFI:21524992 bytes, SHA256
+7ea13bdd2442ad201cc8503b4f5972116b564de7535f4ee1022689a54edea031.
+USB image SHA2560de3f28297e34b9f1a73f0321084403409d7bfa8b2643ddfa3152aa7dd4dd5e4.
+All16 Wi-Fi host suites plus virtio/mailbox/5 Python checks passed fatal UBSan.
+Exact normal USB QEMU boot/shell/process/pipe/timer/halt passed, absent-radio only.
+Current QEMU virtio network ping/DNS/4372-byte HTTP/2 PTYs/3 reconnects/pipelines/
+Ctrl-C/link-recovery passed separately. USB BOOTWDAT.EFI preserves the physically
+accepted stopped ARP image. Final USB readback/eject status: usb-install.json.
+
+Physical live-IP result and TX cursor correction — 2026-10-20
+-------------------------------------------------------------
+The user photograph proves3/3 gateway pings, AX211_IP_OK and the listener.
+Actual Mac Telnet reached Riplix, executed echo WIFI_REMOTE_SHELL_OK and
+ifconfig (UP/link up/address107/24/gateway100.1). Another connection also got
+its prompt, then both connections stopped. HP logs show live TX SSN ownership,
+QUIESCED0x4f4000 and Network is down. This was a driver stop, not evidence of
+Telnet's4-client limit being reached. No sustained/concurrent/file-transfer
+acceptance is claimed. See hp-live-first-result.json and hp-live-ssn-failure.png.
+The old7ea13bdd... EFI is historical; keep the accepted stopped DATA fallback.
+
+Source audit found a concrete protocol bug: OpenBSD's cur_hw/tail_hw use
+IWX_TFD_QUEUE_SIZE_MAX_GEN3=65536 on AX210+, while ring cur/tail index256 DMA
+slots. Linuxpcie tx-gen2 increments full hardware write_ptr and masks only
+cmd/DMA index. The old live code wrapped its doorbell at256. An independent
+fake hardware cursor reproduced RED: got0, expected256. The original photo
+lacked raw SSN/head/tail, so it cannot establish this as the only physical cause.
+New code keeps16-bit head/tail/SSN,8-bit native indices and12-bit MAC sequence
+independent. Tests check256 and65536 hardware boundaries,4096 MAC wrap, partial
+cumulative reclaim across65535->0, old/future SSNs and full-width alias rejection.
+
+Linuxpcie iwl_pcie_reclaim logs/declines an out-of-window completion without
+releasing memory or stopping the NIC. The adapter now does the same: increment
+backend_errors plus a private ignored-SSN counter, report the first4 warnings and retain every owned
+page/length/timestamp. Ignored replies cannot reset the5s oldest-TX watchdog.
+Malformed format/queue, real descriptor ownership corruption and watchdog
+failure still stop safely. Fatal diagnostics now retain head/tail/lastSSN/count
+before DMA/key erasure. No blanket SSN acceptance or unsafe buffer recycling.
+
+Pinned consumers: Linuxv6.12 pcie/{tx,tx-gen2}.c, mvm/tx.c, OpenBSD iwx TX queue
+advance/send path and if_iwxreg.h GEN3 constant. URL/SHA record:
+build/x86_64-network/wifi-reference/live-tx-reclaim-sources.json.
+Red evidence: ssn-regression-red.{log,json}; new host suite: ssn-host-check/result.json.
+Exact revised image/QEMU/staging hashes follow final validation in
+ssn-built-efi.json, ssn-production-check/result.json and usb-install.json.
+Reboot into BOOTWIFI, run sh /network.sh and retest sustained real Telnet. There
+is no in-place radio restart in the previous image. Services/SSH, NVMe and
+process-memory ownership are unchanged. This revision still needs HP acceptance.
+
+Revised TX-counter candidate (host/QEMU passed; HP retry pending)
+---------------------------------------------------------------
+BOOTWIFI.EFI:21524992 bytes, SHA256
+60720f36e43a085df0133904c770881408d33b87e4d545903fc19e9a650a2c91.
+USB image SHA256434e79721d4ac7cb5071ca7b582fb2850cd7b98763fa7867c0b4c9377d85f525.
+All16 Wi-Fi host suites + virtio/mailbox native checks passed fatal UBSan;
+5 Python profile/packaging/container checks passed. Exact normal USB image
+passed shell/process/apps/pipe/timer/halt checks in QEMU, absent-radio only.
+The private temporary credential/configuration are unchanged. Only optional
+BOOTWIFI and matching notices are replaced; failed prior live EFI is not added
+as a fallback. All accepted/default fallback hashes are preserved. Readback and
+final eject are separately recorded in usb-install.json. Next: real sustained
+Telnet/traffic after the user's new boot. No physical correction pass yet.
+
+Unified NVMe + services physical acceptance and beacon policy — 2026-10-20
+-------------------------------------------------------------------------
+Unified EFI9360974a... physically reached automatic Wi-Fi, network oneshot,
+SSH/Telnet. OpenSSH exec, entropycheck, gateway3/3,65812-byte exact SFTP,
+mini signed477-entry bootstrap and real grep/cowsay/BASIC packages passed.
+Manual restart retained package DB/data and same SSH host key; apps reran.
+Later link stopped on live beacon loss. TX head/tail/SSN85, queued0; this is
+not the previous pending-TX/ownership failure. SSH timed out afterward. The
+photo lacks all four missed-beacon counters, so real prolonged RF loss is
+not ruled out. First-session bounded acceptance remains; sustained uptime not.
+
+Old code stopped on since-last-RX>=10 alone. Reviewed Linux v6.12
+mvm/mac-ctxt.c: iwl_mvm_handle_missed_beacons_notif and legacy API4 adapter,
+mvm.h and fw/api/mac.h. NEW-TX consumer reports CQM warning above8; it declares
+loss only at consecutive>=19 AND since-last-RX>=4. Recent RX keeps connection
+alive even when many beacons are absent. Generic old-TX mac80211 probe behavior
+is different. OpenBSD iwx_rx_bmiss sends directed probe before state loss;
+we do not introduce unreviewed management TX merely to imitate that branch.
+
+Corrected policy matches Linux new-TX, retaining strict API4 length/link guards
+and all DMA/crypto/TX checks. Four raw counters logged before warning/fatal
+outcome. Independent oracle cases cover8/9/10,18/19, recent-RX3/4,100-beacon
+loss and normal TX after warnings. Old code RED at10/10; all16 Wi-Fi suites,
+virtio/mailbox and Python guards pass fatal UBSan after correction.
+Source URLs/hashes: build/x86_64-network/wifi-reference/beacon-loss-sources.json
+and build/x86_64-hp-beacon/source-audit.json. Original failure/physical checks:
+build/x86_64-hp-system/physical/{post-reboot-result,beacon-loss}.json.
+
+New candidate EFI SHA256:
+729bcb1b59ba4bcfe8834d9091fe72ab9841f6381eaf7256884bfe84b416f4f2
+Recompiled only native console/wifi-native/wifi-live over retained accepted
+kernel/app/math/loader inputs; source and input hashes in candidate.json.
+No HP root rewrite: package/host-key changes remain on NVMe. New console uses
+aligned pending/green OK/red ERR; detailed trace serial, no stale network.sh
+instruction or false RAM-root description. Pixel/serial RGB/BGR host checks
+pass. Exact candidate two-boot QEMU USB/NVMe/entropy/offline/process/pipe/timer/
+shutdown checks passed, absent-radio path only. One first attempt dropped a
+letter in synthetic PS/2 typing; paced service-profile input0.2s passed. This
+is a test-input correction, not a claim of unbounded polled keyboard capacity.
+
+USB default paths are the only planned changed payloads. Previous recovery
+images stay byte-identical, including BOOTWIFI which retains the old cutoff.
+New physical RF acceptance is pending. Test real idle/traffic beyond earlier
+short checks. Reconnect requires runtime safe reset/start plus userland saved
+profile/backoff/address readiness; current driver still lacks that control path.
+Do not claim that threshold correction implements automatic reconnect or rekey.
+
+
+X64 MANUAL RADIO CONTROL VALIDATED / REKEY LIMIT OBSERVED — 2026-10-20
+====================================================================
+Physical beacon-corrected image retained packages/data/pinned host key and
+automatic IP/services; gateway3/3,90s idle +24 rounds10s apart passed. A later
+SFTP upload timed out. User confirms HP awake: WiFi link stopped, live protected
+rekey requires reconnect (user transcribed relay; source literal is rekey).
+This is the known fail-closed unsupported EAPOL rekey path, not evidence of
+another beacon-threshold fault. No unattended reliability acceptance claimed.
+
+Private x64 ABI0x104 and /bin/wifi now implement status/down/reconnect for the
+same embedded test profile. Strict76-cell descriptor validation before effects,
+confirmed stop before DMA/pool reuse, repeated discovery resets MSI/MSIX fields,
+full fresh CPU SNonce/authentication/keys. Synchronous local-console development
+control; startup can pause guest work. No automatic retries, DHCP, profile/
+credential selection or in-place GTK/PTK rekey. Unsafe stop blocks/halts; never
+retry through it. Query returns last link error and attempt/generation counts.
+Userland IP config persists; daemons that exited may need explicit svc restart.
+No shared SDK/kernel/network/service/SSH source edits for this control.
+
+Reviewed cached primary Linux restart_cleanup and OpenBSD stop/init consumers;
+review/hashes: build/x86_64-wifi-control/restart-source-review.json. Host tests
+cover100 mocked fresh-start cycles, failed startup/stop, busy/absent/counters,
+malformed descriptors and no hardware effects on rejection. Exact EFI passed
+two full QEMU USB/NVMe boots with utility absent-radio outcomes, persistence,
+entropy/offline/process/pipe/timer/shutdown and unchanged GPT/seven canaries.
+QEMU does not emulate AX211; physical radio restart remains required.
+
+Candidate EFI c762560efc02c9f0da02494b1af45aebfa325609f02ae7682f009edc81e521b2.
+Retains prior accepted compiled kernel/apps/math; rebuilds native adapter/
+runtime/control only. Root fixture includes utility; PHYSICAL NVMe does not:
+SFTP staging failed before transfer. After next boot, upload /bin/wifi promptly
+then test local status/down/reconnect and remote recovery. USB-only refresh
+preserves installed packages and all Linux/recovery payloads. Internal boot,
+reset and unattended Wi-Fi policy remain later gates. Inline-asm compiler RED
+reproducer remains for compiler owner; utility uses checked volatile fallback.
+
+Manual-control USB handoff complete — 2026-10-20
+Both default USB EFI paths now contain c762560efc02c9f0da02494b1af45aebfa325609f02ae7682f009edc81e521b2.
+All130 existing recovery payloads hash-preserved; FAT checks/read-only readback
+passed; safely ejected. HP NVMe was not written.18 host suites including restart
+and mailbox guards pass fatal UBSan; exact candidate passed two QEMU boots.
+Physical /bin/wifi is NOT installed yet: after next ordinary boot, stage utility
+via pinned SSH/SFTP, sync, then validate local radio down/reconnect and daemon
+recovery. Current known network192.168.100.107; user must not expect command
+available before that upload. Automatic policy/rekey still not implemented.
+
+
+X64 RECOVERY PRIORITY / ARP GATE REGRESSION — 2026-10-20
+=======================================================
+User reports repeated physical power cycles fail with protected ARP reply timeout.
+Local OS shell still runs. Ubuntu maintenance SSH2222 available; USB on Mac.
+Priority now network recovery and orderly reboot before keyboard/GUI/apps.
+
+Found legacy zero-SPA diagnostic still gating live startup. Captured expected-
+correct host RED in arp-red.log: a full WPA2 fake AP without diagnostic ARP must
+produce live NIC, but old code sent diagnostic TX instead. Live mode now ignores
+that standalone diagnostic, retains handshake/key/DMA/crypto guards, and hands
+ARP to normal IP stack. Standalone protected-ARP diagnostic still strict.
+
+Owned x64 userland recovery: wifid supervised through explicit wifi.ini;
+network requires wifi (ready=exec means recovery manager alive, NOT address
+ready). Existing network oneshot/net-ready still gates daemon boot readiness.
+Association trigger moves after PID1 for system-services WiFi profiles only;
+protocol code and embedded profile remain native temporarily. Bounded native
+startup is synchronous and may pause guest work; never invoked from NIC poll.
+Retry policy2,4,8,16,32,60 seconds; explicit wifi down creates persistent pause,
+wifi reconnect clears it. Status polls live notifications. Recovered generation
+runs explicit /etc/wifi-online.sh to configure address and request configured
+network/telnetd/sshd services, including recovery after prior retry exhaustion.
+No shared service-manager/SSH/network-stack source changes or new supplicant
+claim. Proper in-place rekey/profiles/asynchronous protocol still later.
+
+Orderly reboot uses private x64 command0x105 to arm firmware reset, existing
+shutdown path stops services/syncs/quiesces devices, then writes only checked
+FADT byte-SystemIO RESET_REG/RESET_VALUE. HP read-only descriptor: port0xb2,
+value0xfb, flag advertised; QEMU reset acceptance pending. Unsupported descriptor
+refuses reboot; no guessed port fallback. Actual ACPI S5 power-off remains later.
+
+Maintenance stays on HP: full filesystem export was blocked by automatic
+approval review due to private SSH material, so no guest payload is copied to
+Mac. Uploaded checker/new tools only; on-HP COW dry-run validates declared paths,
+all unrelated regular/device inode metadata/content retained, clean fsck and
+both GPT identities. Apply is gated behind exact candidate acceptance and the
+reviewed whole-root input hash. Only changed pages of existing1GiB p3 will be
+written, with full readback; installed packages/data/SSH keys preserved.
+
+
+X64 RECOVERY/REBOOT CANDIDATE VALIDATED AND INSTALLED — 2026-10-20
+================================================================
+Exact EFI cab9aabf3ae70d643a72ad18fee8d63cf023e9620a7974c78c9423d00c80a04e.
+20 Wi-Fi host suites pass fatal UBSan, including real daemon-loop mocks:
+failed boot at0/2/6s, rekey-loss recovery, online hooks, pause/resume, unsafe-stop
+refusal, TERM and unsupported control. Pure policy covers60s cap/clock wrap.
+Existing standalone ARP diagnostic remains strict; live regression now passes
+without any diagnostic ARP response. ACPI parser guards and actual HP FADT
+fixture pass; HP reset descriptor byte-SystemIO0xb2/value0xfb supported.
+
+Exact EFI two-boot QEMU USB/NVMe/entropy/offline/process/pipe/timer/persistence
+passed, plus actual firmware reset on second boot after orderly service stop,
+filesystem sync, NIC quiescence and final block flush. No RF emulation or HP
+reboot claim. A source-only conditional guard was added for diagnostic builds;
+relink changed PE timestamp only. Restoring recorded timestamp reproduced exact
+accepted EFI AND full USB image hashes. Future private rebuild pins timestamp.
+
+Installed directly ON HP via Ubuntu, no root payload exported. Only six paths:
+/bin/{wifi,wifid,reboot}, /etc/services/{wifi,network}.ini,
+/etc/wifi-online.sh.678 changed pages/1,388,544 bytes within1GiB p3. Whole1GiB
+readback and clean fsck verified;358 unrelated existing files/inode metadata
+retained including package database/data/SSH identity. Both GPT copies unchanged;
+Ubuntu/ESP/NVRAM untouched. Root after SHA256 26b5b51fbc2f50cb43c7a2cecb224ffab17c1d1fc5265179665a5fae966271b0.
+No raw filesystem backup/export was made. Disk identity/geometry and reviewed
+whole-root input hash gated exclusive writes. Acceptance receipts remain under
+build/x86_64-wifi-recovery/; HP temporary checker/binaries may be removed.
+
+Physical next gate: boot new USB, inspect wifi/ifconfig/svc status, reconnect via
+pinned SSH, explicitly test local pause/resume and forced link-loss recovery,
+then remote reboot/reconnect with user present. Normal shutdown still syncs/
+halts; S5 power-off, full userland supplicant/profiles and seamless rekey remain
+unimplemented. Native authentication is still synchronous/embedded-profile;
+automatic policy is userland and never restarts inside NIC poll. Network manager
+ready=exec denotes daemon alive, not IP/internet; existing net-ready oneshot
+and explicit online hook govern address readiness and remote service requests.
+
+Recovery/reboot media handoff complete — 2026-10-20
+Both default USB EFI paths verified against accepted cab9aabf...c80a04e;
+all130 existing recovery payloads unchanged, FAT checks/read-only readback pass;
+safely ejected. Recovery tools and six managed paths already installed on HP
+NVMe with complete readback; no remote upload dependency on the next boot.
+Ubuntu remains running; temporary on-HP installer code removed. Physical RF
+and actual HP reboot acceptance still pending. Boot USB normally; use wifi
+status, ifconfig, svc --runtime /var/run/svcd status and wifi.log for diagnosis.

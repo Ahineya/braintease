@@ -1,0 +1,90 @@
+{Module Syma/Parser
+  {Program {Tokenize r"{R Tokenize/Processing/Symbol/VarRest
+      {Program r\"hello\" {Tokenizing - Spoordo {MetaSafe Frames .. {Frame {..}}} {Strings {/r/ \"^[^(){} ]+\" s_} ..}} ..}
+      {Program {Tokenizing - Default {MetaSafe Frames .. {Frame {.. {PVarRest Substring(s_ -2)}}}} {Strings ..}} ..}
+      :guard NormalEq(\"..\" Substring(s_ -2))
+    }"}}
+  {Rules
+    {R Tokenize/Start
+      {Program {Tokenize expr_} _}
+      {Program {Tokenizing Default {MetaSafe} {Strings expr_}} _}
+    }
+
+    {R Tokenize/Processing/Eat
+      {Program {Tokenizing Default .. {Strings {/r/ r"^\s+" s_} ..}} _}
+
+      {Program {Tokenizing Default .. {Strings ..}} _}
+    }
+
+    {R Tokenize/Processing/LCURLY
+      {Program {Tokenizing Default {MetaSafe ..} {Strings {/r/ r"^\{"} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {}}} {Strings ..}} _}
+    }
+    {R Tokenize/Processing/LPAREN
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. s_}}} {Strings {/r/ r"^\("} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}} {Frame {s_}}} {Strings ..}} _}
+    }
+
+    {R Tokenize/Processing/RCURLY&PAREN
+      {Program {Tokenizing Default {MetaSafe .. {Frame {prev..}} {Frame {curr..}}} {Strings {/r/ "^[})] ?"} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {prev.. {curr..}}}} {Strings ..}} _}
+    }
+
+    {R Tokenize/Processing/End
+      {Program {Tokenizing Default {MetaSafe f_} {Strings {/r/ "^\\}$"}}} _}
+      {Program {Tokenizing End {MetaSafe f_}} _}
+    }
+
+    {R Tokenize/Processing/Number
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ r"^-?\d+\.?\d*" n_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. ParseNum(n_)}}} {Strings ..}} _}
+    }
+
+    {R Tokenize/Processing/String
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ r'^r?\"([^\"\\]|\\.)*[\'"]' s_} ..}} _}
+      {Program {Tokenizing Default
+         {MetaSafe .. {Frame {.. Substring(Substring(s_ 0 -1) 1)}}} {Strings ..}} _}
+    }
+
+    {R Tokenize/Processing/Symbol/Var
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ "^[^(){} ]+" s_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. {PVar "_"}}}} {Strings ..}} _}
+      :guard Is(s_ "_")
+    }
+
+    {R Tokenize/Processing/Symbol/Var
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ "^[^(){} ]+" s_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. {PVar Substring(s_, -1)}}}} {Strings ..}} _}
+      :guard NormalEq("_", Substring(s_, -1))
+    }
+
+    {R Tokenize/Processing/Symbol/VarRest/PH
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ "^[^(){} ]+" s_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. {PVarRest "_"}}}} {Strings ..}} _}
+      :guard Is(s_ "..")
+    }
+
+    {R Tokenize/Processing/Symbol/VarRest
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ "^[^(){} ]+" s_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. {PVarRest Substring(s_, -2)}}}} {Strings ..}} _}
+      :guard NormalEq("..", Substring(s_, -2))
+    }
+
+    {R Tokenize/Processing/Symbol 
+      {Program {Tokenizing Default {MetaSafe .. {Frame {..}}} {Strings {/r/ "^[^(){} \"]+ ?" s_} ..}} _}
+      {Program {Tokenizing Default {MetaSafe .. {Frame {.. Sym(Trim(s_))}}} {Strings ..}} _}
+      :guard And(
+        Not(NormalEq("..", Substring(s_, -2)))
+        Not(NormalEq("_", Substring(s_, -1)))
+      )
+    }
+  }
+}
+
+
+
+;refactor
+{Rules {
+  R RenameRule Tokenize/Processing/Symbol HelloClaude
+}}
+;end

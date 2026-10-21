@@ -1,0 +1,82 @@
+{Module Core/Fun
+    {Export
+        id
+        if
+
+        apply
+
+        map
+        reduce
+        filter
+        take
+        skip
+        flatten
+
+        both
+
+        partial
+        partialLast
+        pipe
+        compose
+
+        pipeMany
+        curryMany
+    }
+
+    {Rules
+        {fn id(x_) => x_}
+
+        {fn if(True a_ b_) => a_}
+        {fn if(False a_ b_) => b_}
+
+        {fn apply(composed(Inert(fna_ fnb_)) args..) => apply(fna_ apply(fnb_ args..))}
+        {fn apply(carried(Inert(fn_(carg_))) args..) => apply(fn_ carg_ args..)}
+        {fn apply(carriedLast(Inert(fn_(carg_))) args..) => apply(fn_ args.. carg_)}
+        {fn apply(fn_ args..) => fn_(args..)}
+
+        {fn map(fn_ {}) => {/!}}
+        {fn map(fn_ {item_ ..}) => {apply flatten {{apply fn_ item_} {apply map fn_ {..}}}}}
+
+        {fn reduce(fn_ {} acc_) => acc_}
+        {fn reduce(fn_ {curr_ ..} acc_) => {apply reduce fn_ {..} {apply fn_ acc_ curr_}}}
+
+        {fn filter(fn_ {}) => {/!}}
+        {fn filter(fn_ {item_ ..}) => {apply flatten {
+            {apply if {apply fn_ item_} item_ {}}
+            {apply filter fn_ {..}}
+        }}}
+
+        {fn take(0 list_) => {/!}}
+        {fn take(n_ {item_ ..}) => {apply flatten {
+            item_
+            {apply take Sub(n_ 1) {..}}
+        }}}
+
+        {fn skip(0 list_) => list_}
+        {fn skip(n_ {item_ ..}) => {apply flatten {
+            {apply skip Sub(n_ 1) {..}}
+        }}}
+
+        {fn flatten({}) => {/!}}
+        {fn flatten({.. {things..} ..}) => {apply flatten {.. things.. ..}}}
+        {fn flatten({..}) => {..}}
+
+        {fn both(fna_ fnb_ arg_) => {{apply fna_ arg_} {apply fnb_ arg_}}}
+
+        {fn partial(fn_ arg_) => carried(Inert(fn_(arg_)))}
+        {fn partialLast(fn_ arg_) => carriedLast(Inert(fn_(arg_)))}
+        {fn pipe(fna_ fnb_) => composed(Inert(fnb_ fna_))}
+        {fn compose(fna_ fnb_) => composed(Inert(fna_ fnb_))}
+
+        {fn pipeMany(fns..) => reduce(pipe {fns..} id)}
+        {fn curryMany(fn_ args..) => reduce(partial {args..} fn_)}
+    }
+
+    {RuleRules
+      R(
+        "Sugar/FnShorthand",
+            {fn SYMAWHAT_ => SYMAREPLACE_},
+            {R ReplaceAll(ToString(SYMAWHAT_), " ", "/") SYMAWHAT_ SYMAREPLACE_ :innermost}
+        )
+    }
+}

@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y\n",
+  "description": "Puzzle engines: local variables hide outer typedefs in assignment and array expressions"
+}

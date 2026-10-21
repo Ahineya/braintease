@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y",
+  "description": "Repeated nested designators preserve earlier elements in the same row"
+}

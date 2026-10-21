@@ -148,13 +148,13 @@ int ripple_dns_query(const char *server,const char *name,unsigned type,unsigned 
                 n=write(fd,query,size);
                 if(n==size)break;
                 if(n>=0){errno=EIO;break;}
-                if(errno!=EAGAIN||nu_expired(start,2000UL)||nu_wait())break;
+                if(errno!=EAGAIN||nu_expired(start,2000UL)||nu_ready(fd,1,start,2000UL))break;
             }while(1);
             if(n!=size){if(errno==EINTR){close(fd);h_errno=TRY_AGAIN;return -1;}continue;}
             while(!nu_expired(start,2000UL)) {
                 n=read(fd,reply,capacity);
                 if(n<0) {
-                    if(errno==EAGAIN){if(!nu_wait())continue;}
+                    if(errno==EAGAIN){if(!nu_ready(fd,0,start,2000UL))continue;}
                     if(errno==EINTR){close(fd);h_errno=TRY_AGAIN;return -1;}
                     break;
                 }
@@ -210,13 +210,49 @@ static struct hostent *hosts(const char *name,const uint32_t *address) {
     }
     fclose(f);return 0;
 }
+/* Small positive A cache, local to the process. A CNAME chain's minimum TTL
+ * governs its alias, zero TTL is never cached, and resolver changes invalidate
+ * all entries. Monotonic elapsed subtraction also handles the clock word wrap. */
+#define DNS_CACHE_SLOTS 8
+struct dns_cache_entry {
+    char name[254],canonical[254];uint32_t values[4];
+    unsigned count;unsigned long stamp,lifetime;
+};
+static struct dns_cache_entry dns_cache[DNS_CACHE_SLOTS];
+static uint32_t cache_servers[3];static unsigned cache_server_count,cache_next;
+static struct hostent *cached(const char *name) {
+    uint32_t ips[3]={0,0,0};unsigned ns=servers(ips),i,j;unsigned long now=nu_now();
+    if(ns!=cache_server_count||memcmp(ips,cache_servers,sizeof(ips))) {
+        memset(dns_cache,0,sizeof(dns_cache));memcpy(cache_servers,ips,sizeof(ips));cache_server_count=ns;
+    }
+    for(i=0;i<DNS_CACHE_SLOTS;i++) {
+        struct dns_cache_entry *entry=dns_cache+i;
+        if(!entry->count||strcmp(name,entry->name))continue;
+        if(now-entry->stamp>=entry->lifetime){entry->count=0;return NULL;}
+        memcpy(values,entry->values,sizeof(values));
+        for(j=0;j<entry->count;j++)addresses[j]=(char *)(values+j);
+        return result(entry->canonical,entry->count);
+    }
+    return NULL;
+}
+static void cache_result(const char *name,const char *canonical,unsigned count,unsigned long ttl) {
+    struct dns_cache_entry *entry;
+    if(!ttl)return;
+    entry=dns_cache+(cache_next++%DNS_CACHE_SLOTS);
+    strcpy(entry->name,name);strcpy(entry->canonical,canonical);
+    memcpy(entry->values,values,sizeof(values));entry->count=count;
+    entry->stamp=nu_now();entry->lifetime=(ttl>300UL?300UL:ttl)*1000UL;
+}
 struct hostent *gethostbyname(const char *name) {
-    unsigned char packet[RIPPLE_DNS_PACKET];char current[254],target[254],seen[8][254];
+    unsigned char packet[RIPPLE_DNS_PACKET];char current[254],original[254],target[254],seen[8][254];
+    unsigned long ttl=0xffffffffUL;
     unsigned hop,i,at,count,have,j,advanced;int n;struct ripple_dns_rr rr;struct hostent *h;
     if(!name){h_errno=NO_RECOVERY;return 0;}
     if(inet_pton(AF_INET,name,values)==1){addresses[0]=(char *)values;return result(name,1);}
     if(normalize(name,current)){h_errno=NO_RECOVERY;return 0;}
     if((h=hosts(current,0))!=0)return h;
+    if((h=cached(current))!=NULL)return h;
+    strcpy(original,current);
     for(hop=0;hop<8;hop++) {
         strcpy(seen[hop],current);n=res_query(current,1,1,packet,sizeof(packet));if(n<0)return 0;
         at=12;if(ripple_dns_name(packet,n,&at,target))break;at+=4;
@@ -228,10 +264,10 @@ struct hostent *gethostbyname(const char *name) {
             for(i=0;i<count;i++) {
                 if(ripple_dns_rr(packet,n,&scan,&rr))goto malformed;
                 if(rr.klass!=1||strcmp(rr.name,current))continue;
-                if(rr.type==1&&have<4){values[have]=ip4(packet+rr.data);addresses[have]=(char *)&values[have];++have;}
-                if(rr.type==5){k=rr.data;if(ripple_dns_name(packet,n,&k,target))goto malformed;}
+                if(rr.type==1&&have<4){if(rr.ttl<ttl)ttl=rr.ttl;values[have]=ip4(packet+rr.data);addresses[have]=(char *)&values[have];++have;}
+                if(rr.type==5){if(rr.ttl<ttl)ttl=rr.ttl;k=rr.data;if(ripple_dns_name(packet,n,&k,target))goto malformed;}
             }
-            if(have)return result(current,have);
+            if(have){cache_result(original,current,have,ttl);return result(current,have);}
             if(!*target)break;
             for(i=0;i<=hop;i++)if(!strcmp(target,seen[i]))goto malformed;
             if(!strcmp(current,target))goto malformed;

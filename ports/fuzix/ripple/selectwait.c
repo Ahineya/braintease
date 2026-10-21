@@ -16,7 +16,15 @@ unsigned ripple_select_active;
 static uint8_t selecting[PTABSIZE], registered_count[PTABSIZE];
 /* Store inode indices, not pointers into a possibly discarded syscall stack.
  * Fatal exit and normal completion use the same bounded cleanup. */
+#ifdef CONFIG_DYNAMIC_OFT
+static uint8_t (*registered)[UFTSIZE];
+void ripple_select_init(void) {
+    registered = ripple_kernel_alloc(PTABSIZE * sizeof(*registered));
+    if (!registered) panic("select registrations");
+}
+#else
 static uint8_t registered[PTABSIZE][UFTSIZE];
+#endif
 typedef char registered_inode_fits[(ITABSIZE <= 256) ? 1 : -1];
 static struct ripple_deadline_queue deadlines;
 typedef char deadline_slots_fit[(PTABSIZE <= RIPPLE_DEADLINE_SLOTS) ? 1 : -1];
@@ -82,22 +90,27 @@ static int clock_read(VmHostTime *t) {
 }
 arg_t _select(void) {
     struct ripple_select_request req;
-    struct ripple_fd_set want[3],ready[3];
+    struct ripple_fd_set_wide want[3],ready[3];
     struct ripple_select_time duration;
     VmHostTime sample;
     struct ripple_deadline_time start;
     struct ripple_deadline_slot *timer = &deadlines.slots[udata.u_ptab-ptab];
     inoptr nodes[UFTSIZE];
     int nfds=(int)udata.u_argn,result=-1,expired=0;
-    unsigned fd,n,mask,have,interest;
+    unsigned fd,n,mask,have,interest,set_size,capacity;
     irqflags_t irq;
-    if((uint32_t)udata.u_argn>UFTSIZE||nfds<0||nfds>32){udata.u_error=EINVAL;return -1;}
+    if((uint32_t)udata.u_argn>UFTSIZE||nfds<0){udata.u_error=EINVAL;return -1;}
     if(uget((void *)udata.u_argn1,&req,sizeof(req)))return -1;
-    if(req.version!=RIPPLE_SELECT_VERSION){udata.u_error=EINVAL;return -1;}
+    if(req.version==RIPPLE_SELECT_VERSION) {
+        set_size=sizeof(struct ripple_fd_set);capacity=RIPPLE_SELECT_WORDS*16;
+    } else if(req.version==RIPPLE_SELECT_VERSION_WIDE) {
+        set_size=sizeof(struct ripple_fd_set_wide);capacity=RIPPLE_FILE_LIMIT;
+    } else {udata.u_error=EINVAL;return -1;}
+    if(nfds>capacity){udata.u_error=EINVAL;return -1;}
     memset(want,0,sizeof(want));memset(nodes,0,sizeof(nodes));
     for(n=0;n<3;n++)if(req.sets[n]) {
-        if(uget(req.sets[n],&want[n],sizeof(want[n]))||
-           !valaddr_w(req.sets[n],sizeof(want[n]),sizeof(want[n])))return -1;
+        if(uget(req.sets[n],&want[n],set_size)||
+           !valaddr_w(req.sets[n],set_size,set_size))return -1;
     }
     if(req.timeout) {
         if(uget(req.timeout,&duration,sizeof(duration)))return -1;
@@ -152,6 +165,6 @@ arg_t _select(void) {
     udata.u_ptab->p_timeout=0;
     irqrestore(irq);
     if(result<0)return -1;
-    for(n=0;n<3;n++)if(req.sets[n]&&uput(&ready[n],req.sets[n],sizeof(ready[n])))return -1;
+    for(n=0;n<3;n++)if(req.sets[n]&&uput(&ready[n],req.sets[n],set_size))return -1;
     return result;
 }

@@ -12,6 +12,7 @@ mod globals;
 mod instruction;
 mod link;
 mod liveness;
+mod memory;
 mod process;
 mod suspension;
 mod units;
@@ -41,6 +42,7 @@ struct Compiler {
     global_bank: u64,
     global_cells: u64,
     dynamic: Option<rcc_ir::native_image::ModuleMetadata>,
+    read_views: bool,
 }
 
 impl Compiler {
@@ -171,6 +173,74 @@ fn compile_object_config(
     dynamic: Option<rcc_ir::native_image::ModuleMetadata>,
     roots: &[String],
 ) -> Result<(Vec<u8>, Option<rcc_ir::native_image::Manifest>), String> {
+    compile_object_target(module, kernel, application, dynamic, roots, None)
+}
+
+/// Emit an ELF object for a freestanding x86_64 runtime. The exported
+/// rcc_native_entry(ctx) initializes logical globals/tokens and calls C main;
+/// no host main/start wrapper or host CPU feature detection is used.
+pub fn compile_freestanding_object(module: &Module, triple: &str) -> Result<Vec<u8>, String> {
+    compile_object_target(
+        module,
+        &BTreeSet::new(),
+        false,
+        None,
+        &["main".into()],
+        Some(triple),
+    )
+    .map(|(object, _)| object)
+}
+
+/// Emit a separately loadable application with explicit freestanding target
+/// identity. Packaging and runtime helper binding belong to the target loader.
+pub fn compile_freestanding_application(
+    module: &Module,
+    triple: &str,
+) -> Result<(Vec<u8>, rcc_ir::native_image::Manifest), String> {
+    let (object, manifest) = compile_object_target(
+        module, &BTreeSet::new(), true, None, &["main".into()], Some(triple),
+    )?;
+    let mut manifest = manifest.ok_or("missing application manifest")?;
+    manifest.arch = "x86_64".into();
+    manifest.os = "none".into();
+    Ok((object, manifest))
+}
+
+/// The same entry with shared kernel globals, for the Riplix continuation ABI.
+pub fn compile_freestanding_kernel(
+    kernel: &[Module],
+    applications: &[Module],
+    triple: &str,
+) -> Result<Vec<u8>, String> {
+    let (module, shared) = link::hosted_module(kernel, applications)?;
+    compile_object_target(
+        &module,
+        &shared,
+        false,
+        None,
+        &["main".into()],
+        Some(triple),
+    )
+    .map(|(object, _)| object)
+}
+
+fn compile_object_target(
+    module: &Module,
+    kernel: &BTreeSet<String>,
+    application: bool,
+    dynamic: Option<rcc_ir::native_image::ModuleMetadata>,
+    roots: &[String],
+    freestanding: Option<&str>,
+) -> Result<(Vec<u8>, Option<rcc_ir::native_image::Manifest>), String> {
+    let read_views = match std::env::var("RCC_NATIVE_MEMORY") {
+        Err(std::env::VarError::NotPresent) => false,
+        Ok(value) if value == "checked" => false,
+        Ok(value) if value == "read-v1" => true,
+        _ => return Err("RCC_NATIVE_MEMORY must be checked or read-v1".into()),
+    };
+    if read_views && freestanding.is_some() {
+        return Err("freestanding read-v1 runtime support is pending; use RCC_NATIVE_MEMORY=checked".into());
+    }
     if module.target != Target::Native {
         return Err("native backend requires IR compiled for --target native".into());
     }
@@ -180,8 +250,24 @@ fn compile_object_config(
     let mut flags = settings::builder();
     flags.set("opt_level", "speed").map_err(|e| e.to_string())?;
     flags.set("is_pic", "true").map_err(|e| e.to_string())?;
-    let isa = cranelift_native::builder()
-        .map_err(|e| e.to_string())?
+    let builder = if let Some(triple) = freestanding {
+        if triple != "x86_64-unknown-none" {
+            return Err("freestanding target must be x86_64-unknown-none".into());
+        }
+        flags
+            .set("enable_probestack", "false")
+            .map_err(|e| e.to_string())?;
+        flags
+            .set("unwind_info", "false")
+            .map_err(|e| e.to_string())?;
+        // target-lexicon leaves the format of x86_64-unknown-none unknown.
+        // State ELF explicitly while preserving the freestanding OS identity.
+        cranelift_codegen::isa::lookup_by_name("x86_64-unknown-none-elf")
+            .map_err(|e| e.to_string())?
+    } else {
+        cranelift_native::builder().map_err(|e| e.to_string())?
+    };
+    let isa = builder
         .finish(settings::Flags::new(flags))
         .map_err(|e| e.to_string())?;
     let builder = ObjectBuilder::new(
@@ -258,6 +344,7 @@ fn compile_object_config(
         global_bank: 1,
         global_cells: 1,
         dynamic,
+        read_views,
     };
     let global_cells = compiler
         .ir
@@ -402,7 +489,7 @@ fn compile_object_config(
     let manifest = if application {
         Some(application::manifest(&compiler, offset as u32)?)
     } else {
-        entry::emit_entry(&mut compiler, kernel_offset - 1)?;
+        entry::emit_entry(&mut compiler, kernel_offset - 1, freestanding.is_some())?;
         None
     };
     let object = compiler

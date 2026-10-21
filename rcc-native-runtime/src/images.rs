@@ -653,7 +653,7 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_load(
         return 0;
     }
     let start = memory::linear(pointer);
-    if start < address_space::KERNEL_START || count as usize > CELLS - start {
+    if !address_space::shared_span(start, count as usize) {
         return 0;
     }
     let mut cells = vec![0; count as usize];
@@ -738,7 +738,7 @@ unsafe extern "C" fn rcc_native_ext_rcc_hosted_image_append(
         return 0;
     }
     let start = memory::linear(pointer);
-    if start < address_space::KERNEL_START || count > (CELLS - start) as u64 {
+    if count > usize::MAX as u64 || !address_space::shared_span(start, count as usize) {
         return 0;
     }
     let Some(Loading {

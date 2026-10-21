@@ -1,9 +1,49 @@
 # Fuse-X desktop integration
 
-The desktop model is **one Fuse-X application with multiple native windows**.
+The default desktop model is **one Fuse-X application with multiple native windows**.
 Terminal and GUI windows share one Dock icon. People switch between windows
 using a Finder-style Dock menu, the menu bar's Window menu, and normal macOS
 window controls.
+
+An optional **nested desktop** puts guest applications inside one macOS window,
+for developing the same desktop policy that a future Riplix x64 display backend
+can use:
+
+```sh
+scripts/run-fuse-x.sh --run-only --desktop
+```
+
+This implies `--gui` and opens the usual graphical terminal inside the desktop.
+Launch existing GX applications from its shell; they remain independent guest
+processes. Direct invocation can select `FUSE_X_DESKTOP=1`, with an optional
+`FUSE_X_DESKTOP_SIZE=1280x800` logical initial size. Native-window mode remains
+available through the normal launcher.
+
+The first profile has opaque windows, title-bar dragging, a bottom-right resize
+grip, focus and pointer capture. Close, minimize and maximize/restore controls
+sit on the left of each title bar. Maximize fills the available workspace while
+keeping the taskbar visible; restore returns to the previous bounds. Fixed-size
+clients show an unavailable maximize control. Minimized windows return through
+the taskbar, retaining their maximized state. Dragging a maximized title bar
+restores its normal size before moving it.
+Titles sit just after the controls, left aligned with a clear gap. Title and
+taskbar labels use the same pinned Noto Sans glyph masks as Graphite apps, at
+12 logical points with authored 1x/2x coverage.
+The outer Mac window's red close button minimizes the desktop; the Dock or
+Window menu restores it. An internal close button or Command-W requests that
+application to close, allowing its unsaved-work dialog to keep it open. The
+desktop is a window/compositor prototype with simple chrome; migration of the
+full FuseDE shell to Graphite remains subsequent work.
+
+`libraries/graphics/desktop.rs` supplies allocation-free window policy and packed
+pixel composition. `hosted_desktop.rs` adapts retained published app frames,
+input, density and presentation to one host window. Composition does not read
+app pixels back into C16 buffers. Native-window and nested modes use the same
+GX client interface; LVGL, SDL and terminal apps need no special desktop UI.
+Nested presentation uses each client's logical size and reports 100% effective
+presentation zoom; per-client enlargement remains a native-window feature.
+The x64 display/authority adapter remains to be implemented independently of
+the ongoing kernel and driver work.
 
 ## Implemented native windows
 
@@ -26,7 +66,8 @@ closes. Window and Dock lists activate and restore individual windows. Quit /
 Command-Q requests orderly guest shutdown. The reconnectable console remains
 available alongside the GUI.
 
-The hosted GX backend supports up to sixteen RGB565 surfaces. Native Nano-X
+The hosted GX backend supports up to sixteen surfaces, with XRGB8888 preferred
+and RGB565 available for compatible clients. Native Nano-X
 uses one private canvas per top-level; child widgets draw and clip within that
 canvas. Overlapping virtual coordinates never make one Mac window obscure
 another's pixels. The virtual root is not displayed. Top-level placement belongs
@@ -120,7 +161,7 @@ Closing a window delivers a close request to its owner. Applications need an
 opportunity to handle unsaved work. Process exit releases its remaining windows;
 closing an arbitrary window must not stop the whole kernel.
 
-Presentation uses RGB565 bitmap surfaces. Further drawing acceleration should
+Presentation preserves the negotiated surface format. Further drawing acceleration should
 follow measured needs and preserve this window/surface boundary.
 
 ## One Dock icon and a window list

@@ -1,0 +1,113 @@
+{
+  "metadata": {
+    "name": "Unary",
+    "created": "2025-10-25T18:39:30.283Z",
+    "modified": "2025-10-25T21:25:30.766Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "Ugdyx2Ony7U_LBEK5Ru5P",
+      "type": "markdown",
+      "content": "# Unary algebra in Syma\n\nLet's define a compound and a system to represent unary numbers.\n\nLet `{Unary}` compound represent 0. Let's use | symbol in the `{Unary}` compound to represent 1. So:\n\n```syma\n{Unary | 0 :rule acc_ u.. .. | |} ; 3\n{Unary | | |} ; 3\n```\n\nAlso, while we are at it, let the `NaN` symbol represent the result of dividing by 0.\n\nLet's create a way to transform integers into unary numbers and back:",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "LapXDRNQMrZhRbxA0aAaz",
+      "type": "code",
+      "content": ":clear\n\n; {Unary} compound should contain only |\n:rule Unary/Invariant {Unary a..} -> NaN :guard AreAnyNot(| a..)\n\n; Unary to Num\n:rule ToNum/NaN {ToNum {NaN}} -> NaN\n:rule ToNum {ToNum {Unary u..}} -> {ToNum 0 {Unary u..}}\n:rule ToNum/Zero {ToNum 0 {Unary}} -> 0\n:rule ToNum/Step {ToNum acc_ {Unary one_ u..}} -> {ToNum Add(acc_ 1) {Unary u..}}\n:rule ToNum/End {ToNum acc_ {Unary}} -> acc_\n\n; Unary from Num\n:rule FromNum {FromNum num_} -> {FromNum {Unary} num_} :guard IsNum(num_)\n:rule FromNum/Step {FromNum {Unary ..} num_} -> {FromNum {Unary | ..} Sub(num_, 1)} :guard Gt(num_ 0)\n:rule FromNum/Step {FromNum {Unary ..} 0} -> {Unary ..}\n:rule FromNum {FromNum ..} -> NaN",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 10 rules\n"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "L9PvehzJ-_22Xhp92YoCz",
+      "type": "markdown",
+      "content": "Let's test these:",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "4BRZfRkYWCMyo_4zqVuMY",
+      "type": "code",
+      "content": "{Nums\n    ToNum({Unary})\n    ToNum({Unary |})\n    ToNum({Unary | | |})\n}\n\n{Unaries\n  FromNum(5)\n}\n\n{Unary | | Not| }",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Bundle\n  {Nums 0 1 3}\n  {Unaries\n    {Unary\n      |\n      |\n      |\n      |\n      |\n    }\n  }\n  NaN\n}"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "7i1jYnIBdiO7bqklGIrWM",
+      "type": "markdown",
+      "content": "Perfect! Now, let's\n\n## Define Addition\n\nAddition in unary is simply merging two `{Unary}` together:",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "4A5V83BxVTwiOapodrkqX",
+      "type": "code",
+      "content": ":rule AddUnary Add({Unary a..}, {Unary b..}) -> {Unary a.. b..}",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Added 1 rule\n"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "bCJ_0prRgtvCIUZrAy5NU",
+      "type": "code",
+      "content": ":rule AddUnary Add({Unary a..}, {Unary b..}) -> {Unary a.. b..} :guard And(AreSyms(a..), AreSyms(b..))\n\n:rule SubtractUnary Sub({Unary | a..} {Unary | b..}) -> {Sub {Unary a..} {Unary b..}} :guard And(AreSyms(a..), AreSyms(b..))\n:rule SubtractUnary/A Sub({Unary a..} {Unary}) -> {Unary a..} :guard AreSyms(a..)\n:rule SubtractUnary/Zero Sub({Unary} {Unary b..}) -> {Unary} :guard AreSyms(b..)\n\n:rule MultiplyUnary Mul({Unary a..}, {Unary b..}) -> {Mul Unary {} {A a..} {B b..}} :guard And(AreSyms(a..), AreSyms(b..))\n:rule MultiplyUnary/Step {Mul Unary {..} {A a_ ..} {B b..}} -> {Mul Unary {.. b..} {A ..} {B b..}}\n:rule MultiplyUnary/End {Mul Unary {..} {A} {B b..}} -> {Unary ..}\n\n:rule EqUnary Equ({Unary a..} {Unary a..}) -> {Unary |} :guard And(AreSyms(a..), AreSyms(b..))\n:rule EqUnary Equ({Unary a..} {Unary b..}) -> {Unary} :guard And(AreSyms(a..), AreSyms(b..))\n\n:rule LteUnary Lte({Unary a..} {Unary b..}) -> Equ({Unary} Sub({Unary a..} {Unary b..})) :guard And(AreSyms(a..), AreSyms(b..))\n\n:rule NotUnary/TF Notu({Unary |}) -> {Unary}\n:rule NotUnary/FT Notu({Unary}) -> {Unary |}\n\n:rule GtUnary Gt({Unary a..} {Unary b..}) -> Notu(Lte({Unary a..} {Unary b..})) :guard And(AreSyms(a..), AreSyms(b..))\n\n:rule If/False If({Unary} t_ f_) -> f_\n:rule If/True If({Unary |} t_ f_) -> t_\n\n:rule ModuloUnary Mod({Unary a..}, {Unary b..}) -> If(Gt({Unary b..} {Unary a..}) {Unary a..} {Mod Unary {} {B b..} {A a..}}) :guard And(AreSyms(a..), AreSyms(b..))\n:rule ModuloUnary/Step {Mod Unary {..} {B b..} {A b.. a..}} -> {Mod Unary {.. |} {B b..} {A a..}}\n:rule ModuloUnary/End {Mod Unary {..} {B b..} {A a..}} -> Unary(a..)\n\n:rule DivisionUnary/Zero Div({Unary a..}, {Unary}) -> {NaN} :guard AreSyms(a..)\n:rule DivisionUnary Div({Unary a..}, {Unary b..}) -> If(Gt({Unary b..} {Unary a..}) {Unary |} {Div Unary {} {B b..} {A a..}}) :guard And(AreSyms(a..), AreSyms(b..))\n:rule DivisionUnary/Step {Div Unary {..} {B b..} {A b.. a..}} -> {Div Unary {.. |} {B b..} {A a..}}\n:rule DivisionUnary/End {Div Unary {..} {B b..} {A a..}} -> Unary(..)\n\n; Section for sanity\n:rule ToNum/NaN {ToNum {NaN}} -> NaN\n:rule ToNum {ToNum {Unary u..}} -> {ToNum 0 {Unary u..}}\n:rule ToNum/Zero {ToNum 0 {Unary}} -> 0\n:rule ToNum/Step {ToNum acc_ {Unary one_ u..}} -> {ToNum Add(acc_ 1) {Unary u..}}\n:rule ToNum/End {ToNum acc_ {Unary}} -> acc_\n\n; Runner\n:rule Runner/Start {Tests t..} -> {Testing True t..}\n:rule Runner/False {Testing True {Test a_ b_} t..} -> {Testing False t..} :guard Not(NormalEq(a_ b_))\n:rule Runner/True {Testing v_ {Test a_ b_} t..} -> {Testing v_ t..} :guard NormalEq(a_ b_)\n\n",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Added 30 rules\n"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "MPU3wa5M1X8VE61Wityuo",
+      "type": "code",
+      "content": "{Tests\n   {Test 2 ToNum({Div {Unary | | | |} {Unary | |}})}\n   {Test 1 ToNum({Div {Unary | | } {Unary | |}})}\n   {Test 1 ToNum({Div {Unary | | } {Unary | | | | |}})}\n   {Test NaN ToNum({Div {Unary | | } {Unary}})}\n   {Test 2 ToNum({Mod {Unary | |} {Unary | | | |}})}\n   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | | |}})}\n   {Test 0 ToNum({Mod {Unary | | | |} {Unary | | }})}\n   {Test 1 ToNum({Mod {Unary | | | |} {Unary | | |}})}\n   {Test 8 ToNum({Mul {Unary | | | |} {Unary | |}})}\n   {Test 6 ToNum({Add {Unary | | | |} {Unary | |}})}\n   {Test 2 ToNum({Sub {Unary | | | |} {Unary | |}})}\n   {Test 0 ToNum({Sub {Unary | | | |} Add({Unary | |} {Unary | |})})}\n   {Test 0 ToNum(Notu({Unary |}))}\n   {Test 1 ToNum(Notu({Unary}))}\n   {Test 0 ToNum(Lte({Unary | | |} {Unary |}))}\n   {Test 1 ToNum(Lte({Unary | | |} {Unary | | | |}))}\n   {Test 1 ToNum(Lte({Unary | | | |} {Unary | | | |}))}\n}",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Testing True}"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "2Z1y8qMkQzYlmlJi_qlZe",
+      "type": "code",
+      "content": "Add({Unary | |} {Unary | |})",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Unary\n  |\n  |\n  |\n  |\n}"
+        }
+      ],
+      "metadata": {}
+    }
+  ]
+}

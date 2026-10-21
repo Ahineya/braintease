@@ -1,0 +1,6 @@
+{
+  "description": "Semantic control for bounded-memory portable native lowering across many functions",
+  "use_runtime": true,
+  "expected": "YYY\n",
+  "timeout_secs": 30
+}

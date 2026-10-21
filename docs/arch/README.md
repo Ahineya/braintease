@@ -10,6 +10,7 @@ This folder is the **current** architectural specification for the Ripple VM, as
 | [registers.md](registers.md) | 32-register file and symbolic names |
 | [isa.md](isa.md) | Encoding, opcodes, CALL/RET, HALT, LOAD/STORE pitfall |
 | [abi.md](abi.md) | C data model, calling convention, stack frames |
+| [native-x64.md](native-x64.md) | Accepted native x64 migration: dual application ABIs, preemption, native kernel and hosting RFL |
 | [memory.md](memory.md) | Bank map, fat pointers, GEP, heap |
 | [mmio.md](mmio.md) | MMIO header summary; full device spec in `rvm/mmio.md` |
 | [crypto.md](crypto.md) | Optional ECC and public RSA accelerator, guest TLS and kernel interface |
@@ -24,3 +25,5 @@ Related (not duplicated here):
 - MMIO devices: [`rvm/mmio.md`](../../rvm/mmio.md)
 - C feature list: [`SUPPORTED_FEATURES.md`](../../SUPPORTED_FEATURES.md)
 - Historical drafts: [`docs/archive/`](../archive/README.md)
+- x86_64 port milestones and acceptance commands: [`tools/x86_64/README.md`](../../tools/x86_64/README.md)
+- Riplix x64 delivery order, hardware dependencies and parallel work: [master plan](../x64-master-plan.md)

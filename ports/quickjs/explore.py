@@ -165,7 +165,7 @@ def compile_gates(build, compiler, target):
     return results
 
 
-def guest_build(build, compiler, target, kind='foundation'):
+def guest_build(build, compiler, target, kind='foundation', application_sources=None, output_name=None):
     if kind in ('eval', 'full'):
         kind = 'runtime'  # Same engine/fixture; evaluation is a separate run gate.
     engine = kind in ('runtime', 'cli')
@@ -181,11 +181,15 @@ def guest_build(build, compiler, target, kind='foundation'):
             (source / 'heap-routines.inc').write_text(fixture((source / 'quickjs.c').read_text()))
     stem = {'numbers': 'qjsnumbers', 'foundation': 'qjscheck', 'support': 'qjssupport',
             'platform': 'qjsplatform', 'storage': 'qjsstorage', 'heap': 'qjsheap', 'runtime': 'qjsruntime', 'cli': 'js'}[kind]
-    binary = build / (stem + ('.fxe' if target == 'native' else '.rxe'))
+    binary = build / ((output_name or stem) + ('.fxe' if target == 'native' else '.rxe'))
     log = build / (target + '-' + kind + '-build.log')
     inputs = [PORT / ('cli.c' if kind == 'cli' else 'tests/' + {'numbers': 'numbers.c', 'support': 'support.c',
                                 'platform': 'platform.c', 'storage': 'storage.c', 'heap': 'heap.c', 'runtime': 'runtime.c', 'foundation': 'c16.c'}[kind]),
               source / 'cutils.c']
+    if application_sources is not None:
+        if not engine:
+            raise ValueError('custom applications require the complete engine')
+        inputs = [*application_sources, source / 'cutils.c']
     if kind == 'numbers': inputs.append(source / 'dtoa.c')
     if kind == 'support': inputs += [source / 'libunicode.c', source / 'libregexp.c']
     if kind in ('platform', 'heap', 'runtime', 'cli'): inputs.append(source / 'qjs-platform.c')

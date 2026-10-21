@@ -13,146 +13,45 @@
  * Changed sort direction
  */
 
-#include <string.h>
+/* SPDX-License-Identifier: LGPL-2.1-only */
+/* C16 heapsort: size_t indices and constant auxiliary storage.
+ * No shared pivot buffer: comparators may call qsort recursively. */
+#include <stdlib.h>
 
-char *_qbuf = 0;		/* pointer to storage for qsort() */
-
-#define	PIVOT			((i+j)>>1)
-#define moveitem(dst,src,size)	if(dst != src) memcpy(dst, src, size)
-
-static void _wqsort(void *basep, int lo, int hi,
-               int (*cmp)(const void *, const void *))
-{
-   int   k;
-   register int i, j, t;
-   register int *p = &k;
-   short *base = basep;
-
-   while (hi > lo)
-   {
-      i = lo;
-      j = hi;
-      t = PIVOT;
-      *p = base[t];
-      base[t] = base[i];
-      base[i] = *p;
-      while (i < j)
-      {
-	 while (((*cmp) ((base + j), p)) > 0)
-	    --j;
-	 base[i] = base[j];
-	 while ((i < j) && (((*cmp) ((base + i), p)) <= 0))
-	    ++i;
-	 base[j] = base[i];
-      }
-      base[i] = *p;
-      if ((i - lo) < (hi - i))
-      {
-	 _wqsort(base, lo, (i - 1), cmp);
-	 lo = i + 1;
-      }
-      else
-      {
-	 _wqsort(base, (i + 1), hi, cmp);
-	 hi = i - 1;
-      }
-   }
+static void exchange(char *a, char *b, size_t width) {
+  while (width--) {
+    char cell = *a;
+    *a++ = *b;
+    *b++ = cell;
+  }
 }
 
-static void _lqsort(long *base, int lo, int hi, int (*cmp)(const void *, const void *))
-{
-   long  k;
-   register int i, j, t;
-   register long *p = &k;
-
-   while (hi > lo)
-   {
-      i = lo;
-      j = hi;
-      t = PIVOT;
-      *p = base[t];
-      base[t] = base[i];
-      base[i] = *p;
-      while (i < j)
-      {
-	 while (((*cmp) ((base + j), p)) > 0)
-	    --j;
-	 base[i] = base[j];
-	 while ((i < j) && (((*cmp) ((base + i), p)) <= 0))
-	    ++i;
-	 base[j] = base[i];
-      }
-      base[i] = *p;
-      if ((i - lo) < (hi - i))
-      {
-	 _lqsort(base, lo, (i - 1), cmp);
-	 lo = i + 1;
-      }
-      else
-      {
-	 _lqsort(base, (i + 1), hi, cmp);
-	 hi = i - 1;
-      }
-   }
+static void sift(char *base, size_t root, size_t count, size_t width,
+                 int (*compare)(const void *, const void *)) {
+  while (root < count / 2) {
+    size_t child = root * 2 + 1;
+    if (child + 1 < count &&
+        compare(base + child * width, base + (child + 1) * width) < 0)
+      child++;
+    if (compare(base + root * width, base + child * width) >= 0)
+      return;
+    exchange(base + root * width, base + child * width, width);
+    root = child;
+  }
 }
 
-static void _nqsort(void *basep, int lo, int hi, int size,
-	       int (*cmp)(const void *, const void *))
-{
-   register int i, j;
-   register char *p = _qbuf;
-   char *base = basep;
-
-   while (hi > lo)
-   {
-      i = lo;
-      j = hi;
-      p = (base + size * PIVOT);
-      moveitem(_qbuf, p, size);
-      moveitem(p, (base + size * i), size);
-      moveitem((base + size * i), _qbuf, size);
-      p = _qbuf;
-      while (i < j)
-      {
-	 while (((*cmp) ((base + size * j), p)) > 0)
-	    --j;
-	 moveitem((base + size * i), (base + size * j), size);
-	 while ((i < j) && (((*cmp) ((base + size * i), p)) <= 0))
-	    ++i;
-	 moveitem((base + size * j), (base + size * i), size);
-      }
-      moveitem((base + size * i), p, size);
-      if ((i - lo) < (hi - i))
-      {
-	 _nqsort(base, lo, (i - 1), size, cmp);
-	 lo = i + 1;
-      }
-      else
-      {
-	 _nqsort(base, (i + 1), hi, size, cmp);
-	 hi = i - 1;
-      }
-   }
-}
-
-void qsort(void *base, size_t num, size_t size,
-	  int (*cmp)(const void *,const void *))
-{
-   char  _qtemp[128];
-
-   if (_qbuf == 0)
-   {
-      if (size > sizeof(_qtemp))/* records too large! */
-	 return;
-      _qbuf = _qtemp;
-   }
-   /* Ripple: C sizes count 16-bit cells, not physical octets. */
-   if (size == sizeof(short))
-      _wqsort(base, 0, num - 1, cmp);
-   else if (size == sizeof(long))
-      _lqsort(base, 0, num - 1, cmp);
-   else
-      _nqsort(base, 0, num - 1, size, cmp);
-   if (_qbuf == _qtemp)
-      _qbuf = 0;
+void qsort(void *data, size_t count, size_t width,
+           int (*compare)(const void *, const void *)) {
+  char *base = data;
+  size_t i;
+  if (count < 2)
+    return;
+  if (!width || count > (size_t)-1 / width)
+    return;
+  for (i = count / 2; i; i--)
+    sift(base, i - 1, count, width, compare);
+  for (i = count - 1; i; i--) {
+    exchange(base, base + i * width, width);
+    sift(base, 0, i, width, compare);
+  }
 }

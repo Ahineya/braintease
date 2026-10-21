@@ -17,11 +17,11 @@ struct block {
 };
 #define HEADER ((size_t)sizeof(struct block))
 /* Exact small sizes, then doubling bounds covering the complete arena even
- * when all free blocks coalesce. Native's 192-bank arena needs extra bins. */
+ * when all free blocks coalesce. Native's sparse multi-GiB arena needs extra bins. */
 #define SMALL_BINS 32
 #ifdef FUSE_X_USER
 #include "../../../../fuse-x/include/memory-layout.h"
-#define BIN_COUNT 52
+#define BIN_COUNT 58
 #define MAX_REQUEST (FUSE_HEAP_CELLS - HEADER)
 #else
 #define BIN_COUNT 48
@@ -117,7 +117,7 @@ static int grow(size_t size) {
     amount = need < GROW_CELLS ? GROW_CELLS : need;
 #ifdef FUSE_X_USER
     /* Reject exhaustion before forming an out-of-address-space C pointer.
-     * At the last banks even a valid request can step past bank 255 before
+     * At the last banks even a valid request can step past its private range before
      * brk gets a chance to reject it. That is a native runtime fault. */
     {
         unsigned long at=(unsigned long)current;

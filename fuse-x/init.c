@@ -8,15 +8,32 @@
 
 extern unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_console_closed;
 extern unsigned fuse_stop_tasks(unsigned);
-extern unsigned fuse_gui;
+extern unsigned fuse_gui, fuse_rescue;
 extern unsigned fuse_new_terminals;
-static int graphics_service;
+static int graphics_service, services_manager, console_started;
+static int boot_file(const char *path){
+    int fd=fx_open(path,O_RDONLY,0);if(fd<0)return 0;fx_close(fd);return 1;
+}
+static int start_services(void){
+    int pid,fd;char *arguments[]={"svcd","--boot",NULL};
+    char *environment[]={"PATH=/usr/bin:/bin","HOME=/","SHELL=/bin/sh","LANG=C",NULL};
+    if(fuse_rescue||!boot_file("/etc/boot/services.ini"))return 0;
+    pid=fx_fork();if(pid)return pid;
+    /* Service output never shares the interactive console. */
+    fd=fx_open("/dev/null",O_RDONLY,0);
+    if(fd<0||fx_call(36,fd,0,0)<0)fx_exit(127);if(fd>2)fx_close(fd);
+    fd=fx_open("/var/log/svcd.log",O_WRONLY|O_CREAT|O_APPEND,0600);
+    if(fd<0||fx_call(36,fd,1,0)<0||fx_call(36,fd,2,0)<0)fx_exit(127);if(fd>2)fx_close(fd);
+    fx_call(23,(unsigned long)"/bin/svcd",(unsigned long)arguments,(unsigned long)environment);
+    fx_error("init svcd");fx_exit(127);return -1;
+}
 
 static int start_program(unsigned console) {
+    int first=console==1&&!console_started&&!fuse_rescue&&boot_file("/etc/boot/console.ini");
     int pid=fx_fork(), group;
-    char *arguments[3];
+    char *arguments[4];
     char *environment[9];
-    if(pid) return pid;
+    if(pid){if(pid>0&&console==1)console_started=1;return pid;}
     fx_call(35,SIGINT,0,0); fx_call(35,SIGQUIT,0,0);
     fx_call(35,SIGTTOU,1,0);
     if(console==3) {if(fx_call(78,0,0,0)<0)fx_error("init graphics setsid");}
@@ -25,14 +42,20 @@ static int start_program(unsigned console) {
     if(console==1 && fx_call(29,0,TIOCSPGRP,(unsigned long)&group)<0) fx_error("init foreground group");
     fx_call(35,SIGTTOU,0,0);
     arguments[0]=console==3 ? "nano-X" : console==2 ? "gterm" : console ? "sh" : "telnetd";
-    arguments[1]=console==3 ? "-p" : NULL;arguments[2]=NULL;
-    environment[0]="PATH=/bin:/usr/bin";
+    arguments[1]=console==3 ? "-p" : NULL;arguments[2]=arguments[3]=NULL;
+    environment[0]="PATH=/usr/bin:/bin";
     environment[1]=root_home_environment;
     environment[2]="TERM=vt100";
     environment[3]="SHELL=/bin/sh";
     environment[4]="PS1=fuse-x# ";
     environment[5]="EDITOR=/bin/vi"; environment[6]="USER=root";
     environment[7]="LOGNAME=root"; environment[8]=NULL;
+    if(first){
+        arguments[0]="console-session";arguments[1]="--config";arguments[2]="/etc/boot/console.ini";
+        fx_call(23,(unsigned long)"/bin/console-session",(unsigned long)arguments,(unsigned long)environment);
+        fx_error("init console-session; using shell");
+        arguments[0]="sh";arguments[1]=arguments[2]=NULL;
+    }
     fx_call(23,(unsigned long)(console==3 ? "/bin/nano-X" : console==2 ? "/bin/gterm" : console ? "/bin/sh" : "/bin/telnetd"),
             (unsigned long)arguments,(unsigned long)environment);
     fx_error(arguments[0]); fx_exit(127);
@@ -42,6 +65,10 @@ static int start_program(unsigned console) {
 static int reap(int console) {
     int pid,status;
     while((pid=fx_call(55,-1UL,(unsigned long)&status,WNOHANG))>0) {
+        if(pid==services_manager){
+            services_manager=0;
+            if(!fuse_stopping){fx_puts("Fuse-X: service supervisor stopped; console remains available (status ");fx_number(status);fx_puts(")\n");}
+        }
         if(pid==graphics_service && !fuse_stopping) {
             fx_puts("Fuse-X: Nano-X service stopped (status ");fx_number(status);fx_puts(")\n");
             graphics_service=0;
@@ -63,6 +90,9 @@ void fuse_init_entry(unsigned long argument) {
     fx_puts("Fuse-X: native /init running as PID 1\n");
     if(root_home_start()<0)fx_puts("init: home unavailable; starting in /\n");
     fx_call(35,SIGINT,1,0); fx_call(35,SIGQUIT,1,0);
+    services_manager=start_services();
+    if(services_manager<0){fx_error("init service supervisor fork");services_manager=0;}
+    if(fuse_rescue)fx_puts("Fuse-X: rescue mode; boot services and console policy skipped\n");
     if(fuse_telnet && start_program(0)<0) fx_error("init telnetd fork");
     if(fuse_gui && (graphics_service=start_program(3))<0) fx_error("init graphics service fork");
     if(fuse_gui && start_program(2)<0) fx_error("init graphical terminal fork");
@@ -84,7 +114,15 @@ void fuse_init_entry(unsigned long argument) {
         }
         fx_call(37,1,0,0);
     }
+    fuse_stopping=1;
     fx_puts("Fuse-X: stopping guest processes\n");
+    /* Only notify the supervisor first: signalling every service at once
+     * would bypass its dependency shutdown ordering. Overall watchdog: 90 s. */
+    if(services_manager){
+        fx_call(39,services_manager,SIGTERM,0);fx_call(39,services_manager,SIGCONT,0);
+        for(attempts=0;services_manager&&attempts<900;attempts++){reap(0);if(services_manager)fx_call(37,1,0,0);}
+        if(services_manager)fx_puts("Fuse-X: service shutdown deadline exceeded; forcing cleanup\n");
+    }
     fuse_stop_tasks(SIGTERM);
     for(attempts=0;attempts<5 && fuse_stop_tasks(0);attempts++) {
         reap(0); fx_call(37,1,0,0);

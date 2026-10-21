@@ -104,6 +104,31 @@ static void javascript_token(TextBuffer *b, unsigned long row, const char *line,
     assert(at && !text_render(b, row, 0, 160, 4, styles, 2048, 0, 0, cells));
     for (i = 0; i < strlen(token); ++i) assert((cells[at - line + i] & ~255UL) == styles[kind]);
 }
+static void syma(void) {
+    const char *first = "{R \"a\" {Foo x_ xs..} {Add -1.2e+3 x_} :guard True} ; comment";
+    const char *source = "{R \"a\" {Foo x_ xs..} {Add -1.2e+3 x_} :guard True} ; comment\n"
+        "/* block\nstill */ {Module Demo}\n{Print r\"raw\\\" tail}\n\"multi\nline\"\n";
+    TextBuffer *b = text_new();
+    assert(!text_append(b, (const unsigned char *)source, strlen(source))); text_language(b, 15);
+    javascript_token(b,0,first,"R",2); javascript_token(b,0,first,"\"a\"",3);
+    javascript_token(b,0,first,"x_",6); javascript_token(b,0,first,"xs..",6);
+    javascript_token(b,0,first,"-1.2e+3",4); javascript_token(b,0,first,":guard",2);
+    javascript_token(b,0,first,"; comment",1);
+    javascript_token(b,2,"still */ {Module Demo}","still */",1);
+    javascript_token(b,2,"still */ {Module Demo}","Module",2);
+    javascript_token(b,3,"{Print r\"raw\\\" tail}","r\"raw\\\"",3);
+    javascript_token(b,3,"{Print r\"raw\\\" tail}","tail",0);
+    javascript_token(b,5,"line\"","line\"",3);
+    assert(!text_replace(b,0,0,(const unsigned char *)"/*",2));
+    javascript_token(b,0,"/*{R", "R",1);
+    assert(!text_replace(b,0,2,NULL,0)); javascript_token(b,0,first,"R",2);
+    text_free(b);
+    source="{Outer r\"}\\\" ; }\n /* } */ {Inner \"}\"}}";
+    b=text_new();assert(!text_append(b,(const unsigned char *)source,strlen(source)));text_language(b,15);
+    assert(text_match(b,0)==(long)strlen(source)-1);
+    assert(text_match(b,strstr(source,"/* }")-source+3)<0);
+    text_free(b);
+}
 static void javascript(void) {
     const char *first = "async function load($value) { return /a[\\/]/gu.test($value) ? 1.5e-3 : 0xffn; } // tail";
     const char *source = "async function load($value) { return /a[\\/]/gu.test($value) ? 1.5e-3 : 0xffn; } // tail\n"
@@ -233,4 +258,4 @@ static void wrapping(void) {
     assert(text_length(b) == strlen((const char *)text));
     text_free(b);
 }
-int main(void) { edits(); structure(); randomized(); highlighting(); keywords(); javascript(); display_generation(); banks(); damage_rendering(1); damage_rendering(3); damage_rendering(4); damage_rendering(14); wrapping(); puts("Text engine: history, randomized edits/line index, CRLF, syntax convergence, accumulated damage, wrapping and bank boundary passed"); return 0; }
+int main(void) { edits(); structure(); randomized(); highlighting(); keywords(); javascript(); syma(); display_generation(); banks(); damage_rendering(1); damage_rendering(3); damage_rendering(4); damage_rendering(14); damage_rendering(15); wrapping(); puts("Text engine: history, randomized edits/line index, CRLF, syntax convergence, accumulated damage, wrapping and bank boundary passed"); return 0; }

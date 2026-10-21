@@ -9,7 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 # Binary search requires sorted, unique tables and a bounded token buffer.
 syntax = (ROOT / 'libraries/text/syntax.inc').read_text()
-for name in ('core', 'pascal', 'script', 'lisp', 'json', 'basic', 'javascript'):
+for name in ('core', 'pascal', 'script', 'lisp', 'json', 'basic', 'javascript', 'syma'):
     body = re.search(r'const char \*const ' + name + r'\[\] = \{(.*?)\};', syntax, re.S).group(1)
     words = re.findall(r'"([^"]+)"', body)
     assert words == sorted(set(words)) and all(len(word) < 32 for word in words), name

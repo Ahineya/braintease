@@ -3,7 +3,7 @@
 void tcp_passive_receive(NetTcp *tcp, const TcpSegment *s) {
     if (s->flags & TCP_RST) {
         if (s->sequence == tcp->rcv_nxt) tcp_fail(tcp, NET_RESET);
-        else if (s->sequence - tcp->rcv_nxt < NET_TCP_RX_BUFFER) tcp_challenge(tcp);
+        else if (s->sequence - tcp->rcv_nxt < NET_TCP_RX_CAP(tcp)) tcp_challenge(tcp);
         return;
     }
     if (s->flags & TCP_SYN) {

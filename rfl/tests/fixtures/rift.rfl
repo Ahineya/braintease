@@ -168,7 +168,7 @@ fn unicode_editing() -> bool {
     let s = settings();
     keys(&b, &mut v, &mut vi, "i");
     for (scalar in [1046 as u32, 101, 769, 20013, 128578, 258]) {
-        event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: scalar }, &s, 19);
+        event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: scalar, mouse: None }, &s, 19);
     }
     if (!equal(&b, "Жé中🙂Ă") || v.cursor != b.len() || b.visual(v.cursor, 4) != 7) {
         println("Unicode input or key collision failed");
@@ -199,20 +199,20 @@ fn unicode_editing() -> bool {
         return false;
     }
     keys(&b, &mut v, &mut vi, "r");
-    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013, mouse: None }, &s, 19);
     keys(&b, &mut v, &mut vi, "0.");
     if (!equal(&b, "中é中")) {
         println("Unicode replacement/dot failed");
         return false;
     }
     keys(&b, &mut v, &mut vi, "f");
-    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013, mouse: None }, &s, 19);
     if (v.cursor != 6) {
         println("Unicode character search failed");
         return false;
     }
     keys(&b, &mut v, &mut vi, "F");
-    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013 }, &s, 19);
+    event(&b, &mut v, &mut vi, InputEvent { kind: 0, value: 20013, mouse: None }, &s, 19);
     if (v.cursor != 0) {
         println("Unicode backward search failed");
         return false;
@@ -296,6 +296,14 @@ fn main() -> i16 {
     }
     if (detect("Makefile").name != "make" || detect("HELLO.BF").lexer != 8 as u16 || detect("main.rfl").lexer != 1 as u16) {
         return 5;
+    }
+    let syma = detect("DEMO.SYMA");
+    if (syma.name != "syma" || syma.lexer != 15 as u16 || syma.tool != "syma" || syma.variable != "SYMA" || syma.arguments != "run {file}" || detect("demo.symnb").lexer != 5 as u16) {
+        return 12;
+    }
+    let worksheet = detect("OBJECTS.SYMWS");
+    if (worksheet.name != "syma" || worksheet.lexer != 15 as u16 || worksheet.arguments != "worksheet {file} --run") {
+        return 13;
     }
     for (file in ["hello.js", "module.mjs", "SCRIPT.CJS"]) {
         let js = detect(file);

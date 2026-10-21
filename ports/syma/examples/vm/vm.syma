@@ -1,0 +1,214 @@
+{Module RippleVM
+  {Import RippleVM/Registers from "./registers.syma" open}
+  {Import RippleVM/RAM from "./ram.syma" open}
+  {Import Core/Plumb as Plumb open macro}
+  {Import Core/Main as CoreMain open}
+  {Program
+      {State
+          Starting
+          {InitRegisters}
+          {Ops
+            {0 0  7  7  14}  // LI A0, 7;
+            {1 0  10 8  14}  // LI A1, 8;
+            {2 8  7  9  2}   // Sub A2, A1, A0;
+            {3 50 9  9  10}  // ADDI A2, A2, 50;
+            {4 7  0  9  18}  // STOR A2, R0, A0; // Store A2 at address in R0 + cell offset A0
+            {5 7  0  10 17}  // LOAD A3, R0, A0; // Load A0 from address in R0 + cell offset A0
+            {6 0  0  0  0}   // HALT
+          }
+          {InitRam}
+      }
+      {App}
+  }
+
+/*
+#define OP_HALT 0
+#define OP_NOP  0 // TODO: Make some real code
+
+#define OP_ADD  0x1
+#define OP_SUB  0x2
+#define OP_AND  0x3
+#define OP_OR   0x4
+#define OP_XOR  0x5
+#define OP_SL   0x6 // Bit Shift Left
+#define OP_SR   0x7 // Bit Shift Right
+#define OP_SLT  0x8 // Set Less Than signed
+#define OP_SLTU 0x9 // Set Less Than unsigned
+
+#define OP_ADDI 0xA
+#define OP_ANDI 0xB
+#define OP_ORI  0xC
+#define OP_XORI 0xD
+#define OP_LI   0xE
+#define OP_SLLI 0xF
+#define OP_SRLI 0x10
+
+#define OP_LOAD 0x11
+#define OP_STOR 0x12
+
+#define OP_JAL  0x13
+#define OP_JALR 0x14
+
+#define OP_BEQ  0x15
+#define OP_BNE  0x16
+#define OP_BLT  0x17
+#define OP_BGE  0x18
+
+#define OP_BRK  0x19
+
+#define OP_MUL  0x1A
+#define OP_DIV  0x1B
+#define OP_MOD  0x1C
+
+#define OP_MULI  0x1D
+#define OP_DIVI  0x1E
+#define OP_MODI  0x1F
+*/
+
+  {Rules
+
+    {R Start
+      {State Starting .. {RAM ..} ..}
+      {State Running .. {RAM ..} ..}
+    }
+
+    {R Running->Fetch
+      {State Running ..}
+      {State Fetch ..}
+    }
+
+    {R Fetch->Decode
+      {State Fetch {Registers p.. {reg_ PC pc_} n..} {Ops .. {pc_ op..} ..} ..}
+      {State Decode {Op {pc_ op..}} {Registers p.. {reg_ PC {Add pc_ 1}} n..} {Ops .. {pc_ op..} ..} ..}
+    }
+
+    {R Decode->Decoding
+      {State Decode {Op ..} ..}
+      {State Decoding {Op ..} ..}
+    }
+
+    // ======= Instruction Decoding =======
+
+    {R Decoding/HALT
+      {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+      {State Halt ..}
+      :guard Eq(opcode_, 0) // HALT
+    }
+
+    {OpTwoReg Add  1 a_ b_ -> {Mod {Add a_ b_} 65536}}
+    {OpTwoReg Sub  2 a_ b_ -> {Mod {Add {Sub a_ b_} 65536} 65536}}
+    {OpTwoReg And  3 a_ b_ -> {BitAnd a_ b_}}
+    {OpTwoReg Or   4 a_ b_ -> {BitOr a_ b_}}
+    {OpTwoReg Xor  5 a_ b_ -> {BitXor a_ b_}}
+    {OpTwoReg Sl   6 a_ b_ -> {BitSl a_ b_}}
+    {OpTwoReg Sr   7 a_ b_ -> {BitSr a_ b_}}
+    {OpTwoReg Slt  8 a_ b_ -> {SetLessThan a_ b_}}
+    {OpTwoReg Sltu 9 a_ b_ -> {SetLessThanUnsigned a_ b_}}
+
+    {OpOneReg Addi Add 10}
+    {OpOneReg Andi And 11}
+    {OpOneReg Ori  Or  12}
+    {OpOneReg Xori Xor 13}
+
+    {R Decoding/LI
+      {State Decoding {Op {_ op2_ op1_ op0_ opcode_}} ..}
+      {State Execute {ALU} {Current} {Microcode {PutImm op1_ to reg op0_}} ..}
+      :guard Eq(opcode_, 14) // LI
+    }
+
+    {OpOneReg Slli Sl 15}
+    {OpOneReg Srli Sr 16}
+
+    {OpTwoRegMem Load  17}
+    {OpTwoRegMem Store 18}
+
+    {OpTwoReg Mul 26 a_ b_ -> {Mod {Mul a_ b_} 65536}}
+    {OpTwoReg Div 27 a_ b_ -> {Div a_ b_}}
+    {OpTwoReg Mod 28 a_ b_ -> {Mod a_ b_}}
+    {OpOneReg Muli Mul 29}
+    {OpOneReg Divi Div 30}
+    {OpOneReg Modi Mod 31}
+
+    // ======= Microcode Execution =======
+
+    {R Execute->Executing
+      {State Execute            {ALU ..} {Current} {Microcode step_ ..} ..}
+      {State ExecutingMicrocode {ALU ..} {Current} {Microcode step_ ..} ..}
+    }
+
+    {R Executing->Microcode/Pick
+      {State ExecutingMicrocode {ALU ..} {Current}       {Microcode step_ ..} ..}
+      {State ExecutingMicrocode {ALU ..} {Current step_} {Microcode       ..} ..}
+    }
+
+    // ======= Memory Operations =======
+    {R Execute->Microcode/Load
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Load into target_}} .. {Registers .. {target_ rname_ _}  ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
+      {State ExecutingMicrocode {ALU}             {Current}                     .. {Registers .. {target_ rname_ v_} ..} .. {RAM .. {bank_ addr_ v_} ..} .. }
+    }
+
+    {R Execute->Microcode/Store
+      {State ExecutingMicrocode {ALU bank_ addr_} {Current {Store into v_}} .. {RAM .. {bank_ addr_ _}  ..} ..}
+      {State ExecutingMicrocode {ALU}             {Current}                 .. {RAM .. {bank_ addr_ v_} ..} ..}
+    }
+
+    // ======= Helpers =======
+
+    {R Execute->Microcode/LoadImm
+      {State ExecutingMicrocode {ALU ..}      {Current {LoadImm imm_}} ..}
+      {State ExecutingMicrocode {ALU .. imm_} {Current}                ..}
+    }
+
+    {R Execute->Microcode/PutImm
+      {State ExecutingMicrocode {ALU} {Current {PutImm imm_ to reg reg_}} .. {Registers .. {reg_ rname_ _}    ..} ..}
+      {State ExecutingMicrocode {ALU} {Current}                           .. {Registers .. {reg_ rname_ imm_} ..} ..}
+    }
+
+    {R Execute->Microcode/LoadReg
+      {State ExecutingMicrocode {ALU ..}    {Current {LoadReg reg_}} .. {Registers .. {reg_ _ v_} ..} ..}
+      {State ExecutingMicrocode {ALU .. v_} {Current}                .. {Registers .. {reg_ _ v_} ..} ..}
+    }
+
+    // ======= Microcode Completion =======
+
+    {R Execute->Microcode/End
+      {State ExecutingMicrocode {ALU} {Current} {Microcode} ..}
+      {State Fetch                                          ..}
+    }
+  }
+
+  {RuleRules
+    {R Transform/OpTwoRegs
+      {OpTwoReg OPNAME_ OPCODE_ a_ b_ -> EXPR_}
+      {Splat
+        {R Concat("Decoding/", ToString(OPNAME_))
+          {State Decoding {Op {{/ _} op2_ op1_ op0_ opcode_}} {/ ..}}
+          {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}} {/ ..}}
+          :guard Eq(opcode_, OPCODE_)
+        }
+        {R Concat("Executing/Microcode/", ToString(OPNAME_))
+          {State ExecutingMicrocode {ALU a_ b_} {Current {OPNAME_ into op0_}} {/ ..} {Registers {/ ..} {op0_ rname_ {/ _}}     {/ ..}} {/ ..}}
+          {State ExecutingMicrocode {ALU}       {Current}                     {/ ..} {Registers {/ ..} {op0_ rname_ EXPR_} {/ ..}} {/ ..}}
+        }
+      }
+    }
+    {R Transform/OpTwoRegMem
+      {OpTwoRegMem OPNAME_ OPCODE_}
+      {Splat
+        {R Concat("Decoding/", ToString(OPNAME_))
+          {State Decoding {Op {{/ _} op2_ op1_ op0_ opcode_}} {/ ..}}
+          {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadReg op2_} {OPNAME_ into op0_}} {/ ..}}
+          :guard Eq(opcode_, OPCODE_)
+        }
+      }
+    }
+    {R Transform/OpOneReg
+      {OpOneReg OPNAME_ OP_ OPCODE_}
+      {R Concat("Decoding/", ToString(OPNAME_))
+        {State Decoding {Op {{/ _} op2_ op1_ op0_ opcode_}} {/ ..}}
+        {State Execute  {ALU} {Current} {Microcode {LoadReg op1_} {LoadImm op2_} {OP_ into op0_}} {/ ..}}
+        :guard Eq(opcode_, OPCODE_)
+      }
+    }
+  }
+}

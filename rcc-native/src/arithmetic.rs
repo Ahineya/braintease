@@ -3,6 +3,62 @@ use cranelift_codegen::ir::{condcodes::IntCC, types, InstBuilder, Value as ClVal
 use rcc_ir::ir::{IrBinaryOp as Op, IrType, Value};
 
 impl Cg<'_, '_> {
+    /// Normalize the common same-bank case without entering the runtime.
+    /// Both hosted and freestanding runtimes back the original 256 banks.
+    /// Higher banks, bank crossings and malformed inputs retain the checked
+    /// helper, including its target-specific limits and diagnostics. GEP does
+    /// not access memory or poll; this adds no COW/view/scheduling obligations.
+    pub(super) fn logical_gep(
+        &mut self,
+        pointer: ClValue,
+        delta: ClValue,
+    ) -> Result<ClValue, String> {
+        let bank_cells = i64::from(rcc_ir::target::DataLayout::RIPPLE16.bank_cells);
+        let bank = self.b.ins().ushr_imm_u(pointer, 16);
+        let offset = self.b.ins().band_imm_u(pointer, 65535);
+        let next = self.b.ins().iadd(offset, delta);
+        let valid_bank = self.b.ins().icmp_imm_u(IntCC::UnsignedLessThan, bank, 256);
+        let valid_offset = self
+            .b
+            .ins()
+            .icmp_imm_u(IntCC::UnsignedLessThan, offset, bank_cells);
+        // Unsigned comparison also rejects negative results and extreme signed
+        // deltas. With offset < 64000, adding any i64 delta can only wrap into
+        // this small accepted range when the mathematical result is valid.
+        let same_bank = self
+            .b
+            .ins()
+            .icmp_imm_u(IntCC::UnsignedLessThan, next, bank_cells);
+        let valid = self.b.ins().band(valid_bank, valid_offset);
+        let valid = self.b.ins().band(valid, same_bank);
+        let bank_bits = self.b.ins().band_imm_u(pointer, -65536);
+        let fast = self.b.ins().bor(bank_bits, next);
+
+        let slow = self.b.create_block();
+        let done = self.b.create_block();
+        self.b.append_block_param(done, types::I64);
+        // Only the inline branch retains a view. The helper branch is a call
+        // barrier even though this particular checked GEP does not read RAM.
+        let view = self.read_view;
+        let mut fast_args = vec![fast.into()];
+        if let Some(view) = view {
+            for _ in 0..4 { self.b.append_block_param(done, types::I64); }
+            fast_args.extend(view.values().map(cranelift_codegen::ir::BlockArg::from));
+        }
+        self.b.ins().brif(valid, done, &fast_args, slow, &[]);
+        self.b.switch_to_block(slow);
+        let checked = self.runtime("rcc_native_gep", &[pointer, delta])?;
+        let mut slow_args = vec![checked.into()];
+        if view.is_some() {
+            let zero = self.k(0);
+            slow_args.extend([cranelift_codegen::ir::BlockArg::from(zero); 4]);
+        }
+        self.b.ins().jump(done, &slow_args);
+        self.b.switch_to_block(done);
+        self.read_view = view.map(|_| super::memory::ReadView::from_values(&self.b.block_params(done)[1..]));
+        Ok(self.b.block_params(done)[0])
+    }
+
     pub fn width_of(&self, value: &Value) -> u32 {
         match value {
             Value::Temp(t) => self.types.get(t).map(width).unwrap_or(16),

@@ -3,6 +3,7 @@
  * Standard pipes carry HTTP entity headers/body and diagnostics. TLS/crypto
  * objects live entirely in the exec'd worker, never in the browser ABI. */
 #include <netsurf_profile.h>
+#include "image-limits.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +24,10 @@
 #include "../../tls/ripple_http.h"
 #define WEB_HEADERS 4
 #define WEB_LINE 1024
-#define WEB_BODY_LIMIT 262144UL
-#define WEB_WORKERS 2
+#define WEB_BODY_LIMIT web_body_limit
+static unsigned long web_body_limit;
+#define WEB_WORKERS 4
+static unsigned web_worker_limit=2;
 struct web_worker {
     pid_t pid;
     int input,output,errors,status;
@@ -40,9 +43,9 @@ struct web_fetch {
     char *request;
     unsigned request_size,request_sent,record_used,record_left,record_kind;
     unsigned char record[3];
-    bool started,aborted,locked,eof,headers_done,progress,only_2xx,known;
+    bool draining,started,aborted,locked,eof,headers_done,progress,only_2xx,known;
     unsigned line_used,header_budget,header_count,error_used;
-    unsigned long received,total,started_at;
+    unsigned long received,total,started_at,drain_at;
     const char *failure;
     char line[WEB_LINE+3], error[256], *location, *headers[WEB_HEADERS];
 };
@@ -92,6 +95,7 @@ static void destroy(void *opaque)
     unsigned i;
     while(*at&&*at!=c)at=&(*at)->next;
     if(*at)*at=c->next;
+    if(getenv("NETSURF_TRACE_HTTP"))fprintf(stderr,"NETSURF_HTTP_FREE %s started=%d aborted=%d received=%lu\n",nsurl_access(c->url),c->started,c->aborted,c->received);
     if(c->started)--active_count;
     kill_worker(c); collect(c,true); release_worker(c);free(c->request);
     nsurl_unref(c->url); free(c->location);
@@ -105,6 +109,7 @@ static void send_message(struct web_fetch *c,const fetch_msg *message)
 static void fail(struct web_fetch *c,const char *reason)
 {
     if(!c->failure)c->failure=reason;
+    if(getenv("NETSURF_TRACE_HTTP"))fprintf(stderr,"NETSURF_HTTP_ERROR %s %s\n",nsurl_access(c->url),reason);
     kill_worker(c); c->eof=true;
 }
 static bool initialise(lwc_string *scheme) { return true; }
@@ -144,7 +149,7 @@ static struct web_worker *available_worker(const char *url)
     if(!at)return NULL;
     at+=3;while(*at&&*at!='/'&&*at!='?'&&*at!='#')at++;
     n=at-url;
-    for(i=0;i<WEB_WORKERS;i++) {
+    for(i=0;i<web_worker_limit;i++) {
         w=&workers[i];if(w->busy)continue;
         if(w->pid>0&&reap_worker(w,false)) {stop_worker(w);w->pid=0;w->origin[0]=0;}
         if(!choice||(!choice->pid&&w->pid>0))choice=w;
@@ -160,11 +165,13 @@ static bool spawn_worker(struct web_worker *w)
     w->pid=fork();w->exited=false;
     if(w->pid<0)goto failed;
     if(!w->pid) {
-        char *args[5];unsigned count=0;
+        char *args[7],limit[12];unsigned count=0;
         if(dup2(input[0],0)<0||dup2(out[1],1)<0||dup2(err[1],2)<0)_exit(126);
         /* Never keep the browser's Nano-X/socket/files alive after exec. */
         for(fd=3;fd<FD_SETSIZE;fd++)close(fd);
         args[count++]="htget";args[count++]="--worker";
+        snprintf(limit,sizeof(limit),"%lu",WEB_BODY_LIMIT);
+        args[count++]="--body-limit";args[count++]=limit;
         if(ca_path){args[count++]="--cacert";args[count++]=ca_path;}
         args[count]=NULL;execv("/bin/htget",args);
         write(2,"Unable to execute /bin/htget\n",sizeof("Unable to execute /bin/htget\n")-1);_exit(127);
@@ -183,7 +190,8 @@ static bool start(void *opaque)
     struct web_fetch *c=opaque;
     char *cookie,*at;unsigned i,length;
     struct web_worker *w;
-    if(active_count==WEB_WORKERS)return false;
+    if(active_count==web_worker_limit)return false;
+    if(!WEB_BODY_LIMIT)c->failure="Invalid NETSURF_IMAGE_INPUT limit";
     if(c->aborted||c->failure){++active_count;c->started=true;c->eof=true;return true;}
     w=available_worker(nsurl_access(c->url));if(!w)return false;
     ++active_count;c->started=true;c->started_at=now_ms();
@@ -214,7 +222,16 @@ static bool start(void *opaque)
 static void abort_fetch(void *opaque)
 {
     struct web_fetch *c=opaque;
-    c->aborted=true;kill_worker(c);
+    if(getenv("NETSURF_TRACE_HTTP"))fprintf(stderr,"NETSURF_HTTP_ABORT %s\n",nsurl_access(c->url));
+    c->aborted=true;
+    /* Small, already framed responses can be discarded to a validated DONE.
+     * This preserves the worker/TLS connection without delivering more callbacks.
+     * Unknown/large responses and slow peers are cancelled by closing instead. */
+    if(c->worker && c->headers_done && c->known && !c->failure &&
+       c->request_sent==c->request_size && c->received<=c->total &&
+       c->total-c->received<=65536UL) {
+        c->draining=true;c->drain_at=now_ms();
+    } else kill_worker(c);
 }
 static void complete(struct web_fetch *c,fetch_msg_type type,const char *value)
 {
@@ -260,7 +277,7 @@ static void process_line(struct web_fetch *c)
                 /* Reject known oversize entities at their headers, before
                  * downloading the first 256 KiB of a multi-megabyte image. */
                 if(n>WEB_BODY_LIMIT&&code!=204&&code!=304&&code!=301&&code!=302&&code!=303&&code!=307&&code!=308) {
-                    fail(c,"HTTP response exceeds 256 KiB source limit");return;
+                    fail(c,"HTTP response exceeds configured source limit");return;
                 }
                 c->total=n;c->known=true;
             }
@@ -289,7 +306,7 @@ static void drain_errors(struct web_fetch *c)
 static void response_data(struct web_fetch *c,const ns_octet_t *buf,unsigned got)
 {
     unsigned i=0,n,kind;fetch_msg message;
-    while(i<got&&!c->eof&&!c->failure&&!c->aborted) {
+    while(i<got&&!c->eof&&!c->failure&&(!c->aborted||c->draining)) {
         if(c->record_used<3) {
             if(buf[i]>255){fail(c,"Invalid HTTP worker record octet");break;}
             c->record[c->record_used++]=buf[i++];
@@ -309,7 +326,7 @@ static void response_data(struct web_fetch *c,const ns_octet_t *buf,unsigned got
                    fetch_http_code(c->parent)!=307&&fetch_http_code(c->parent)!=308)||i!=got) {
                     fail(c,"Incomplete HTTP worker response");break;
                 }
-                c->eof=true;release_worker(c);break;
+                c->eof=true;c->draining=false;release_worker(c);break;
             }
             if(kind==RIPPLE_HTTP_ERROR){c->error_used=0;c->error[0]=0;}
         }
@@ -323,10 +340,10 @@ static void response_data(struct web_fetch *c,const ns_octet_t *buf,unsigned got
             }
         } else if(c->record_kind==RIPPLE_HTTP_BODY) {
             c->received+=n;
-            if(c->received>WEB_BODY_LIMIT){fail(c,"HTTP response exceeds 256 KiB source limit");break;}
+            if(c->received>WEB_BODY_LIMIT){fail(c,"HTTP response exceeds configured source limit");break;}
             memset(&message,0,sizeof(message));message.type=FETCH_DATA;
             message.data.header_or_data.buf=buf+i;message.data.header_or_data.len=n;
-            send_message(c,&message);i+=n;
+            if(!c->aborted)send_message(c,&message);i+=n;
         } else {
             unsigned end=i+n;
             for(;i<end;i++)if(c->error_used+1<sizeof(c->error)) {
@@ -354,23 +371,31 @@ static void poll_fetch(lwc_string *scheme)
     for(;c;c=next) {
         next=c->next;
         if(c->locked)continue;
-        if(c->aborted){if(collect(c,false))complete(c,FETCH_FINISHED,NULL);continue;}
+        if(c->draining&&now_ms()-c->drain_at>2000UL) {
+            c->draining=false;kill_worker(c);
+        }
+        if(c->aborted&&!c->draining){if(collect(c,false))complete(c,FETCH_FINISHED,NULL);continue;}
         if(!c->started)continue;
         drain_errors(c);
         if(!c->progress) {
             c->progress=true;memset(&message,0,sizeof(message));message.type=FETCH_PROGRESS;
             message.data.progress="Fetching through guest HTTP/TLS worker";send_message(c,&message);
         }
-        if(c->aborted)continue;
+        if(c->aborted&&!c->draining)continue;
         if(now_ms()-c->started_at>240000UL)fail(c,"Network request exceeded 240 second deadline");
         if(c->worker&&!c->failure&&c->request_sent<c->request_size) {
             got=write(c->worker->input,c->request+c->request_sent,c->request_size-c->request_sent);
             if(got>0)c->request_sent+=got;
             else if(!got||(errno!=EAGAIN&&errno!=EINTR))fail(c,"HTTP worker request pipe failed");
         }
-        for(round=0;round<4&&!c->eof&&!c->aborted&&!c->failure;round++) {
+        for(round=0;round<8&&!c->eof&&(!c->aborted||c->draining)&&!c->failure;round++) {
             got=read(c->worker->output,buf,sizeof(buf));
-            if(!got){fail(c,"HTTP worker exited before completing the response");break;}
+            if(!got){
+                drain_errors(c);collect(c,false);
+                if(getenv("NETSURF_TRACE_HTTP"))fprintf(stderr,"NETSURF_HTTP_EXIT pid=%d status=%d reaped=%d detail=%s\n",
+                    c->worker->pid,c->worker->status,c->worker->exited,c->error);
+                fail(c,"HTTP worker exited before completing the response");break;
+            }
             if(got<0){if(errno!=EAGAIN&&errno!=EINTR)fail(c,"HTTP worker output pipe failed");break;}
             response_data(c,buf,got);
         }
@@ -392,7 +417,7 @@ static void poll_fetch(lwc_string *scheme)
 static int fdset(lwc_string *scheme,fd_set *reads,fd_set *writes,fd_set *errors)
 {
     int max=-1;struct web_fetch *c;struct web_worker *w;
-    for(c=jobs;c;c=c->next)if(c->started&&!c->aborted&&(w=c->worker)!=NULL) {
+    for(c=jobs;c;c=c->next)if(c->started&&(!c->aborted||c->draining)&&(w=c->worker)!=NULL) {
         if(w->output>=0){FD_SET(w->output,reads);if(w->output>max)max=w->output;}
         if(w->errors>=0){FD_SET(w->errors,reads);if(w->errors>max)max=w->errors;}
         if(w->input>=0&&c->request_sent<c->request_size){FD_SET(w->input,writes);if(w->input>max)max=w->input;}
@@ -413,6 +438,9 @@ nserror netsurf_http_register(const char *ca_file)
         .abort=abort_fetch,.free=destroy,.poll=poll_fetch,.fdset=fdset,.finalise=finalise,
     };
     const char *names[2]={"http","https"};unsigned i;nserror error;
+    web_body_limit=ns_image_limit("NETSURF_IMAGE_INPUT",NS_IMAGE_INPUT_DEFAULT,33554432UL);
+    web_worker_limit=ns_image_limit("NETSURF_HTTP_WORKERS",2,WEB_WORKERS);
+    if(!web_body_limit||!web_worker_limit)return NSERROR_BAD_PARAMETER;
     signal(SIGPIPE,SIG_IGN);
     if(ca_file){ca_path=strdup(ca_file);if(!ca_path)return NSERROR_NOMEM;}
     for(i=0;i<2;i++) {

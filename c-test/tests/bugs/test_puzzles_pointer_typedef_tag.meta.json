@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "A pointer typedef and its struct tag occupy different namespaces",
+  "expected": "Y\n"
+}

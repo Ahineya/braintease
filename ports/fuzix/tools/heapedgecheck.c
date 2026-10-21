@@ -3,14 +3,17 @@
 #include "heapcheck.c"
 #undef main
 #include <sys/wait.h>
+#ifdef FUSE_X_USER
+#include "../../../fuse-x/include/memory-layout.h"
+#endif
 
 static int near_limit(void) {
     char *p;
     /* First allocation in this child: the usual 4096-cell growth cannot fit,
      * but one small block still can. Parent's heap remains untouched. */
 #ifdef FUSE_X_USER
-    if((unsigned long)sbrk(0)<(48UL<<16))C(brk((void *)(48UL<<16))==0);
-    C(brk((void *)((239UL << 16) | 63980U)) == 0);
+    if((unsigned long)sbrk(0)<FUSE_HEAP_BASE)C(brk((void *)FUSE_HEAP_BASE)==0);
+    C(brk((void *)(((FUSE_HEAP_END_BANK-1) << 16) | 63980U)) == 0);
 #else
     C(brk((void *)((30UL << 16) | 63980U)) == 0);
 #endif

@@ -1,0 +1,14 @@
+[Unit]
+Description=Riplix development root SSH listener
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bash /usr/local/sbin/riplix-dev-ssh 2222
+Restart=on-failure
+RestartSec=2
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

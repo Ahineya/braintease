@@ -126,7 +126,53 @@ export fn open_file(screen: &Screen, colors: Palette, options: OpenOptions) -> R
                 dirty = false;
             }
             let event = modal.front.event();
-            let key = event.key();
+            let mut key = event.key();
+            match event.mouse {
+                Some(mouse) => {
+                    match modal.mouse(mouse) {
+                        Some(local) => {
+                            if (area.contains(local.row, local.column)) {
+                                let was_selected = files.cursor.selected;
+                                files.mouse(area, local);
+                                if (local.pressed() || local.wheel() != 0) {
+                                    // A second click on the selected row opens it.
+                                    let item = if (local.row >= area.row + 3) {
+                                        files.cursor.top + (local.row - area.row - 3) as usize
+                                    } else {
+                                        files.entries.len()
+                                    };
+                                    if (local.pressed() && !editing && item == was_selected && item < files.entries.len() && local.column > area.column && local.column < area.column + area.columns - 1 && local.row < area.row + area.rows - 1) {
+                                        key = 13;
+                                    }
+                                    editing = false;
+                                    input = name_from_selection(&files);
+                                    prefix = "";
+                                    notice = "";
+                                    listing_dirty = true;
+                                    dirty = true;
+                                }
+                            } else if (input.mouse(Rect { row: h - 4, column: 8, rows: 1, columns: w - 10 }, local)) {
+                                editing = true;
+                                listing_dirty = true;
+                                dirty = true;
+                            } else if (local.pressed() && local.row == h - 3 && notice == "") {
+                                key = if (local.column < 14) {
+                                    13
+                                } else if (local.column < 26) {
+                                    27
+                                } else {
+                                    20
+                                };
+                            }
+                        },
+                        None => {}
+                    }
+                    if (key == NO_KEY) {
+                        continue;
+                    }
+                },
+                None => {}
+            }
             if (event.kind == NO_KEY) {
                 continue;
             }

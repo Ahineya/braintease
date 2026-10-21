@@ -16,6 +16,14 @@ static void resize(int sig){resized=1;signal(sig,resize);}
 static void size(void){struct winsize s;check(!ioctl(0,TIOCGWINSZ,&s),"geometry");printf("MUX_GEOMETRY %u %u\n",s.ws_col,s.ws_row);fflush(stdout);}
 int main(int argc,char **argv){
     int fds[32],i,pid,status;char path[]="/dev/ptyp0";fd_set reads;struct timeval wait;
+    if(argc>1&&!strcmp(argv[1],"--workspace")){
+        char directory[256],line[40];check(getcwd(directory,sizeof(directory))!=NULL,"workspace cwd");
+        printf("WORKSPACE_DIR %s\n",directory);
+        for(i=2;i<argc;i++)printf("WORKSPACE_ARG %s\n",argv[i]);
+        puts("WORKSPACE_READY");fflush(stdout);
+        while(fgets(line,sizeof(line),stdin))if(!strcmp(line,"quit\n"))break;
+        puts("WORKSPACE_EXIT");return 0;
+    }
     if(argc>1&&!strcmp(argv[1],"--burst")){
         struct termios saved,raw;unsigned count=0,j;char data[256];int n;
         check(!tcgetattr(0,&saved),"get burst termios");raw=saved;raw.c_lflag&=~(ICANON|ECHO|ISIG);raw.c_iflag&=~(ICRNL|INLCR|IXON);raw.c_cc[VMIN]=1;raw.c_cc[VTIME]=0;

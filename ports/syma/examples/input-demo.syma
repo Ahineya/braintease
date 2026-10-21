@@ -1,0 +1,32 @@
+{Module Demo/Input
+  {Import Core/Effect open}
+  {Program
+    {Effects {Pending} {Inbox}}
+    
+    {PrintEff "Enter your name: \n"}
+    {Eff {ReadLine "name"}}
+  }
+
+  {Rules
+    {R NextStep/1
+      {Program
+        {Effects .. {Inbox {ReadLineComplete "name" {Text name_}} ..}}
+      }
+      {Program
+        {Effects .. {Inbox ..}}
+        {PrintEff Concat("Hello ", name_, "!\nPress any key: ")}
+        {Eff {GetChar "char"}}
+      }
+    }
+
+    {R NextStep/2
+      {Program
+        {Effects .. {Inbox {GetCharComplete "char" {Char ch_}} ..}}
+      }
+      {Program
+        {Effects .. {Inbox ..}}
+        {PrintEff Concat("You pressed: ", ch_, "\n")}
+      }
+    }
+  }
+}

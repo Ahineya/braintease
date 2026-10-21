@@ -33,6 +33,38 @@ int main(void) {
             if(again&&(again!=(RiImage *)1))ri_image_free(again);
         }
     }
+    /* Independent source/output budgets: JPEG layout keeps original geometry,
+     * decoded buffers never exceed the requested target. Other formats remain
+     * strict until they have a row/tile decoder as well. */
+    for(v=0;v<sizeof(vectors)/sizeof(vectors[0]);v++)if(vectors[v].expected) {
+        const struct vector *item=vectors+v;
+        RiLimits output={8,8,64,262144UL,786432UL};
+        status=ri_image_decode_fit(item->data,item->size,NULL,&output,&im);
+        /* NULL source defaults to output, deliberately still a strict input. */
+        check(status==RI_LIMIT&&!im,"default source bound");
+        { RiLimits source={512,512,65536UL,262144UL,786432UL};
+          status=ri_image_decode_fit(item->data,item->size,&source,&output,&im);
+          check(status==RI_OK&&im&&im->width<=8&&im->height<=8,"bounded scaled JPEG");
+          if(!status) {
+              check(im->source_width==item->w&&im->source_height==item->h,"intrinsic JPEG dimensions");
+              ri_image_free(im);im=NULL;
+          }
+          output.work=1;
+          check(ri_image_decode_fit(item->data,item->size,&source,&output,&im)==RI_LIMIT&&!im,"decoder work bound");
+        }
+    }
+    { RiLimits source={4096,4096,16777216UL,262144UL,786432UL};
+      RiLimits output={128,128,16384UL,262144UL,786432UL};
+      check(ri_image_decode(image_large_baseline,sizeof(image_large_baseline),NULL,&im)==RI_LIMIT&&!im,"strict large JPEG refused");
+      status=ri_image_decode_fit(image_large_baseline,sizeof(image_large_baseline),&source,&output,&im);
+      check(status==RI_OK&&im&&im->width==65&&im->height==49&&im->source_width==1025&&im->source_height==769,"direct reduced MCU decode");
+      if(!status) {
+          max=0;
+          for(cut=0;cut<65UL*49*4;cut++) {error=abs((int)im->rgba[cut]-image_large_expected[cut]);if(error>max)max=error;}
+          if(max>8)printf("REDUCED max=%u first=%u,%u,%u expected=%u,%u,%u\n",max,im->rgba[0],im->rgba[1],im->rgba[2],image_large_expected[0],image_large_expected[1],image_large_expected[2]);
+          check(max<=8,"reduced MCU reference pixels");ri_image_free(im);im=NULL;
+      }
+    }
     check(ri_image_decode(vectors[0].data,vectors[0].size,&small,&im)==RI_LIMIT&&!im,"custom dimension bound");
     check(ri_image_decode(NULL,10,NULL,&im)==RI_CORRUPT&&!im,"null input");
     check(ri_image_decode(vectors[0].data,vectors[0].size,NULL,NULL)==RI_CORRUPT,"null output");

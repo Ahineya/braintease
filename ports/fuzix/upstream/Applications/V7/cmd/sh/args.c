@@ -37,7 +37,11 @@ int options(int argc, const char *argv[])
 	register char *flagc;
 	char *flagp;
 
-	if (argc > 1 && *argp[1] == '-') {
+	/* Explicit end of options also permits positional arguments starting '-'. */
+	if (argc > 1 && eq(argp[1], "--")) {
+		argp[1] = argp[0];
+		argc--;
+	} else if (argc > 1 && *argp[1] == '-') {
 		cp = argp[1];
 		flags &= ~(execpr | readpr);
 		while (*++cp) {

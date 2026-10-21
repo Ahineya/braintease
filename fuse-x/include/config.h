@@ -9,12 +9,15 @@
 #define RIPPLE_SCHED_QUANTUM_MS 5U
 #include "memory-layout.h"
 #define NBUFS 32
+#define NMOUNTS 8
 #define CONFIG_DYNAMIC_BUFPOOL
 #include "../../ports/fuzix/ripple/config-common.h"
 #include "../../ports/fuzix/ripple/process-limits.h"
 #define PTABSIZE RIPPLE_PROCESS_SLOTS
-#define UFTSIZE 32
-#define OFTSIZE 192
+#include "../../ports/fuzix/ripple/file-limits.h"
+#define UFTSIZE RIPPLE_FILE_LIMIT
+#define OFTSIZE RIPPLE_OPEN_FILE_LIMIT
+#define CONFIG_DYNAMIC_OFT
 #define ITABSIZE 128
 #define CONFIG_PLATFORM_BRK
 /* Native pointer arithmetic requires the canonical next-bank address at an

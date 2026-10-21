@@ -1,0 +1,69 @@
+I have just made Syma so much more powerful. Check this out.
+
+{ImagineRules
+    {with-one-of R Hello
+        {Hello {{OneOf Add Sub} a b}}
+        {Chosen operation : {{OneOfResult} a b}}
+    }
+}
+
+Based on this, I want to generate rules:
+
+{ImagineRules
+  R(
+    "Hello/Sub",
+    {Hello Sub(a, b)},
+    {Chosen
+      operation
+      : Sub(a, b)
+    }
+  )
+  R(
+    "Hello/Add",
+    {Hello Add(a, b)},
+    {Chosen
+      operation
+      : Add(a, b)
+    }
+  )
+}
+
+And here how it goes:
+
+:rule LiftOneOf {.. {OneOf rest..} ..} -> Splat({LiftingOneOf rest..} {.. {LiftedOneOf rest...} ..}) :scope with-one-of
+:rule LiftingOneOf {.. {LiftingOneOf rest..} ..} -> Splat({LiftingOneOf rest..} {.. ..}) :scope with-one-of
+:rule LiftedOneOf {.. R .. {LiftingOneOf rest..} ..} -> {.. R .. {LiftedOneOf rest..} ..}
+
+:rule OneOf/Generate {with-one-of R name_ {LiftedOneOf args..} ..} -> {with-one-of R name_ {Current} {LiftedOneOf args..} ..}
+:rule OneOf/Generate/Pick {with-one-of R name_ {Current} {LiftedOneOf a_ args..} ..} -> {with-one-of R name_ {Current a_} {LiftedOneOf args..} ..}
+
+:rule multiline
+OneOf/Generate/Splat 
+{with-one-of R name_ {Current c_} {LiftedOneOf args..} rest..} 
+-> 
+Splat(
+    {with-one-of R name_ {Current} {LiftedOneOf args..} rest..}
+    {fold-oneof R Concat(ToString(name_) "/" ToString(c_)) {Variant c_} rest.. }
+)
+:end
+
+:rule OneOf/Fold/A {LiftedOneOf ..} -> c_ :scope fold-oneof :with {fold-oneof .. {Variant c_} ..} :innermost
+:rule OneOf/Fold/B {OneOfResult ..} -> c_ :scope fold-oneof :with {fold-oneof .. {Variant c_} ..} :innermost
+
+:rule OneOf/Fold {fold-oneof R name_ {Variant c_} ..} -> {R name_ ..}
+:rule WithOneOf/Fold {with-one-of .. {Current} {LiftedOneOf} ..} -> Cleanup
+
+:rule Cleanup {.. Cleanup ..} -> {.. ..}
+
+:rule Test/A {Something ..} -> c_ :scope Scope :with {Scope .. {Variant c_} ..}
+:rule Test/B {Another   ..} -> c_ :scope Scope :with {Scope .. {Variant c_} ..}
+
+:rule Test/Fold {Scope .. {Variant c_} ..} -> {.. ..}
+
+So, I have introduced:
+
+:scope Head — to be able to match only if there exists an arbitrary high parent compound with Head head
+
+:with — to allow an additional match with bindings. If there is no :scope defined, it matches on the same thing that the rule match. If :scope is defined, then it matches on that particular parent.
+
+:innermost — yes, I did add it as an opt-in strategy. I tried to resist it as much as possible, but when the language itself asks for it, who am I to resist. Now Syma can do everything that regular languages can, but still stays Syma, not another Lisp. But it can be a Lisp now, lol.

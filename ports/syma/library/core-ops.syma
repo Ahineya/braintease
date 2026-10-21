@@ -1,0 +1,29 @@
+{Module Core/Ops
+      {Rules
+          ; String concat
+          :rule Add/Strings {.. a_ + b_ ..} -> {.. {Concat a_ b_} ..} :guard And(IsStr(a_) IsStr(b_))
+
+          ; Inline math notation
+
+          ; Higher precedence
+          {:rule InlineMul {.. _ * _ ..} -> {.. {InlineMul _ _} ..}}
+          {:rule InlineDiv {.. _ / _ ..} -> {.. {InlineDiv _ _} ..}}
+          {:rule InlineMod {.. _ % _ ..} -> {.. {InlineMod _ _} ..}}
+
+          ; Lower precedence
+          {:rule InlineAdd {.. _ + _ ..} -> {.. {InlineAdd _ _} ..}}
+          {:rule InlineSub {.. _ - _ ..} -> {.. {InlineSub _ _} ..}}
+
+          {:rule DoubleWrapRemove/Add {{InlineAdd _ _}} -> {InlineAdd _ _}}
+          {:rule DoubleWrapRemove/Sub {{InlineSub _ _}} -> {InlineSub _ _}}
+          {:rule DoubleWrapRemove/Mul {{InlineMul _ _}} -> {InlineMul _ _}}
+          {:rule DoubleWrapRemove/Div {{InlineDiv _ _}} -> {InlineDiv _ _}}
+          {:rule DoubleWrapRemove/Mod {{InlineMod _ _}} -> {InlineMod _ _}}
+
+          {:rule Fold/Add {InlineAdd _ _} -> {Add _ _}}
+          {:rule Fold/Sub {InlineSub _ _} -> {Sub _ _}}
+          {:rule Fold/Mul {InlineMul _ _} -> {Mul _ _}}
+          {:rule Fold/Div {InlineDiv _ _} -> {Div _ _}}
+          {:rule Fold/Mod {InlineMod _ _} -> {Mod _ _}}
+      }
+}

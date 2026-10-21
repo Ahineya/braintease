@@ -136,6 +136,17 @@ worker SDKs, which must already be populated. Libraries
 are cached separately per backend with source/header/compiler fingerprints.
 Each failed compilation retains its diagnostic log next to the IR file.
 
+Old investigation builds and acceptance executables are disposable. The OS
+build runner prunes idle experiments after 24 hours; current native compilation
+caches, browser/worker packages, sources and guest disks remain available.
+Preview a manual cleanup with `python3 scripts/clean-artifacts.py`, then add
+`--apply` to remove the listed artifacts. `--deep` also discards idle Ripple
+compilation caches; `--dev-cache` discards the main Rust debug profile. Both
+require rebuilding those caches on their next use. The main release tools are
+retained. Cleanup keeps one recovery backup per disk and protects active builds
+and running guests. Successful Ripple assembly now removes its assembly dump
+after producing the cached object instead of retaining both large files.
+
 The dependency host runner (`tests/host.py`) also accepts
 `--sanitize --build build/netsurf-host-asan`
 for AddressSanitizer and `--timeout` for execution limits. In this sandbox,
@@ -282,8 +293,8 @@ The toolbar uses a compact sans face; address scrolling and its caret use
 pixel measurements rather than character counts.
 
 Four-bit antialiased coverage is alpha blended over the actual destination,
-including dark backgrounds and images. Three bounded client atlases share the
-ordinary image-resource LRU with photographs, with at most nine glyph
+including dark backgrounds and images. Eight bounded client atlases use reserved text entries on Fuse-X; the
+portable profile shares its smaller image LRU with photographs. At most nine glyph
 rectangles per drawing request. Repaints reuse uploaded atlases; colours are
 applied by the GC without rebuilding the font. There are no host font calls,
 new MMIO commands, or guest TrueType dependencies.
@@ -337,8 +348,8 @@ execute scripts. Image codec support remains linked in either mode. The
 frontend has no favicon display, so it no longer starts unused favicon fetches.
 
 The existing upstream low/high-level **memory cache** handles response
-freshness and conditional requests. Its minimum target is now 1,048,576 C
-cells, four times the previous target; NetSurf assigns 75% to its source
+freshness and conditional requests. The hosted minimum target is 8,388,608 C
+cells (16 MiB); the portable target remains 1,048,576 cells. NetSurf assigns 75% to its source
 cache and 25% to its built-in image-cache target. Our image handler additionally
 imposes its exact aggregate decoded-pixel quota. These are cleanup targets,
 not a reservation or a hard bound on document memory. Fresh cacheable URLs can
@@ -376,7 +387,7 @@ reuse. `no-cache` requires revalidation; `no-store` is never persisted and
 invalidates an older disk copy. POST, error responses, empty bodies, session
 cookies, credential-bearing URLs and responses with unsupported `Vary` fields are omitted
 from disk caching. `Vary: Accept-Encoding` is supported because every request
-uses identity encoding. This profile does not yet maintain other request-header variant
+uses the same fixed content-encoding offer (gzip, with identity also accepted). This profile does not yet maintain other request-header variant
 keys or persistent authenticated sessions. Failed/cancelled fetches are not
 saved, and cached HTTPS content does not permit certificate bypass on network
 requests. Saving begins after a short idle interval and is attempted on normal
@@ -466,27 +477,44 @@ python3 ports/netsurf/tests/bench_fetch.py --local --repeat 1 --output build/net
 
 The graphical build (`--gui`) links the shared, browser-independent decoder in
 [`libraries/image`](../../libraries/image/image.h), plus a thin content-handler
-adapter. PNG, GIF's first frame, baseline JPEG and uncompressed BMP work in
-HTML images, CSS backgrounds and direct image URLs. GIF animation, progressive
-JPEG, WebP, SVG and ICO are not included. See the [library guide](../../libraries/README.md#images)
+adapter. PNG, GIF's first frame, baseline/progressive JPEG and uncompressed BMP work in
+HTML images, CSS backgrounds and direct image URLs. GIF animation, WebP, SVG
+and ICO are not included. See the [library guide](../../libraries/README.md#images)
 for exact format, color and resource limits, C use and the owned RFL `lib/image`
 wrapper. `--images` links the content handlers into other core frontends; those
 frontends must register them and implement their bitmap callbacks.
 
-NetSurf keeps at most 65,536 decoded pixels across its entire content cache,
-with a 512-pixel dimension limit and 256 Ki-octet input limit per image. Its
-handler limits temporary decode work to 393,216 C cells. Decoded RGBA is used
+The native profile defaults to 8,388,608 decoded pixels across the content cache
+(64 MiB of C16 RGBA), 1,048,576 pixels per image (8 MiB), 8 Mi-octet source
+input and 16,777,216 temporary work cells (32 MiB).
+The portable defaults remain 65,536 aggregate pixels, 256 Ki-octet input and
+393,216 work cells. Stored bitmaps are bounded to 2048×2048 on native and
+512×512 on portable, subject to the per-image pixel budget. JPEG sources may
+be up to 4096×4096 and are reduced by powers of two to fit the remaining output
+budget while preserving intrinsic layout dimensions. Baseline JPEG uses MCU
+storage and a reduced 1/8 IDCT at larger reductions. Progressive JPEG uses a
+bounded full coefficient/image pass before reduction; intermediate scans are
+not displayed. PNG/GIF/BMP retain their strict source-size bounds.
+
+Bounded guest environment overrides are `NETSURF_IMAGE_PIXELS` (up to 4,194,304),
+`NETSURF_IMAGE_CACHE_PIXELS` (up to 67,108,864), `NETSURF_IMAGE_INPUT` (up to
+33,554,432 octets) and `NETSURF_IMAGE_WORK` (up to 67,108,864 C cells). Invalid
+values stop initialization with an error. These controls do not enlarge the
+process heap or change the profile's stored-bitmap geometry limit. Decoded RGBA is used
 directly as the frontend bitmap, without a second RGBA allocation. Quota or
 format failures leave normal alternate text; they do not disable other images.
 The legacy C16 content-size counter saturates, while a separate 32-bit pixel
-counter enforces the exact aggregate bound. Cache eviction/retry policy is
-basic: a later image can be refused while earlier cached images consume it.
+counter enforces the exact aggregate bound. Before decoding another image,
+the handler evicts the least recently used decoded images as necessary,
+including their converted Nano-X resources. Encoded sources remain owned by
+NetSurf. Drawing an evicted image decodes it again without another download.
+This is a ceiling, not a startup allocation; allocation failures remain recoverable.
 
 The content handler probes incoming image prefixes for supported formats and
 dimensions. Unsupported formats (including WebP behind `.png`/`.jpg` names),
-oversized dimensions and images exceeding the remaining decoded-pixel quota
+oversized dimensions and images exceeding the configured single-image budget
 fail before their complete source is downloaded. The full decoder still
-validates accepted containers. Known HTTP entity lengths above 256 KiB fail
+validates accepted containers. Known HTTP entity lengths above the configured source limit fail
 at the response headers; streaming responses retain the same running limit.
 Incremental HTML reflow is enabled while images arrive.
 
@@ -499,21 +527,24 @@ Nano-X on private disks:
 python3 ports/netsurf/app.py --web --source ports/netsurf/tests/streaming.c --target native -o build/netsurf/streamcheck.fxe
 python3 ports/netsurf/app.py --gui --source ports/netsurf/tests/scroll.c --target native -o build/netsurf/scrollcheck.fxe
 python3 ports/netsurf/tests/streaming.py --target native
-# Repeat the builds with --target ripple and .rxe outputs for RVM JIT.
-python3 ports/netsurf/tests/streaming.py --target ripple
+# Portable builds remain available, but browser performance work targets native
+# Fuse-X and the developing x64 port. RVM is not an acceptance requirement.
 ```
 
 A separate reusable Nano-X adapter converts/scales visible tiles to RGB565,
 with an optional 0..255 alpha plane. The server blends against the actual
 window backing pixels. CSS repetition and clipping preserve source phase;
 there is no full-page framebuffer, per-pixel transport call or host decoder.
-The browser now retains up to three converted server images (65,536 cells
-combined), with LRU eviction and explicit invalidation before RGBA destruction
+The portable browser retains up to three converted server images (65,536 cells
+combined). Fuse-X allows eight text and thirty-two photo entries with independent
+1,048,576/4,194,304-cell budgets. Both use LRU eviction and explicit invalidation before RGBA destruction
 or modification. Small CSS patterns expand once and use batches of up to nine
 rectangles. Repaints reuse RGB565 uploads; scale changes reuse source images.
 Oversized images, patterns and allocation/quota refusals use the bounded
 visible-tile fallback. One connection slot stays available for that fallback.
-Existing server image quotas remain unchanged. Hosted image drawing now also
+The hosted server has 256 image slots and a 16,777,216-cell aggregate budget,
+up to 64 images per connection, and 512 ordinary pixmap/image objects;
+portable server quotas remain unchanged. Hosted image drawing now also
 accepts the existing 1920x1080 native window bounds. The server draws opaque
 unscaled images directly through its clipping-aware blitter. Other colour and
 alpha images use four-row RGB565 stripes (8 KiB VM / 15 KiB native scratch)
@@ -528,6 +559,38 @@ node ports/netsurf/install.mjs native fuse-x/build/ROOTFS.IMG /tmp/netsurf-nativ
 node ports/netsurf/install.mjs ripple build/fuzix/fuzix.img /tmp/netsurf-rvm.img build/netsurf/netsurf.rxe build/netsurf/htget.rxe build/fuzix/nano-X.rxe
 ```
 
+### Retained document rendering
+
+Native builds cache up to 64 document-space 256×256 RGB565 tiles (8 MiB) and
+one viewport backing pixmap. Wheel scrolling shifts the overlapping viewport
+pixels and fills only the newly exposed strips from cached tiles. Missing
+tiles use the existing NetSurf renderer. Content invalidations discard
+overlapping tiles, including offscreen ones; navigation, resize and close
+reset the appropriate buffers. The viewport is presented with one blit, so
+occlusion and menu/caret overlays do not corrupt scroll copies.
+
+Fixed-position/fixed-background HTML and embedded document views use the
+original viewport repaint path. `--no-render-cache` also selects it explicitly.
+This is guest-side rendering with server-side pixel copies, without a host web
+engine, GPU compositor or parallel DOM/layout. `--trace` reports tile hits,
+misses, rasterized/reused pixels and document paint times.
+
+The independent baseline comparison checks complete document pixels through
+scrolling, distant jumps, resize and reload, including alpha/CSS backgrounds,
+large PNGs, fixed-content fallback, long C16 documents and decoded-image eviction:
+
+```sh
+python3 ports/netsurf/tests/rendering.py --build build/netsurf
+# For separately built test packages, add --graphics-build DIR --sdk DIR.
+```
+
+In the local styled-page fixture, four small cached scroll repaints took
+2–3 ms versus 296–372 ms with `--no-render-cache`, using the same read-v1
+package and kernel. These are document-paint trace times, excluding chrome
+and host presentation. Cold tile fills and resize/reflow still rasterize and
+can cost more than an uncached paint; network, decoding and layout are separate
+costs. The native pixel comparisons also run with checked-memory packages.
+
 Enable Images and open `/usr/share/netsurf/images.html` for the installed gallery. Its PNG has
 transparent edges; the other examples exercise JPEG, interlaced GIF and BMP.
 The fixtures are generated locally and require no external image service.
@@ -538,8 +601,8 @@ python3 ports/netsurf/tests/images.py --target native
 python3 ports/netsurf/tests/images.py --target ripple
 ```
 
-The decoder passes 61 independent format vectors: 495 checks on the host and
-496 on each C16 guest. Allocation-failure and mutation checks pass 18,519 cases
+The current decoder passes 66 independent format vectors: 578 checks on the
+host and 579 on native C16. Allocation-failure and mutation checks pass 20,078 cases
 with guarded allocations and UBSan; no ASan result is claimed because this
 macOS runtime stalls in sanitizer initialization before `main`.
 Graphical tests verify exact RGB565 transparency, scaling, CSS tiling, ordinary
@@ -558,7 +621,8 @@ Captures and logs go under `build/netsurf/images-native/` and `images-ripple/`;
 ## HTTP and verified HTTPS
 
 `http/fetch.c` registers real NetSurf HTTP/HTTPS fetchers. A browser keeps at
-most two independent `/bin/htget --worker` processes, with nonblocking request,
+most two independent `/bin/htget --worker` processes by default
+(`NETSURF_HTTP_WORKERS=1..4` selects a bounded pool), with nonblocking request,
 response and diagnostic pipes. Workers survive successful requests, retaining
 parsed trust anchors and a connection to one origin. Reusing a verified TLS
 connection avoids another process load, trust parse and handshake for every
@@ -566,7 +630,7 @@ image. The pool prefers an idle worker already connected to the requested
 origin. Additional requests remain in NetSurf's queue.
 
 The generic pipe protocol is documented in
-[`ripple_http.h`](../tls/ripple_http.h). It frames final HTTP headers, dechunked
+[`ripple_http.h`](../tls/ripple_http.h). It frames final HTTP headers and decoded
 body chunks and an explicit success/error marker; process EOF is an error.
 Requests and responses can span several pipe reads/writes. Poll batches remain
 bounded, and available entity bytes are flushed before another network wait.
@@ -577,9 +641,10 @@ Its file-download and single-response CLI modes remain available.
 Workers retain only fully consumed, unambiguous HTTP/1.1 responses. Explicit
 `Connection: close`, HTTP/1.0, close-delimited bodies, skipped redirect bodies
 and malformed framing discard the connection. A stale reused socket gets one
-fresh GET attempt only before any response octets arrive. Cancelling a fetch
-kills/reaps its worker, including buffered response bytes; quitting reaps the
-entire pool. Cookies and conditional headers belong to each request and do not
+fresh GET attempt only before any response octets arrive. Cancellation drains a known, validly framed remainder of at most 64 KiB
+under a two-second deadline and suppresses further content callbacks. A fully
+consumed valid response can then reuse its connection; unknown, oversized,
+slow or corrupt remainders kill/reap the worker. Quitting reaps the entire pool. Cookies and conditional headers belong to each request and do not
 leak into the next one. TLS stays in a separate process heap.
 
 This is also an explicit component boundary: imported NetSurf is GPLv2-only,
@@ -603,11 +668,15 @@ may change schemes: the address reflects the destination, and HTTPS never
 silently falls back to unverified TLS. The standalone downloader's existing
 HTTPS-to-HTTP redirect refusal is unchanged.
 
-Bounds: one entity is limited to 256 KiB of source octets, headers to 16 KiB,
+Bounds: the browser passes its configured source limit to each worker
+(default 1 MiB on Fuse-X, 256 KiB portable); headers are limited to 16 KiB,
 one line to 1,024 cells, URLs to fewer than 1,280 cells and outgoing extra
 headers to four. Each request has a 240-second browser deadline, with shorter
-transport operation deadlines. IPv4 and identity content encoding are used;
-compressed responses, POST and uploads report errors. These source bounds
+transport operation deadlines. IPv4 and gzip/identity content encoding are
+used. gzip is streamed through a 32 KiB history with compressed and decoded
+size limits, optional-header checks, CRC/size validation and bounded member
+concatenation. Worker response metadata describes the decoded body. The
+ordinary downloader CLI continues requesting identity. POST and uploads report errors. These source bounds
 are not DOM/heap quotas: small but pathological markup can still exceed the
 process window. Arbitrary modern websites are outside this profile.
 

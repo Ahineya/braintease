@@ -1,0 +1,17 @@
+{Module
+  Core/String
+  {Import Core/List as CL open}
+  {Export CharsToStrings StringsToChars}
+  {Rules
+    R("Str/Join", {Join with_ Strings(strs..)}, {StringJoin "" with_ strs..})
+    R("Str/Join/Start", {StringJoin "" with_ s_ strs..}, {StringJoin s_ with_ strs..})
+    R("Str/Join/Step", {StringJoin acc_ with_ s_ strs..}, {StringJoin Concat(acc_, with_, s_) with_ strs..})
+    R("Str/Join/Done", {StringJoin acc_ with_}, acc_)
+
+    R("Str/CharsToStrings", CharsToStrings({Chars chars..}), Strings(chars..))
+    R("Str/StringsToChars", StringsToChars({Strings strs..}), Chars(strs..))
+
+    R("Str/ReplaceAll", ReplaceAll(str_, old_, new_), Join(new_, SplitBy(old_, str_)))
+    R("Str/ReplaceFirst", ReplaceFirst(str_, old_, new_), Join(new_, Take(2, SplitBy(old_, str_))))
+  }
+}

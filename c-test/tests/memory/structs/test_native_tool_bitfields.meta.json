@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y\n",
+  "description": "C16 packed signed fields, aggregate initialization and single-evaluation updates"
+}

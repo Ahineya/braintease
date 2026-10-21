@@ -117,7 +117,8 @@ def adapt_core(name, source):
 \t/* 1. Create children */''')
     if name == 'netsurf/desktop/netsurf.c':
         source = replace(source, '#define MINIMUM_MEMORY_CACHE_SIZE (2 * 1024 * 1024)',
-                         '#define MINIMUM_MEMORY_CACHE_SIZE 1048576UL\n#include <c16-cache.h>')
+                         '#ifdef RIPPLE_NETSURF_HOSTED\n#define MINIMUM_MEMORY_CACHE_SIZE 8388608UL\n'
+                         '#else\n#define MINIMUM_MEMORY_CACHE_SIZE 1048576UL\n#endif\n#include <c16-cache.h>')
         source = replace(source, '#define LLCACHE_STORE_MIN_BANDWIDTH (128 * 1024)',
                          '#define LLCACHE_STORE_MIN_BANDWIDTH 0UL')
         source = replace(source, '#define LLCACHE_STORE_MAX_BANDWIDTH (1024 * 1024)',

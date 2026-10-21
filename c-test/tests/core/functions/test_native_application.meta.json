@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Application function-token and data initializers shared by hosted and freestanding loaders",
+  "expected": "YYYY\n"
+}

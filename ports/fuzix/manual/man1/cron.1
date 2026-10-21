@@ -1,0 +1,69 @@
+.TH CRON 1
+.SH NAME
+cron, crond \- run recurring commands and queued at jobs
+.SH SYNOPSIS
+.B cron
+[\-f] [\-c file] [\-s spool] [\-\-no-at] [\-t | \-\-once [\-\-time epoch]]
+.SH DESCRIPTION
+Run in the foreground for svcd supervision. crond is a symbolic-link alias.
+At startup, then once for each new epoch minute, reload /etc/crontab and
+launch matching commands with /bin/sh -c. Jobs may overlap and output is
+inherited from cron, normally the service log. Standard input is /dev/null
+and the initial working directory is /. PATH defaults to /bin:/usr/bin if absent.
+The local timezone follows TZ or /etc/TZ.
+.PP
+Each non-comment line contains minute (0-59), hour (0-23), day of month
+(1-31), month (1-12), day of week (0-7; 0 and 7 mean Sunday), then a command.
+Fields accept *, comma lists, inclusive ranges and /step suffixes.
+When both day fields are restricted, either may match; otherwise both match.
+A field beginning with * has wildcard day semantics, including */step.
+There is no username column. Commands run with cron's credentials.
+.PP
+Each minute also starts /bin/atrun for the selected queue, independently of
+crontab errors. Missed minutes are not replayed. Backward wall-clock changes
+pause dispatch until the previous epoch minute is exceeded; repeated local
+DST times at distinct epoch minutes may run twice. Timezone changes are read
+on the next minute. Malformed crontabs reject the entire recurring batch.
+.SH OPTIONS
+.TP
+.B \-f
+Remain in the foreground; this is always the behavior.
+.TP
+.B \-c file
+Select another crontab. It must be a regular file owned by cron's effective
+user, without group or other write permission. Symbolic links are rejected.
+.TP
+.B \-s spool
+Select an absolute private at queue directory. Default: /var/spool/at.
+.TP
+.B \-\-no-at
+Disable the queue runner, retaining recurring commands only.
+.TP
+.B \-t
+Validate the crontab and exit without launching any job.
+.TP
+.B \-\-once
+Dispatch the current minute once and wait for direct children.
+Return failure if configuration, dispatch or a waited job fails.
+.TP
+.B \-\-time epoch
+With --once, match recurring schedules against a specified Unix timestamp.
+This does not change the system clock or atrun's real current time.
+.SH SERVICE
+Installing /etc/services/cron.ini does not start cron.
+Explicitly add cron to enabled in /etc/boot/services.ini on a system with
+svcd boot integration, or use svc start cron on an existing supervisor.
+SIGTERM/SIGINT stop new dispatch. svcd signals the service process group,
+including its active jobs. Directly stopping cron alone does not cancel jobs.
+.SH LIMITS
+A crontab line holds at most 2048 native characters, excluding newline.
+Definitions are dynamically allocated; exec and available process/memory
+limits apply. Environment assignments in crontab, @daily macros, mail delivery,
+and special percent-to-stdin syntax are not implemented. Percent is literal
+shell text. Edit /etc/crontab directly; a crontab management command is not included.
+.SH EXIT STATUS
+0 for a clean validation/one-shot or normal service stop; 1 for validation or
+one-shot execution errors; 2 for invalid command-line options.
+Daemon job/configuration errors are logged and retried at later minutes.
+.SH SEE ALSO
+at(1), atrun(1), svc(1)

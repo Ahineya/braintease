@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "expected": "Y\n",
+  "description": "Guarded 32-level includes work inside guest file-descriptor limits"
+}

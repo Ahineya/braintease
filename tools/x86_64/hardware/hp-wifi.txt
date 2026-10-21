@@ -1,0 +1,1046 @@
+HP AX211 WI-FI / NATIVE NETWORKING HANDOFF — 2026-10-20
+=====================================================
+The physical target is the BUILT-IN Wi-Fi. No Ethernet cable/adapter is required
+or requested. QEMU's virtio Ethernet card is an independent stack/remote-shell
+acceptance device, not the HP hardware driver. Native HP passive Wi-Fi discovery
+works; initial 802.11 authentication and association are physically confirmed.
+User reports the WPA2 handshake/key checkpoint passed. Protected traffic and
+an IP link remain pending.
+The existing accepted offline USB/NVMe installation was not changed here.
+
+
+
+
+CURRENT USB: PROTECTED UNICAST ARP CHECKPOINT — 2026-10-20
+---------------------------------------------------------
+Accepted private WPA2 key image retained locally and on USB as BOOTWKEY.EFI
+(a4a7028d...). Auth/association/passive-scan and default/offline fallbacks all
+preserved. Only optional BOOTWIFI, notices and accepted-WPA2 fallback written.
+No NVMe/Ubuntu access or shared compiler/SDK/runtime/kernel/socket edits.
+
+New explicit --wifi-data-probe target is 192.168.100.1, read from the Mac's
+current default route on en0. No address is claimed: ARP sender IP0.0.0.0,
+Ethernet destination broadcast carried ToDS to the unicast AP, Protected bit
+set, firmware CCMP encryption enabled. Require positive TX completion AND a
+matching decrypted unicast ARP reply. This profile does NOT adopt the router's
+IP or configure a guest IPv4 address. It is a bounded data proof, not full ACD.
+
+Compared pinned Linuxv6.12 rxmq.c/rx.h with OpenBSD iwx TX/RX/crypto consumers.
+RX pad is after IV; SEC_CCM/MIC_OK, CRC/overrun, selected AP/channel/receiver,
+ExtIV/key0 and increasing per-TID PN are validated. Modern Linux does not
+additionally require DECRYPTED bit11; it is retained raw, both forms tested.
+No unprotected-data fallback. ARP/IPv4/IPv6 protocol length trims any retained
+crypto trailer before native Ethernet conversion. TKIP/group RX, fragments,
+A-MSDU, live rekey, ring reuse and persistent IP interface remain pending.
+A router may decline probes or answer only by broadcast; this checkpoint
+accepts only unicast replies. Such timeout alone does not prove broken CCMP.
+
+All14 host suites pass fatal UBSan, including1149 framing/status/PN/atomicity
+cases and19 full startup/WPA/protected-ARP/error/clean-stop cases. Public fake
+firmware frames/status do not certify real hardware crypto. Exact production
+USB EFI passed QEMU shell/apps/process/pipe/timer/normal halt, absent-radio only.
+Evidence: data-host-validation.json, data-built-efi.json, data-production-check/
+result.json and usb-install.json under build/x86_64-wifi-start-shell/.
+BOOTWIFI.EFI 21487616 bytes SHA256:
+a13e5d39b18fba50d9d570591b8205cc52e6d67364d4fa774e0d376aded05c23
+Production USB image SHA256:
+da62c87f98220b6412380d102fbb7a6285ecc596bca7b753b4480e3138116831
+Notices13829 bytes embedded and WIFILIC.TXT. Final identity/hash readback
+and safe ejection are recorded in usb-install.json. Private derived test key
+is still embedded; no plaintext password logged/committed or prompt added.
+
+F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Expected final summary:
+  AX211_DATA_RESULT tx=1(or2) rx>=1 ARP=1 complete=1 ... status=<actual> PN>0
+  AX211_QUIESCED, AX211_DATA_OK, normal RAM-root shell.
+If it fails, photograph DATA_RESULT and STARTUP_FAILED. No moving target or
+new credential needed. Radio intentionally stops after this checkpoint too.
+Physical protected-ARP acceptance pending; no IP/Telnet/SSH success claim.
+Prior current-test entries below are historical.
+
+Parallel owners reported by user: services management and wolfSSH. Those own
+service boot/DHCP/remote-server policy and SSH port respectively. This work
+stays in AX211/native packet transport. DHCP should sit above a usable network
+interface; services require explicit readiness/link-change handling, not just
+boot-completed timing. Shared control/readiness ABI must be coordinated first.
+The acknowledgement and ownership split are also in the coordination note.
+
+
+PHYSICAL WPA2 KEY CHECKPOINT ACCEPTED / NEXT TRANSPORT WORK — 2026-10-20
+------------------------------------------------------------------------
+User reports AX211_WPA2_OK on the HP. No photo/raw final counters supplied for
+this run; record only the reported marker and its implemented acceptance scope:
+authenticated M3, positive M4 TX and PTK/GTK command replies, followed by the
+intentional radio stop. This does NOT establish protected data or IP operation.
+Evidence: build/x86_64-wifi-start-shell/hp-wpa-result.json. Last staged EFI
+SHA256 a4a7028d7dc792bf568b4820866a498a411b491153f989f96dc48538b2e42e8c
+is preserved as accepted-wpa.EFI (private, mode0600, derived test PMK inside).
+The hash is from the staging receipt, not measured from the physical HP.
+USB is reported returned to the Mac. Previous pending-current entries below
+are historical; prior hardware proofs and fallback hashes remain valid.
+
+Integration boundary reviewed: net.h / network.inc carry raw Ethernet frames
+and NicInfo between native NIC queues and the existing C16 DEVICE_NET mailbox.
+net.c is currently virtio-only. Keep that mailbox and existing TCP/IP/socket
+stack; add AX211 Ethernet <-> 802.11/LLC conversion beneath it. The current
+Wi-Fi path stops and wipes DMA/keys before shell. Persistent operation requires
+an explicit runtime lifecycle, bounded reusable RX/TX queues, disconnect/error/
+shutdown handling, and key/replay state that survives until actual teardown.
+Do not simply remove the stop or treat a key ACK as decrypted RX acceptance.
+
+Next sequence:
+1. Source-reviewed protected packet TX/RX: CCMP unicast, actual firmware crypto
+   status and per-key/TID replay checks; TKIP group integrity/replay handling for
+   this AP. Validate frame/header/padding/LLC conversion with independent vectors.
+2. Persistent driver/backend on the existing raw-frame boundary, correct DMA
+   ownership/ring recycling/backpressure, then actual ARP/ping and Telnet with
+   HP-appropriate IPv4 config. Existing QEMU defaults are not HP LAN settings.
+   DHCP is currently absent; explicit initial static IPv4 is possible.
+3. Userspace Wi-Fi scan/connect/disconnect/status + saved profiles and curses
+   UI over the same control API. Administrative up/down differs from associated
+   radio carrier. Existing ifconfig only names eth0 and protocol up/down; do
+   not claim it currently powers down the AX211. Coordinate shared interface/
+   socket/SDK changes before implementation. Rekey/reconnect must accompany a
+   durable link; no long-running network claim from a one-shot handshake.
+4. Network CLI/Telnet first, then mux, commander/mc and rift, followed by network
+   apps on the existing socket API once dependencies are validated. No need for
+   individual apps to implement Wi-Fi. GUI/audio remain their own drivers/work.
+
+Pinned OpenBSD iwx_tx, iwx_rx_hwdecrypt and iwx_ccmp_decap reviewed for next
+transport phase: CCMP hardware inserts TX IV/PN, RX requires actual CCM/DEC_DONE/
+MIC_OK and host per-TID PN validation. RX pad is AFTER the CCMP IV, not blindly
+between the MAC header and IV. Firmware may retain/strip the trailing MIC;
+upstream does not invent a reserved-zero or fixed-length assumption. Preserve
+these source facts in tests before the next USB build. Current source review
+is planning/evidence, not protected-data implementation or test acceptance.
+
+
+CURRENT USB: SOURCE-REVIEWED WPA2 HANDSHAKE / KEY CHECKPOINT — 2026-10-20
+------------------------------------------------------------------------
+The user supplied the temporary test passphrase and explicitly requested no
+password prompt. It is held in an ignored mode0600 build file, never printed
+or added to source/docs. The optional EFI carries its derived PMK; this is
+private test material. RDSEED/RDRAND supplies a fresh SNonce on every boot.
+Accepted association is retained locally and on USB as BOOTWASC.EFI; accepted
+auth remains BOOTWAUT.EFI. Default/offline boot and every prior fallback hash
+are preserved. Only optional BOOTWIFI, notices and accepted-association fallback
+were written/readback verified; no internal NVMe/live Ubuntu interface action.
+
+Read actual OpenBSD PAE input1.39/output1.33/crypto1.81, iwx1.230/reg1.75,
+Linuxv6.12 mld-key/datapath/TX/session consumers, and wpa_supplicant2.11 GTK
+orientation BEFORE staging. See hp-wifi-checks.txt for exact decisions/limits;
+secured-wifi-sources.json under build/x86_64-network/wifi-reference/ pins URL/SHA.
+Crypto cores carry source notices and boot/wifi-crypto-sources.json adaptation
+hashes. Source-first review also corrected successful association-session expiry
+handling: it must not reject WPA solely because keys are not yet installed.
+
+The bounded exchange verifies M1/M2/M3/M4, HMAC-SHA1-128, RFC3394 key wrap,
+ANonce/replay/frozen AP RSN and bundled GTK. Retries resend responses without
+reinstalling keys. After positive M4 TX, exactly one CCMP PTK command and one
+CCMP/TKIP GTK command are required, matching the firmware's SEC_KEY v1 ABI.
+TKIP MIC orientation follows the supplicant STA swap plus Linux's explicit
+RX/TX fields. Clean stop precedes erasure of retained DMA/key buffers.
+This is a KEY-COMMAND checkpoint, not protected-traffic acceptance. No live
+rekey/group-only handshake, RX replay filter, protected data, persistent
+interface/IP or Telnet yet. Separate GTK-after-M3 is an unsupported checkpoint
+mode; M3 must bundle GTK. Unsupported security/entropy fail explicitly.
+
+All12 host suites pass fatal UBSan:350 public oracle/protocol cases and46
+full startup/EAPOL/key/retry/failure/stop cases, plus prior92 assoc/42 auth/
+112 station/37 scan and earlier suites. Independent hashlib/HMAC/OpenSSL
+fixtures and known crypto answers, exact TX/key ABI, key-reinstall guards,
+opaque ACKs, session expiry and cleanup are covered. AES uint8 final-round
+shifts were explicitly widened after UBSan found signed-promotion UB.
+The exact normal EFI passed full QEMU USB shell/apps/process/pipe/timer/halt;
+QEMU has no AX211 and proves absent-radio boot only. Physical WPA2 pending.
+Evidence: wpa-host-validation.json, wpa-built-efi.json,
+wpa-production-check/result.json and usb-install.json under the existing
+Wi-Fi output. Production USB image SHA256:
+e0206a6a69effad0db1b3defab51b8ba14d744b3a54295a5cfeeb84a7530c226
+BOOTWIFI.EFI 21474816 bytes, SHA256:
+a4a7028d7dc792bf568b4820866a498a411b491153f989f96dc48538b2e42e8c
+Notices13225 bytes embedded and WIFILIC.TXT. USB write verified on the same
+UUIDs; final ejection recorded in usb-install.json. No failed-image backup.
+
+F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Expected final summary (retry counts can vary):
+  AX211_WPA2_RESULT M1=1 M2=1 M3=1 M4=1 TX=1(or2) keys=2 complete=1
+  AX211_QUIESCED, AX211_WPA2_OK, normal RAM-root shell.
+Radio deliberately stops on success too. If it fails, photograph final
+WPA2_RESULT plus STARTUP_FAILED. Do not infer protected data/IP from key ACKs.
+No shared compiler/SDK/runtime/kernel/select/socket/preemption edits. Prior
+CURRENT/PENDING descriptions below are historical, except accepted physical
+association evidence which remains valid.
+
+
+PHYSICAL ASSOCIATION ACCEPTED — 2026-10-20
+-------------------------------------------
+User photo confirms the source-reviewed association milestone on the HP:
+AUTH_RESULT tx1/AP-status0/reply1; ASSOC_RESULT tx1/AP-status0/reply1,
+AID10, updates3/complete1; AX211_ASSOC_OK, QUIESCED0x3ee000, then the normal
+RAM-root /init and Bourne shell. LINK -> STA -> MAC command/reply sequence is
+visible. This is real association acceptance, not host/QEMU evidence.
+Last staged candidate SHA256 (from installation receipt, not printed in photo):
+7b786122528ed2a9b15d798b08e8c53e5e68d2eec2ddab3de39a9509a1dd3524.
+Photo and transcription: build/x86_64-wifi-start-shell/hp-association.png and
+hp-association-result.json. Current USB receipt records physical acceptance.
+
+Photo also shows12 discovered APs, channel48 MCC/NVM0xf61, TKIP group suite
+0x02ac0f00, pair-CCMP1/PSK1/parsed1, queue1/rawflags1/TX-verified1. This boot
+has no detected country (0/source0), applied world00 (0x3030)/source7,
+status1/aux3 and generations0/0. The actual returned VALID/non-radar profile
+allowed association; no country override or active-scan-bit requirement.
+The prior successful initial-auth report now also has photographed counters.
+
+Device is intentionally stopped before shell; WPA2/EAPOL key handshake, CCMP
+pairwise/TKIP group crypto, persistent link/RX recycling and IP remain pending.
+Next: source-first secured handshake/key/data-path work, then real IP/Telnet.
+No password requested/read. No USB write, internal NVMe/live Ubuntu access or
+shared-source change for this acceptance record. Retain this accepted image
+before replacing it in a future build. Older pending/current entries below
+are historical.
+
+CURRENT USB TEST: SOURCE-REVIEWED ASSOCIATION — 2026-10-20
+-------------------------------------------------------------
+User confirmed AUTH_OK on the preceding audited745c9b39... build. This is
+user-reported physical initial802.11 authentication acceptance; no successful
+photo/raw counters were supplied. It is not password/WPA2 or IP acceptance.
+The accepted auth image is now preserved locally as accepted-auth.EFI and on
+USB as BOOTWAUT.EFI, SHA256
+745c9b3931ddcc5c0f684caee721d868f6a82fea45a8ffbb9faf009444942986.
+
+The user's source-first requirement was applied BEFORE USB refresh. Inspected
+OpenBSD net80211 output1.148/input1.263 association/RSN construction, response
+handling, iwx1.230 MLD associated updates, and Linuxv6.12 mac80211 send/receive
+association consumers. Pinned URL/SHA evidence: association-sources.json and
+client-channel-sources.json under build/x86_64-network/wifi-reference/.
+Details, exact consumers and deliberate limits: hp-wifi-checks.txt.
+
+Explicit --wifi-assoc after --wifi-auth now sends one legacy20MHz association
+request after BOTH auth TX/AP success. It advertises the selected SSID/OFDM
+rates and WPA2 PSK/CCMP pairwise with the AP's ACTUAL TKIP or CCMP group cipher.
+No WMM/HT/PMF/PMKID/WPA1 fallback is advertised. Native queue1/index1 SSN2 uses
+a fresh retained page/descriptor; no reuse/retry. Require successful TX and a
+matching successful AP response, bounded fixed fields/rates/IEs, masked legacy
+AID1..2007. All five reserved AID MSBs are masked like Linux; no zero-bit gate.
+The final source review added that compatibility case before writing USB.
+Then matched LINK -> STA -> MAC updates set active legacy rates/beacon timing,
+AID and associated client state, following iwx_run's order. QoS isn't negotiated,
+so its modify bit is omitted rather than inventing EDCA values. No full data-
+path claim. Session/country/RF/errors/timeouts/DMA bounds/stop guards remain.
+
+All9 host suites pass under UBSan, including92 additional association transport
+scenarios over both group-cipher fixtures and every truncated RX prefix. Prior
+42 auth,112 setup,37 scan and startup/PNVM/NVM/PCI/consumer-audit cases remain
+green; Python firmware/CLI profile checks pass. Unchanged pinned upstream
+structs compile with sizeof/offsetof assertions (LINK208/STA96/MAC52). The exact
+FINAL normal EFI passed QEMU USB shell/apps/process/pipe/timer and normal halt.
+QEMU proves absent-radio boot only, not over-air association. Evidence under
+build/x86_64-wifi-start-shell/: assoc-host-validation.json, assoc-built-efi.json,
+assoc-production-check/result.json and usb-install.json. Production image SHA
+9a4a4f6957679e9c159f07f6a6263bcf4cfc5e58e6bfaf71b8897bf13c338d9f.
+
+Installed/readback verified, safely ejected USB disk4. Only optional BOOTWIFI,
+its notices and the accepted-auth fallback were written; all previous default/
+accepted/fallback EFI hashes preserved. Notices9175 bytes are embedded and in
+WIFILIC.TXT, including the net80211 BSD notices. Final BOOTWIFI.EFI21444608 bytes:
+SHA256 7b786122528ed2a9b15d798b08e8c53e5e68d2eec2ddab3de39a9509a1dd3524.
+Choose F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Expected final summary:
+  AX211_ASSOC_RESULT tx=1(or2) AP-status=0 reply=1 AID=<assigned> updates=3 complete=1
+  AX211_QUIESCED, AX211_ASSOC_OK, normal RAM-root shell.
+If it fails, photograph the final ASSOC_RESULT and STARTUP_FAILED reason.
+Physical association is PENDING. The radio is intentionally stopped before
+shell; EAPOL/WPA2 keys, GTK/TKIP encryption and a usable IP/Telnet link remain
+unimplemented. No password requested/read. No internal NVMe, live Ubuntu,
+shared compiler/SDK/runtime/kernel/select/socket/preemption changes. Earlier
+current-test entries below are historical.
+
+CURRENT USB RETRY: CONSUMER-AUDITED CLIENT AUTH — 2026-10-20
+------------------------------------------------------------
+User requested an audit against actual Linux/OpenBSD consumers after repeated
+extra checks caused hardware retries. The source/check inventory and deliberate
+bootstrap limits are now in hp-wifi-checks.txt. This audits the pinned startup/
+scan/setup/auth path; it does NOT claim general Wi-Fi feature completeness.
+
+Latest physical photo15b696db... confirms countryAL/source5 detected AND applied,
+status0/aux0x48, generation1/1, channel48 MCC AND NVM flags0xf61, queue1/rawflags1,
+auth phase/session/TX/AP0, QUIESCED0x3e9000. The padding correction and CHUB
+apply worked; our ACTIVE-scan-bit requirement still stopped before auth TX.
+Saved hp-client-channel-result.json/png in the existing Wi-Fi build directory.
+
+Consumer audit corrections (see exact functions/references in audit note):
+- ACTIVE means active scanning. Linux station mgd_auth/prep_channel excludes
+  DISABLED rather than NO_IR; iwx_auth likewise does not require ACTIVE clear/
+  PASSIVE absent for a known BSS. Allow client auth to the discovered selected
+  BSS on VALID MCC/SKU channels; no probes/beacons. Radar remains out of scope.
+- Queue flags AND reply padding are opaque to both allocation consumers.
+  Retain raw; check size, supported fixed qid1/write pointer0, command errors.
+- Empty OTP/zero reserved MAC count/version are NVM informational fields;
+  LAR is nonzero, not ==1. Retain/report raw values, verify real CSR MAC,
+  supported bands/chains/profile bounds before radio use.
+- MCC status alone does not invalidate its returned actual profile (Linux
+  consumes ILLEGAL too); CHUB RX padding is also ignored upstream. Existing
+  country/source/ABI/size/count/actual channel/generation guards remain.
+- Context/session ACKs do not request a response body upstream; ignore bodies,
+  retain transport command identity/failed-header and real session fields.
+- New TX response uses payload tx_queue, not legacy header queue/index. AX210+
+  SSN is low16 bits, older hardware12. Ignore high bits/trailing data; require
+  correct payload queue/SSN, one frame, SUCCESS/DIRECT_DONE and AP reply.
+  Exact session notification size/real link/status/start/config fields retained.
+No removal of native DMA ownership/bounds/stop, RF/thermal, fixed-resource/
+timeout, known ABI, selected BSS/security/rates, disabled/radar or real error
+checks. Outgoing reserved bytes remain zero. No shared runtime/compiler edits.
+No association/password/EAPOL/keys/GTK-TKIP crypto/IP link added. Actual RF
+transmit/auth success still PENDING and cannot be certified by host tests.
+
+Consumer-derived tests/wifi-audit.c:10 focused cases,9 confirmed RED before
+correction then all GREEN. Full transport host UBSan42 auth +37 scan +112 setup
+cases and prior startup/PNVM/NVM/PCI regressions pass; Python tests pass.
+Includes photographed0xf61, valid passive/disallowed/radar channels, missing BSS,
+opaque ACKs/padding, NVM informational values, header/payload TX distinction,
+16-bit SSN high/low-bit controls, trailing TX data and clean stop. Native TX,
+TFH byte-count/rate/header and session layouts were compared to consumers too.
+
+Final optional BOOTWIFI.EFI 21440512 bytes SHA256
+745c9b3931ddcc5c0f684caee721d868f6a82fea45a8ffbb9faf009444942986.
+Installed/readback verified, default/accepted/fallback hashes preserved, USB
+safely ejected. Notices7314 bytes updated for Intel session/TX consumers,
+embedded and WIFILIC. F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT ->
+BOOTWIFI.EFI. Expect to proceed past permission gate to session/TX; AUTH_OK
+still requires actual positive TX completion and matching AP response.
+Photograph final outcome/diagnostics if it stops. Exact production USB QEMU
+shell/apps/process/pipe/timer/normal halt passed; absent-radio only. Image SHA
+069cb6338668312d85cb1aaa8b22f71b1a693490c8a1b7c4df50892dd5d265ee.
+Evidence: audit-host-validation.json, audit-red.log, audit-production-check/
+result.json, usb-install-before-audit.json and usb-install.json. No internal
+NVMe, live Ubuntu interface, shared compiler/SDK/kernel/select/socket/preemption
+changes. Earlier current-test descriptions below are historical.
+
+CURRENT USB RETRY: NONZERO MCC REPLY PADDING — 2026-10-20
+----------------------------------------------------------
+Physical156e15d9... stopped before scan on the new country/source/reserved
+check. Photo shows payload460 bytes, header0x000801c8, status1 (same profile),
+MCC00, source7 DEFAULT,110 channels, byte13=3 and bytes14/15=0. First three
+channel words0x34b are visible; target48/index17 is NOT shown. Scan/notification/
+setup/auth counters0; QUIESCED0x3cd000 and normal RAM-root shell. Evidence:
+build/x86_64-wifi-start-shell/hp-mcc-reserved-result.json/png.
+
+The zero check added in the preceding change was too strict. Both pinned
+OpenBSD iwx_send_update_mcc_cmd and Linux iwl_mvm_update_mcc consume the same
+20-byte layout without inspecting reserved[3]. Linuxv6.18 confirms this handling;
+reference captures mcc-response-sources.json under Wi-Fi references. These
+bytes remain semantically opaque; do NOT guess they encode permission or
+country. Removed only their zero requirement, retained as reg_profile_aux in
+state/final summary. Exact size/count, supported ABI, country/source validation,
+returned per-channel flags, SKU/generation/RF/DMA/deadline guards remain.
+Outgoing reserved fields remain zero. The CHUB apply-country/source correction
+and early-notification handling from the preceding retry are retained.
+
+Added exact photographed20-byte header (only unseen channel entries synthetic)
+and observed RED before the fix. UBSan regression passes, including all payload
+truncations, invalid country/source rejection, arbitrary nonzero values in ALL
+three opaque bytes through the production transport,37 scan +33 auth +112 setup
+cases and previous startup/PNVM/NVM/PCI tests. No actual TX/auth success claimed.
+Exact production USB passes full QEMU shell/apps/process/pipe/timer/halt;
+absent-radio only. Image SHA256
+3389234fdd402059f1a137360ccfa636b1addb3d324ec83d738de58e69e0e061.
+
+Final BOOTWIFI.EFI 21440512 bytes, SHA256
+15b696dba1533619cd1a1f8ae35b65fa450f374926dde1e9e36f012323a64cf6.
+Verified on the same USB and safely ejected. F9 -> Boot From EFI File ->
+RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI. Expected to get past initial MCC
+reply into scan and detected-country apply; actual hardware retry pending.
+Target remains AUTH_OK; failures should retain CHANNEL_PERMISSION/REG_PROFILE
+and explicit outcome. No password, association, EAPOL, keys, TKIP group crypto
+or IP link. Default/accepted/fallback hashes and notices preserved, no internal
+NVMe/live Ubuntu/shared compiler/SDK/kernel/socket/preemption changes. Evidence:
+reserved-host-validation.json, mcc-reserved-red.log,
+reserved-production-check/result.json, usb-install-before-reserved.json and
+usb-install.json in Wi-Fi build output. Older current-test entries are historical.
+
+CURRENT USB RETRY: APPLY DETECTED MCC BEFORE AUTH — 2026-10-20
+---------------------------------------------------------------
+The photo of63cbcbe8... confirms station step7/complete1, queue1/raw flags1,
+AUTH_PHASE/SESSION/TX/AP status0, QUIESCED0x3e9000, and explicit failure
+"authentication channel TX not permitted". No session command or host auth
+frame was submitted. MCC/NVM channel flags and applied country scrolled away;
+the photo does NOT establish their values. Saved hp-auth-permission.png and
+hp-auth-permission-result.json in build/x86_64-wifi-start-shell/.
+
+Found a concrete sequence bug: CHUB detection must be followed by MCC_UPDATE
+with that exact firmware-supplied country AND source. Re-querying ZZ/GET_CURRENT
+can leave the default/world profile applied. Linuxv6.12 mvm/nvm.c
+(iwl_mvm_rx_chub_update_mcc), mvm/mac80211.c (get_regdomain) and the public
+nvm-reg.h document this exchange. Captures/hashes: mcc-linux-sources.json in
+build/x86_64-network/wifi-reference/. No host-chosen country or permission
+bit override. Initial query remains ZZ/GET_CURRENT. A CHUB notification before
+that query stays pending until the explicit detected-country update; query
+alone cannot acknowledge its generation. Both regressions were observed RED.
+
+Retain the ACTUAL returned MCC/source/status and channel flags, accept bounded
+firmware world/different-country replies, normalize zero MCC to world as Linux
+does, and reject malformed source/country/reserved bytes. Existing generation
+races, max2 updates/8 notices, AP filtering, deadlines and native DMA/stop guards
+remain. Auth still requires returned valid+active/non-radar permission plus
+SKU validity. A passive-only returned profile stops before session/TX. Final
+summary now repeats CHANNEL_PERMISSION (ch/MCC/NVM) and REG_PROFILE
+(detected/applied/source/generations/status), even before auth_enabled.
+No password, association, EAPOL, keys, TKIP group crypto or IP link added.
+Hardware resolution and actual TX/authentication remain PENDING.
+
+Final optional BOOTWIFI.EFI staged, readback verified and USB safely ejected:
+21440512 bytes; SHA256
+156e15d997b496b0644a870e04d92a676c799753651f115f4690f29449f79aa9.
+F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Look for REG_PROFILE_APPLY/REFRESHED, then AUTH_FRAME_SUBMITTED and AUTH_OK.
+If it fails, photograph the final CHANNEL_PERMISSION/REG_PROFILE and failure.
+All default/accepted/fallback EFI hashes preserved, including BOOTW5G.EFI.
+WIFILIC7312 bytes and embedded notices include the Intel BSD regulatory sources.
+No internal NVMe, Ubuntu interface, shared compiler/SDK/kernel/socket/preemption
+change. The initially staged9a20a1c5... was superseded by this final timing fix.
+Small receipts before both writes are retained; no duplicate failed EFI backup.
+
+UBSan37 scan/regulatory,33 auth and112 station cases plus previous startup/
+PNVM/NVM/PCI tests pass. Covers exact LE country/source command, early notice,
+update races, returned world profile, malformed fields, passive denial and
+permission-failure final diagnostics. Python firmware tests pass. Exact final
+production USB passed full QEMU shell/app/process/pipe/timer/normal halt;
+QEMU has no AX211 and proves only absent-radio boot. Image SHA256
+6b67223db0ac29e8338f579e5c37bdba8fb5c89d70c8f2b6dc9cdccc2ba50950.
+Evidence: mcc-host-validation.json, mcc-red.log, mcc-early-red.log,
+mcc-production-check/result.json and usb-install.json in Wi-Fi build output.
+Previous current-test entries below are historical.
+
+CURRENT USB TEST: QUEUE REPLY / BOUNDED 802.11 AUTHENTICATION — 2026-10-20
+------------------------------------------------------------------------
+Photo of ce81c004... now CONFIRMS groupTKIP (raw suite0x02ac0f00), CCMP pairwise,
+PSK and fully parsed beacon details. Scan/profile refresh completed; setup
+step7 reached the queue response: payload01 00 01 00 00 00 00 00, qid1,
+raw flags1, initial pointer0, reserved0. Prior context commands replied without
+failed-command flags. Driver's extra zero-flags rule stopped, QUIESCED0x3e9000,
+then RAM-root shell. This is NOT proof that a queue transmitted. Evidence:
+build/x86_64-wifi-start-shell/hp-queue-reply-result.json/png.
+
+The matching OpenBSD iwx_enable_txq and Linuxv6.12 iwl_pcie_txq_alloc_response
+ignore the legacy allocation flags and use the assigned ID/write pointer.
+Their header comment calls flags a failure field; its actual bit semantics
+remain ambiguous. Do NOT equate1 with enabled or declare it a failure/success.
+Added exact photographed-reply test, observed RED, then retained flags raw and
+aligned response handling with those consumers. Size/tag/qid1/pointer0/reserved
+and failed-command-header checks remain. Preparation-only output is now
+STATION_SETUP_REPLIES_OK with actual TX explicitly unverified. New auth test
+below requires positive independent evidence rather than treating flags as TX.
+Reference captures: queue-linux-sources.json, linux-tx-api.json and
+linux-time-event.json under build/x86_64-network/wifi-reference/.
+
+New explicit --wifi-auth after --wifi-prepare-ssid enables a bounded preliminary
+802.11 Open System auth exchange to the same selected WPA2 AP. It requires
+current MCC valid+active TX permission, no radar flag, SKU-valid low-band5GHz,
+antennaA, TX command10/response7 and session command2/notification3. Pinning
+these ABIs occurs before hardware mutations. A firmware session-protection ADD
+must receive both ACK and successful start. One native Gen3 TX descriptor holds
+an auth request at the AP's lowest basic OFDM rate, command-rate/no-encryption
+flags, three checked TFH TBs and a Gen3 byte count. No host retry/ring reuse.
+Native page is retained with the permanent DMA pool until verified stop.
+
+Success requires BOTH single-frame TX statusSUCCESS/DIRECT_DONE with matching
+qid/index/SSN/size and an AP auth response matching own/AP/BSSID addresses,
+channel, CRC, unprotected/unfragmented frame, algorithm0/transaction2/status0.
+Handles AP-before-TX and start-before-ACK ordering. Wrong/stale/failed/duplicate
+completions, rejected AP/session, passive/radar channel or missing antenna,
+malformed bounds and timeouts fail explicitly. Other beacons cannot extend
+deadlines; session end before completion fails. Country/RF/thermal/DMA guards
+remain. All paths stop/reset and disable bus mastering before shell return.
+No association, password, WPA2/EAPOL, keys, TKIP group encryption or IP link.
+Preparation-only mode still sends no frames. True TX/auth remain PENDING.
+
+Installed/ejected optional BOOTWIFI.EFI:21,435,904 bytes, SHA256
+63cbcbe8d33ebbd45c041805299df7da4c9cca8106f186bc156cf4da099a0984.
+Same F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Look for AUTH_FRAME_SUBMITTED, final QUEUE_REPLY TX-verified1,
+AUTH_RESULT tx1(or2) AP-status0 reply1, QUIESCED and AX211_AUTH_OK. A failure
+photo of the final summary/diagnostics is useful. Authentication here means
+only the initial802.11 radio exchange; the secured password handshake is later.
+
+Host UBSan30 new auth scenarios plus112 preparation/earlier startup/PNVM/NVM/
+scan/PCI regressions pass. Includes the exact flags1 photo, flags65535 retained
+without granting TX proof, completion/AP/session failures/order/padding,
+passive/radar channel and antenna denial, lowest-basic12Mbps selection and
+pre-start ABI rejection. Independent compiled pinned declarations confirm
+Gen3 TX/session sizes and offsets. QEMU full production USB shell/apps/process/
+pipe/timer and orderly halt passed; QEMU validates absent-radio boot only.
+Exact USB image SHA256
+85534d440802d6754828c6c2400caf2c846957c010298de2edcd1830a16d2041.
+Evidence: auth-host-validation.json, auth-upstream-abi.c, queue-red.log,
+auth-production-check/result.json and usb-install.json in Wi-Fi build output.
+
+All accepted/default/fallback EFI hashes preserved, including BOOTW5G.EFI.
+WIFILIC.TXT expanded to7232 bytes to carry additional Intel BSD wire notices;
+notices are embedded in EFI too. Old receipt usb-install-before-auth.json.
+No internal NVMe, live Ubuntu radio, shared compiler/SDK/kernel/socket or
+preemption edits. Older "pending exact cipher" and current USB descriptions
+below are historical; TKIP-group/CCMP-pairwise is now physically established.
+
+CURRENT RETRY: MIXED GROUP CIPHER / VISIBLE FINAL SUMMARY — 2026-10-20
+--------------------------------------------------------------------
+User photo of bf697063... shows SCAN_ACK/COMPLETE1,13 RX frames, one regulatory
+refresh, station step0/complete0, QUIESCED0x3d1000 and explicit driver error
+"target group cipher requires CCMP". It returns to the normal RAM shell.
+Thus station commands never started. Exact target suite masks scrolled away;
+do NOT record TKIP as physically confirmed. User Mac screenshots show WPA/
+weak security, and saved Ubuntu inventory advertises WPA1/WPA2. These support,
+but do not prove, the mixed CCMP-unicast/TKIP-group hypothesis. Evidence:
+build/x86_64-wifi-start-shell/hp-security-gate-result.json/png.
+
+Group and pairwise ciphers are distinct. The previous no-transmit station
+preparation gate unnecessarily required a CCMP group advertisement. Recognize
+CCMP or TKIP group suites for THIS checkpoint; still require valid WPA2 RSN,
+PSK AKM, CCMP pairwise, supported basic rates and optional/not-required PMF.
+Unknown/other group OUI/types, malformed RSN/rates, WPA1-only/open and TKIP-only
+unicast fail. A details_valid flag prevents partially parsed IEs from qualifying.
+The raw four-byte group selector is retained for diagnosis. Firmware station
+commands are unchanged; no frame TX, handshake, key installation or TKIP group
+encryption was added. GTK/TKIP must be implemented and accepted before any
+future claim of a working secured data link on a TKIP-group AP.
+
+After ALL transport diagnostics, the native adapter repeats a concise final line:
+  AX211_TARGET_SECURITY group=TKIP|CCMP|unknown pair-CCMP=0|1 PSK=0|1 parsed=0|1
+  AX211_TARGET_GROUP_SUITE=raw four octets in LE integer form
+Expected TKIP OUI00:0f:ac/type2 would print0x02ac0f00; CCMP/type4 prints0x04ac0f00.
+For TKIP it explicitly says group encryption is not implemented. This summary
+is adjacent to the final outcome instead of being lost above verbose failures.
+No SSID/password/keys or nearby network details are printed in that summary.
+
+Refreshed BOOTWIFI.EFI:21,431,808 bytes, SHA256
+ce81c0044e36c05213e3d78b83c73ce76e2135c82fe950ef5ed237dfa77eb3f1.
+Verified RIPLIXBOOT updated and ejected. Same F9 -> Boot From EFI File ->
+RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI; expected STATION_SETUP_STEP0..6,
+STATION_SETUP_COMPLETE1, QUIESCED and AX211_STATION_SETUP_OK. Photograph final
+summary/failure; actual group suite and station-setup acceptance remain PENDING.
+All accepted/default/fallback hashes preserved, including BOOTW5G.EFI. Only
+optional BOOTWIFI replaced; no failed EFI backup duplication. Receipt backup
+usb-install-before-mixed.json; current receipt usb-install.json. No internal
+NVMe, Ubuntu interface, shared compiler/SDK/kernel/socket/preemption changes.
+
+UBSan112 station-setup scenarios exercise BOTH actual RSN group-type2 and4
+beacon fixtures, per-step failures and bounded DMA allocation failures. All
+previous startup/PNVM/NVM/32 scan/PCI tests pass. Native result-summary tests
+cover CCMP/TKIP/unknown labels, raw suite output, explicit unimplemented-TKIP
+notice and no SSID/control-byte leakage. Exact production USB image passed
+full QEMU shell/app/process/pipe/timer and orderly shutdown. Image SHA256
+2efe9ee67e58c39d1805774177ab8cee2b41b59c95db3354a57b2ccf385f8827.
+QEMU accepts absent-radio boot only. Evidence: mixed-host-validation.json,
+mixed-production-check/result.json and mixed-*-host.log in the Wi-Fi build dir.
+Reference for separate pairwise/group roles: upstream wpa_supplicant.conf,
+https://chromium.googlesource.com/external/w1.fi/cgit/hostap/+/refs/tags/hostap_2_5/wpa_supplicant/wpa_supplicant.conf
+Older CCMP-group-only/current candidate descriptions below are historical.
+
+CURRENT USB TEST: TARGET SECURITY / FIRMWARE STATION SETUP — 2026-10-20
+----------------------------------------------------------------------
+User confirmed the target SSID from the photographed channel48 entry. No
+password requested/read. New --wifi-prepare-ssid option requires --wifi-scan
+and1..32 UTF-8 octets, encoded into a numeric-byte build header. No credential
+or neighbor-network inventory is embedded in repository documentation.
+
+After the completed scan and any deferred country-profile refresh, parse the
+AP's bounded RSN/rate/beacon/TIM IEs. Exact SSID matching selects the strongest
+compatible BSSID and freezes its parameters. Require infrastructure/WPA2-PSK,
+CCMP pairwise AND group cipher, known legacy basic rates, and no mandatory PMF.
+No open/WPA1/TKIP/SAE-only downgrade. Unsupported security reports an explicit
+failure and raw suite masks for diagnosis; this is not password verification.
+
+Seven commands follow the pinned OpenBSD MA MLD path: UHB PHY_CONTEXT(20MHz),
+RLC_CONFIG(v2), MAC_CONFIG ADD, LINK_CONFIG ADD/MODIFY, STA_CONFIG(v1), and
+SCD_QUEUE_CONFIG(v3). The management queue uses separate aligned native TFH
+and byte-count buffers in the permanent6MiB pool. Queue reply must confirm
+qid1, zero write pointer/flags/reserved; no queue/frame reuse. No management
+or data frame is submitted and no keys installed. New country changes after
+selection stop setup explicitly; all started paths stop/reset with DMA off.
+Actual 802.11 authentication/association and WPA2/EAPOL remain the next gates.
+
+BOOTWIFI.EFI:21,431,808 bytes
+SHA256 bf697063e3787693e2e67533ae8753944efab6ecd96bc2d23d7ae4347bef2506.
+Installed on independently verified RIPLIXBOOT and ejected. Choose F9 -> Boot
+From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI. Expected markers:
+  AX211_TARGET_CHANNEL=0x30
+  AX211_TARGET_RSN_GROUP/PAIR/AKM/CAPS and TARGET_BASIC_RATES
+  AX211_STATION_SETUP_STEP0..6, STATION_SETUP_COMPLETE1
+  AX211_QUIESCED, AX211_STATION_SETUP_OK, normal RAM-root shell.
+For CCMP and PSK, masks include GROUP0x10, PAIR0x10, AKM0x4. A failure photo
+including the last reply/header/words and explicit reason is useful evidence.
+Physical station-setup acceptance is PENDING. This image does not connect yet.
+
+Accepted dual-band scan bf74ac84... is preserved on USB as BOOTW5G.EFI and
+locally as accepted-scan5.EFI. BOOTW24/BOOTWNVM/BOOTWALV and normal/default/
+fallback files remain hash-identical. Receipt usb-install.json; preceding
+receipt usb-install-before-prepare.json. No formatting, boot-entry/internal
+NVMe write or live Ubuntu interface action. Shared compiler/SDK/kernel/socket/
+preemption sources were untouched; bounded/checked freestanding builds remain.
+
+Host UBSan passes56 station/queue transport cases (per-step timeout/tag/failed
+flag/payload/RF-kill/country-change, wrong queue reply and allocation failures),
+9 pre-start ABI/capability/profile rejections, RSN counts/duplicates/PMKIDs,
+security downgrade guards, exact/strongest SSID selection and a20,000-case
+malformed IE corpus. Previous19 startup/10 PNVM/11 NVM/32 scan cases and native
+PCI handoff/terminal escaping remain passing. Compiled extracted pinned OpenBSD
+declarations independently confirm wire sizes/offsets. Python firmware tests
+and CLI invalid/oversize UTF-8 profile rejection pass.
+Exact production USB image passed full QEMU shell/app/process/pipe/timer checks
+and orderly halt. Image SHA256
+76510e4fe25859789ddf07af619edc8892f848544d9fa71935d17433c55d5f98.
+QEMU accepts absent-radio boot only, not real station setup.
+Evidence: prepare-host-validation.json, prepare-upstream-abi.c and
+prepare-production-check/result.json under build/x86_64-wifi-start-shell/.
+
+PHYSICAL DUAL-BAND SCAN ACCEPTED — 2026-10-20
+----------------------------------------------
+User photo confirms bf74ac84... completed the2.4/5GHz scan and country refresh:
+AL/source5, one GET_CURRENT profile refresh, zero filtered APs,13 AP entries,
+zero drops/malformed beacons, QUIESCED0x3d1000 and AX211_SCAN_OK. User confirms
+their secured AP is the channel48 entry (-69dBm). This accepts real5GHz RX and
+the deferred regulatory query. No association/WPA2/IP link is claimed.
+Evidence: build/x86_64-wifi-start-shell/hp-dualband-scan-result.json/png.
+Accepted EFI retained locally as accepted-scan5.EFI before further builds.
+Next: bounded RSN/rate/beacon parsing and target selection, then matched native
+PHY/MAC/link/station/management-queue firmware setup. No password needed yet.
+All older pending5GHz statements below are historical.
+
+CURRENT RETRY: CHUB COUNTRY DETECTION / DEFERRED REFRESH — 2026-10-20
+-------------------------------------------------------------------
+The user photo of45edc833... shows scan ACK,15 RX frames, RX producer36, then
+CHUB notification header0xc00700c9/payload0x0005414c. Public LAR_MCC_NOTIFY ABI
+is four bytes: countryAL, source5=WIFI, reserved0. Our unconditional regulatory-
+change guard deliberately stopped with QUIESCED0x3d0000 and returned to shell.
+This was a driver policy stop, not a photographed firmware error. Matching
+OpenBSD iwx_mcc_update logs country detection and does not fail the scan.
+Evidence: build/x86_64-wifi-start-shell/hp-scan5-regulatory-result.json/png.
+
+Replaced that gate with bounded handling: validate/record CHUB detection, finish
+the already submitted FORCE_PASSIVE scan, then GET_CURRENT/ZZ refresh the actual
+firmware profile before accepting results. No country forced from the notice
+or Mac. Results on channels removed by the new profile are filtered out. An
+update arriving while a query is pending requires another query; generations
+prevent lost updates. At most2 refreshes and8 notices; notifications do not
+reset deadlines. Malformed country/size/source/reserved, query error/timeout,
+continued changes beyond the bound, RF/thermal kill and RX ownership failures
+still stop/reset with DMA disabled. No association or active probing added.
+
+The exact photographed notice regression was observed RED before the change;
+host UBSan now passes32 transport cases including refresh races, AP removal,
+short/malformed notices/replies, timeout/flood bounds and all prior tests.
+Evidence: regulatory-host-validation.json and regulatory-production-check/
+result.json under build/x86_64-wifi-start-shell/. Exact production EFI passed
+full QEMU USB shell/app/process/pipe/timer checks; this accepts absent-radio
+boot only. Physical5GHz scan/completion with refresh remains PENDING.
+
+Current BOOTWIFI.EFI:21,423,104 bytes
+SHA256 bf74ac84d76fabb2e144938cc04f1d57863da3bc2ffca8a4984e6543f15615a7.
+Expected useful markers: REG_COUNTRY_DETECTED0x414c, REG_PROFILE_QUERY,
+REG_PROFILE_REFRESHED, QUIESCED, network results and AX211_SCAN_OK. No detection
+notice on a boot means no extra refresh is required. Default/BOOTW24/BOOTWNVM/
+BOOTWALV/fallback hashes preserved; preceding receipt usb-install-before-regulatory.json.
+No shared compiler/SDK/kernel/socket/preemption or internal-disk changes.
+Older unconditional-CHUB-stop descriptions below are superseded by this retry.
+
+NEXT HARDWARE TEST: 5GHz LOW-BAND DISCOVERY — 2026-10-20
+------------------------------------------------------
+Current optional BOOTWIFI adds passive36/40/44/48 to1/6/11. It retains the first
+18 NVM entries (both v3/v4) and intersects each with the MCC reply and SKU band
+flags. Both public channel maps place36/40/44/48 at indices14..17; missing or
+invalid entries do not grant permission. A5GHz-only board profile is supported.
+No country override, active probes, association or160MHz data-link claim.
+Scan beacons on primary channel48 without implementing160MHz channel bonding.
+
+Request/RX band handling uses band1 for2.4GHz and band0 for5GHz, with a separate
+4-bit low-band mask (bits0..3 ->36/40/44/48); no shift by physical channel48.
+Expected AX211_PASSIVE_SCAN_5GHZ_MASK=0x0f when all four are allowed, followed
+by channel48 results and AX211_SCAN_OK. RX still bounded504 buffers,32 results,
+one iteration110TU/channel and2s completion wait. Full-band/6GHz/DFS discovery
+remains outside this checkpoint; busy-RX exhaustion still stops explicitly.
+
+Restored the native adapter's scan profile selection and escaped result display,
+which were missing locally while its test still called scan_results. Preserved
+other existing adapter diagnostics. Host UBSan passes24 transport cases plus
+5 pre-start ABI/capability rejections, channel48 RX, NVM/MCC denial independently,
+5GHz-only SKU, short profile, unrequested channels, v3/v4 profile retention and
+prior PNVM/NVM/startup/PCI/terminal escaping checks. Production shell acceptance
+record: build/x86_64-wifi-start-shell/scan5-production-check/result.json;
+host record: scan5-host-validation.json. Physical5GHz acceptance pending.
+
+Current EFI size21423104; SHA256
+45edc8330add8fca334c0375823d2011e9114e001292be17690d3e5610404470.
+Accepted2.4GHz scan retained as EFI/BOOT/BOOTW24.EFI (311b5b8e... below),
+NVM checkpoint BOOTWNVM and ALIVE-only BOOTWALV retained; normal/default and
+fallback hashes verified. USB receipt usb-install.json; preceding receipt
+usb-install-before-scan5.json. No internal storage or live Ubuntu Wi-Fi action.
+The same --wifi-scan build option selects this expanded test; boot BOOTWIFI.EFI.
+
+PHYSICAL PASSIVE SCAN ACCEPTED — 2026-10-20
+------------------------------------------
+User photo confirms candidate SHA256
+311b5b8e995839f598b47e4d7214cd816c7ee0ff5b89a273842504a0bb3cf816:
+passive channel mask0x842 (1/6/11), scan command0x010d acknowledged, iteration
+notification0x00b5 and completion0x000f, AP_COUNT5, QUIESCED0x3d0000, SCAN_OK
+and return to the RAM-root shell. Five AP entries on channels6/11, four with
+RSN IE present and one open; zero table drops and malformed beacons. The user
+independently recognizes these nearby names from Mac Wi-Fi settings. This
+accepts actual RF reception, native RX descriptors/beacon parsing, scan flow,
+result display and clean stop on the physical HP. No SSIDs transcribed here.
+
+The user's own network was absent; cause is undetermined. This candidate only
+listens on1/6/11 briefly, so other2.4GHz channels/5GHz and missed/hidden beacons
+remain possibilities. No claim of complete-band discovery or association/IP.
+Next: expand channel coverage in bounded batches, then secured association,
+EAPOL/key setup and the existing IP stack/remote shell.
+Evidence: build/x86_64-wifi-start-shell/hp-passive-scan-result.json and
+hp-passive-scan.png. Older pending-scan statements below are historical.
+
+TARGET NETWORK CHANNEL CONFIRMED — 2026-10-20
+--------------------------------------------
+User confirms their AP is5GHz and the Mac is connected to the same network.
+Read-only macOS system_profiler current en0 connection reports primary channel48
+(5GHz,160MHz),802.11ax, security mode wpa2_personal_mixed, countryAL, signal-74dBm
+and noise-91dBm. SSID is OS-redacted; no attempt to recover it, no password or
+network setting read/change. This target was outside the1/6/11 scan coverage.
+Next scan should include the allowed5GHz low-band channels, including48, using
+firmware/NVM regulatory data. Mac country/width are observations, not an excuse
+to override the HP firmware's regulatory profile or infer160MHz driver support.
+Evidence: build/x86_64-network/wifi-reference/mac-wifi-target.json.
+
+NEXT HARDWARE TEST: BOUNDED PASSIVE SCAN — 2026-10-20
+----------------------------------------------------
+Optional --wifi-scan adds strap/OTP MAC read and nine radio commands after the
+accepted init/NVM path: TX antenna, Bluetooth coexistence, integrated MA SoC,
+thermal thresholds (firmware CT kill), power-save off, MCC GET_CURRENT/ZZ,
+reduced scan config, beacon-filter off, v17 passive scan request. Matching iwx
+MA/GF config has no SISO PHY-command requirement or xtal delay; this firmware
+has no DQA capability. No fabricated calibration table, country or MAC address.
+Exact firmware command/RX/MCC ABI and capabilities are checked before starting.
+
+Only channels1/6/11 marked valid in BOTH NVM and the MCC reply are requested;
+FORCE_PASSIVE, no directed SSIDs, one iteration,110TU dwell. This is intentionally
+an initial2.4GHz subset, not full-band discovery. Native aligned command pages
+and up to two TFH transfer buffers per command stay in the permanent6MiB pool.
+No command/ring reuse; RX has an explicit504-buffer ownership/count cap. A busy
+environment can hit that cap and stop with diagnostics; no silent overwrite.
+Command/completion waits bounded2s, total transport15s; thermal/radio kill and
+regulatory change stop. Every started path resets/stops and verifies DMA off.
+
+RXv5 descriptor/MPDU lengths, CRC/overrun status, management frame type/padding,
+SSID/TLV bounds and BSSID/channel are checked. At most32 BSSID/channel results;
+extra entries and malformed IEs are counted. Names/control bytes are escaped
+before console output. Reports signal and privacy/RSN presence; this is not a
+WPA security negotiation. No nearby network names are stored in handoff docs.
+A completed zero-AP scan is distinct from a timeout. No association/IP link yet.
+
+Current BOOTWIFI.EFI:21,419,008 bytes
+SHA256 311b5b8e995839f598b47e4d7214cd816c7ee0ff5b89a273842504a0bb3cf816.
+Accepted NVM checkpoint retained as EFI/BOOT/BOOTWNVM.EFI (f9220255... below);
+accepted ALIVE-only BOOTWALV and normal/default/fallbacks remain hash-identical.
+Choose F9 -> Boot From EFI File -> RIPLIXBOOT -> EFI -> BOOT -> BOOTWIFI.EFI.
+Look for MAC_ADDRESS_VALID, PASSIVE_SCAN_CHANNEL_MASK, QUIESCED, a result list
+and AX211_SCAN_OK. Photograph status/failure output; first physical scan pending.
+
+Host UBSan:19 scan transport scenarios,5 ABI/capability pre-start rejections,
+MAC strap/OTP fallback, exact v17/TFH bytes, MCC bounds/status/channel intersection,
+scan-before/after-ACK ordering, empty scan/completion timeout, bad tags/failed
+commands, thermal/regulatory changes, bad MPDU lengths, beacon padding/TLV/
+multicast/CRC guards,32-entry cap and native SSID terminal escaping. Earlier
+19 startup/10 PNVM/11 NVM and PCI handoff regressions also pass. Exact production
+EFI passed full QEMU USB shell/app/process/pipe/timer checks and normal halt.
+QEMU tests absent-radio boot only. Evidence: scan-host-validation.json and
+scan-production-check/result.json under build/x86_64-wifi-start-shell/.
+USB receipt usb-install.json; previous receipt usb-install-before-scan.json.
+No shared compiler/SDK/kernel/select/socket/preemption source edits.
+
+PHYSICAL INIT / NVM READBACK ACCEPTED — 2026-10-19
+-------------------------------------------------
+User photo confirms BOOTWIFI candidate SHA256
+f92202558b1474579db6a97fe591f6706bbec7caea200a31ee9cb161715638f2:
+PNVM_STATUS/COMPLETE0x50001, command submissions/replies0x0203,0x0c00,0x0c02,
+INIT_COMPLETE1, NVM_VERSION0x1290,110 channel entries/38 marked valid,
+TX/RX chain masks0x3, MAC flags0x101f. QUIESCED0x3c7000 and NVM_READ_OK,
+then the normal RAM-root shell prompt. This is physical acceptance of native
+command DMA, firmware initialization, checked board-data readback and stop.
+The PNVM status bits remain opaque; do not infer their meaning from this pass.
+No scan, association, WPA2 or IP link yet. Next gate: actual MAC address read,
+required PHY/calibration and regulatory setup, then bounded AP scanning.
+Evidence: build/x86_64-wifi-start-shell/hp-nvm-readback-result.json and
+hp-nvm-readback.png. Pending NVM statements below are historical pre-test notes.
+
+PHYSICAL STARTUP ACCEPTED — 2026-10-19
+--------------------------------------
+User photograph confirms the revised BOOTWIFI.EFI on the HP: ROM_STARTED,
+ROM_ALIVE, FW_ALIVE version6, QUIESCED and STARTUP_OK, then the RAM-root shell.
+PCI command BEFORE=0x0000, AFTER=0x0402 proves disabled memory decode was the
+previous skip's cause; valid BAR0x48192c4000 was already assigned. Actual cold
+boot HW_REV=0x441, RF_ID=0x2010d000 match MA/GF. LMAC89.735b75a4, UMAC25.0;
+SKU words [0x510d1,0,0]. DMA bytes used0x3c1000. This is real hardware firmware
+startup/response/stop acceptance; no PNVM/scan/WPA2/link acceptance yet.
+Evidence: build/x86_64-wifi-start-shell/hp-alive-result.json and hp-alive.png.
+Earlier pending startup statements below are historical. Next: select matching
+PNVM using the returned SKU, confirm its completion, then NVM/calibration/scan.
+
+PHYSICAL PNVM NOTIFICATION / NVM READBACK RETRY — 2026-10-19
+----------------------------------------------------------
+The user photograph shows the selected PNVM submitted and notification0x0cfe
+received with raw status0x50001, followed by QUIESCED0x3c6000. Our earlier
+experimental zero-only gate stopped here. That requirement was unsupported:
+Linuxv6.12 logs the raw status and proceeds; OpenBSD proceeds on notification
+receipt. Neither requires zero. The bits of0x50001 are not documented in the
+inspected public ABI. Preserve the raw value without guessing its meaning or
+calling it proof of calibration/board-data success. Historical zero-gate image:
+SHA256 08034cf5e0b741e214a2ee5dea4e74bb2e8bac6058a826562eb46cc6ad587577.
+Photo/result: build/x86_64-wifi-start-shell/hp-pnvm-notification.{png,json}.
+
+New EFI/BOOT/BOOTWIFI.EFI:21,414,400 bytes
+SHA256 f92202558b1474579db6a97fe591f6706bbec7caea200a31ee9cb161715638f2.
+The --wifi-pnvm profile now retains the opaque status and attempts read-only
+NVM initialization/readback following OpenBSD iwx: INIT_EXTENDED_CFG (INIT_NVM),
+NVM_ACCESS_COMPLETE, wait INIT_COMPLETE, then NVM_GET_INFO. Exactly three native
+queue0 commands, no ring reuse. Wide headers, 64-byte-aligned native buffers,
+TFH descriptor addresses/lengths and response tags are checked. Native DMA stays
+in the permanent6MiB pool; no C16 pointers. ACK and INIT notification ordering
+is handled. Each command/init wait is bounded2s; all started paths stop/reset
+and verify PCI bus mastering off before returning. Failure diagnostics include
+last RX header, payload length/first8 words and command/init state.
+
+NVM replies require the advertised v3/v4 layout with exact bounded size and
+validate version, reserved MAC count, band flags, antenna masks, LAR flag and
+channel count. Report board version, TX/RX chain masks and channel/valid counts;
+zero currently valid channels is allowed (regulatory setup follows). GET_INFO
+does not supply the actual MAC address; that separate read remains later work.
+This probe sends no scan/association/data TX and does not establish a link.
+Desired markers: AX211_PNVM_STATUS=0x50001 (retained, not interpreted),
+AX211_INIT_COMPLETE=1, AX211_NVM_VERSION/CHANNELS/TX_CHAINS/RX_CHAINS,
+AX211_QUIESCED and AX211_NVM_READ_OK. Physical NVM readback is PENDING.
+
+For SKU[0x510d1,0,0], pinned recovery PNVM selects version0x38196ea0 and two
+fragments (1656+12052=13708 bytes); firmware capability32 uses the64-entry
+native table. Matching firmware/PNVM are unchanged opaque snapshots with Intel
+notices retained. Public references remain OpenBSD iwx1.230/reg1.75 and
+Linuxv6.12 fw/pnvm.c + fw/api/nvm-reg.h. Source provenance lives under
+build/x86_64-network/wifi-reference/{sources,pnvm-linux-sources}.json.
+
+Host UBSan passed the photographed0x50001 through the full command/readback
+sequence, INIT-before/after-ACK ordering, v3/v4 bounds and11 NVM transport fault
+cases, plus10 PNVM,19 startup cases and native PCI handoff guards. Exact normal
+EFI passed the QEMU USB shell/app/process/pipe/timer suite and normal halt.
+QEMU tests absent-radio boot only; it does not emulate AX211/NVM.
+Evidence: build/x86_64-wifi-start-shell/nvm-host-validation.json and
+nvm-production-check/result.json; USB receipt: usb-install.json.
+Physically accepted ALIVE-only EFI stays on USB as EFI/BOOT/BOOTWALV.EFI;
+normal/default/fallback files remain hash-identical. No internal disk action.
+No shared compiler/SDK/kernel/select/socket/preemption changes in this patch.
+
+Physical retry: PCI memory decoding — 2026-10-19
+-----------------------------------------------
+The user booted the first startup candidate and reported:
+  WIFI_BRINGUP_SKIPPED BAR_or_memory_decode
+Firmware upload/reset/DMA startup was NOT reached. That combined guard did not
+print raw values, so it cannot distinguish disabled memory decode from a bad
+BAR assignment. The subsequent successful photograph above resolves this.
+
+The revised BOOTWIFI.EFI below validates the assigned BAR and DMA/IOMMU handoff,
+turns off bus mastering and PCI interrupt delivery, then enables PCI memory
+space with checked readback before mapping registers. No BAR sizing, guessed
+address, relocation, power-state change or IOMMU reprogramming is attempted.
+It prints AX211_PCI_COMMAND_BEFORE, AX211_BAR0_LOW/HIGH and
+AX211_PCI_COMMAND_AFTER. Invalid BAR type/unassigned/alignment/range and failed
+PCI setup now have DISTINCT errors. The separate --wifi-probe stays read-only.
+
+Native UBSan regressions cover all four inherited memory-decode/bus-master
+combinations, denied decode writes, bad BARs, IRQ masking and no MMIO before
+successful setup. Exact refreshed production EFI passed the full QEMU USB
+shell/app/process/pipe/timer suite and normal halt. Evidence:
+  build/x86_64-wifi-start-shell/decode-host-validation.json
+  build/x86_64-wifi-start-shell/decode-production-check/result.json
+Only BOOTWIFI.EFI was replaced on the returned USB; default/fallback hashes
+were verified unchanged. Old receipt: usb-install-before-decode.json. Current
+receipt: usb-install.json. Physical retry/ALIVE subsequently passed above.
+
+Optional firmware startup test staged — 2026-10-19
+-------------------------------------------------
+Native AX210-family startup subset now lives in boot/wifi-image.c,
+wifi-transport.c and wifi-native.c. This historical ALIVE-only experiment has no PNVM,
+scan, association, EAPOL/key configuration, traffic or IP link is implemented.
+It parses the pinned recovery API89 blob, constructs Gen3 context/scratch +
+IML + LMAC/UMAC/paging DMA maps, and supplies 512 native 4KiB receive buffers.
+All DMA memory is a permanently reserved 6MiB kernel pool, covered by existing
+VT-d/RMRR guards. No guest/C16 pointer reaches the hardware. Exact PCI/subsystem,
+D0, BAR assignment and capability bounds plus DMA guards are checked before
+writes. Setup disables inherited DMA/IRQs, enables memory decode with readback,
+then checks the MA/GF non-CDB variant before firmware startup. PCI MSI/MSI-X/INTx
+stay disabled; device CSR causes and RX status are
+polled. Bus mastering is verified only after addresses and buffers are ready.
+Every started path attempts STOP_MASTER/reset + PCI DMA disable. Unconfirmed
+stop halts with buffers retained; success stops the controller before the shell.
+
+Historical ALIVE-only production candidate (now BOOTWALV.EFI on USB):
+  EFI/BOOT/BOOTWALV.EFI (21,352,448 bytes)
+  SHA256 becb43906095fe71afe023d793c77b810fe3ab87d46c98e81beae6b4691a68ed
+  EFI/BOOT/WIFILIC.TXT supplies the firmware/driver redistribution notices;
+  these notices are also embedded in the EFI binary's retained payload section.
+Existing BOOTX64/BOOTOLD/BOOTRAM/BOOTRO files were hash-verified unchanged. No
+partition table/default EFI boot selection or internal NVMe bytes were changed.
+This candidate is RAM-root only, with no NVMe/block driver compiled in.
+USB staging receipt: build/x86_64-wifi-start-shell/usb-install.json.
+
+On the HP choose F9 -> Boot From EFI File -> RIPLIXBOOT volume -> EFI -> BOOT
+-> BOOTWIFI.EFI. Cold boot is preferred. Photograph the startup diagnostics,
+including AX211_HW_REV/RF_ID and the final outcome. Desired markers:
+  AX211_ROM_STARTED -> AX211_ROM_ALIVE -> AX211_FW_ALIVE
+  AX211_SKU_WORD (three words), AX211_QUIESCED, AX211_STARTUP_OK
+A bounded failure/skip is useful evidence too. AX211_STARTUP_OK alone does NOT
+mean Wi-Fi is connected. AX211_STOP_FAILED_DMA_RETAINED / BOOT_FAIL deliberately
+halts instead of letting the shell reuse DMA memory. Physical ALIVE passed above.
+The normal default USB entry continues to boot the accepted persistent system.
+
+Acceptance completed BEFORE staging:
+  Host UBSan: actual firmware boundaries/metadata/section maps and every TLV
+  truncation, ring/context ABI offsets, ALIVE v5/6/7 bounds/status and 19 mocked
+  transport scenarios (timeouts, RF kill, ROM errors, malformed RX, ownership,
+  stop/PCI failure, unknown notification). Separate production PCI adapter
+  harness checks D0/BAR/variant/capability/IOMMU rejection and IRQ/master masks.
+  QEMU: runtime fixture and full shell/apps/process/pipe/timer suite with no
+  emulated AX211. The exact production EFI also passed the full suite through
+  emulated USB with normal halt. This validates absent-device boot only.
+  Evidence: build/x86_64-wifi-start/result.json,
+  build/x86_64-wifi-start-shell/{result,host-validation}.json and
+  build/x86_64-wifi-start-shell/production-check/result.json.
+Apple ASan was unavailable (dyld/malloc initialization deadlock before main);
+UBSan was used successfully. No hardware/firmware success is inferred from mocks.
+
+Rebuild (provide the exact pinned recovery blob above, not a same-named patch):
+  python3 tools/x86_64/boot.py build --ram-root --wifi-firmware \
+    build/x86_64-network/wifi-reference/iwlwifi-ma-b0-gf-a0-89.ucode \
+    --output build/x86_64-wifi-start-shell
+Reuse --font-atlas build/x86_64-offline/normal/font.atlas if font export is denied.
+--wifi-firmware rejects persistent roots/NVMe probes/network profiles and embeds
+only this hash-pinned blob. Unknown firmware patches fail before building.
+OpenBSD reference versions are if_iwx.c v1.230 and if_iwxreg.h v1.75; notices are
+in boot/wifi-LICENSE.txt and boot/wifi-firmware-LICENSE.txt. PNVM/NVM/calibration
+is the next driver gate AFTER physical ALIVE, followed by scan and WPA2.
+
+Physical evidence (read-only SSH while Ubuntu remained connected)
+----------------------------------------------------------------
+PCI 0000:00:14.3: 8086:7e40, subsystem 8086:0094, revision20.
+Intel Meteor Lake CNVi / AX211, MAC/RF variant ma-b0-gf-a0.
+BAR0 0x48192c4000, 16KiB, 64-bit non-prefetchable; above64GiB.
+Linux driver iwlwifi/iwlmvm; firmware89.123cf747.0 ma-b0-gf-a0-89.ucode.
+Hardware-revision diagnostic0x441, RF ID0x2010d000.
+Ubuntu interface wlo1 currently has192.168.100.107/24, gateway192.168.100.1.
+The current access point advertises WPA1/WPA2; first support can target WPA2-PSK.
+No password was requested/read, no interface was detached and no radio/firmware/
+IOMMU/PCI setting was written. Keep this SSH path intact while Ubuntu is running.
+Raw inventory/firmware hashes: build/x86_64-network/wifi-reference/hp-inventory.json
+and ubuntu-firmware.json. Do not publish nearby networks or credentials in docs.
+
+The actually working recovery image
+-----------------------------------
+Read the EXISTING SystemRescue13.02 airootfs.sfs directly, without mounting it
+or extracting a full root. Package records identify:
+  Linux LTS6.18.41-1; iwlwifi, iwlmvm, mac80211 and cfg80211 kernel modules.
+  NetworkManager1.58.0-1; nmtui; wpa_supplicant2.11-5.
+  ma-b0-gf-a0-83/86/89 firmware and matching PNVM family.
+Thus the comfortable setup UI is nmtui -> NetworkManager -> wpa_supplicant /
+Linux wireless APIs -> iwlwifi/firmware. EFI itself does not supply that stack.
+We can borrow the interaction pattern and use its firmware as a reference;
+its Linux binaries/modules cannot be loaded into the freestanding Riplix kernel.
+
+Extracted only the relevant firmware reference pair, with supplied Intel notice,
+under build/x86_64-network/wifi-reference/ (not vendored into the source tree):
+  iwlwifi-ma-b0-gf-a0-89.ucode:1752712 octets
+  SHA256 9984b550d78ede691433f6de9d19c16cbf85e1e2806ef42904e790853d2a4227
+  iwlwifi-ma-b0-gf-a0.pnvm:55096 octets
+  SHA256 067f24f8d601e4f0238d53b2a769f5bd58aa2619c780a334d9da83b514dc6199
+Ubuntu's files have the SAME names/API89 but DIFFERENT decompressed hashes:
+  ucode f6e17dd2978f34c6c8fbbc9567cfcc65a23109962f4de67ec89c1ec5c8a26908
+  PNVM  b80bff2ba005faa4edb574d2a4713d332bbeefa5e313947771598dc86fc17ee6
+Do not assume identical patches or mix firmware/PNVM snapshots silently.
+The public TLV container inspector (wifi_firmware.py) validates complete record
+and padding bounds, reports60 section records and217 command-version entries
+in this recovery firmware. It does NOT inspect executable instructions, upload
+firmware or establish compatibility with a future driver.
+
+Driver reference and native boundary
+------------------------------------
+Current OpenBSD if_iwx.c/if_iwxvar.h explicitly match MAC_TYPE_MA + RF_TYPE_GF
+without CDB to iwx_cfg_ma_b0_gf_a0, with iwx-ma-b0-gf-a0-89 and its PNVM. This is
+an exact-family starting reference beyond the generic AX211 marketing name.
+Downloaded reference files retain notices and SHA256 provenance in sources.json.
+The online iwx manual lists older firmware examples; source configuration is the
+basis for the MA/API89 observation. This is NOT a completed portability review.
+
+A native C/Clang platform driver can keep real64-bit BAR/DMA pointers outside
+C16. The existing checked DEVICE_NET_INFO/TX/RX/STATS frame contract can remain
+unchanged once Wi-Fi association produces a usable link. Radio control/scan/key
+management needs a separate interface; do not overload raw-frame descriptors or
+put credentials in diagnostic logs. Existing guest TCP/IP/sockets/PTYs are reused.
+
+Work sequence / acceptance gates
+--------------------------------
+1. Read-only cold-boot PCI/CSR discovery: --wifi-probe. The optional probe does
+   not size/rewrite BARs, enable memory decode, change power, reset, load firmware
+   or start DMA. It skips an absent/wrong device, non-D0 state, disabled decode,
+   malformed config or unavailable CSR. Native host tests prove no PCI/CSR writes;
+   QEMU verifies absent-radio boot still reaches the normal working shell.
+   Actual HP CSR acceptance is pending. This is discovery, not a Wi-Fi driver.
+   Self-contained RAM-root production candidate (no NVMe access):
+   build/x86_64-wifi-probe/normal/esp/EFI/BOOT/BOOTX64.EFI
+   SHA256 4cf1b9f923233f11020cf06c9bccb2d177ccaf79c25e5637ba23884301320bd0
+   Diagnostics reach the panel and serial. Exact production image passed the
+   full QEMU shell/app/process/pipe/timer suite via USB. Candidate is NOT
+   installed on USB; actual HP CSR acceptance remains pending.
+2. Adapt the matching Intel transport: ownership/power/reset, bounded native DMA
+   queues, checked TLV firmware + matching PNVM, firmware ALIVE and NVM/calibration.
+   Preserve existing VT-d guards; do not disable an active IOMMU blindly. Keep
+   buffers resident until the controller is actually quiescent. Poll initially
+   if suitable; no guest execution from an ISR. Inspect all OpenBSD bus/task/
+   net80211/crypto dependencies before choosing the reusable scope.
+3. Scan APs with valid channel/regulatory information; verify SSID/security and
+   signal against the known working recovery/Ubuntu results on this machine.
+4. Managed association + WPA2-PSK/EAPOL/key installation; handle disconnect,
+   retries, malformed management traffic and interface reset. No open-network
+   substitute for the user's normal secured access point.
+5. Bring up the existing IP stack (explicit initial IPv4 config is possible;
+   DHCP and DNS configuration follow), then real HP ping and remote shell.
+6. Curses UI using the existing guest library: scan list, signal/security,
+   password entry with echo disabled, connect/disconnect/status and saved profiles
+   protected by file mode0600. A small CLI/control boundary should serve both UI
+   and initial setup from this chat. Ask for the password only when the secured
+   association path can actually use it. No placeholder/fake scan results.
+
+QEMU stack milestone completed
+------------------------------
+--network user adds modern virtio-net, bounded native DMA/frame queues and the
+same C16 mailbox as other runtimes. No checksum/GSO/mergeable offload, hardware
+Wi-Fi claim or host-socket replacement for guest TCP/IP. QEMU supplies NAT only.
+Host forwarding binds127.0.0.1:2323 -> guest192.168.64.250:23 by default.
+
+Passed first RAM boot and TWO fresh NVMe-root boots: guest ping/DNS, exact4372-
+octet binary host HTTP download, two simultaneous Telnet PTYs, shared files,
+pipeline, Ctrl-C, three reconnects, link down/up + a fresh remote shell, remote
+file persistence, core shell/app/process/pipe/timer tests and clean teardown.
+The persistent run also passes missing/readonly/read/write/flush storage failures.
+Host UBSan tests exercise ring wrap/ownership/corruption/quotas/backpressure/
+link-down/counters and mailbox rejection/atomicity/bank crossings/short-buffer RX.
+Evidence: build/x86_64-network/result.json and network-result.json;
+build/x86_64-network-persistent/{result,network-result}.json.
+Only the small network CLI/diagnostics were packaged; htget's current canonical
+recipe needs its separate TLS port and entropy acceptance, so it remains excluded.
+No shared compiler/SDK/runtime ABI or true-preemption change was made.
+
+References
+----------
+https://github.com/openbsd/src/blob/master/sys/dev/pci/if_iwx.c
+https://github.com/openbsd/src/blob/master/sys/dev/pci/if_iwxvar.h
+https://github.com/openbsd/src/blob/master/sys/dev/pci/if_iwxreg.h
+https://man.openbsd.org/iwx
+https://wireless.docs.kernel.org/en/latest/en/users/drivers/iwlwifi.html
+https://www.system-rescue.org/manual/Network_configuration_and_programs/
+https://docs.oasis-open.org/virtio/virtio/v1.2/virtio-v1.2.html
+
+PCI initialization reference (memory enable is distinct from bus mastering):
+https://www.kernel.org/doc/html/latest/driver-api/pci/pci.html

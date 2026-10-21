@@ -10,7 +10,11 @@
  */
 
 #include	"defs.h"
+#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
+#include "shell-prompt.h"
+#endif
 #include <string.h>
+#include <fcntl.h>
 #include <sys/wait.h>
 
 
@@ -58,8 +62,11 @@ void initio(IOPTR iop)
 				fd = chkopen(ion);
 			} else if (flags & rshflg) {
 				failed(ion, restricted);
-			} else if (iof & IOAPP && (fd = open(ion, 1)) >= 0) {
-				lseek(fd, 0L, 2);
+			} else if (iof & IOAPP) {
+				/* A one-time seek races other writers (notably cron jobs). */
+				fd = open(ion, O_WRONLY | O_CREAT | O_APPEND, 0666);
+				if (fd < 0)
+					failed(ion, badcreate);
 			} else {
 				fd = create(ion);
 			}
@@ -127,6 +134,9 @@ void execa(const char **at)
 	register const char **t = at;
 
 	if ((flags & noexec) == 0) {
+#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
+        if (flags & prompt) shell_mux_report(at);
+#endif
 		xecmsg = notfound;
 		path = getpath(*t);
 		namscan(exname);
@@ -327,10 +337,15 @@ void trim(char *at)
 	register char q = 0;
 
 	if ( (p = at) ) {
-		while ( (c = *p) ) {
-			*p++ = c & STRIP;
+		char *source = at;
+		while ( (c = *source++) ) {
 			q |= c;
+			/* Quote-only markers preserve an empty argument during split,
+			 * but must not truncate a concatenated argument here. */
+			if (c & STRIP)
+				*p++ = c & STRIP;
 		}
+		*p = 0;
 	}
 	nosubst = q & QUOTE;
 }

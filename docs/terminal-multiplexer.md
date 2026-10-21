@@ -1,15 +1,16 @@
 # mux: terminal workspaces
 
 `mux` is a shared C application for Riplix and native Fuse-X. It runs
-independent shells and full-screen applications in tabs and split panes inside
+independent shells and full-screen applications in tiled and floating desktop tabs inside
 an existing terminal. It works through the physical console, graphical
 terminals and Telnet; it has no graphics or VM-specific dependency.
 
 ## Getting started
 
 Normal application builds install `/bin/mux` and `man mux` on both systems.
-Run `mux` to create the default session `main`, or attach it if already running.
-Use `mux new work` for another named session. An optional command replaces the
+Run `mux` to attach the live session `main`. If it is not running, mux restores
+the last saved default workspace, or starts a fresh shell if none exists.
+Use `mux new main` to start fresh explicitly, or `mux new work` for another named session. An optional command replaces the
 first pane's shell, for example `mux new browse lynx`.
 
 Commands use a prefix: press **Ctrl-B**, release it, then press the command key.
@@ -18,20 +19,29 @@ Press Ctrl-B twice to send that control character to the application.
 | After Ctrl-B | Action |
 |---|---|
 | `?` | Show keyboard help; any key closes it |
-| `c` | New tab |
+| `c` | New tiled tab |
+| `f` | New floating desktop tab |
+| `w` | New shell window in the desktop tab |
+| `e` | Run dialog: open a program in a desktop window, or a new tiled tab |
+| `M` | Minimize the focused desktop window |
+| `m`, `v` | Move / resize the focused window; arrows or `hjkl`, Enter/Esc finish |
+| `t` | Rename the focused desktop window |
 | `n`, `p`, `1`–`8` | Next, previous, numbered tab |
 | `,` | Rename tab; Ctrl-U clears the name |
 | `%` | Split left/right |
 | `"` | Split top/bottom |
 | Tab or `o` | Next pane |
 | `h`, `j`, `k`, `l` or arrows | Focus left/down/up/right |
-| `+`, `-` | Grow/shrink the pane at its nearest split |
+| `+`, `-` | Grow/shrink the split, or the desktop window |
 | `z` | Zoom the pane or restore its layout |
 | `[` | Enter scrollback and copy mode |
 | `]` | Paste the internal clipboard |
 | `x` | Close pane, with confirmation |
 | `d` | Detach and leave applications running |
 | `r` | Redraw |
+| `S` | Save the named session and update the default workspace |
+| `C`, `D` | Override the focused pane’s restart command / directory |
+| `A` | Clear those overrides and use automatic foreground capture again |
 
 Ordinary Tab, function keys, Ctrl-C and Ctrl-Z go to the focused pane. Each pane
 has its own shell job control: `jobs`, `fg` and `bg` operate on that shell's jobs.
@@ -46,6 +56,75 @@ Space marks the start of a line selection; move and press `y` to copy it.
 Without a mark, `y` copies the current line. `/` searches backward through the
 retained lines, wrapping; `n` repeats. Escape or `q` returns to the application.
 Copying also leaves scrollback. This clipboard is private to the session.
+
+## Floating desktop tabs
+
+Press **Ctrl-B f** to create a desktop tab, marked `[D]` in the tab strip.
+It starts with one shell; **Ctrl-B w** opens another overlapping window.
+Tiled tabs remain available with **Ctrl-B c**. The two kinds of tab can coexist
+in one session, sharing the same twelve-pane/eight-tab limits and PTY pool.
+`%` and `"` also create a window when used in a desktop tab.
+
+- Drag a title bar to move its window. Drag a side, bottom edge or corner to
+  resize it. The title buttons minimize (`[_]`), maximize/restore (`[+]`/`[-]`), and close
+  immediately (`[x]`). Ctrl-B x still asks for confirmation. Side and bottom borders
+  use the normal terminal background. Mux’s top/bottom bars are dark gray;
+  window title strips are lighter gray, with a blue text accent on the active window.
+- Click a window to focus and raise it. The task bar above the normal status
+  line lists every window in stable creation/slot order; clicking a title raises
+  that window even when it is completely covered or minimized. Cycling with Ctrl-B Tab/o
+  raises the next window too. Ctrl-B `hjkl`/arrows choose a window in that
+  direction by its center, including overlapping windows.
+- Ctrl-B **m** enters Move mode; Ctrl-B **v** enters Resize mode. Then use arrows
+  or `hjkl` in one-cell steps, finishing with Enter, Escape or Ctrl-C. These modes
+  consume their controls rather than sending them into the application.
+  Ctrl-B **+/-** grows/shrinks both dimensions. Ctrl-B **z** maximizes/restores.
+- Ctrl-B **t** sets a manual window title. By default, titles follow the program
+  launched by the system shell (for example `rift` or `lynx`), returning to
+  `shell` at its next idle prompt. A manual title takes priority; clear it with
+  Ctrl-U and Enter in the title prompt to return to automatic titles.
+  Ctrl-B **,** still renames the whole tab. Ctrl-B **!** moves the running pane
+  into its own tiled tab, without restarting its process.
+
+Mouse reports inside a window's content are translated into that child's local
+coordinates and respect its requested reporting modes. A child drag retains its
+owner even when it crosses another window. Window-manager drags are captured
+until release; resize, detach, tab changes and pane replacement cancel capture.
+**Shift-drag remains terminal text selection**, including over a desktop tab.
+
+Preferred window rectangles survive a temporary smaller outer terminal. Windows
+are clamped to the available desktop without overwriting their saved geometry;
+terminals too small for a frame temporarily show only the focused terminal.
+**Ctrl-B M** minimizes a window without stopping its program. Minimized windows
+are not composed or hit-tested, but their PTYs continue to run and collect output.
+Their taskbar text is dimmer, with the same label and slot width. Click a taskbar
+button to restore/raise it; Ctrl-B Tab/o also cycles through hidden windows and
+restores the selected one. Minimizing the last visible window leaves an empty
+desktop; ordinary keys/pastes are not sent into hidden applications. The Run
+dialog, taskbar and prefix controls remain available. Minimized state and manual
+title overrides are included in saved/default workspaces. Images remain planned
+separately.
+
+### Run a program
+
+**Ctrl-B e** opens a centered Run dialog. Enter a program name or command with
+arguments, such as `rift '/mnt/host/notes.js'`. Enter or the Run button launches
+it; Escape or Cancel dismisses the dialog. Backspace removes a Unicode grapheme,
+Ctrl-U clears input, and bracketed paste inserts text without executing a pasted
+newline. Small terminals use the footer as the input field.
+
+In a desktop tab, Run creates a new floating window. In a tiled tab, it creates
+a new mux tab named after the program. The launch inherits the selected pane's
+reported directory, or its configured directory when overridden/unavailable.
+The command runs through the configured shell, returning to an interactive shell
+when it finishes; launch errors remain visible there. Run commands are retained
+as restart recipes. Automatic window titles use the existing shell launch reports,
+so there is no periodic process polling or extra rendering cost per character.
+
+This takes inspiration from [Twin](https://github.com/cosmos72/twin), whose
+terminal window manager supports overlapping windows. It extends mux's existing
+PTY/session model and does not require a new application protocol or a Twin port.
+Existing TUI applications work in a desktop window without changes.
 
 ## Sessions and configuration
 
@@ -75,6 +154,52 @@ Session sockets live in `/tmp/mux-UID/NAME`. The directory must be owned by the
 calling user and have mode 0700; sockets use guest Unix-domain IPC. Names allow
 1..24 letters, digits, hyphens and underscores. Creation recovers stale socket
 nodes after a reboot but refuses to replace other filesystem entries.
+
+## Save once, return after reboot
+
+**Ctrl-B S** saves both the current named session and `$HOME/.mux/default`.
+`mux save NAME` does the same from inside a pane, another terminal or a script,
+whether the session is attached or detached. The default is an independent,
+atomic copy of the most recently saved workspace. Named saves remain available
+with `mux saved` and `mux restore NAME`.
+
+A plain **`mux`** attaches to live `main` first. Otherwise it restores the default
+workspace as `main`, including tiled/desktop tabs, rectangles, titles, stacking,
+focus, zoom, shell configuration and per-pane restart recipes. With no saved
+default it starts a fresh shell. `mux new NAME [COMMAND ...]` and an explicit
+`mux COMMAND ...` bypass automatic restore. An invalid default produces an error;
+`mux new main` lets you start fresh without overwriting it.
+
+The interactive system shell reports foreground external launches and idle
+prompts through a private, bounded terminal OSC. At save time mux checks that
+the reported process group still owns the pane's foreground terminal. It saves
+shell-quoted arguments and the command's launch directory; an idle shell saves
+its current directory. Thus `rift 'notes with spaces.js'` can reopen that file,
+while a completed `rm` or a background job is not replayed. Closing an automatically
+restored application returns to an interactive shell. Commands run through a
+pipeline or redirected away from the terminal are not captured as standalone
+foreground applications. Session-management invocations of `mux` are excluded.
+
+**Ctrl-B C** and **Ctrl-B D** set explicit restart-command and directory overrides;
+they take priority over automatic capture and persist across restores. An empty
+C override requests a shell. **Ctrl-B A** clears both overrides for that pane.
+This is also useful for custom shells, compound commands, wrappers, or a job
+resumed with `fg`: automatic capture follows the most recent supported launch,
+not the shell's job table. Without a valid report, mux retains the pane's startup
+recipe. Version 1/2 snapshots preserve their old explicit recipes as overrides.
+
+These are restart recipes, not process checkpoints. Saving does not retain
+unsaved editor buffers, process memory, shell variables/environment changes,
+background jobs, terminal contents or scrollback text. Save application data
+normally. Saving remains explicit; detaching, exiting or shutting down does not
+automatically replace the last saved workspace. `mux kill NAME` keeps saved files.
+Remove `$HOME/.mux/default` to disable automatic restore of the saved workspace.
+
+Both the snapshot directory (0700) and files (0600) are private to their owner.
+The entire layout and restart directories are validated before any command runs.
+The shell adds no protocol output outside mux, and ordinary terminal rendering
+ignores the private report. Report parsing has bounded memory and does not add
+per-character work to the terminal's ASCII fast path.
 
 ## Architecture and performance
 
@@ -110,7 +235,25 @@ then retains the top-left overlap and clamps saved cursors. It does not reflow
 wrapped text. Maximum model geometry is 240×100; existing GX/Nano-X terminals
 keep their separate 80×30 graphics limits. Underline/blink and cursor-shape
 state are retained; extended colours are approximated on the existing 16-colour
-palette. Full Unicode and complete xterm emulation remain outside this version.
+palette. UTF-8 graphemes and wide cells use the shared Unicode engine; complete
+xterm emulation and bidirectional layout remain outside this version.
+
+Floating composition uses a back-to-front stack of retained cell surfaces.
+Only changed outer cells are sent to the attaching terminal; moving a window
+changes geometry and damage, without invalidating/reprinting the whole terminal.
+Each window keeps its last complete cell surface so an unfinished synchronized
+application update cannot leak through when another window moves or is raised.
+Covered windows keep consuming PTY output. A wide grapheme clipped by an
+occlusion boundary becomes a blank cell rather than overwriting the window above.
+These caches allocate at most one extra content-sized grid per desktop pane.
+
+Session saves write `MUX-SESSION 4`, recording desktop type, preferred
+rectangles, window titles, stacking ranks, minimized state and explicit-override flags as well as
+restart recipes. The reader still accepts versions 1, 2 and 3. Older mux binaries
+cannot read version 4 saves. Validation checks the complete split ownership graph, unique
+contiguous stacking ranks and bounded geometry before any saved command runs.
+Desktop geometry is in terminal cells; resizing a PTY remains the application's
+normal SIGWINCH/TIOCGWINSZ path, without text reflow in mux itself.
 
 ## Resource preparation and limits
 
@@ -140,6 +283,11 @@ screens for every new pane.
 ```
 make -C ports/fuzix BUILD="$PWD/build/fuzix" test-mux
 make -C fuse-x test-mux
+python3 ports/fuzix/tools/test_mux_floating.py
+python3 ports/fuzix/tools/test_mux_snapshot.py
+python3 ports/fuzix/tools/test_mux_desktop.py --target both
+python3 ports/fuzix/tools/test_mux_windows.py --target both
+python3 ports/fuzix/tools/test_mux_default.py --target both
 ```
 
 The Python integration driver uses real guest kernels, a real outer PTY and

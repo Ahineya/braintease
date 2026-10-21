@@ -1,0 +1,21 @@
+{Module RippleVM/RAM
+  {Import Core/Plumb as Plumb open macro}
+  {Export InitRam RAM}
+  
+  {Rules
+    {R InitRAM
+      {State .. {InitRam}   ..}
+      {State .. {InitRam 0} ..}
+    }
+    {R InitRam:Repeat
+      {State b.. {InitRam     n_     ..}          ..}
+      {State b.. {InitRam Add(n_, 1) .. {0 n_ 0}} ..}
+      :guard Lte(n_, 1023)  // Limit RAM size to 1024 cells
+    }
+    {R InitRam:Done
+      {State .. {InitRam n_ ..} ..}
+      {State .. {RAM        ..} ..}
+      :guard Not(Lte(n_, 1023))
+    }
+  }
+}

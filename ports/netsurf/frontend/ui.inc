@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 static void fill(int x,int y,int w,int h,GR_COLOR c)
-{ if(w>0&&h>0) { GrSetGCForeground(gc,c); GrFillRect(wid,gc,x,y,w,h); } }
+{ if(w>0&&h>0) { GrSetGCForeground(gc,c); GrFillRect(draw_target,gc,x,y,w,h); } }
 static plot_font_style_t ui_font(void)
 {
     plot_font_style_t style;memset(&style,0,sizeof(style));
@@ -125,22 +125,32 @@ static void paint_chrome(void)
     top=eh>track?(long)window.sy*(track-thumb)/(eh-track):0;
     fill(view_width()+3,TOOLBAR+top,SCROLLBAR-6,thumb,GR_RGB(99,119,135));
 }
+#include "render.inc"
 static void paint(void)
 {
     if(!wid || (!dirty&&!chrome_dirty))return;
     if(dirty) {
         struct plot_context p;
+        uint64_t paint_start=0,paint_end=0;
         struct redraw_context redraw={.interactive=true,.background_images=true,.plot=&plotters,.priv=&p};
+        if(tracing)nsu_getmonotonic_ms(&paint_start);
         p.limit=p.clip=damage; p.text_runs=p.rectangles=0;
         dirty=false;
-        if(browser_window_has_content(window.bw))browser_window_redraw(window.bw,-window.sx,TOOLBAR-window.sy,&p.limit,&redraw);
-        else { plot_clip(&redraw,&p.limit); fill(p.limit.x0,p.limit.y0,p.limit.x1-p.limit.x0,p.limit.y1-p.limit.y0,GR_RGB(255,255,255)); }
+        if(browser_window_has_content(window.bw)) {
+            if(!render_paint(&p)) {
+                draw_target=wid;p.limit=p.clip=damage;
+                browser_window_redraw(window.bw,-window.sx,TOOLBAR-window.sy,&p.limit,&redraw);
+            }
+        } else { plot_clip(&redraw,&p.limit); fill(p.limit.x0,p.limit.y0,p.limit.x1-p.limit.x0,p.limit.y1-p.limit.y0,GR_RGB(255,255,255)); }
         if(caret&&!editing) {
-            struct rect limit=viewport(); plot_clip(&redraw,&limit);
+            struct rect limit=viewport(); p.limit=limit;plot_clip(&redraw,&limit);
             fill(caret_x-window.sx,TOOLBAR+caret_y-window.sy,1,caret_height,GR_RGB(0,0,0));
         }
         paints++;
-        if(tracing)fprintf(stderr,"NETSURF_GUI_PAINT %u text=%u rect=%u\n",paints,p.text_runs,p.rectangles);
+        if(tracing) {
+            nsu_getmonotonic_ms(&paint_end);
+            fprintf(stderr,"NETSURF_GUI_PAINT %u text=%u rect=%u ms=%lu\n",paints,p.text_runs,p.rectangles,(unsigned long)(paint_end-paint_start));
+        }
     }
     if(chrome_dirty) { paint_chrome(); chrome_dirty=false; }
     if(menu_open)paint_menu();
@@ -340,6 +350,7 @@ static void handle_event(GR_EVENT *event)
     case GR_EVENT_TYPE_UPDATE:
         if(event->update.utype==GR_UPDATE_SIZE) {
             close_menu();
+            render_clear();
             width=event->update.width; height=event->update.height;
             if(width<40)width=40; if(height<100)height=100;
             browser_window_schedule_reformat(window.bw); full_damage(); chrome_dirty=true;

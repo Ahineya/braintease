@@ -1,0 +1,166 @@
+Initial internal EFI staging (2026-10-21)
+=======================================
+
+tools/x86_64/internal_boot.py stages an initial Riplix trial on an explicitly
+selected, already mounted ESP. It does not discover disks, mount partitions,
+run efibootmgr, change BootOrder/BootNext, reboot, or copy the root filesystem.
+The platform owner must separately verify the physical disk/PARTUUID and the
+selected mount directory. --esp-id records that caller-verified identity; the
+tool cannot establish it from a directory pathname.
+
+Inputs are two distinct AMD64 PE32+ EFI applications and independently supplied
+SHA256 hashes: candidate and previously accepted known-good. Structural PE
+validation and matching hashes do not establish that an image boots on the HP.
+The caller chooses those hashes from accepted build/hardware evidence.
+
+Initial files, all owned by this tool:
+  EFI/Riplix/BOOTX64.EFI     Candidate for a separately configured one-boot trial.
+  EFI/Riplix/BOOTGOOD.EFI    Independently checked fallback, selected manually
+                           by firmware/file browser if needed.
+  EFI/Riplix/manifest.json  Exact paths, sizes, SHA256, PE metadata, stage time,
+                           caller ESP identity; never claims boot acceptance.
+
+--directory Riplix-tui selects an independent initial-stage namespace instead
+of the default Riplix. Both apply and inspect require the same selection; paths
+in the manifest and interrupted-stage prefixes follow it. Names must be exactly
+Riplix or Riplix- followed by1 to48 ASCII letters/digits/hyphens, starting with a
+letter or digit. Existing other namespaces remain untouched; this does not
+enable replacement, updates or firmware selection.
+
+No EFI/ubuntu, EFI/BOOT or recovery payload is replaced. There is no full ESP
+backup and no private key/root image copy. The known-good EFI uses its embedded
+root selection policy; it is not a rollback of the installed root filesystem.
+The fallback file alone does not automatically rescue a hung candidate.
+
+Example argument shapes (replace every uppercase value with independently
+verified input; neither example changes firmware state):
+
+  python3 tools/x86_64/internal_boot.py apply --esp-dir ESP_MOUNT \
+    --esp-id PARTUUID=VERIFIED_ESP_PARTUUID \
+    --candidate CANDIDATE.EFI --candidate-sha256 CANDIDATE_SHA256 \
+    --known-good ACCEPTED.EFI --known-good-sha256 ACCEPTED_SHA256
+
+  python3 tools/x86_64/internal_boot.py inspect --esp-dir ESP_MOUNT \
+    --esp-id PARTUUID=VERIFIED_ESP_PARTUUID \
+    --candidate-sha256 CANDIDATE_SHA256 --known-good-sha256 ACCEPTED_SHA256 \
+    --manifest-sha256 SHA256_RETURNED_BY_APPLY
+
+Each file is exclusively created, completely written, fsynced and read back.
+The directory and parent directory are fsynced; the complete directory is then
+published atomically with no-replace semantics and re-verified. Native host
+support is required: Linux renameat2(RENAME_NOREPLACE), or macOS
+renamex_np(RENAME_EXCL). Publication fails closed on unsupported filesystems or
+failed fsync. A failed post-publication check retains the destination for
+inspection, never silently overwriting or rolling it back.
+
+A clean repeat with the same hashes verifies and fsyncs existing files without
+rewriting them, completing synchronization after a prior final-fsync failure.
+Any missing/unrecognized/rejected file state or different hashes is
+refused. This initial-staging tool intentionally provides no update/promotion
+or deletion command. Unexpected case-colliding names and symlinks are refused.
+
+Interruption before directory publication may leave an EFI/.Riplix-stage-*
+directory. inspect reports these names; apply refuses to proceed until the
+owner reviews them. Ordinary write/space failures clean only the unique staging
+directory made by the current invocation. Abrupt interruption and a failure
+after publication preserve evidence. Do not create firmware entries or select
+BootNext until apply/inspect succeeds, the exact manifest is recorded, and the
+parent's device identity/Ubuntu-preservation checks pass. Keep USB recovery.
+
+Offline validation:
+  python3 tools/x86_64/tests/test_internal_boot.py
+
+Tests cover exact manifest/readback, unrelated Ubuntu/BOOT/recovery hashes,
+idempotent verification, malformed PE and hashes, symlinks/nonregular sources,
+unknown/rejected states, insufficient space and write failure, corruption,
+interruption, and a destination appearing during atomic publication. They use
+temporary directories only, not disks, mounted ESPs or firmware variables.
+
+
+HP physical staging, trial and default boot — 2026-10-21
+=================================================
+Combined candidate dab393f9ca5aa4fcd2a616e16b1e4868f0f9047bd389492c7cf437bc681f4147
+was selected after23 Wi-Fi host suites/26 checks and exact two-boot QEMU
+persistence, reset, input-octet and renderer-grid acceptance. Initial stage
+module13 tests pass on Mac, Ubuntu and a disposable mounted vfat image.
+
+Parent verified WD SN560 disk/model/serial, both GPT copies and partition
+identities. Only three new EFI/Riplix files were added on internal p1; all eight
+prior ESP files and both GPT copies remained hash-identical. The installer
+performed no p3/root export, format or root update. Known-good EFI502111b...c3f8c6 is retained
+as EFI/Riplix/BOOTGOOD.EFI. Full source/hash/install receipts are private build
+metadata in build/x86_64-internal-boot/ and build/x86_64-radio-console/.
+
+A separate active firmware entry0000 (Riplix development) was created without
+changing BootOrder2001,0001,2005,2002,2004. BootNext0000 selected the one-shot
+trial. Both USB default boot files were refreshed/read back;158 recorded other
+payloads were unchanged, prior BOOTGOOD/recovery retained, and BOOTGTK.EFI added
+with the physically accepted previous build on each volume. Both FAT checks
+passed; USB safely ejected and remained on the Mac throughout the HP trial.
+
+The physical internal boot reached pinned SSH, Wi-Fi generation1/attempt1,
+configured address, and running wifi/sshd/telnetd with completed network/key
+services. Three gateway pings and two DNS-resolved internet pings passed.
+This establishes initial internal boot/remote readiness, not sustained RF
+stability, a held SSH session through GTK rotation or physical-key acceptance.
+
+Orderly Riplix reboot returned Ubuntu; BootCurrent0001 was verified after
+user reopened its temporary root SSH listener on2222. Ubuntu clears /tmp at
+boot, so exact hash-verified installer inputs were restored before promotion;
+no root filesystem payload or private SSH key was exported.
+
+Riplix entry0000 is now first in BootOrder0000,2001,0001,2005. All existing
+prior entries retain their relative order. Firmware had stale references2002
+and2004 with no corresponding Boot#### variables; efibootmgr rejected them,
+so only these nonexistent references were removed. Ubuntu's original entry,
+all eight prior ESP payloads and both GPT copies remain unchanged. No BootNext
+was present for the acceptance boot. Ordinary Ubuntu reboot then selected
+Riplix by default without USB; pinned SSH, services, gateway/DNS traffic and
+Wi-Fi generation1/attempt1 with GTK/rejection0 passed again. Physical acceptance
+receipt: build/x86_64-internal-boot/physical-acceptance.json. Installed image
+still needs physical keyboard/display and sustained-radio acceptance.
+
+Keep Ubuntu and USB recovery. Use firmware's boot selector for either;
+a Riplix command to select a one-time Ubuntu boot is not implemented here.
+Remote EFI update publication/health rollback remains separate future work.
+
+
+Terminal candidate and unattended development loop — later 2026-10-21
+====================================================================
+The preceding Riplix-default result is historical. The user explicitly chose
+Ubuntu as temporary default while EFI updates still require Ubuntu access.
+Root SSH2222 now starts automatically through riplix-dev-ssh.service; the
+original home-directory script is preserved. A real Ubuntu reboot verified
+autostart before the new candidate trial. See ubuntu-dev-loop.txt for commands,
+authentication scope, root-setting restoration and removal.
+
+Terminal candidate32d71c89df9ed6ed8e0a039faa19b931d1a1ef529770c8a64a70ad6fc5790691
+adds a shadow-derived visible console cursor and32MiB total RXE1 limit.
+After host/loader, named-stage/vfat and exact QEMU checks, three new files were
+staged in EFI/Riplix-tui. BOOTGOOD.EFI there is the preceding accepted dab393f9
+build. EFI/Riplix and all eleven previous ESP files were preserved. Active
+entry0002 (Riplix terminal test) uses that new namespace;0000 retains the prior
+accepted build and0001 remains Ubuntu. BootNext0002 selects a single trial.
+
+The full unattended Ubuntu -> Riplix -> Ubuntu -> Riplix loop passed. Both
+Riplix boots reached pinned SSH, Wi-Fi and services. Initial gateway/DNS traffic
+passed. Ubuntu's return had a fresh boot ID, enabled/active automatic SSH2222,
+BootCurrent0001, no BootNext and Ubuntu-first order. Readback verified all old
+ESP files, the new three files and unchanged GPT metadata before selecting
+the second one-shot Riplix boot. No USB movement or Ubuntu console action was
+needed for this round trip.
+
+Actual HP pkg installed nine terminal/data packages: mux, rfl-fm/mc, rift/vi,
+keycheck, fixed levee and four dependencies. Seven executable/alias hashes,
+native entry probes and SSH PTY Levee arrow/delete/save, Commander F10 exit
+and Rift insert/Escape/save passed. All nine versions and the exact large Rift
+image survived the reboot. Physical framebuffer cursor/display remains a
+local acceptance gate. Standard local Escape/arrows/F1-F12 already passed;
+Fn/media support remains deferred.
+
+Final receipt: build/x86_64-terminal-wave32/physical-acceptance.json.
+HP is left running the new Riplix candidate. Ubuntu remains the persistent
+default; ordinary Riplix reboot returns it for the next update. This is not
+automatic rollback for a hung candidate. Old EFI fallback and installed-app
+rollback are separate: the preceding16MiB loader cannot execute current Rift.
+USB recovery stayed on the Mac and was not rewritten in this wave.

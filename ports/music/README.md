@@ -303,3 +303,16 @@ wide products, plus the MP3 path's software floating-point helpers. Use those
 results to improve generated code/VM execution and compare a maintained Tremor
 port with a fixed-point MP3 candidate. Keep decoder input/output as guest octets
 and PCM samples; neither path requires a host codec service.
+
+## Mouse controls
+
+The curses player enables drag reporting. Click a file or playlist row to
+select it, then click the selected row again to open/play. Click pane headings
+to change focus. Wheel navigates the pane under the pointer. The bottom action
+labels and top-right Shuffle label are clickable. Click or drag the progress
+line to seek; use the volume buttons or wheel over the time/volume row to adjust
+volume. Shift-drag remains terminal text selection. Keyboard arrows still seek,
+Space pauses, and all playlist shortcuts remain available.
+
+`python3 rfl/tools/test_apps_mouse.py --target both --app music` exercises these
+controls against disposable native and RVM guest disks, with silent PCM output.

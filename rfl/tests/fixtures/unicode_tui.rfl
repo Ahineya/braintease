@@ -14,7 +14,7 @@ fn checks() -> bool {
     input.key(LEFT);
     input.key(330);
     if (input.text != "Ж🙂" || input.cursor != 2) { return false; }
-    input.event(InputEvent { kind: 0, value: 258 });
+    input.event(InputEvent { kind: 0, value: 258, mouse: None });
     if (input.text != "ЖĂ🙂" || input.cursor != 4 || input.column(8) != 2) { return false; }
     input.key(RIGHT);
     input.key(BACKSPACE);

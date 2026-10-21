@@ -1,0 +1,319 @@
+{Module
+  Core/FromJSON/Lex
+  {Import Core/String as S open}
+  {Export}
+  {Rules
+    ; ================ LEXER ===================
+    {R JSONLex/Value/True {JSONLex ""} {Ok Tokens()}}
+    {R JSONLex/Value/True {JSONLex "true"} {Ok Tokens({TOKTRUE})}}
+    {R JSONLex/Value/False {JSONLex "false"} {Ok Tokens({TOKFALSE})}}
+    {R JSONLex/Value/Null {JSONLex "null"} {Ok Tokens({TOKNULL})}}
+    {R JSONLex {JSONLex s_} Tokenize(SplitToChars(Unescape(s_))) :guard IsStr({Inert s_})}
+    {R Tokenize {Tokenize {Chars chars..}} {TokenizerState Start {Tokens} Chars(chars..)}}
+    ; Intermediate tokenizer state: {TokenizerState Start|Processing|End {Focus a_} {Tokens} {Chars}}
+    {R Tokenize/Start {TokenizerState Start {Tokens} Chars(a_, chars..)} {TokenizerState Processing Default {Focus a_} {Tokens} Chars(chars..)}}
+    {R Tokenize/End   {TokenizerState End {Tokens tok..}} {Ok {Tokens tok..}}}
+    {R
+      Tokenize/Mode/Default/Object
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKLCURLY} } Chars(chars..)}
+      :guard
+      Eq(a_, "{")
+    }
+    {R
+      Tokenize/Mode/Default/Array
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKLBRACK} } Chars(chars..)}
+      :guard
+      Eq(a_, "[")
+    }
+    {R
+      Tokenize/Mode/Default/Object/End/Leaf
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKRCURLY} } }
+      :guard
+      Eq(a_, "}")
+    }
+    {R
+      Tokenize/Mode/Default/Array/End/Leaf
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKRBRACK} } }
+      :guard
+      Eq(a_, "]")
+    }
+    {R
+      Tokenize/Mode/String/End/Leaf
+      {TokenizerState Processing String {Focus a_} {Tokens tok.. {TOKSTR str..}} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKSTR str..} }}
+      :guard
+      Eq(a_, Unescape("\""))
+    }
+    {R
+      Tokenize/Mode/Number/End/Leaf
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKNUM a_} } }
+      :guard
+      IsDigit(a_)
+    }
+    ; String switches tokenizer state to string
+    {R
+      Tokenize/Mode/Default/String
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing String {Focus next_} {Tokens tok.. {TOKSTR} } Chars(chars..)}
+      :guard
+      Eq(a_, Unescape("\""))
+    }
+    ; ========= TRUE =========
+    {R
+      Tokenize/Mode/Default/MaybeTrue/Check
+      {TokenizerState Processing Default {Focus t_} {Tokens tok..} Chars(r_, u_, e_, chars..)}
+      {TokenizerState Processing MaybeTrue {Focus t_} {Tokens tok.. {MAYBETRUE Concat(t_, r_, u_, e_)}} Chars(chars..)}
+      :guard
+      Eq(t_, "t")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeTrue/Success
+      {TokenizerState Processing MaybeTrue {Focus t_} {Tokens tok.. {MAYBETRUE mbtrue_}} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKTRUE}} Chars(chars..)}
+      :guard
+      Eq(mbtrue_, "true")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeTrue/Error
+      {TokenizerState Processing MaybeTrue {Focus t_} {Tokens tok.. {MAYBETRUE mbtrue_}} Chars(next_, chars..)}
+      {TokenizerState Error {Tokens tok..}}
+      :guard
+      Neq(mbtrue_, "true")
+    }
+    ; ========= FALSE =========
+    {R
+      Tokenize/Mode/Default/MaybeFalse/Check
+      {TokenizerState Processing Default {Focus f_} {Tokens tok..} Chars(a_, l_, s_, e_, chars..)}
+      {TokenizerState Processing MaybeFalse {Focus f_} {Tokens tok.. {MAYBEFALSE Concat(f_, a_, l_, s_, e_)}} Chars(chars..)}
+      :guard
+      Eq(f_, "f")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeFalse/Success
+      {TokenizerState Processing MaybeFalse {Focus _} {Tokens tok.. {MAYBEFALSE mbfalse_}} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKFALSE}} Chars(chars..)}
+      :guard
+      Eq(mbfalse_, "false")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeFalse/Error
+      {TokenizerState Processing MaybeFalse {Focus _} {Tokens tok.. {MAYBEFALSE mbfalse_}} Chars(next_, chars..)}
+      {TokenizerState Error {Tokens tok..}}
+      :guard
+      Neq(mbfalse_, "false")
+    }
+    ; ========= NULL =========
+    {R
+      Tokenize/Mode/Default/MaybeNull/Check
+      {TokenizerState Processing Default {Focus n_} {Tokens tok..} Chars(u_, l_, ll_, chars..)}
+      {TokenizerState Processing MaybeNull {Focus n_} {Tokens tok.. {MAYBENULL Concat(n_, u_, l_, ll_)}} Chars(chars..)}
+      :guard
+      Eq(n_, "n")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeNull/Success
+      {TokenizerState Processing MaybeNull {Focus n_} {Tokens tok.. {MAYBENULL mbnull_}} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKNULL}} Chars(chars..)}
+      :guard
+      Eq(mbnull_, "null")
+    }
+    {R
+      Tokenize/Mode/Default/MaybeNull/Error
+      {TokenizerState Processing MaybeNull {Focus n_} {Tokens tok.. {MAYBENULL mbnull_}} Chars(next_, chars..)}
+      {TokenizerState Error {Tokens tok..}}
+      :guard
+      Neq(mbnull_, "null")
+    }
+    ; Basics
+    {R
+      Tokenize/Mode/Default/Colon
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKCOLON} } Chars(chars..)}
+      :guard
+      Eq(a_, ":")
+    }
+    {R
+      Tokenize/Mode/Default/Comma
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKCOMMA} } Chars(chars..)}
+      :guard
+      Eq(a_, ",")
+    }
+    {R
+      Tokenize/Mode/Default/ObjEnd
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKRCURLY} } Chars(chars..)}
+      :guard
+      Eq(a_, "}")
+    }
+    {R
+      Tokenize/Mode/Default/ArrEnd
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKRBRACK} } Chars(chars..)}
+      :guard
+      Eq(a_, "]")
+    }
+    ; Eating spaces
+    {R
+      Tokenize/Mode/Default/EatFiveSpaces
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(b_, c_, d_, e_, next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok..} Chars(chars..)}
+      :guard
+      And(IsWhitespace(a_), IsWhitespace(b_), IsWhitespace(c_), IsWhitespace(d_), IsWhitespace(e_))
+    }
+    {R
+      Tokenize/Mode/Default/EatSpaces
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok..} Chars(chars..)}
+      :guard
+      IsWhitespace(a_)
+    }
+    ; String processing
+    {R
+      Tokenize/Mode/String/Cont
+      {TokenizerState Processing String {Focus a_} {Tokens tok.. {TOKSTR str..}} Chars(next_, chars..)}
+      {TokenizerState Processing String {Focus next_} {Tokens tok.. {TOKSTR Concat(str.., a_)} } Chars(chars..)}
+      :guard
+      Neq(a_, Unescape("\""))
+    }
+    {R
+      Tokenize/Mode/String/End
+      {TokenizerState Processing String {Focus a_} {Tokens tok.. {TOKSTR str..}} Chars(next_, chars..)}
+      {TokenizerState Processing Default {Focus next_} {Tokens tok.. {TOKSTR str..} } Chars(chars..)}
+      :guard
+      Eq(a_, Unescape("\""))
+    }
+    ; ============= Number processing =============
+    {R
+      Tokenize/Mode/Num/Int/Leaf
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKNUM Concat(num.., a_)}}}
+      :guard
+      IsDigit(a_)
+    }
+    {R
+      Tokenize/Mode/Num/ExpStart/Leaf
+      {TokenizerState Processing Number/ExpStart {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKNUM Concat(num.., a_)} }}
+      :guard
+      IsDigit(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Exp/Leaf
+      {TokenizerState Processing Number/Exp {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKNUM Concat(num.., a_)} }}
+      :guard
+      IsDigit(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Float/Leaf
+      {TokenizerState Processing Number/Float {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars}}
+      {TokenizerState End {Tokens tok.. {TOKNUM Concat(num.., a_)} }}
+      :guard
+      IsDigit(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Int/End
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Default {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      :guard
+      And(Not(IsValidExp(a_)), And(Not(IsValidIntCont(a_)), Not(IsValidFloatSwitch(a_))))
+    }
+    {R
+      Tokenize/Mode/Num/Int/End/NearLeaf
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars chars..}}
+      {TokenizerState Processing Default {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars chars..}}
+      :guard
+      And(Not(IsValidExp(a_)), And(Not(IsValidIntCont(a_)), Not(IsValidFloatSwitch(a_))))
+    }
+    {R
+      Tokenize/Mode/Default/Number
+      {TokenizerState Processing Default {Focus a_} {Tokens tok..} Chars(next_, chars..)}
+      {TokenizerState Processing Number/Int {Focus next_} {Tokens tok.. {TOKNUM a_} } Chars(chars..)}
+      :guard
+      Or(Eq(a_, "-"), IsDigit(a_))
+    }
+    {R
+      Tokenize/Mode/Num/Float/End
+      {TokenizerState Processing Number/Float {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Default {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      :guard
+      And(Not(IsValidIntCont(a_)), Not(IsValidExp(a_)))
+    }
+    {R
+      Tokenize/Mode/Num/Exp/End
+      {TokenizerState Processing Number/Exp {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Default {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      :guard
+      Not(IsValidIntCont(a_))
+    }
+    {R
+      Tokenize/Mode/Num/Int/ToExp
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/ExpStart {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsValidExp(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Int/FloatToExp
+      {TokenizerState Processing Number/Float {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/ExpStart {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsValidExp(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Int/ToFloat
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/Float {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsValidFloatSwitch(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Int/Cont
+      {TokenizerState Processing Number/Int {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/Int {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsValidIntCont(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Float/Cont
+      {TokenizerState Processing Number/Float {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/Float {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsValidIntCont(a_)
+    }
+    {R
+      Tokenize/Mode/Num/Exp/StartCont
+      {TokenizerState Processing Number/ExpStart {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/Exp {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      Or(IsValidAfterExp(a_), IsDigit(a_))
+    }
+    {R
+      Tokenize/Mode/Num/Exp/Cont
+      {TokenizerState Processing Number/Exp {Focus a_} {Tokens tok.. {TOKNUM num..}} {Chars next_ chars..}}
+      {TokenizerState Processing Number/Exp {Focus next_} {Tokens tok.. {TOKNUM Concat(num.., a_)}} {Chars chars..}}
+      :guard
+      IsDigit(a_)
+    }
+    {R
+      Tokenize/Mode/Error
+      {TokenizerState s_ .. {Tokens tok..} ..}
+      {Err {TokenizerState {Tokens tok..}}}
+      :guard
+      Neq(s_, Error)
+    }
+    ; Helpers
+    {R IsDigit {IsDigit c_} Neq({IndexOf "0123456789" c_}, -1)}
+    {R IsValidIntCont {IsValidIntCont c_} Neq({IndexOf "0123456789" c_}, -1) }
+    {R IsValidFloatSwitch {IsValidFloatSwitch c_} Eq(c_, ".")}
+    {R IsValidExp {IsValidExp c_ } Neq({IndexOf "eE" c_}, -1) }
+    {R IsValidAfterExp {IsValidAfterExp c_ } Neq({IndexOf "+-" c_}, -1) }
+    {R IsWhitespace {IsWhitespace c_} Neq({IndexOf " \n\t\r" c_}, -1) }
+  }
+}

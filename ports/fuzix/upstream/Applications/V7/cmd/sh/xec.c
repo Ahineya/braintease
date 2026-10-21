@@ -196,9 +196,9 @@ int execute(TREPTR argt, int execflg, int *pf1, int *pf2)
 
 					case SYSSET:
 						if (a1) {
-							int argc;
+							int argc, reset = eq(a1, "--");
 							argc = options(argn, (const char **)com);
-							if (argc > 1)
+							if (argc > 1 || reset)
 								setargs((const char **)com + argn - argc);
 						} else if (((COMPTR) t)->comset == 0)
 						        /* Scan name chain and print */

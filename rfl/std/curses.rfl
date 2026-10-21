@@ -2,6 +2,8 @@
 extern "C" {
     fn rfl_curses_cells(window: *mut u16, row: i16, column: i16, cells: *const u32, count: i16) -> i16;
     fn rfl_curses_shape(shape: i16) -> i16;
+    fn rfl_curses_mouse(mode: i16);
+    fn rfl_curses_getmouse(data: *mut u32) -> i16;
     fn rfl_curses_screen() -> *mut u16;
     fn rfl_curses_begin() -> i16;
     fn rfl_curses_end();
@@ -144,10 +146,59 @@ export fn color_pair(number: u16) -> u32 {
 
 /// Input status and value are separate, so U+0102 can never mean Down.
 export struct InputEvent {
-    /// 0: Unicode text; 1: function key; -1: timeout; -2: terminal loss.
+    /// 0: Unicode text; 1: function key; 2: mouse; -1: timeout; -2: terminal loss.
     kind: i16,
     /// Unicode scalar for text events, or the decoded function-key code.
-    value: u32
+    value: u32,
+    /// Pointer data only for kind 2; coordinates are relative to the screen.
+    mouse: Option<MouseEvent>
+}
+
+/// Mouse subscriptions: off, buttons/wheel, dragging, or hover respectively.
+export const MOUSE_OFF: i16 = 0;
+export const MOUSE_BUTTONS: i16 = 1;
+export const MOUSE_DRAG: i16 = 2;
+export const MOUSE_HOVER: i16 = 3;
+/// Raw ncurses-compatible mouse flags, also usable with MouseEvent.flags.
+export const BUTTON1_PRESSED: u32 = 2;
+export const BUTTON1_RELEASED: u32 = 1;
+export const BUTTON2_PRESSED: u32 = 64;
+export const BUTTON2_RELEASED: u32 = 32;
+export const BUTTON3_PRESSED: u32 = 2048;
+export const BUTTON3_RELEASED: u32 = 1024;
+export const BUTTON_SHIFT: u32 = 67108864;
+export const BUTTON_ALT: u32 = 134217728;
+export const BUTTON_CTRL: u32 = 268435456;
+/// Zero-based screen cells and raw ncurses-compatible button/modifier flags.
+export struct MouseEvent {
+    row: i16,
+    column: i16,
+    flags: u32
+}
+
+impl MouseEvent {
+    /// A left press, excluding held-button motion.
+    export fn pressed(&self) -> bool {
+        (self.flags & 2) != 0 && (self.flags & 536870912) == 0
+    }
+    /// Left button released.
+    export fn released(&self) -> bool {
+        (self.flags & 1) != 0
+    }
+    /// Wheel rows: negative up, positive down; zero for other events.
+    export fn wheel(&self) -> i16 {
+        if ((self.flags & 65536) != 0) {
+            -3
+        } else if ((self.flags & 2097152) != 0) {
+            3
+        } else {
+            0
+        }
+    }
+    /// Hover or dragging motion, rather than a button transition.
+    export fn motion(&self) -> bool {
+        (self.flags & 536870912) != 0
+    }
 }
 
 /// Literal terminal paste boundaries, enabled explicitly by an application.
@@ -157,7 +208,9 @@ export const PASTE_END: i16 = 412;
 impl InputEvent {
     /// Compatibility key for shortcuts; non-ASCII text returns NO_KEY.
     export fn key(&self) -> i16 {
-        if (self.kind < 0) {
+        if (self.kind == 2) {
+            NO_KEY
+        } else if (self.kind < 0) {
             self.kind
         } else if (self.kind == 1 || self.value < 128) {
             self.value as i16
@@ -172,7 +225,15 @@ fn event(window: *mut u16) -> InputEvent {
     let kind = unsafe {
         rfl_curses_event(window, &mut value)
     };
-    InputEvent { kind: kind, value: value }
+    if (kind == 1 && value == 413) {
+        let mut data: [u32; 3] = [0, 0, 0];
+        if (unsafe {
+            rfl_curses_getmouse(&mut data[0])
+        } == 0) {
+            return InputEvent { kind: 2, value: value, mouse: Some(MouseEvent { row: data[1] as i16, column: data[0] as i16, flags: data[2] }) };
+        }
+    }
+    InputEvent { kind: kind, value: value, mouse: None }
 }
 
 fn draw(window: *mut u16, row: i16, column: i16, text: String, style: u32) {
@@ -211,6 +272,11 @@ fn fill(window: *mut u16, row: i16, column: i16, width: i16, ch: char, style: u3
 }
 
 impl Screen {
+    /// Requests buttons, dragging or hover. Suspend/exit disable reporting;
+    /// resume restores the subscription. Keyboard-only terminals remain usable.
+    export fn mouse(&self, mode: i16) {
+        rfl_curses_mouse(mode);
+    }
     /// Returns the current number of terminal rows.
     export fn rows(&self) -> i16 {
         rfl_curses_rows()

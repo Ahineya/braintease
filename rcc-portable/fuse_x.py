@@ -29,6 +29,8 @@ def main():
     parser.add_argument('--build', type=Path, default=ROOT / 'fuse-x/build')
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--float-format', action='store_true')
+    parser.add_argument('--linker', type=Path, help='explicit application packaging adapter')
+    parser.add_argument('--heap-profile', choices=['hosted','bounded'])
     args = parser.parse_args()
     args.output = args.output.resolve()
     if args.output in [source.resolve() for source in args.sources]:
@@ -75,6 +77,10 @@ def main():
                        '--compiler', str(args.compiler), '--build', str(args.build), '-o', str(package)]
             if args.float_format:
                 command.append('--float-format')
+            if args.linker:
+                command += ['--static', '--linker', str(args.linker.resolve())]
+            if args.heap_profile:
+                command += ['--heap-profile', args.heap_profile]
             for obj in objects:
                 command += ['--object-ir', str(obj)]
             subprocess.run(command, check=True, stdout=sys.stderr)

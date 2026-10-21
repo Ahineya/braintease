@@ -1,0 +1,20 @@
+{Module Demo/Logic
+  {Import Core/Main open} // Imports unqualified If
+  {Import Core/Effect open} // Imports unqualified PrintEff
+
+  {Program
+    {PrintEff If({Mortal Socrates}, "Socrates is a mortal.\n", "Socrates is not a mortal.\n")}
+  }
+
+  {Rules
+    {R Humans→Mortals
+      Mortal(x_)
+      Human(x_)
+    }
+
+    {R Fact
+      Human(Socrates)
+      True
+    }
+  }
+}

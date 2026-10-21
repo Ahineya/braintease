@@ -1,0 +1,4 @@
+{Module Demo/Print 
+  {Import Core/Effect} 
+  {Program 
+    {Core/Effect/Eff {Print "id_1761606421784_0" {Message {Format "Hello, Syma Print!\n"}} } } {Core/Effect/Eff {Print "id_1761606421785_1" {Message {Format "Second message printed.\n"}} } } } {Rules R( Format/Message, {Format {Var "_"}}, Concat( "Printed message: ", {Var "_"} ) ) } }

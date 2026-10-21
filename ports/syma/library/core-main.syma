@@ -1,0 +1,28 @@
+{Module
+  Core/Main
+  {Export If IsEmpty NotEmpty Alt Default Skip Take ReplaceAll}
+  {Rules
+    R("If/True",  {If True  a_ b_}, a_)
+    R("If/False", {If False a_ b_}, b_)
+    {R "IsEmpty/True" IsEmpty(Empty) True}
+    {R "IsEmpty/False" IsEmpty(_) False}
+    {R "NotEmpty/True" NotEmpty(Empty) False}
+    {R "NotEmpty/False" NotEmpty(_) True}
+    {R "Alt/Left" Alt(x_, _) x_ Neq(x_, Empty)}
+    {R "Alt/Right" Alt(Empty, y_) y_}
+    {R "Default" Default(x_, d_) Alt(x_, d_)}
+    
+    {R Skip     {Skip n_ {terms..}} {Skipping n_ {terms..}}}
+    {R Skipping {Skipping n_ {term_ terms..}} {Skipping Sub(n_ 1) {terms..}} :guard Gt(n_ 0)}
+    {R Skipping/End {Skipping 0 {terms..}} {Ok {terms..}}}
+    {R Skipping/TooMuch {Skipping _ {}} {Ok {}}}
+    
+    {R Take       {Take n_ Ok({terms..})} {Taking n_ {} {terms..}}}
+    {R Taking     {Taking n_ {..} {term_ terms..}} {Taking Sub(n_, 1) {.. term_} {terms..}} :guard Gt(n_ 0)}
+    {R Taking/End {Taking 0 {..} {terms..}} {Ok {..}}}
+    {R Taking/TooMuch {Taking _ {..} {}} {Ok {}}}
+    
+    {R ReplaceAll {ReplaceAll {pat..} {.. pat.. ..} with_} {ReplaceAll {pat..} {.. with_ ..} with_}}
+    {R ReplaceAll/End {ReplaceAll {drop..} {..} _} Ok({..})}
+  }
+}

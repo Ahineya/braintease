@@ -1,0 +1,17 @@
+{Worksheet V1 100000
+  {Cell Text "Objects and algebra\nTwo symbolic libraries in one universe. F5 runs the worksheet.\nUse the arrow keys to select a cell, Enter to edit, F2 to save and F1 for help." ""}
+  {Cell Code "{Import OOP/Objects as OOP}" ""}
+  {Cell Code "{Import Math/Small as Math open}" ""}
+  {Cell Text "Your OOP DSL: inheritance, method override and an is-a test." ""}
+  {Cell Code "{Define $objects\n {OOP/Run {Program\n  :class Animal {walks() => true}\n  :class Dog :extends Animal {bark() => \"woof\"}\n  :class WingedDog :extends Dog {flies() => true walks() => false}\n  :var pet := :new WingedDog()\n  :print(pet.bark())\n  :print(pet.flies())\n  :print(pet.walks())\n  :print(pet is Animal)\n  :print(pet is Cat)\n }}}" ""}
+  {Cell Text "A polynomial, its derivative, and evaluation at x=3." ""}
+  {Cell Code "{Define $polynomial {Sum {Power x 3} {Product 2 x}}}" ""}
+  {Cell Code "{Define $derivative {Differentiate $polynomial x}}" ""}
+  {Cell Code "{Substitute $polynomial x 3}" ""}
+  {Cell Code "{Substitute $derivative x 3}" ""}
+  {Cell Text "Expansion is explicit. Trigonometric derivatives stay symbolic." ""}
+  {Cell Code "{Expand {Product {Sum x 1} {Sum x 2}}}" ""}
+  {Cell Code "{Differentiate {Sin {Power x 2}} x}" ""}
+  {Cell Text "Both libraries still coexist; earlier named values remain available." ""}
+  {Cell Code "{Together $objects $derivative}" ""}
+}

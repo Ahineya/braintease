@@ -1,6 +1,6 @@
 import { columns, prefix, next, previous } from "lib/unicode";
-import { LEFT, RIGHT, HOME, END, BACKSPACE, InputEvent } from "std/curses";
-import { Canvas, fitted } from "lib/tui";
+import { LEFT, RIGHT, HOME, END, BACKSPACE, InputEvent, MouseEvent } from "std/curses";
+import { Canvas, Rect, fitted } from "lib/tui";
 
 /// Editable UTF-8 line. The cursor is a byte boundary; motion/deletion uses graphemes. Input keys do not accept/cancel a dialog or alter focus.
 export struct LineEdit {
@@ -14,14 +14,31 @@ export fn line_edit(text: String) -> LineEdit {
 }
 
 impl LineEdit {
+    /// Places the caret at the clicked grapheme, accounting for horizontal scroll.
+    /// Coordinates and `area` must use the same coordinate system.
+    export fn mouse(&mut self, area: Rect, event: MouseEvent) -> bool {
+        if (!event.pressed() || area.rows != 1 || !area.contains(event.row, event.column)) {
+            return false;
+        }
+        let left = self.left(area.columns as usize);
+        self.cursor = left + prefix(self.text[left..self.text.len()], (event.column - area.column) as usize);
+        true
+    }
+
     /// Leftmost character needed to keep the cursor in a field of `width` cells.
     export fn left(&self, width: usize) -> usize {
-        if (width == 0) { return self.cursor; }
+        if (width == 0) {
+            return self.cursor;
+        }
         let before = self.text[0..self.cursor];
         let used = columns(before);
-        if (used < width) { return 0; }
+        if (used < width) {
+            return 0;
+        }
         let mut left = prefix(before, used - width + 1);
-        if (left < self.cursor && columns(self.text[left..self.cursor]) >= width) { left = next(self.text, left); }
+        if (left < self.cursor && columns(self.text[left..self.cursor]) >= width) {
+            left = next(self.text, left);
+        }
         left
     }
     /// Cursor position in display cells within the scrolled field.
@@ -31,7 +48,9 @@ impl LineEdit {
     /// Inserts one Unicode scalar; the 255-octet limit never cuts an encoding.
     export fn insert(&mut self, value: char) -> bool {
         let code = value as u32;
-        if (code < 32 || (code >= 127 && code < 160) || code > 1114111 || (code >= 55296 && code <= 57343)) { return false; }
+        if (code < 32 || (code >= 127 && code < 160) || code > 1114111 || (code >= 55296 && code <= 57343)) {
+            return false;
+        }
         let text = from_char(value);
         if (self.text.len() + text.len() <= 255) {
             self.text = self.text[0..self.cursor] + text + self.text[self.cursor..self.text.len()];
@@ -46,8 +65,11 @@ impl LineEdit {
     }
     /// Handles a collision-free curses text/key event.
     export fn event(&mut self, event: InputEvent) -> bool {
-        if (event.kind == 0 && event.value >= 128) { self.insert(event.value as char) }
-        else { self.key(event.key()) }
+        if (event.kind == 0 && event.value >= 128) {
+            self.insert(event.value as char)
+        } else {
+            self.key(event.key())
+        }
     }
     /// Handles arrows, Home/End, Backspace/Delete, Ctrl-U and printable ASCII.
     /// New input is bounded to 255 characters; navigation/deletion always work.

@@ -1,0 +1,13 @@
+{
+  "version": "5.9.4",
+  "url": "https://api.github.com/repos/wolfSSL/wolfssl/tarball/v5.9.4-stable",
+  "archive_sha256": "6db67538fba8a2599fcac699659df159b082204b3555f2d3dd4708b25d6f8904",
+  "files": {
+    "wolfmath.c": "78f80990235dacd3d6564527afd468d34174498259321de1315ad9481910267c",
+    "ed25519.c": "ec6572eecf2223539ef17d1351747900670bbaa9ff913028ee000e42951af9da",
+    "fe_operations.c": "0f059577e7b85a2dac128400651dc9d8e851c2c7fb6c105cf1af4a450aebdc58",
+    "ge_operations.c": "ff6ddd3b2dbcb415606883fae750b95e79faa33170fc82474a6336d840b4b3d8",
+    "fe_low_mem.c": "be191e0a10adcb00e8e353cd70b73ddd3b2a8d2ada3ca375a74e213dc4436c60",
+    "ge_low_mem.c": "68b51cbffec6c28ec85dac91f98b539af3d83ec4425854f2f9a1a1623de48b6a"
+  }
+}

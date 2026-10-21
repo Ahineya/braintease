@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from memory_mode import selected as native_memory_mode
 
 ROOT = Path(__file__).resolve().parent.parent
 PORT = ROOT / 'ports/fuzix'
@@ -26,6 +27,8 @@ def main():
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--linker', type=Path)
     parser.add_argument('--build', type=Path, default=ROOT / 'fuse-x/build')
+    parser.add_argument('--heap-profile', choices=('hosted','bounded'), default=os.environ.get('FUSE_X_HEAP_PROFILE','hosted'),
+                        help='hosted sparse heap (default) or bounded 48..239 freestanding heap; use a separate build directory per profile')
     parser.add_argument('--float-format', action='store_true', help='enable floating point libc formatting and math')
     parser.add_argument('--curses', action='store_true', help='link the shared C16 curses library')
     parser.add_argument('--ini', action='store_true', help='link the shared INI reader')
@@ -38,6 +41,12 @@ def main():
     parser.add_argument('--sdk-only', action='store_true', help='prepare shared SDK libraries without compiling an executable')
     parser.add_argument('--library', action='append', default=[], metavar='HOST=GUEST', help='import a guest shared library interface')
     args = parser.parse_args()
+    try:
+        memory_mode = native_memory_mode()
+    except ValueError as error:
+        parser.error(str(error))
+    if args.heap_profile not in ('hosted', 'bounded'):
+        parser.error('FUSE_X_HEAP_PROFILE must be hosted or bounded')
     if args.shared:
         args.float_format = True
     args.curses = args.curses or args.tui_theme
@@ -48,6 +57,10 @@ def main():
                 ROOT / 'runtime/include', PORT / 'ripple', ROOT / 'ports/graphics/include',
                 ROOT / 'libraries/ini', ROOT / 'libraries/tui-theme']
     flags = ['--target', 'native', '--bank-size', '64000', '-DRIPPLE_MMU=1', '-DFUSE_X_USER=1', '-DNO_64BIT']
+    if args.heap_profile == 'bounded':
+        flags += ['-DFUSE_X_BOUNDED_HEAP=1']
+    if any(d.split('=',1)[0] == 'FUSE_X_BOUNDED_HEAP' for d in args.defines):
+        parser.error('select --heap-profile bounded instead of a source-only FUSE_X_BOUNDED_HEAP define')
     if args.float_format:
         flags.remove('-DNO_64BIT')
     for directory in includes:
@@ -80,6 +93,7 @@ def main():
         libraries += floating
         core_sources.update(floating)
     digest = hashlib.sha256()
+    digest.update(memory_mode.encode())
     digest.update(str((compiler, compiler.stat().st_mtime_ns, flags)).encode())
     for directory in includes:
         for header in sorted(directory.rglob('*.h')):
@@ -119,6 +133,7 @@ def main():
             output = shared_dir / name
             stamp = output.with_suffix(output.suffix + '.sha256')
             digest = hashlib.sha256(str((linker, linker.stat().st_mtime_ns, dependencies)).encode())
+            digest.update(memory_mode.encode())
             for path in inputs:
                 digest.update(path.read_bytes())
             for _, value in zip(dependencies[::2], dependencies[1::2]):

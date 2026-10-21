@@ -477,6 +477,73 @@ static struct value *lvalue(struct func *f, struct expr *e)
     return NULL;
 }
 
+static unsigned fieldwidth(struct type *t, struct bitfield b)
+{
+    unsigned width = (unsigned)(t->size * 16);
+    if (!(t->prop & PROPINT) || !width || width > 64 || b.before < 0 || b.after < 0 ||
+        (unsigned)b.before + (unsigned)b.after >= width)
+        error(&tok.loc, "portable IR: invalid bitfield storage");
+    return width - b.before - b.after;
+}
+
+static struct value *fieldvalue(struct func *f, struct type *t, struct bitfield b, struct value *v)
+{
+    unsigned shift = (unsigned)(t->size * 16) - fieldwidth(t, b);
+    if (shift) {
+        v = binary(f, "shl", t, v, mkintconst(shift));
+        v = binary(f, t->u.arith.issigned ? "ashr" : "lshr", t, v, mkintconst(shift));
+    }
+    return v;
+}
+
+/* A bitfield's nominal integer storage can extend beyond sizeof(struct).
+ * Read/write only the cells it actually occupies, preserving neighboring bits
+ * and evaluating its address once. This also avoids overreading small objects. */
+static struct value *fieldload(struct func *f, struct type *t, enum typequal q, struct bitfield b,
+                               struct value *p)
+{
+    unsigned width = fieldwidth(t, b), first = b.before / 16;
+    unsigned last = (b.before + width + 15) / 16, n;
+    struct value *v = mkintconst(0);
+    for (n = first; n < last; n++) {
+        struct value *cell =
+            convert(f, t, &typeushort, load(f, &typeushort, q, gep(f, p, mkintconst(n))));
+        if (n != first)
+            cell = binary(f, "shl", t, cell, mkintconst((n - first) * 16));
+        v = binary(f, "or", t, v, cell);
+    }
+    if (b.before % 16)
+        v = binary(f, "lshr", t, v, mkintconst(b.before % 16));
+    return fieldvalue(f, t, b, v);
+}
+
+static struct value *fieldstore(struct func *f, struct type *t, enum typequal q, struct bitfield b,
+                                struct value *p, struct value *v)
+{
+    unsigned width = fieldwidth(t, b), first = b.before / 16;
+    unsigned last = (b.before + width + 15) / 16, n;
+    unsigned long long mask = width == 64 ? ULLONG_MAX : (1ULL << width) - 1;
+    struct value *encoded = binary(f, "and", t, v, mkintconst(mask));
+    if (b.before % 16)
+        encoded = binary(f, "shl", t, encoded, mkintconst(b.before % 16));
+    mask <<= b.before % 16;
+    for (n = first; n < last; n++) {
+        unsigned cellmask = (unsigned)(mask >> ((n - first) * 16)) & 65535;
+        struct value *at = gep(f, p, mkintconst(n)), *part = encoded;
+        if (n != first)
+            part = binary(f, "lshr", t, part, mkintconst((n - first) * 16));
+        part = convert(f, &typeushort, t, part);
+        part = binary(f, "and", &typeushort, part, mkintconst(cellmask));
+        if (cellmask != 65535) {
+            struct value *old = load(f, &typeushort, q, at);
+            old = binary(f, "and", &typeushort, old, mkintconst(65535 ^ cellmask));
+            part = binary(f, "or", &typeushort, old, part);
+        }
+        store(f, &typeushort, q, at, part);
+    }
+    return fieldvalue(f, t, b, v);
+}
+
 static void edge(struct func *f, struct block *to)
 {
     unsigned long *p = arrayadd(&to->predecessors, sizeof(*p));
@@ -682,6 +749,8 @@ struct value *funcexpr(struct func *f, struct expr *e)
         return stringdecl(e)->value;
     case EXPRCOMPOUND:
         return lvalue(f, e);
+    case EXPRBITFIELD:
+        return fieldload(f, e->type, e->qual, e->u.bitfield.bits, lvalue(f, e->base));
     case EXPRUNARY:
         if (e->op == TBAND)
             return lvalue(f, e->base);
@@ -712,7 +781,11 @@ struct value *funcexpr(struct func *f, struct expr *e)
         r = funcexpr(f, e->u.assign.r);
         if (e->u.assign.l->kind == EXPRTEMP)
             e->u.assign.l->u.temp = r;
-        else
+        else if (e->u.assign.l->kind == EXPRBITFIELD) {
+            struct expr *field = e->u.assign.l;
+            r = fieldstore(f, field->type, field->qual, field->u.bitfield.bits,
+                           lvalue(f, field->base), r);
+        } else
             store(f, e->u.assign.l->type, e->u.assign.l->qual, lvalue(f, e->u.assign.l), r);
         return r;
     case EXPRTEMP:
@@ -722,8 +795,10 @@ struct value *funcexpr(struct func *f, struct expr *e)
             v = funcexpr(f, arg);
         return v;
     case EXPRINCDEC:
-        p = lvalue(f, e->base);
-        l = load(f, e->type, e->qual, p);
+        p = lvalue(f, e->base->kind == EXPRBITFIELD ? e->base->base : e->base);
+        l = e->base->kind == EXPRBITFIELD
+                ? fieldload(f, e->type, e->qual, e->base->u.bitfield.bits, p)
+                : load(f, e->type, e->qual, p);
         if (e->type->kind == TYPEPOINTER)
             r = gep(f, l,
                     mkintconst(e->op == TINC ? e->type->base->size : 0 - e->type->base->size));
@@ -735,7 +810,10 @@ struct value *funcexpr(struct func *f, struct expr *e)
                           e->type, l, funcexpr(f, &one));
         } else
             r = binary(f, e->op == TINC ? "add" : "sub", e->type, l, mkintconst(1));
-        store(f, e->type, e->qual, p, r);
+        if (e->base->kind == EXPRBITFIELD)
+            r = fieldstore(f, e->type, e->qual, e->base->u.bitfield.bits, p, r);
+        else
+            store(f, e->type, e->qual, p, r);
         return e->u.incdec.post ? l : r;
     case EXPRCALL: {
         struct array args = {0};
@@ -790,8 +868,18 @@ struct value *funcexpr(struct func *f, struct expr *e)
             return v;
         }
         if (e->pointer_difference) {
-            l = unary(f, "ptrtolinear", &typelong, funcexpr(f, e->u.binary.l->base));
-            r = unary(f, "ptrtolinear", &typelong, funcexpr(f, e->u.binary.r->base));
+            struct expr *left = e->u.binary.l, *right = e->u.binary.r;
+            /* Constant-expression probing can strip the parser's redundant
+             * pointer-to-long casts before a conditional is emitted. Keep the
+             * pointer operands themselves rather than assuming cast wrappers. */
+            if (left->kind == EXPRCAST)
+                left = left->base;
+            if (right->kind == EXPRCAST)
+                right = right->base;
+            if (left->type->kind != TYPEPOINTER || right->type->kind != TYPEPOINTER)
+                error(&tok.loc, "portable IR: invalid pointer difference operands");
+            l = unary(f, "ptrtolinear", &typelong, funcexpr(f, left));
+            r = unary(f, "ptrtolinear", &typelong, funcexpr(f, right));
             return binary(f, "sub", &typelong, l, r);
         }
         /* cproc expresses member addresses as integer addition and then
@@ -927,11 +1015,11 @@ void funcinit(struct func *f, struct decl *d, struct init *init, bool hasinit)
             store(f, &typeushort, QUALNONE, gep(f, p, mkintconst(i)), mkintconst(0));
     for (; init; init = init->next) {
         struct value *at = p;
-        if (init->bits.before || init->bits.after)
-            error(&tok.loc, "portable IR: bitfield initialization is not implemented");
         if (init->start)
             at = gep(f, p, mkintconst(init->start));
-        if (init->expr->kind == EXPRSTRING) {
+        if (init->bits.before || init->bits.after)
+            fieldstore(f, init->expr->type, QUALNONE, init->bits, at, funcexpr(f, init->expr));
+        else if (init->expr->kind == EXPRSTRING) {
             const uint_least16_t *s = init->expr->u.string.data;
             for (i = 0; i < init->end - init->start && i < init->expr->u.string.size; i++)
                 store(f, &typeushort, QUALNONE, gep(f, at, mkintconst(i)), mkintconst(s[i]));
@@ -1211,6 +1299,50 @@ void emitdata(struct decl *d, struct init *init)
         literal = constantvalue(init->expr);
     else if (init) {
         for (item = init; item; item = item->next) {
+            if (item->bits.before || item->bits.after) {
+                struct init *last = item, *part;
+                unsigned long long first = item->start + item->bits.before / 16;
+                unsigned long long end = item->end - item->bits.after / 16, cell;
+                unsigned short *packed;
+                while (last->next && (last->next->bits.before || last->next->bits.after) &&
+                       last->next->start + last->next->bits.before / 16 < end) {
+                    last = last->next;
+                    if (last->end - last->bits.after / 16 > end)
+                        end = last->end - last->bits.after / 16;
+                }
+                if (first < at || end > n || end <= first ||
+                    end - first > SIZE_MAX / sizeof(*packed))
+                    error(&tok.loc, "portable IR: invalid bitfield initializer span");
+                packed = calloc((size_t)(end - first), sizeof(*packed));
+                if (!packed)
+                    fatal("cannot allocate bitfield initializer");
+                for (part = item;; part = part->next) {
+                    unsigned bit, width = fieldwidth(part->expr->type, part->bits);
+                    unsigned long long number = bits(part->expr);
+                    for (bit = 0; bit < width; bit++) {
+                        unsigned long long position = part->start * 16 + part->bits.before + bit;
+                        if (position / 16 < first || position / 16 >= end)
+                            error(&tok.loc, "portable IR: bitfield initializer exceeds storage");
+                        if ((number >> bit) & 1)
+                            packed[position / 16 - first] |= 1U << (position % 16);
+                    }
+                    if (part == last)
+                        break;
+                }
+                if (first > at)
+                    datafield(&types, &values, text("[%llu x i16]", first - at), "[]");
+                append(&chars, "[");
+                for (cell = first; cell < end; cell++)
+                    append(&chars, text("%s%u", cell == first ? "" : ", ", packed[cell - first]));
+                append(&chars, "]");
+                arrayaddbuf(&chars, "", 1);
+                datafield(&types, &values, text("[%llu x i16]", end - first), chars.val);
+                chars.len = 0;
+                free(packed);
+                at = end;
+                item = last;
+                continue;
+            }
             if (item->start < at || item->end > n || item->end < item->start || item->bits.before ||
                 item->bits.after)
                 error(&tok.loc,

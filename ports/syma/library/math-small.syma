@@ -1,0 +1,65 @@
+; A small real-polynomial algebra, implemented in Syma rules, not native opcodes.
+; Binary Sum/Product/Power constructors. See WORKSHEET.md for domains and limits.
+{Module Math/Small
+ {Export Sum Product Power Sin Cos Simplify Differentiate Substitute Expand UnevaluatedDerivative}
+ {Rules
+  {R sum/numbers {Sum a_ b_} {Add a_ b_} :guard And(IsNum(a_) IsNum(b_)) :innermost}
+  {R sum/zero-left {Sum 0 a_} a_ :innermost}
+  {R sum/zero-right {Sum a_ 0} a_ :innermost}
+  {R sum/same {Sum a_ a_} {Product 2 a_} :innermost}
+  {R sum/coefficients {Sum {Product a_ x_} {Product b_ x_}} {Product Add(a_ b_) x_}
+     :guard And(IsNum(a_) IsNum(b_)) :innermost}
+  {R product/numbers {Product a_ b_} {Mul a_ b_} :guard And(IsNum(a_) IsNum(b_)) :innermost}
+  {R product/zero-left {Product 0 a_} 0 :innermost}
+  {R product/zero-right {Product a_ 0} 0 :innermost}
+  {R product/one-left {Product 1 a_} a_ :innermost}
+  {R product/one-right {Product a_ 1} a_ :innermost}
+  {R product/coefficient {Product a_ b_} {Product b_ a_}
+     :guard And(Not(IsNum(a_)) IsNum(b_)) :innermost}
+  {R product/collect {Product a_ {Product b_ x_}} {Product Mul(a_ b_) x_}
+     :guard And(IsNum(a_) IsNum(b_)) :innermost}
+  {R product/same {Product a_ a_} {Power a_ 2} :innermost}
+  {R power/one {Power a_ 1} a_ :innermost}
+  ; Stay within nonnegative integer powers; leave explicit 0^0 unevaluated.
+  {R power/numbers {Power a_ n_} Pow(a_ n_)
+     :guard And(And(IsNum(a_) IsNum(n_)) And(NormalEq(n_ Floor(n_)) And(Gte(n_ 0) Or(Neq(a_ 0) Neq(n_ 0)))))
+     :innermost}
+  {R power/zero {Power a_ 0} 1 :guard IsSym(a_) :innermost}
+  {R sin/zero {Sin 0} 0 :innermost}
+  {R cos/zero {Cos 0} 1 :innermost}
+  {R simplify {Simplify a_} a_}
+
+  {R differentiate {Differentiate a_ x_} {D a_ x_} :guard IsSym(x_) :innermost}
+  {R derivative/self {D x_ x_} 1 :innermost}
+  {R derivative/constant {D n_ x_} 0 :guard IsNum(n_) :innermost}
+  {R derivative/symbol {D a_ x_} 0 :guard IsSym(a_) :innermost}
+  {R derivative/sum {D {Sum a_ b_} x_} {Sum {D a_ x_} {D b_ x_}} :innermost}
+  {R derivative/product {D {Product a_ b_} x_}
+     {Sum {Product {D a_ x_} b_} {Product a_ {D b_ x_}}} :innermost}
+  {R derivative/power {D {Power a_ n_} x_}
+     {Product {Product n_ {Power a_ Sub(n_ 1)}} {D a_ x_}}
+     :guard And(IsNum(n_) And(NormalEq(n_ Floor(n_)) Gt(n_ 0))) :innermost}
+  {R derivative/sin {D {Sin a_} x_} {Product {Cos a_} {D a_ x_}} :innermost}
+  {R derivative/cos {D {Cos a_} x_} {Product {Product -1 {Sin a_}} {D a_ x_}} :innermost}
+  {R derivative/unknown {D a_ x_} {UnevaluatedDerivative a_ x_} :prio -1000 :innermost}
+
+  ; Structural substitution descends into arguments, including unknown functions.
+  {R substitute/self {Substitute x_ x_ v_} v_ :innermost}
+  {R substitute/call {Substitute {h_ args..} x_ v_}
+     {Rebuild h_ {Walk {Items args..} x_ v_}} :innermost}
+  {R substitute/atom {Substitute a_ x_ v_} a_
+     :guard Or(IsNum(a_) Or(IsSym(a_) IsStr(a_))) :innermost}
+  {R walk/empty {Walk {Items} x_ v_} {Items} :innermost}
+  {R walk/step {Walk {Items a_ rest..} x_ v_}
+     {Prepend {Substitute a_ x_ v_} {Walk {Items rest..} x_ v_}} :innermost}
+  {R walk/prepend {Prepend a_ {Items rest..}} {Items a_ rest..} :innermost}
+  {R rebuild {Rebuild h_ {Items args..}} {h_ args..} :innermost}
+
+  ; Distribution only occurs under explicit Expand. No reverse factoring rules.
+  {R expand {Expand a_} {Expansion a_} :innermost}
+  {R expand/left {Product {Sum a_ b_} c_}
+     {Sum {Product a_ c_} {Product b_ c_}} :scope Expansion :innermost}
+  {R expand/right {Product a_ {Sum b_ c_}}
+     {Sum {Product a_ b_} {Product a_ c_}} :scope Expansion :innermost}
+  {R expand/end {Expansion a_} a_}
+ }}

@@ -1,6 +1,6 @@
 //! Host-ABI curses/theme calls, behind checked compatibility-ABI adapters.
 use super::{
-    memory::linear,
+    memory::{linear, pointer},
     native_os::{cached, octets, put_bytes, read32, span, string, write32},
     *,
 };
@@ -64,6 +64,8 @@ unsafe extern "C" {
         a4: c_int,
     ) -> c_int;
     fn rfl_curses_shape(a0: c_int) -> c_int;
+    fn rfl_curses_mouse(mode: c_int);
+    fn rfl_curses_getmouse(data: *mut u32) -> c_int;
     fn ru_append(a0: u32, a1: u32) -> u32;
     fn ripple_curses_text_run(a0: *mut c_void, a1: *mut u8, a2: u32, a3: c_int) -> u32;
     fn rfl_host_tui_signals(a0: c_int) -> ();
@@ -179,6 +181,8 @@ tui!(rcc_native_ext_rfl_curses_window_cursor(rt,a0,a1,a2,a3) {unsafe{rfl_curses_
 tui!(rcc_native_ext_rfl_curses_scroll(rt,a0,a1) {(unsafe{rfl_curses_scroll(window(rt,a0),a1 as u16 as i16 as c_int )}) as i64 as u64});
 tui!(rcc_native_ext_rfl_curses_region(rt,a0,a1,a2) {(unsafe{rfl_curses_region(window(rt,a0),a1 as u16 as i16 as c_int,a2 as u16 as i16 as c_int )}) as i64 as u64});
 tui!(rcc_native_ext_rfl_curses_shape(rt,a0) {(unsafe{rfl_curses_shape(a0 as u16 as i16 as c_int )}) as i64 as u64});
+tui!(rcc_native_ext_rfl_curses_mouse(rt,mode) {unsafe{rfl_curses_mouse(mode as u16 as i16 as c_int)};0});
+tui!(rcc_native_ext_rfl_curses_getmouse(rt,out) {span(out,6);let mut data=[0u32;3];let status=unsafe{rfl_curses_getmouse(data.as_mut_ptr())};if status==0{for (i,value) in data.into_iter().enumerate(){write32(rt,pointer(linear(out)+i*2),value);}}status as i64 as u64});
 
 tui!(rcc_native_ext_rfl_curses_begin(rt) {rt.flush();let n=unsafe{rfl_curses_begin()};if n==0{unsafe{rfl_host_tui_signals(1)};}n as i64 as u64});
 tui!(rcc_native_ext_rfl_curses_end(_rt) {unsafe{rfl_curses_end();if isendwin()!=0{rfl_host_tui_signals(0);}}0});

@@ -1,0 +1,46 @@
+Run({OOP/Transform/Transform {OOP/Desugar/Desugar
+    :class Animal {
+        walks() => true
+    }
+
+    :class Dog :extends Animal {
+        bark() => "woof"
+    }
+
+    :class DogWithoutLegs :extends Dog {
+        walks() => false
+    }
+
+    :class Furry :extends Dog {
+        bark() => "fuck"
+        annoy() => true
+    }
+
+    :class DogWithoutLegsButWithWings :extends DogWithoutLegs {
+        flies() => true
+    }
+
+    :var a := :new Dog()
+
+    :print(a.walks()) ; true
+    :print(a.bark())  ; "woof"
+
+    :print(a is Animal) ; true
+    :print(a is Furry)  ; false
+
+    :var b := :new DogWithoutLegs()
+
+    b.walks ; Ignored
+
+    :print(b.walks()) ; false
+    :print(b.bark())  ; "woof"
+
+    :var furry := :new Furry()
+
+    :print(furry.bark()) ; "fuck"
+
+    :var flyingDog := :new DogWithoutLegsButWithWings()
+
+    :print(flyingDog.flies()) ; true
+    :print(flyingDog.bark())  ; "woof"
+}})

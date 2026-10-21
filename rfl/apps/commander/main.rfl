@@ -1,13 +1,14 @@
-import { start, Screen, RESIZE, NO_KEY } from "std/curses";
-import { IoError, arguments, working_directory, metadata, executable, DIRECTORY, create_dir, error_message } from "std/posix";
+import { start, Screen, RESIZE, NO_KEY, CLOSED, MOUSE_DRAG, function_key } from "std/curses";
+import { IoError, arguments, working_directory, metadata, executable, DIRECTORY, create_dir, error_message, Errno, run_program, change_directory } from "std/posix";
 import { Browser, active, destination, selected_path, joined, load_panel, enter, reload, select_by, select_name, keep_visible } from "./model";
-import { action, Navigate, First, Last, Enter, Parent, Switch, Reload, Copy, Move, Mkdir, Delete, View, Quit, Console, SinglePanel, NoAction, ThemeMenu, About, Edit, Rename } from "./keys";
+import { action, Navigate, First, Last, Enter, Parent, Switch, Reload, Copy, Move, Mkdir, Delete, View, Quit, Console, SinglePanel, NoAction, ThemeMenu, About, Edit, Rename, Network } from "./keys";
 import { default_theme, choose_theme, Theme } from "./theme";
-import { render, render_cached, painting, visible_rows } from "./ui";
+import { render, render_cached, painting, visible_rows, panel_area } from "./ui";
 import { number } from "./format";
-import { prompt, confirm, view, console, choose, about, external } from "./widgets";
+import { prompt, confirm, view, console, choose, about, external, connection_choice } from "./widgets";
 import { copy_file, move_path, delete_path, Moved, CopiedSourceRetained, editor_command } from "./actions";
 import { parent } from "lib/path";
+import { connections, unmount } from "std/sftp";
 
 fn refresh(state: &mut Browser) {
     let mut shared = false;
@@ -201,10 +202,73 @@ fn launch(screen: &Screen, state: &mut Browser, edit: bool) -> bool {
     true
 }
 
+// The helper authenticates in the foreground so host fingerprints and key
+// passphrases use the existing protected SSH prompts. Only its service remains
+// in the background; Commander never stores passwords or constructs shell text.
+fn network(screen: &Screen, theme: &Theme, state: &mut Browser) -> Result<unit, IoError> {
+    let choice = connection_choice(screen, theme, "SFTP connections", ["Connect remote directory", "Disconnect / connection status"]);
+    match choice {
+        None => {},
+        Some(0) => {
+            let endpoint = match prompt(screen, theme, "SSH profile or user@host:/directory", "") {
+                Some(value) => value,
+                None => { return Ok({}); }
+            };
+            if (endpoint == "") { return Ok({}); }
+            let point = match prompt(screen, theme, "Mount directory (empty, under /mnt)", "/mnt/remote") {
+                Some(value) => value,
+                None => { return Ok({}); }
+            };
+            if (point.len() < 6 || point[0..5] != "/mnt/") { state.status = "Choose a directory under /mnt"; return Ok({}); }
+            match create_dir("/mnt") { Ok(_) => {}, Err(Errno(17)) => {}, Err(error) => { return Err(error); } }
+            match create_dir(point) { Ok(_) => {}, Err(Errno(17)) => {}, Err(error) => { return Err(error); } }
+            let mut helper = "/bin/sftp-mount";
+            match executable(helper) {
+                Ok(true) => {},
+                _ => { helper = "/mnt/host/ssh/sftp-mount.fxe"; }
+            }
+            screen.suspend();
+            let result = run_program(helper, ["--background", endpoint, point]);
+            screen.resume();
+            match result {
+                Ok(0) => { enter(state, point)?; state.status = "SFTP connected; ordinary copy, edit and move commands work here"; },
+                Ok(_) => { state.status = "SFTP connection failed; check the SSH profile, identity and host key"; },
+                Err(error) => { return Err(error); }
+            }
+        },
+        Some(_) => {
+            let list = connections()?;
+            if (list.is_empty()) { state.status = "No SFTP directories mounted"; return Ok({}); }
+            let mut labels: Vec<String> = [];
+            for (i in 0..list.len()) {
+                labels.push(list[i].path + if (list[i].connected) { " (connected)" } else { " (disconnected)" });
+            }
+            match connection_choice(screen, theme, "Select connection to disconnect", labels) {
+                None => {},
+                Some(index) => {
+                    let connection = list[index];
+                    if (confirm(screen, theme, "Disconnect " + connection.path + "?")) {
+                        // Panel snapshots own no descriptors. Release a cwd inherited
+                        // from Ctrl-O, then let the kernel reject other busy users.
+                        change_directory("/")?;
+                        unmount(connection.index)?;
+                        if (inside(state.left.path, connection.path)) { state.left = load_panel("/mnt")?; }
+                        if (inside(state.right.path, connection.path)) { state.right = load_panel("/mnt")?; }
+                        state.status = "SFTP disconnected";
+                    }
+                }
+            }
+        }
+    }
+    Ok({})
+}
+
 fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
     let mut theme = initial_theme;
     let mut painted = painting();
     let mut dirty = true;
+    let mut dragging = false;
+    screen.mouse(MOUSE_DRAG);
     while (true) {
         let rows = visible_rows(screen);
         keep_visible(&mut state.left, rows);
@@ -213,11 +277,77 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             render_cached(screen, &theme, &*state, &mut painted);
             dirty = false;
         }
-        let key = screen.key();
+        let event = screen.event();
+        let mut key = event.key();
+        if (key == CLOSED) {
+            return;
+        }
+        match event.mouse {
+            None => {},
+            Some(mouse) => {
+                if (screen.columns() < 40 || screen.rows() < 10) {
+                    continue;
+                }
+                let left = panel_area(screen, &*state, false);
+                let right = panel_area(screen, &*state, true);
+                if (mouse.released()) {
+                    dragging = false;
+                    continue;
+                }
+                if (!state.single && mouse.pressed() && mouse.column == right.column && mouse.row >= 1 && mouse.row < screen.rows() - 3) {
+                    dragging = true;
+                    continue;
+                }
+                if (dragging && mouse.motion()) {
+                    let column = if (mouse.column < 20) {
+                        20
+                    } else if (mouse.column > screen.columns() - 20) {
+                        screen.columns() - 20
+                    } else {
+                        mouse.column
+                    };
+                    state.split = ((column as i32 * 100 + screen.columns() as i32 - 1) / screen.columns() as i32) as i16;
+                    dirty = true;
+                    continue;
+                }
+                if (mouse.pressed() && mouse.row == screen.rows() - 1) {
+                    let slot = screen.columns() / 9;
+                    let button = mouse.column / slot;
+                    if (button < 9) {
+                        key = function_key(button + 2);
+                    }
+                } else {
+                    if (mouse.pressed() || mouse.wheel() != 0) {
+                        let prior = state.right_active;
+                        if (!state.single && mouse.pressed()) {
+                            if (left.contains(mouse.row, mouse.column)) {
+                                state.right_active = false;
+                            } else if (right.contains(mouse.row, mouse.column)) {
+                                state.right_active = true;
+                            }
+                        }
+                        let changed = if (state.single) {
+                            if (state.right_active) {
+                                state.right.mouse(right, mouse)
+                            } else {
+                                state.left.mouse(left, mouse)
+                            }
+                        } else if (right.contains(mouse.row, mouse.column)) {
+                            state.right.mouse(right, mouse)
+                        } else {
+                            state.left.mouse(left, mouse)
+                        };
+                        dirty = changed || (prior && !state.right_active || !prior && state.right_active);
+                    }
+                    continue;
+                }
+            }
+        }
         if (key == NO_KEY) {
             continue;
         }
         if (key == RESIZE) {
+            dragging = false;
             dirty = true;
             continue;
         }
@@ -407,6 +537,12 @@ fn run(screen: &Screen, initial_theme: Theme, state: &mut Browser) {
             SinglePanel => {
                 state.single = !state.single;
             },
+            Network => {
+                match network(screen, &theme, state) {
+                    Ok(_) => {},
+                    Err(error) => { state.status = error_message(error); }
+                }
+            },
             ThemeMenu => {
                 match choose(screen, &theme) {
                     None => {},
@@ -468,7 +604,7 @@ fn main() -> i16 {
             }
         }
     };
-    let mut state = Browser { left: left, right: right, right_active: false, single: false, status: "Enter: open/run/view; F4 edit; r rename; Ctrl-A about" };
+    let mut state = Browser { left: left, right: right, right_active: false, single: false, split: 50, status: "Enter: open/run/view; F4 edit; r rename; Ctrl-A about" };
     let screen = match start() {
         Ok(screen) => move(screen),
         Err(_) => {

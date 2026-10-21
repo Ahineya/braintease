@@ -157,7 +157,51 @@ export function installRoot(input, files) {
     changed = true;
   }
 
+  // pkg owns these paths once adopted. Kernel/seed rebuilds must preserve
+  // their managed links, payloads and configuration rather than re-seeding.
+  const packageOwned = new Set();
+  const packageDB = findPath('/var/lib/pkg/db');
+  if (packageDB) {
+    if ((w(packageDB.node.base) & 0xf000) !== 0x4000) throw Error('invalid package database directory');
+    const directory = cells(packageDB.node);
+    for (let at = 0; at < directory.length; at += 32) {
+      if (!directory[at]) continue;
+      let name = '';
+      for (let j=1;j<=30&&directory[at+j];j++) name+=String.fromCharCode(directory[at+j]);
+      if (!name.endsWith('.db')) continue;
+      const record=nodes.get(directory[at]);
+      if (!record || record.size>131072 || (w(record.base)&0xf000)!==0x8000) throw Error('invalid package record');
+      const text=Array.from(cells(record), c=>String.fromCharCode(c)).join('');
+      const lines=text.split('\n');
+      if (lines[0]!=='RIPDB1' || !/^hash=[0-9a-f]{64}$/.test(lines[6]??'')) throw Error('invalid package metadata');
+      for(const line of lines.slice(7)) {
+        if(!line)continue;
+        const m=/^file=[0-7]+,[0-9]+,[0-9a-f]{64},(.+)$/.exec(line);
+        if(!m||m[1].startsWith('/')||m[1].split('/').some(p=>!p||p==='.'||p==='..'||p.length>30)) throw Error('invalid package-owned path');
+        packageOwned.add('/'+m[1]);
+      }
+    }
+  }
+
   for (const f of files) {
+    if(packageOwned.has(f.name)) continue;
+    // Retire a managed file only if its complete contents still match its
+    // build artifact. Preserve user replacements and other hard links.
+    if (f.removeIfMatches !== undefined) {
+      const found = findPath(f.name);
+      if (!found || !found.parent || (w(found.node.base) & 0xf000) !== 0x8000)
+        continue;
+      const expected = f.removeIfMatches();
+      if (!expected || found.node.size !== expected.length ||
+          !cells(found.node).every((c, i) => c === expected[i]))
+        continue;
+      if (checked.issues.length) throw Error('userspace cleanup requires a clean root');
+      clearEntry(found.parent, found.entry.offset);
+      put(found.node.base + 1, w(found.node.base + 1) - 1);
+      if (!w(found.node.base + 1)) removeNode(found.node);
+      changed = true;
+      continue;
+    }
     const parts = f.name.split('/').filter(Boolean), name = parts.pop();
     if (!name || name.length > 30 || parts.some(n => n === '.' || n === '..'))
       throw Error('invalid install path');

@@ -288,7 +288,7 @@ unsafe extern "C" fn rcc_native_arguments(ctx: *mut Runtime) -> u64 {
 file_service!(rcc_native_ext_rcc_hosted_read_cells(rt, stream, buffer, count) {
     if !rt.processes.hosted || count > 4096 { return u64::MAX; }
     let range = rt.file_span(buffer, count);
-    if range.start < address_space::KERNEL_START { return u64::MAX; }
+    if !address_space::shared_span(range.start, range.len()) { return u64::MAX; }
     let Some(file) = rt.files.get_mut(&stream) else { return rt.file_error(9); };
     let mut bytes = vec![0; range.len() * 2];
     if let Err(error) = file.file.read_exact(&mut bytes) {
@@ -302,7 +302,7 @@ file_service!(rcc_native_ext_rcc_hosted_read_cells(rt, stream, buffer, count) {
 file_service!(rcc_native_ext_rcc_hosted_write_cells(rt, stream, buffer, count) {
     if !rt.processes.hosted || count > 4096 { return u64::MAX; }
     let range = rt.file_span(buffer, count);
-    if range.start < address_space::KERNEL_START { return u64::MAX; }
+    if !address_space::shared_span(range.start, range.len()) { return u64::MAX; }
     let mut cells = vec![0; range.len()];
     rt.memory.read_into(range.start, &mut cells);
     let bytes: Vec<_> = cells.into_iter().flat_map(u16::to_le_bytes).collect();
@@ -326,6 +326,9 @@ mod cell_io_tests {
         rt.files.insert(stream, Stream { file: BufReader::new(file), eof: false, error: false });
         rt.memory.write_from(at, &values);
         unsafe {
+            let private = super::super::memory::pointer(address_space::PRIVATE_START + 1);
+            assert_eq!(rcc_native_ext_rcc_hosted_write_cells(&mut rt, stream, private, 1), u64::MAX);
+            assert_eq!(rcc_native_ext_rcc_hosted_read_cells(&mut rt, stream, private, 1), u64::MAX);
             assert_eq!(rcc_native_ext_rcc_hosted_write_cells(&mut rt, stream, buffer, 1024),1024);
             assert_eq!(rcc_native_ext_fseek(&mut rt,stream,0,0),0);
             rt.memory.fill(at..at+1024,0);

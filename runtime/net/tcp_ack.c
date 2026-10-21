@@ -26,7 +26,7 @@ static void fin_ack(NetTcp *tcp) {
 }
 int tcp_acknowledge(NetTcp *tcp, const TcpSegment *segment) {
     unsigned long ack = segment->acknowledgement, delta = ack - tcp->snd_una;
-    unsigned short size, i, old_window = tcp->window;
+    unsigned short size, old_window = tcp->window;
     if (delta > tcp->sent_nxt - tcp->snd_una) {
         if (!tcp_before(ack, tcp->snd_una)) { tcp_challenge(tcp); return 0; }
         return 1; /* An older ACK may still accompany new, acceptable data. */
@@ -38,14 +38,48 @@ int tcp_acknowledge(NetTcp *tcp, const TcpSegment *segment) {
     if (!delta && !old_window && tcp->window && tcp->inflight && tcp->flight_data) {
         tcp->flight_sent = 0; tcp->retransmitted = 1; tcp->sample_valid = 0;
     }
-    if (!delta) return 1;
-    tcp_rtt(tcp); tcp->snd_una = ack; tcp->last_progress = tcp->now; tcp->retries = 0;
+    if (!delta) {
+        /* Only a pure duplicate ACK with an unchanged window signals loss. */
+        if (tcp->send_buffer && tcp->flight_data && tcp->flight_sent &&
+            !segment->length && !(segment->flags & (TCP_SYN | TCP_FIN)) &&
+            old_window && old_window == tcp->window && ack == tcp->snd_una) {
+            if (tcp->duplicate_acks < 3) ++tcp->duplicate_acks;
+            if (tcp->duplicate_acks == 3 && !tcp->recovering) {
+                unsigned short threshold = tcp->flight_data / 2;
+                if (threshold < tcp->mss * 2) threshold = tcp->mss * 2;
+                tcp->ssthresh = threshold;
+                tcp->cwnd = threshold + tcp->mss * 3;
+                if (tcp->cwnd > NET_TCP_TX_CAP(tcp)) tcp->cwnd = NET_TCP_TX_CAP(tcp);
+                tcp->recovering = 1; tcp->recovery_end = tcp->sent_nxt;
+                tcp->flight_sent = 0; tcp->retransmitted = 1; tcp->sample_valid = 0;
+            }
+        }
+        return 1;
+    }
+    tcp->duplicate_acks = 0;
+    if (tcp->send_buffer && tcp->flight_data) {
+        if (tcp->recovering) {
+            if (!tcp_before(ack, tcp->recovery_end)) {
+                tcp->recovering = 0; tcp->cwnd = tcp->ssthresh;
+            } else {
+                tcp->flight_sent = 0; tcp->retransmitted = 1; tcp->sample_valid = 0;
+            }
+        } else if (tcp->cwnd < NET_TCP_TX_CAP(tcp)) {
+            unsigned short increase = tcp->cwnd < tcp->ssthresh ? (delta < tcp->mss ? delta : tcp->mss) :
+                (unsigned long)tcp->mss * tcp->mss / tcp->cwnd;
+            if (!increase) increase = 1;
+            if (increase > NET_TCP_TX_CAP(tcp) - tcp->cwnd) increase = NET_TCP_TX_CAP(tcp) - tcp->cwnd;
+            tcp->cwnd += increase;
+        }
+    }
+    if(!tcp->sample_valid || !tcp_before(ack,tcp->sample_end))tcp_rtt(tcp);
+    tcp->snd_una = ack; tcp->last_progress = tcp->now; tcp->retries = 0;
     tcp->sent_at = tcp->now;
     if (tcp->flight_flags & TCP_FIN) {
         tcp->inflight = 0; fin_ack(tcp); return 1;
     }
     size = delta;
-    for (i = size; i < tcp->tx_used; ++i) tcp->tx[i - size] = tcp->tx[i];
+    memmove(NET_TCP_TX_DATA(tcp), NET_TCP_TX_DATA(tcp) + size, tcp->tx_used - size);
     tcp->tx_used -= size; tcp->flight_data -= size; tcp->flight_seq += size; tcp->bytes_acked += size;
     if (!tcp->flight_data) tcp->inflight = 0;
     else if (tcp->snd_una == tcp->sent_nxt) {

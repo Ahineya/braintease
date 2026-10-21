@@ -5,6 +5,11 @@ interface and command layer sit over a portable C text engine. The shell has
 Turbo-style menus, tabs and a muted blue palette; the editing surface uses vi
 commands. The command is `rift`; `vi` continues to launch Levee.
 
+The [Graphite graphical editor](../../../ports/lvgl/README.md#text-editor-and-document-components),
+`lvedit`, uses the same C text engine with an LVGL viewport, document tabs and
+file dialogs. It is the first graphical editing profile; the terminal Rift
+interface, vi controller and configuration remain separate.
+
 ```text
 rift /path/main.rfl /path/other.txt
 rift /usr/share/rift/hello.bf
@@ -296,9 +301,19 @@ mode bits and timestamps are not preserved by replacement saves.
 
 Extension detection selects lightweight lexical highlighting for RFL/C/C++/Rust/
 JavaScript, shell/Tcl/awk, Python, Pascal, JSON, INI/TOML/config, Markdown,
-Brainfuck, Makefiles, HTML/CSS, Lisp-like text and assembly. The C engine caches
+Brainfuck, Syma, Makefiles, HTML/CSS, Lisp-like text and assembly. The C engine caches
 multiline lexical state per line and invalidates it from each edit. Highlighting
 is heuristic; it supplies no parser, semantic diagnostics or language server.
+
+Syma `.syma` files use a dedicated lexer for structural keywords, options, variables
+and rest patterns, numeric literals, ordinary/raw strings and `;`, `//`, `/* ... */`
+comments. Multiline lexical state is cached, and structural vi commands ignore strings
+and comments. `.symnb` notebooks use JSON highlighting without an executable runner.
+F5 runs `syma run FILE`; F8 shows its location. Set `SYMA` to choose the executable;
+otherwise Rift checks PATH and then `/mnt/host/syma.fxe` on Fuse-X. `[run] syma` and
+`RIFT_RUN_syma` override the command template. A shared build can be launched with
+`/mnt/host/rift.fxe /mnt/host/syma/examples/print-demo.syma`. See the
+[Syma runtime and REPL guide](../../../ports/syma/README.md).
 
 BASIC `.bas` files use case-insensitive keyword highlighting, apostrophe/`REM`
 comments, and BASIC double-quoted strings. F5 invokes the guest `basic` interpreter;
@@ -386,7 +401,7 @@ Theme roles are `text`, `comment`, `keyword`, `string`, `number`, `operator`,
 `type`, `selection`, `menu`, `tab`, `gutter`, `dialog`, `accent`, `input`, `error`,
 `shadow`. Colors and inheritance use the [shared format](../../../libraries/README.md).
 
-Runner tool paths may be overridden through `BF`, `TCLSH`, `AWK`, `SHELL`,
+Runner tool paths may be overridden through `SYMA`, `BF`, `TCLSH`, `AWK`, `SHELL`,
 `MAKE`, `M4`, `DC`, `CC`, `CXX`, `RFL`, `RUSTC`, `FPC`, `PYTHON`, `JS`, `LUA`.
 These values name one executable; put extra flags in a template. A
 `RIFT_RUN_<language>` environment variable overrides the INI template, for
@@ -483,3 +498,21 @@ marks, CJK, emoji ZWJ sequences, undo/dot replay and Unicode Open/Save As paths.
 The engine checks also move the physical gap through every encoding boundary,
 exercise malformed octets, and test long Unicode words and counted searches.
 Unicode logs are `/tmp/rift-unicode-{fuse-x,fuzix}.log`.
+
+## Mouse controls
+
+Click text to place the caret, drag to create a vi Visual selection, and use
+its usual `y`, `d`, `c` or Esc commands. A plain caret click preserves Insert
+mode. Wheel scrolls three displayed rows, respecting soft wrapping and keeping the caret visible. Tabs, menu
+headings and footer shortcuts are clickable. Open-file lists support click
+selection, wheel navigation and clicking the selected row again to open it;
+text fields accept caret placement. Choice menus activate on click, and help
+supports wheel scrolling and a clickable close hint.
+
+Shift-drag selects terminal text for copying instead of sending mouse input to
+Rift. Other keyboard controls remain available. Hover suggestions, automatic
+scrolling while dragging outside the text area and double-click word selection
+are future work.
+
+Syma worksheet files (`.symws`) use Syma highlighting; F5 evaluates the worksheet
+with `syma worksheet {file} --run`. They share the `SYMA` executable override.

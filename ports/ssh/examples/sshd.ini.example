@@ -1,0 +1,10 @@
+# Optional definition only. Provision keys first; installation does not enable it.
+[service]
+type=simple
+program=/bin/sshd
+ready=notify
+restart=on-failure
+restart_delay_ms=5000
+restart_limit=12
+start_timeout_ms=10000
+stop_timeout_ms=5000

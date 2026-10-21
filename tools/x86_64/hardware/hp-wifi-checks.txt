@@ -1,0 +1,326 @@
+AX211 STARTUP / CLIENT AUTH / ASSOCIATION CHECK AUDIT — 2026-10-20
+==================================================
+Audit prompted by repeated extra host-side rejections on the physical HP.
+Match actual consumers for the pinned firmware/API, not merely header comments.
+Unknown RX padding is never evidence of failure, permission or success.
+This is a source/host-test audit. Subsequent physical photo confirms auth and
+association (AID10, all3 firmware updates). The WPA2 extension below is host
+validated. User now reports physical AX211_WPA2_OK; no photo/raw counters for
+that run. Protected traffic/IP remain unverified. See hp-wifi.txt for next scope.
+
+References (pinned copies and URL/SHA manifests under
+build/x86_64-network/wifi-reference/):
+- OpenBSD if_iwx.c1.230 / if_iwxreg.h1.75: sources.json.
+- Linuxv6.12 fw/api and iwlwifi consumers: queue-linux-sources.json,
+  pnvm-linux-sources.json, mcc-linux-sources.json, linux-tx-api.json,
+  linux-time-event.json, auth-audit-sources.json.
+- Linuxv6.12 mac80211/cfg80211 station channel path: client-channel-sources.json.
+- Linuxv6.18 MCC consumer/header cross-check: mcc-response-sources.json.
+- OpenBSD net80211 output1.148/input1.263: association-sources.json.
+Primary repository URLs:
+https://github.com/openbsd/src/blob/master/sys/dev/pci/if_iwx.c
+https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v6.12/net/mac80211/mlme.c
+https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/tx.c
+https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/+/refs/tags/v6.12/drivers/net/wireless/intel/iwlwifi/mvm/time-event.c
+Use recorded OpenBSD revisions/SHA, not a changing master, for reproduction.
+The generic mac80211 code is inspected for behaviour; no GPL implementation
+body is copied into this driver. Intel's dual-licensed wire/consumer references
+use their BSD alternative, with notices in wifi-LICENSE.txt and the EFI.
+
+Consumer behaviour adopted
+--------------------------
+1. Client channel selection (wifi-auth.c).
+   Linux ieee80211_mgd_auth -> ieee80211_prep_connection -> prep_channel and
+   channel determination call chandef_usable with CHAN_DISABLED, not NO_IR.
+   iwl_nvm_get_regdom_bw_flags maps absent NVM_CHANNEL_ACTIVE to NO_IR;
+   the header explicitly calls ACTIVE active-scanning permission. OpenBSD
+   iwx_init_channel_map sets PASSIVE, while iwx_auth configures the known BSS
+   and starts session protection without requiring ACTIVE/PASSIVE clear.
+   Therefore: never require ACTIVE for authentication to a discovered BSS.
+   Physical flags0xf61 are VALID, non-radar, active-scan absent. Keep actual
+   returned MCC VALID, SKU/channel map, stable generation, parsed selected BSS
+   and completed scan. This is no permission to send probes, beacon or start AP.
+
+2. Queue allocation (wifi-prepare.c).
+   iwx_enable_txq and iwl_pcie_txq_alloc_response check response size and use
+   queue_number/write_pointer. Neither consumes flags/reserved. Retain both
+   raw fields, do not reject nonzero or equate them to enabled/success.
+   OpenBSD rejects a different fixed qid/pointer; Linux supports dynamic queues.
+   We use the OpenBSD fixed-queue behaviour (qid1, initial pointer0).
+
+3. NVM informational fields (wifi-nvm.c).
+   iwl_get_nvm logs empty OTP and zero reserved MAC count; iwx_get_nvm_info
+   retains general version/count. Both independently validate CSR MAC and treat
+   lar_enabled as nonzero. Remove extra empty-OTP/count/version-sentinel/LAR==1
+   rejections. Retain raw general flags/LAR and existing version/address count,
+   print general flags/LAR in diagnostics. Actual MAC validity still required.
+
+4. MCC response (wifi-scan.c).
+   iwl_mvm_update_mcc and iwx_send_update_mcc_cmd ignore RX reserved[3].
+   Linux normalizes zero MCC to world00, parses returned channel profile even
+   for ILLEGAL status; get_regdomain treats ILLEGAL as a changed profile.
+   Status alone neither grants nor denies channels. Retain status and opaque
+   bytes, use returned actual profile/VALID, never requested country as flags.
+   CHUB handler sends detected country/source back through update_mcc; querying
+   ZZ alone does not apply it. CHUB RX padding is ignored by both consumers.
+   Country/source supported-format checks protect our limited update path;
+   they are supported-input limits, not additional firmware failure flags.
+
+5. Context/session command ACKs (wifi-prepare.c, wifi-auth.c).
+   iwx/iwlwifi context/session send_cmd_pdu do not request/parse a body.
+   Preserve transport completion/tag/failed-command-header checks, ignore an
+   unrequested ACK body. A body is not an invented status word. Queue/MCC/NVM
+   commands DO request defined responses and retain their response parsing.
+
+6. Session notification (wifi-auth.c).
+   Linux iwl_mvm_session_prot_notif requires exact16-byte payload. v2 command
+   and v3 notification use link ID. id0, status1, start1, conf_id ASSOC0 are
+   actual fields, NOT reserved bytes. Keep these checks and wait for ACK/start
+   in either order. Failed status or end before completion fails our test.
+   OpenBSD may proceed after command ACK without waiting; this implementation
+   explicitly waits, as Linux's wait_for_notif path allows.
+
+7. Single-frame TX completion (wifi-auth.c).
+   Linux iwl_mvm_rx_tx_cmd_single replaces legacy header queue with payload
+   tx_queue for the new API. iwl_mvm_get_scd_ssn masks16 bits for AX210+,12 for
+   older chips. Use payload queue1, low16-bit SSN1; do NOT require header index0/
+   qid1 or high SSN bits0. Single-frame response needs a full fixed prefix and
+   following SSN; trailing bytes ignored. Unknown status is not success:
+   SUCCESS/DIRECT_DONE only, same as Linux/OpenBSD. One submitted descriptor
+   and duplicate-completion rejection preserve ownership and acceptance proof.
+
+8. Outgoing TX/session wire layout (unchanged).
+   iwx_tx / iwl_pcie_gen2_update_byte_tbl: Gen3 command28 bytes +24-byte802.11
+   header, first TB<=20, second remainder, third6-byte auth body; Gen3 byte
+   count30,3 TB fit one64-byte fetch. Lowest basic legacy OFDM rate and antennaA
+   are explicit checkpoint capabilities. Session ADD payload24, link0/ASSOC0,
+   duration900TU matches the no-beacon-interval fallback in iwx_auth. Native
+   DMA only. Outgoing reserved bytes remain zero, irrespective of RX padding.
+
+9. PNVM/ALIVE (unchanged).
+   Public PNVM completion consumers do not require status0; raw0x50001 retained.
+   ALIVE status0xcafe and known version/length are real API fields. Match SKU/HW
+   and bounded TLV payloads; never inspect opaque firmware machine code.
+
+Deliberate implementation limits / invariants retained
+-----------------------------------------------------
+- Exact HP PCI/MAC/RF identity, BAR/D0/memory-decode/IOMMU guards; PCI interrupts
+  masked; polled transport. Native allocation bounds, permanent DMA residency
+  until stop/reset + bus-master-disable readback. These are platform ownership
+  requirements, not interpretations of unknown firmware response fields.
+- Pin supported firmware89 and command/notification layouts before hardware.
+  TLV counts/section bounds/duplicate required records prevent bad native DMA
+  layouts. Unknown unrelated TLVs/notifications remain ignored where safe.
+- Low5GHz36..48,20MHz, no DFS/radar in this checkpoint; antennaA TX and actual
+  two-chain board masks. Linux supports more; we do not claim those features.
+- Passive scan only, seven channels,32 APs, one scan iteration. Current native
+  pool6MiB,32 command slots/no reuse and504 RX buffers/no recycling. Exhaustion
+  fails explicitly. Max2 country updates/8 notices, stable generation required.
+  A new regulatory change after context setup aborts; restart/reconfigure later.
+- Bounded waits and RF/thermal/hardware errors still stop the radio. Noisy RX
+  cannot extend command deadlines. Ring recycling and general recovery pending.
+- Target selection freezes an actually discovered exact-SSID infrastructure BSS
+  with bounded RSN/rates. WPA2 PSK/CCMP pairwise, CCMP/TKIP group advertisement,
+  known basic OFDM/no required PMF are supported-input limits. Other suites are
+  unsupported, not malformed solely for being different. No security downgrade.
+- Session/link/config identities, AP/own/BSSID/channel/CRC and expected auth
+  transaction/status are actual exchange matching, not padding checks. AP reply
+  plus successful TX completion are both required for AUTH_OK. Association
+  requires an additional explicit profile below; password/EAPOL/keys, GTK/TKIP
+  crypto and IP link remain pending.
+
+Regression evidence
+-------------------
+tests/wifi-audit.c records ten focused consumer-derived cases; nine were RED
+before corrections. Full transport tests additionally cover flags0xf61, valid
+passive channels, disabled/radar denial, missing discovered BSS, opaque ACK
+payloads, ignored TX header fields, payload queue mismatch,16-bit SSN handling,
+trailing TX data, RX padding, malformed/bounded failures and clean stop.
+See audit-host-validation.json, audit-red.log and audit-*-host.log in the Wi-Fi
+build output for final checks; QEMU cannot validate real AX211 RF behaviour.
+
+Association extension reviewed before USB staging — 2026-10-20
+--------------------------------------------------------------
+OpenBSD ieee80211_get_assoc_req / ieee80211_add_rsn_body construct fixed
+capabilities/listen interval, SSID, supported rates and selected RSN. Linux
+v6.12 ieee80211_send_assoc uses the same fixed fields/SSID/link IEs. Our explicit
+legacy5GHz20MHz profile announces ESS/privacy/short slot, listen interval1
+(no power saving), intersection of the AP's known OFDM rates/basic markers,
+RSN version1, actual AP group TKIP or CCMP, pairwise CCMP, AKM PSK and caps0.
+No WMM/QoS, HT/VHT/HE, PMF, PMKID or WPA1 IE is advertised. The group suite is
+not replaced by the pairwise suite. No password or security keys are embedded.
+
+The second management descriptor is queue1/index1, response SSN2 (low16 bits).
+OpenBSD iwx_tx / Linux new TX consumer semantics remain unchanged. Fresh page,
+three TFH TBs (20 +36 +association body), Gen3 byte count includes the full
+24-byte management header/body. Authentication's descriptor/page are untouched.
+Require auth TX+AP success first, then association TX+AP success in either order.
+Session-protection end before all associated updates complete stops the test.
+
+OpenBSD ieee80211_recv_assoc_resp: fixed capability/status/AID, status success,
+bounded rates/optional IEs, known basic-rate negotiation. Match actual own/AP/
+BSSID/channel and valid CRC/unprotected/unfragmented frame before consuming.
+Linux ieee80211_rx_mgmt_assoc_resp masks all five reserved AID MSBs (0x7ff);
+we follow that consumer, not a reserved-zero or0xc000 check. Our legacy
+scope accepts AID1..2007; unsupported basic rates/missing rates or malformed
+IEs fail. Matching deauth/disassoc fails. AP retries cannot restart updates.
+
+OpenBSD iwx_run -> iwx_add_sta_cmd(update1) -> iwx_mld_add_sta_cmd and
+ iwx_mld_mac_ctxt_cmd(MODIFY,assoc1) establish order LINK -> STA -> MAC:
+- LINK MODIFY active/rates/protection/beacon timing (mask0x17). QoS was NOT
+  negotiated, so omit MODIFY_QOS and leave EDCA unchanged rather than writing
+  invented EDCA settings. 11A uses short preamble/slot. iwx_ack_rates supplies
+  mandatory OFDM fallbacks below the lowest basic, always6Mbps.
+- STA_CONFIG v1 reuses station0/link0/peer addresses, writes masked AID at28.
+- MAC_CONFIG v2 MODIFY client.is_assoc at36 and u16 assoc_id at40. Group filter,
+  plus beacons when DTIM period is still unknown, follows iwx_mld_mac_ctxt_cmd.
+Command ACKs ignore unrequested bodies; transport tags/failed flags remain real.
+The structures were extracted unchanged from pinned if_iwxreg.h and compiled
+with sizeof/offsetof assertions: LINK208, STA96, MAC52, all written offsets.
+No full iwx_run/data-path claim: Smart FIFO, multicast runtime setup, rate
+control, keys, ring recycling and a persistent network interface are later work.
+The device is stopped/reset with mastering off before shell on every path.
+
+Regression: tests/wifi-assoc.c passes92 production transport cases over TKIP
+and CCMP group fixtures, AP-before-TX, padding, high SSN bits, opaque headers/
+ACK bodies/unknown IEs, AID forms, DTIM-known/unknown, absent/failed/duplicate/
+wrong TX, AP refusal/disconnect, malformed/truncated RX/rates, failed/missing/
+wrong context ACK at each of3 steps, allocation and country/session changes.
+All descriptor/body truncation prefixes remain unable to claim acceptance.
+All8 prior host suites plus Python tests remain green under UBSan. Evidence:
+assoc-host-validation.json, assoc-upstream-abi.c, assoc-production-check/
+result.json. QEMU verifies absent-radio boot only, not RF or AP acceptance.
+
+WPA2 handshake / firmware-key checkpoint reviewed before USB — 2026-10-20
+------------------------------------------------------------------------
+References: secured-wifi-sources.json in the same pinned reference directory.
+OpenBSD PAE input1.39/output1.33, crypto1.81; SHA1 implementation1.33 and
+public-domain Rijndael1.20/header1.13. Linux v6.12 mvm/mld-key.c and fw/api/
+datapath.h; hostap/wpa_supplicant2.11 wpa_supplicant_install_gtk. The native
+crypto source/adaptation SHA records are maintained in boot/wifi-crypto-sources.json.
+No generic Linux/mac80211 or wpa_supplicant implementation body was copied.
+The BSD/ISC/public-domain notices are retained in source and embedded notices.
+
+The explicit --wifi-psk-file profile derives PMK on the host and embeds it in
+an ignored private build header. No password UI/input changes, command-line
+passphrase, credential logging or source-controlled credential. The test EFI
+DOES carry the derived PMK and must be treated as private test material. Native
+RDSEED/RDRAND with CPUID/CF checks supplies a fresh SNonce every boot; unavailable
+entropy fails explicitly, with no TSC/MAC/fixed-nonce fallback.
+
+PAE message construction matches OpenBSD: EAPOL version1, RSN descriptor2,
+key descriptor version2, M2 info0x10a/selected RSN/SNonce, M4 info0x30a/no nonce
+or data, key length0 in both replies. SHA1 PRF includes the NUL-terminated
+Pairwise key expansion label, sorted MACs/nonces and counter starting0. KCK16,
+KEK16 and CCMP TK16 match the first48 upstream-derived octets. Received M3 must
+have matching ANonce and replay counter, valid HMAC-SHA1-128 over its declared
+EAPOL length, authenticated RFC3394 AES-wrap integrity and the frozen AP RSN IE.
+M3 requires a bundled GTK for this checkpoint; a later separate group handshake
+is explicitly unsupported, not claimed to be malformed on the network.
+
+M1 and authenticated M3 retries reuse the established SNonce/PTK. Responses are
+bounded to four M2 and four M4 submissions, with fresh retained DMA pages and
+queue indices2..9. A duplicate M3 can resend M4 but can NEVER reinstall/reset
+PTK/GTK or the recorded GTK RSC. Ignore stale replay counters without progress.
+Unexpected initial ANonce changes or altered authenticated GTK fail explicitly;
+live rekeying is outside this one-shot proof. PMF/SAE/WPA1/other descriptors,
+protected EAPOL and A-MSDU are also outside this profile.
+
+OpenBSD iwx_tx uses first_data_qid for non-QoS; EAPOL is deliberately non-QoS.
+ToDS DATA header24 + LLC/SNAP8 + EAPOL uses queue1 after auth/assoc, Gen3 TX28,
+TFH TB lengths20/36/LLC+EAPOL and byte count32+EAPOL. Explicit basic command
+rate / encrypt-disable / high-priority flags are a checkpoint choice, not a
+claim of normal upstream rate-control setup. Incoming FromDS EAPOL binds own
+receiver/AP transmitter/channel/CRC; Ethernet source addr3 may differ from the
+BSSID. Supports ordinary/QoS non-A-MSDU headers and RX two-byte padding.
+
+OpenBSD sends M4 before installing keys; this path also requires positive M4
+TX completion before either key command. SEC_KEY command group5/code24/v1 is
+verified in the actual firmware metadata BEFORE hardware mutation. Unchanged
+pinned iwx_sec_key_cmd compiles to80 bytes with all offsets checked. STA mask1,
+PTK flagsCCMP2; GTK flagsmulticast+CCMP0x42 or TKIP0x43. Like Linux, leave
+firmware initial rx_seq/tx_seq0; retain authenticated GTK RSC for future host
+RX replay enforcement, which is NOT implemented by this checkpoint.
+
+TKIP GTK MIC orientation is crucial: AP wire GTK carries AP-TX MIC then AP-RX
+MIC. wpa_supplicant swaps these for STA nl80211 key layout. Linux copies that
+32-byte key and populates explicit RX/TX MIC fields. We match both steps:
+key[16:32] is wire TK; key[32:40] is STA-TX (wire24..31), key[40:48] STA-RX
+(wire16..23), explicit RX48..55=wire16..23 and TX56..63=wire24..31. OpenBSD's
+software TKIP fallback is not mistaken for proof its hardware path supports it.
+Firmware command replies validate transport completion only; protected TKIP
+RX/MIC/replay behaviour still needs its own implementation and physical proof.
+
+Session-protection end is association lifetime, not WPA completion. OpenBSD
+clears TE_ACTIVE on successful end; Linux checks association/beacons rather
+than installed keys. Keep the existing900TU association event; successful end
+after associated context updates does not reject an in-progress EAPOL exchange.
+End before association, failed status, regulatory/RF/thermal changes, deadlines,
+command errors, ring/DMA bounds and stop failures still abort. A verified stop
+precedes wiping retained DMA/key buffers; unconfirmed stop retains DMA and is
+fatal in the native adapter. No ring recycling/live interface claim.
+
+Independent public fixture generation uses Python hashlib/HMAC and OpenSSL AES
+wrap, not the production crypto. RFC2202/known PBKDF2/RFC3394 answers, all key-
+wrap ciphertext mutations, atomic failure/overlap, full wire M2/M4 and exact
+TKIP/CCMP SEC_KEY payloads pass. Protocol350 cases cover truncations, replay,
+wrong MIC/ANonce/security fields and authenticated bad RSN/wrap. Full transport
+46 cases cover early M1, M3 before TX completion, retries before/after PTK,
+QoS/pad/different Ethernet source, association-session expiry, opaque ACKs,
+failed TX/key commands, wrong tags/queue and clean stop/key-buffer erasure.
+All12 host suites pass with fatal UBSan; the vendored AES final-round uint8
+terms were cast to u32 before shifting to remove signed-promotion UB exposed
+by that sanitizer. No compiler/runtime workaround or shared-source changes.
+QEMU verifies the exact production EFI absent-radio boot only. Physical WPA2,
+protected data, RX PN/TKIP validation, group rekeying, IP and Telnet remain pending.
+
+2026-10-20 acceptance update: user reports AX211_WPA2_OK on physical HP. This
+supersedes the key-checkpoint-pending wording above, not the protected-data/
+IP limits. Working image preserved as private accepted-wpa.EFI. Next source
+review must retain RX padding after CCMP IV (iwx_rx_mpdu_mq), real hardware
+CCM/DEC_DONE/MIC_OK checks (iwx_rx_hwdecrypt), per-key/TID PN validation
+(iwx_ccmp_decap + net80211), and lifecycle/queue ownership before a live link.
+
+Protected unicast ARP checkpoint reviewed before staging — 2026-10-20
+-------------------------------------------------------------------
+New pinned Linuxv6.12 mvm/rxmq.c + fw/api/rx.h URL/SHA records are in
+protected-data-sources.json under the reference directory. Chose their Intel
+BSD alternative; notices carried in wifi-LICENSE.txt. Compared actual Linux
+rx_crypto/create_skb/check_pn with OpenBSD iwx_tx/rx_mpdu_mq/ccmp_decap and
+net80211 get_txkey. MAC receiver is unicast AP even for Ethernet broadcast
+ARP in addr3, so TX uses the pairwise CCMP key, not the TKIP GTK. Gen3 encrypted
+TX leaves ENCRYPT_DIS clear; Protected/ToDS set, header24 and no software IV.
+Firmware inserts IV/PN/MIC; totlen/byte-count and TFH lengths follow iwx_tx.
+
+RX requires FromDS Protected unicast to own MAC, selected AP transmitter and
+channel, CRC/overrun, modern SEC_CCM + MIC_OK, ExtIV and installed PTK index0.
+Linux's modern consumer does not additionally gate DECRYPTED/bit11; we retain
+status raw and test both bit11 forms instead of inventing an extra rejection.
+OpenBSD's older consumer does gate DEC_DONE, and that difference is explicit.
+Same/diminished PN is rejected per TID; no same-PN exception because A-MSDU/
+fragments are unsupported here. Invalid integrity/framing never advances PN
+or touches caller output. Non-QoS uses counter0; QoS0..7 uses its own counter.
+Padding skips AFTER IV as both consumers do. For supported Ethernet ARP/IPv4/
+IPv6 payloads, protocol length trims any retained crypto/FCS trailer instead
+of requiring an invented trailing length or delivering MIC as data.
+
+The explicit test profile sends one ARP request with zero sender IPv4, correct
+own sender MAC, zero target MAC, chosen target IPv4. Wire form follows RFC5227
+section1.1; this is not full address acquisition and NEVER announces/adopts the
+probed address. It requires a unicast ARP reply for the requested IPv4, matching
+own target MAC/zero target IP and Ethernet-source/sender-MAC consistency, plus
+positive TX completion, in either order. No implicit gateway or static own IP.
+The chosen target may decline probes or answer by broadcast; those cases do
+not establish a broken encrypted unicast path. Group/TKIP RX is deliberately
+ignored until its MIC/replay path exists. No cleartext IP fallback.
+
+Host tests:1149 converter cases (all descriptor truncations, pad/header/MIC
+presence forms, real/opaque status bits, integrity/replay/PN0/key/channel/address
+rejection, independent TIDs, full-MTU IPv4/IPv6/trailer trimming and atomic
+rejection). Full firmware startup/WPA/ARP19 cases include positive exact wire
+TX, encrypt-enabled flag/TFH/count/SSN, normal or RX-first completion, QoS/pad,
+bit11 absence, missing/failed/wrong TX, missing/wrong ARP, cleartext/wrong-cipher/
+MIC rejection, duplicate PN, bad-then-good same-PN, invalid pre-hardware profile
+and verified stop/key erasure. These are mocked firmware statuses and PUBLIC
+frames, not a claim of real hardware cryptography. Physical DATA_OK remains
+pending; live IP interface, queue reuse, TKIP group and rekey remain later work.

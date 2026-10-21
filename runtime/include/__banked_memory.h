@@ -21,6 +21,13 @@
 /* Decimal bank sizes above INT_MAX would otherwise widen loop comparisons. */
 #define __RCC_BANK_CELLS ((unsigned)BANK_SIZE)
 
+#ifdef FUSE_X_USER
+/* Pure cell operations, not host pointers. Bound each synchronous operation so
+ * the surrounding C loop keeps continuation/signal scheduling opportunities. */
+extern void *__rcc_cell_copy(void *, const void *, size_t);
+extern void *__rcc_cell_fill(void *, int, size_t);
+#endif
+
 static void *__rcc_banked_copy(void *dst, const void *src, size_t n) {
     uintptr_t d = (uintptr_t)dst, s = (uintptr_t)src;
     uintptr_t db = d & 0xffff0000UL, sb = s & 0xffff0000UL;
@@ -29,11 +36,17 @@ static void *__rcc_banked_copy(void *dst, const void *src, size_t n) {
         count = __RCC_BANK_CELLS - da;
         if (count > __RCC_BANK_CELLS - sa) count = __RCC_BANK_CELLS - sa;
         if (n < count) count = (unsigned)n;
+#ifdef FUSE_X_USER
+        if (count > 4096) count = 4096;
+        __rcc_cell_copy((void *)(db | da), (const void *)(sb | sa), count);
+        da += count; sa += count;
+#else
         for (i = 0; i < count; i++) {
             *(unsigned char *)(db | da) = *(const unsigned char *)(sb | sa);
             da++;
             sa++;
         }
+#endif
         n -= count;
         if (da == __RCC_BANK_CELLS) { da = 0; db += 65536UL; }
         if (sa == __RCC_BANK_CELLS) { sa = 0; sb += 65536UL; }
@@ -47,13 +60,18 @@ static void *__rcc_banked_set(void *dst, int c, size_t n) {
     while (n != 0) {
         count = __RCC_BANK_CELLS - da;
         if (n < count) count = (unsigned)n;
+#ifdef FUSE_X_USER
+        if (count > 4096) count = 4096;
+        __rcc_cell_fill((void *)(db | da), c, count);
+        da += count;
+#else
         for (i = 0; i < count; i++) {
             *(unsigned char *)(db | da) = (unsigned char)c;
             da++;
         }
+#endif
         n -= count;
-        da = 0;
-        db += 65536UL;
+        if (da == __RCC_BANK_CELLS) { da = 0; db += 65536UL; }
     }
     return dst;
 }

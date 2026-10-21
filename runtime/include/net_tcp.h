@@ -3,8 +3,9 @@
 #include <net.h>
 #define NET_TCP_BUFFER 512
 #ifdef RIPPLE_FUZIX_NETWORK
-/* 128 active/backlog TCBs must fit the hosted 16-bank shared arena. */
-#define NET_TCP_RX_BUFFER 4096
+/* Backlog/idle TCBs stay compact; active sockets may attach larger rings.
+ * This also leaves room for pipes/IPC on small-memory VM targets. */
+#define NET_TCP_RX_BUFFER 1024
 #define NET_TCP_MSS 1460
 #else
 #define NET_TCP_RX_BUFFER NET_TCP_BUFFER
@@ -31,7 +32,8 @@ typedef struct NetTcpConfig {
     unsigned long initial_sequence, timeout_ms;
 } NetTcpConfig;
 /* Caller-owned: zero before first use; never move/free an active connection.
- * One reliable segment in flight; all queued stream data is copied here. */
+ * Inline buffers retain the compact stop-and-wait profile. Optional external
+ * buffers enable bounded windowed streams; storage stays caller-owned. */
 struct NetTcp {
     NetContext *net;
     unsigned char peer[4], tx[NET_TCP_BUFFER], rx[NET_TCP_RX_BUFFER];
@@ -42,12 +44,18 @@ struct NetTcp {
     unsigned short retransmitted, sample_valid, retries, queued, queued_flight;
     unsigned long snd_una, snd_nxt, sent_nxt, rcv_nxt, flight_seq, window_seq, window_ack;
     unsigned long now, generation, link_epoch, timeout, last_progress, phase_at;
-    unsigned long sent_at, sample_at, rto, base_rto, srtt, rttvar;
+    unsigned long sent_at, sample_at, sample_end, rto, base_rto, srtt, rttvar;
     unsigned long retransmits, probes, bytes_written, bytes_acked, bytes_received, bytes_read;
     unsigned long challenge_at;
     unsigned long zero_at, zero_delay;
     unsigned short challenge_sent, icmp_type, icmp_code, mtu;
     unsigned short accepted;
+    unsigned char *send_buffer, *receive_buffer, *receive_map;
+    unsigned short send_capacity, receive_capacity;
+    unsigned short cwnd, ssthresh, duplicate_acks, recovering;
+    unsigned long recovery_end;
+    unsigned short pending_fin, reorder_used;
+    unsigned long fin_sequence;
 };
 /* Optional caller-owned compact TIME_WAIT storage. Zero before first use and
  * keep attached storage stable for the context lifetime or explicit detach.
@@ -118,6 +126,17 @@ int net_tcp_connect(NetContext *net, NetTcp *tcp, const NetTcpConfig *config, un
 int net_tcp_poll(NetTcp *tcp, unsigned long now_ms);
 int net_tcp_write(NetTcp *tcp, const unsigned char *data, unsigned short length, unsigned short *written);
 int net_tcp_read(NetTcp *tcp, unsigned char *data, unsigned short capacity, unsigned short *received);
+/* Upgrade immediately after connect (before polling) or after accept. No queued
+ * TX is permitted; unread RX is preserved. Buffers must be disjoint, stable and
+ * caller-owned until release/retire. RX map has (receive_capacity+7)/8 cells.
+ * Capacities: TX 512..16384, RX current-used..32768 (minimum inline capacity).
+ * Allocation policy belongs to the caller; there are no hidden allocations. */
+int net_tcp_buffers(NetTcp *, unsigned char *send, unsigned short send_capacity,
+    unsigned char *receive, unsigned short receive_capacity, unsigned char *map);
+#define NET_TCP_TX_DATA(t) ((t)->send_buffer ? (t)->send_buffer : (t)->tx)
+#define NET_TCP_RX_DATA(t) ((t)->receive_buffer ? (t)->receive_buffer : (t)->rx)
+#define NET_TCP_TX_CAP(t) ((t)->send_buffer ? (t)->send_capacity : NET_TCP_BUFFER)
+#define NET_TCP_RX_CAP(t) ((t)->receive_buffer ? (t)->receive_capacity : NET_TCP_RX_BUFFER)
 /* Drain accepted writes, then send FIN. Reading remains available. */
 int net_tcp_shutdown(NetTcp *tcp);
 /* Explicit cancellation: best-effort RST, discard buffers and release the slot.

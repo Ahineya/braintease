@@ -1,0 +1,49 @@
+; Adapted from Syma-Overview.symnb, cell 67. See PROVENANCE.txt.
+{Module OOP/Desugar
+  {Export Desugar}
+  {Rules
+    ; Delay primitive application until the captured symbol is available.
+    {R SplitSymbol {SplitSymbol s_ convert_} {SplitBy "." {convert_ s_}} :innermost}
+    {R Desugar {Program ..} {Desugar ..}}
+
+    ; Let the party started. If there is a compound with only one symbol in it, it may be a call.
+    {R Desugar/Calls/Split
+        {.. { symbol_ } ..}
+        ; Splitting the symbol by pretending it is a string.
+        {.. {Desugaring {SplitSymbol symbol_ ToString}} ..} 
+        :scope Desugar ; Scoping makes this run only when there is an ancestor with this symbol in head position
+        :guard IsSym(symbol_)
+        :innermost
+    }
+
+    ; If after SplitBy we got only one string, let's just say it is desugared, and transform it back to be a symbol
+    {R Desugar/Calls/Plain
+        {.. {Desugaring Strings(s_)} ..}
+        {.. {Desugared      Sym(s_)} ..}
+        :scope Desugar
+        :innermost
+    }
+
+    ; Otherwise, we desugar
+    {R Desugar/Calls/Call
+        {.. {Desugaring  Strings(var_      method_)} ..}
+        {.. {Desugared {Call Sym(var_) Sym(method_)}} ..}
+        :scope Desugar
+        :innermost
+    }
+
+    ; Because we used :innermost on the desugaring rules, we can be sure that this runs when all of them finished
+    {R Desugar/End {Desugar ..} {Desugar/Clean ..}}
+
+    ; And since we are sure everything is desugared, and we are not in the Desugar scope, we can safely clean up
+    {R Desugar/Clean
+        {.. {Desugared term_} ..}
+        {.. term_ ..}
+        :scope Desugar/Clean
+        :innermost
+    }
+
+    ; We gate the Desugarer output with an {Ok} compound, so the transformer will know desugarer finished.
+    {R Desugar/Clean/End {Desugar/Clean ..} {Ok ..}}
+  }
+}

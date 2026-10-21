@@ -13,7 +13,9 @@
 #ifndef NBUFS
 #define NBUFS 8
 #endif
+#ifndef NMOUNTS
 #define NMOUNTS 2
+#endif
 #define CONFIG_JOB_CONTROL
 #define CONFIG_SELECT
 #include "pty-limits.h"

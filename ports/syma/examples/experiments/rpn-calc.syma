@@ -1,0 +1,65 @@
+// :clear
+// :module multiline
+{Module ComputePolish
+  {Rules
+    {R Compute/Entry {ComputePolish _} {Compute Start _}}
+    {R Compute/Start {Compute Start _} {Compute Parsing Split(" ", _)}}
+    {R Compute/Parsed {Compute Parsing {Strings ..}} {Compute Interpreting {Result} {Stack} {Current} {Strings ..}}}
+
+    {R Compute/Interpreting/Take
+        {Compute Interpreting {Result} {Stack ..} {Current              } {Strings op_ ..}}
+        {Compute Interpreting {Result} {Stack ..} {Current ParseNum(op_)} {Strings     ..}}
+    }
+
+    {R Compute/Interpreting/Push
+        {Compute Interpreting {Result} {Stack ..    } {Current op_} ..}
+        {Compute Interpreting {Result} {Stack .. op_} {Current    } ..}
+        :guard IsNum(Inert(op_))
+    }
+
+    {R Compute/Interpreting/Calc/Start
+        {Compute Interpreting {Result} {Stack .. a_ b_}                           {Current op_} ..}
+        {Compute Interpreting {Result} {Stack ..      } {Calc ToOp(op_, a_, b_) } {Current    } ..}
+        :guard IsStr(Inert(op_))
+    }
+
+    {R Compute/Interpreting/Calc/Err/InvalidOp
+        {Compute Interpreting {Result} {Stack ..} {Current op_} ..}
+        {Err Concat("Invalid Operation: ", op_)}
+        :guard Not(IsValidOp(op_))
+    }
+
+    {R Compute/Interpreting/Calc/Err/Underflow
+        {Compute Interpreting {Result} {Stack ..} {Current op_} ..}
+        {Err Concat("Stack Underflow: ", op_)}
+        :guard And(IsStr(Inert(op_)), IsValidOp(op_))
+    }
+
+    {R Compute/Interpreting/Calc/ToOp/Plus
+        {Compute Interpreting {Result} {Stack ..            } {Calc ToOp(op_, a_, b_) } {Current} ..}
+        {Compute Interpreting {Result} {Stack .. Add(a_, b_)}                           {Current} ..}
+        :guard Eq(op_, "+")
+    }
+    {R Compute/Interpreting/Calc/ToOp/Minus
+        {Compute Interpreting {Result} {Stack ..            } {Calc ToOp(op_, a_, b_) } {Current} ..}
+        {Compute Interpreting {Result} {Stack .. Sub(a_, b_)}                           {Current} ..}
+        :guard Eq(op_, "-")
+    }
+    {R Compute/Interpreting/Calc/ToOp/Mul
+        {Compute Interpreting {Result} {Stack ..            } {Calc ToOp(op_, a_, b_) } {Current} ..}
+        {Compute Interpreting {Result} {Stack .. Mul(a_, b_)}                           {Current} ..}
+        :guard Eq(op_, "*")
+    }
+    {R Compute/Interpreting/Calc/ToOp/Div
+        {Compute Interpreting {Result} {Stack ..            } {Calc ToOp(op_, a_, b_) } {Current} ..}
+        {Compute Interpreting {Result} {Stack .. Div(a_, b_)}                           {Current} ..}
+        :guard Eq(op_, "/")
+    }
+
+    {R Compute/End {Compute Interpreting {Result} {Stack st.. r_} {Current} {Strings}} {Ok r_}}
+
+    {R IsValidOp {IsValidOp op_} Neq({IndexOf "+-*/" op_}, -1)}
+  }
+}
+// :end
+// :import ComputePolish

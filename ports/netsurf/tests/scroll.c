@@ -1,14 +1,14 @@
 /* Exercise the real frontend's scrolling without requiring a physical mouse.
- * Only the event source is scripted; layout, painting and Nano-X are real. */
+ * Only timer-delivered input is scripted; layout, painting and Nano-X are real. */
 #include <nano-X.h>
-static void scripted_event(GR_EVENT *, GR_TIMEOUT);
-#define GrGetNextEventTimeout scripted_event
 #define main browser_main
 #include "../frontend/nano.c"
 #undef main
-#undef GrGetNextEventTimeout
-static void scripted_event(GR_EVENT *event, GR_TIMEOUT timeout)
+static void scripted_event(void *opaque)
 {
+    GR_EVENT storage, *event=&storage;
+    (void)opaque;
+    schedule(80,scripted_event,NULL);
     static unsigned stage;
     static unsigned passes;
     static int previous_y=-1;
@@ -39,9 +39,10 @@ static void scripted_event(GR_EVENT *event, GR_TIMEOUT timeout)
             event->type = GR_EVENT_TYPE_CLOSE_REQ;
             fputs("NETSURF_SCROLL_CHECK finished\n", stderr);
         } else goto ordinary;
+        handle_event(event);
         return;
     }
 ordinary:
-    GrGetNextEventTimeout(event, timeout);
+    return;
 }
-int main(int argc, char **argv) { return browser_main(argc, argv); }
+int main(int argc, char **argv) { schedule(80,scripted_event,NULL);return browser_main(argc, argv); }

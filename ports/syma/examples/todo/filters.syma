@@ -1,0 +1,31 @@
+{Module Todo/Filters
+  {Export FiltersView SetFilter}
+
+  {Rules
+    {R "FiltersView"
+      {/@ FiltersView {App {State s... {Filter f_}} _}}
+      {Div :class "flex gap-2 my-4"
+        {Button 
+          :class If(Eq(f_, All), "bg-blue-500 text-white px-2 py-1 rounded", "bg-gray-200 px-2 py-1 rounded") 
+          :onClick SetFilter(All) 
+          "All"
+        }
+        {Button 
+          :class If(Eq(f_, Active), "bg-blue-500 text-white px-2 py-1 rounded", "bg-gray-200 px-2 py-1 rounded") 
+          :onClick SetFilter(Active) 
+          "Active"
+        }
+        {Button 
+          :class If(Eq(f_, Completed), "bg-blue-500 text-white px-2 py-1 rounded", "bg-gray-200 px-2 py-1 rounded") 
+          :onClick SetFilter(Completed) 
+          "Completed"
+        }
+      }
+    }
+
+    {R "SetFilter"
+      Apply(SetFilter(f_), {State s... {Filter oldf_}})
+      {State s... {Filter f_}}
+    }
+  }
+}

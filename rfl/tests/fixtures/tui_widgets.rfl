@@ -4,7 +4,7 @@ import { line_edit } from "lib/tui_input";
 import { Canvas, Rect } from "lib/tui";
 import { FilePanel, PanelPalette, draw, draw_cached, panel_paint } from "lib/tui_files";
 import { DirEntry, Metadata, DIRECTORY, REGULAR } from "std/posix";
-import { END, HOME, UP, DOWN, PAGE_DOWN, LEFT, BACKSPACE } from "std/curses";
+import { END, HOME, UP, DOWN, PAGE_DOWN, LEFT, BACKSPACE, MouseEvent, BUTTON1_PRESSED, BUTTON1_RELEASED } from "std/curses";
 
 struct Labels {
     unused: bool
@@ -117,6 +117,41 @@ fn main() -> i16 {
     }
     draw_cached(&labels, &files, area, colors, true, false, &mut painted);
     println("CACHE_DONE");
+    let list = Rect { row: 3, column: 5, rows: 2, columns: 8 };
+    cursor.select(0, 5, 2);
+    if (!cursor.mouse(list, MouseEvent { row: 4, column: 6, flags: BUTTON1_PRESSED }, 5) || cursor.selected != 1) {
+        return 17;
+    }
+    if (cursor.mouse(list, MouseEvent { row: 5, column: 6, flags: BUTTON1_PRESSED }, 5) || cursor.selected != 1) {
+        return 18;
+    }
+    cursor.mouse(list, MouseEvent { row: 3, column: 6, flags: 2097152 }, 5);
+    if (cursor.selected != 4 || cursor.top != 3) {
+        return 19;
+    }
+    cursor.mouse(list, MouseEvent { row: 3, column: 6, flags: BUTTON1_PRESSED }, 0);
+    if (cursor.selected != 4) {
+        return 20;
+    }
+    let mut unicode = line_edit("a界éz");
+    let field = Rect { row: 2, column: 10, rows: 1, columns: 20 };
+    unicode.mouse(field, MouseEvent { row: 2, column: 12, flags: BUTTON1_PRESSED });
+    if (unicode.cursor != 1) {
+        return 21;
+    }
+    unicode.mouse(field, MouseEvent { row: 2, column: 14, flags: BUTTON1_PRESSED });
+    if (unicode.text[0..unicode.cursor] != "a界é") {
+        return 22;
+    }
+    let before = unicode.cursor;
+    if (unicode.mouse(field, MouseEvent { row: 2, column: 11, flags: BUTTON1_RELEASED }) || unicode.cursor != before) {
+        return 23;
+    }
+    unicode = line_edit("abcdefghij");
+    unicode.mouse(Rect { row: 2, column: 10, rows: 1, columns: 4 }, MouseEvent { row: 2, column: 11, flags: BUTTON1_PRESSED });
+    if (unicode.cursor != 8) {
+        return 24;
+    }
     println("TUI_WIDGETS_OK");
     0
 }

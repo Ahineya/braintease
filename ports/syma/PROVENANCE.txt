@@ -1,0 +1,58 @@
+Syma language reference and test/example snapshot
+================================================
+
+Reference: Syma, packages/core version 0.5.2
+Git revision: bc9e915d4ade5d8beb3991aa18748dd388293dfe
+Audit / C16 port date: 2026-10-20
+Original author: Pavlo Yevsehnieiev
+License: MIT; see LICENSE.syma.txt.
+
+library/ includes the original packages/stdlib/syma sources.
+examples/ includes the original packages/demos/syma .syma and .symnb sources.
+Those original snapshot files are unchanged. tests/source-manifest.json records source paths
+and SHA-256 hashes, including any working-tree state present in the snapshot.
+
+builtins.h is generated from packages/core/src/core/builtins-vocab.js.
+tests/corpus.jsonl records actual normalization calls made by the original
+core test suite, with original results/errors. tests/extra.jsonl adds reference
+edge cases. tests/notebooks.jsonl records evaluations from the original seven
+notebooks; the generation scripts are included alongside them.
+
+The C runtime is a new implementation of those semantics. It does not embed
+Node.js, a JavaScript evaluator, a browser frontend or a transpiled JS engine.
+
+Regexp, Unicode and binary64 conversion use the existing pinned C support
+libraries from ../quickjs/upstream, through ../quickjs/adapt.py and
+../quickjs/support_adapt.py on C16. Their source copyright/license notices are
+retained in that port. LICENSE.quickjs.txt includes the MIT notice distributed
+with those libraries, including Fabrice Bellard and Charlie Gordon's copyrights.
+
+Worksheet additions (2026-10-20)
+--------------------------------
+library/oop-{desugar,transform,objects}.syma adapt the author's OOP example
+from packages/notebook/public/Syma-Overview.symnb, cells 67 and 68. Exact source
+cells are retained in examples/oop/overview-cell-{67,68}.txt; the source notebook
+hash is recorded in tests/oop-source.json. Adaptations add exports and a public
+Program entry point, delay ToString until runtime substitution, and compare
+grammar tokens across module namespaces. WORKSHEET.md describes the retained
+small-language limitations. The full original DSL program is a regression test
+against the original JS engine, both raw and through the packaged library.
+
+library/math-small.syma, examples/worksheets/, the embedding/session interface,
+worksheet UI and their tests are new code for this port. They are not unchanged
+upstream snapshot files. The original source-manifest still identifies precisely
+which upstream files were copied unchanged.
+
+Curses worksheet frontend (2026-10-20)
+------------------------------------
+The full-screen application uses the existing project text and Unicode libraries
+(libraries/text and libraries/unicode, MIT), and the shared FUZIX/Ripple curses
+implementation. The host executable compiles the same curses sources using
+RIPPLE_CURSES_HOST; no ncurses replacement or JavaScript UI is involved. Original
+source notices are retained. The FUZIX library's default license is LGPL-2.1
+(LICENSE.curses-LGPL-2.1.txt); local curses adaptations carry GPL-2.0-or-later
+notices (LICENSE.curses-GPL-2.txt). The termcap sources retain their public-domain
+implementation and Joypace redistribution notices in ports/fuzix/upstream/Library/libs.
+The host libsyma.a continues to contain only the engine/REPL/session objects and
+their existing QuickJS support, excluding the worksheet, curses and text UI objects.
+worksheet-tui.inc, worksheet-pretty.inc and tests/tui.py are new frontend code.

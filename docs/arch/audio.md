@@ -130,6 +130,44 @@ See [the music player](../../ports/music/README.md) for usage, importing C16
 files, sample-exact guest tests and the exploratory Tremor benchmark. Ogg/Vorbis
 is not yet part of the player.
 
+## SDL 1.2 applications
+
+The [SDL port](../../ports/sdl/README.md#pcm-audio) adapts SDL callback PCM,
+WAV loading, mixing and format conversion onto `/dev/pcm`. Callback data remains
+logical octets and is converted into signed-16 sample cells before writes.
+The transport keeps its existing version, exclusive ownership and monotonic
+clock; SDL does not issue `NEXT_TICK` or explicit render commands.
+
+This first profile services callbacks cooperatively at SDL event, drawing and
+wait/delay boundaries, with refill deadlines limiting sleep duration. It
+supports ordinary SDL game loops, pause/resume and shared state protected by
+`SDL_LockAudio`, but does not create an independent guest audio thread. Work or
+blocking I/O outside those boundaries can underrun after the bounded queue is
+consumed. Proper shared-address-space execution contexts remain a separate
+prerequisite for fully asynchronous SDL callbacks. The native host speaker
+thread consumes copied PCM only.
+
+The optional [WAV effects mixer](../../ports/sdl/mixer/README.md) is an original
+SDL_mixer 1.2-compatible source API subset, reusable by C applications and now
+enabled for LGeneral effects. It provides eight default channels with checked
+dynamic allocation, loops, volume, pause, expiry, fades and completion hooks.
+Format/channel conversion and arbitrary-rate nearest-neighbor resampling occur
+when WAVs are loaded. This leaves base SDL's power-of-two `SDL_AudioCVT` rate
+conversion unchanged. Music streams and compressed decoders remain outside the
+subset, and the mixer retains cooperative scheduling.
+
+The focused suite passed 3,481 checks on host byte/wide carriers and actual C16;
+production PCM captures matched overlap, finite-loop, volume and pause samples.
+LGeneral's separate GUI/audio checks passed, including sample-exact original
+clicks, scenario sound loading, persisted mute and close/reopen cleanup. These
+captures establish sample correctness, not a physical speaker latency guarantee.
+See the [SDL verification commands](../../ports/sdl/README.md#verification).
+
+The soundboard `sdl-audio-demo.fxe` also exercises callback audio. Neither a new
+audio device protocol nor startup-service changes are needed. LinCity-NG and
+Wesnoth remain deferred at the user's request because of their C++ requirements
+and other priorities; the WAV mixer does not resolve those dependencies.
+
 ## OPL3 music
 
 The music device sequences MUS scores at 140 ticks per second, using the supplied
@@ -243,3 +281,222 @@ new counters. Statistics are ephemeral, absent from serialized checkpoints, and
 queries do not advance the logical audio timeline. Muted output reports zeros.
 The native scheduling regression has an opt-in silent real-speaker test; unit
 tests drive the same sink consumer without audio hardware.
+
+## SDL threading investigation
+
+Source audit, 2026-10-21; this is a design recommendation, not an implemented
+thread facility. Shared-image green threads are feasible without host guest-code
+callbacks, SMP, ring 3 or timer-driven native stack switching. They are a runtime
+and kernel milestone, rather than a small SDL backend change. Keep the existing
+cooperative audio pump for current applications while investigating that work
+separately. More queued PCM can absorb a bounded delay; it cannot guarantee
+callback progress through an arbitrary compute loop or blocking call.
+
+### What is available now
+
+* [native_hosted.h](../../runtime/include/native_hosted.h) exposes kernel-selected
+  clone/switch/drop/exec contexts, not thread creation. In the hosted
+  [process runtime](../../rcc-native-runtime/src/process.rs), `clone_image` copies
+  the private memory handle, stack cursor, allocation maps, RNG and errno address.
+  [address_space.rs](../../rcc-native-runtime/src/address_space.rs) detaches private
+  pages on writes. Sharing loaded code or the explicitly shared kernel allocator
+  does not make application globals and malloc objects shared after fork.
+* [Compiler continuations](../../rcc-native/src/process.rs) already preserve live
+  values and resume PCs across calls and loop checkpoints. Public function tokens
+  still name resumable entries, including for indirect calls; a thread entry must
+  be validated with the right arity and retain its loaded module. The runtime
+  currently owns one continuation stack per process, with logical frame storage
+  in banks 2 through 4 and one stack cursor. Thread creation must reserve disjoint
+  logical stack storage and separate frame/jump records, not copy a host stack or
+  reuse the same logical frame addresses.
+* Hosted `checkpoint_due` checks time every 256 candidate checks and requires
+  roughly 5 ms since the previous grant. Calls return through the dispatcher;
+  backward branches have generated checks. This is an opportunity to schedule,
+  not a 5 ms callback deadline. Aggregate-return copying, active checkpoint or
+  syscall continuations, and synchronous native helpers can defer it. In
+  particular, the scan suppresses checkpoints while either kernel continuation
+  remains anywhere in the active frame chain.
+* [Fuse-X platform code](../../fuse-x/platform.c) saves a complete `u_data` per
+  process slot before `rcc_hosted_switch`. The
+  [kernel sleep path](../../ports/fuzix/upstream/Kernel/process.c) sleeps that
+  process and resumes its parked syscall later. `u_data` mixes syscall arguments,
+  I/O buffers, result/error and `u_insys` with process resources such as descriptors,
+  brk and signal dispositions. A library-only fiber cannot run a sibling while
+  its sole kernel process is asleep.
+* [SDL support](../../ports/sdl/platform/support.c) explicitly rejects thread,
+  mutex and timer creation. [audio.c](../../ports/sdl/platform/audio.c) calls the
+  mixer only at cooperative boundaries and suppresses service while locked or
+  already inside a callback. Its lock-depth counter is not a thread mutex. The
+  [PCM backend](../../ports/sdl/platform/pcm_audio.c) already uses nonblocking
+  writes and copied samples, which is suitable for an eventual audio worker.
+* Ordinary `Runtime::poll` is expressly forbidden to switch contexts or invoke
+  guest callbacks by the accepted memory-view contract. An audio hook there
+  would break existing read-view lifetime guarantees. The scheduling checkpoint
+  is the separate resumable boundary. Existing setjmp/longjmp also is not a fiber
+  API: it targets a still-live continuation and rejects a returned frame.
+
+### Options and relative scope
+
+| Option | What it can achieve | Scope and limit |
+| --- | --- | --- |
+| Keep pumping; split long application work into explicit steps | Shared mixer state, correct callback pointers and refill between work chunks | Small application change; blocking libc and unbroken work can still starve audio |
+| SDL-only cooperative task/fiber layer | Explicit scheduling among adapted tasks in one image | Useful only with explicit yields and nonblocking I/O; current public APIs cannot create a separate resumable C call stack |
+| Separate mixer process with chunk/command IPC | Continue uploaded effects while the GUI process sleeps or computes | Useful audio-specific intermediate stage; requires a helper package and bounded protocol, not shared-image threads |
+| Kernel-selected sibling continuations sharing one process image | Run the audio worker while main computes or another sibling waits | Recommended long-term direction; requires shared-image ownership, separate continuations/stacks, kernel wait state and synchronization |
+| Host OS thread entering guest code | No supported execution contract | Would violate exclusive runtime access and guest/kernel state assumptions; exclude |
+| Forked arbitrary SDL callback or signal-driven mixer callback | No shared-image threading guarantee | COW separates mixer objects; signal delivery does not provide independent callback scheduling or allocator safety; exclude |
+
+The smallest isolated prototype is a standalone continuation/ownership fixture
+under a new `ports/sdl/threads/` directory, with no production imports or build
+changes. A small header/implementation, two manually resumable test tasks and a
+test runner can establish the proposed contract: one shared image/heap object,
+distinct task locals and stack ranges, entry token plus userdata, per-task errno,
+sleep/wake/join and a mutex wait queue. Use a fake monotonic clock and PCM sink to
+exercise deadlines and partial writes deterministically. It must label simulated
+syscall waits and hand-written continuations as a model; passing it would not
+demonstrate arbitrary compiled SDL callbacks or working guest threads. A separate
+application demo with explicit work chunks can exercise today's real SDL pump,
+but also cannot claim independent threading. Neither experiment needs an x64
+image, driver, compiler/runtime patch or hardware run.
+
+### Audio-specific alternative: mixer helper over IPC
+
+A separate mixer executable is a practical, less disruptive intermediate stage
+for the finite `Mix_*` effects profile. The parent uploads chunks and sends
+play/stop/volume/fade commands; the helper owns chunk/voice state and `/dev/pcm`,
+running the existing refill loop. Uploaded effects and fades can progress while
+the GUI blocks in read/select or computes between checkpoints. This is explicit
+interprocess audio service, not a forked arbitrary callback or thread support.
+
+Fuse-X already has the required [process/descriptor
+wrappers](../../ports/fuzix/ripple/libc/syscalls.c),
+[fork/dup2/exec launch pattern](../../ports/fuzix/ripple/libc/pipe.c),
+[shared kernel pipe rings](../../ports/fuzix/ripple/pipes.c) and
+[pipe/PCM select](../../ports/fuzix/ripple/selectwait.c). Two anonymous pipes can
+carry commands/replies across exec. Close unused ends, preserve intended IPC
+descriptors, and open PCM only in the helper after exec. This fits the existing
+exclusive lease; helper exit releases it, while command EOF detects parent loss.
+The [select fixture](../../ports/fuzix/tools/selectcheck.c) already covers pipe
+backpressure, fork, EOF and broken pipes; it was inspected, not rerun here.
+
+Implementation stays in an optional SDL mixer frontend/protocol, helper package
+and tests; a hosted prototype needs no shared runtime/compiler/kernel/syscall
+or x64 integration edits. Costs include a process slot, private image/heap,
+process switches and chunk copies. Use checked, versioned C16-safe framing and
+request IDs, upload once then reference IDs, and stage loads incrementally:
+pipes hold 8,192 cells, large writes may be short, and readiness reserves no
+message space. Prioritize refill, use nonblocking IPC and bounded queues, and
+never stop audio waiting for a blocked GUI to drain replies. Specify startup
+acknowledgement, timeout/overflow/error handling, shutdown/drain, SIGPIPE/EOF,
+child reaping and rollback for failed fork/exec/PCM acquisition.
+
+Parent chunks become proxies for helper-owned immutable samples; free requires
+ordered stop/release acknowledgement. Never send usable pointers or RWops
+callbacks: the parent reads/uploads generic RWops data. Selected-channel,
+previous-volume and live-state return values need replies or synchronized proxy
+state. Completion events can return over IPC, but parent callbacks still wait
+for a parent service boundary. Public chunk/buffer mutation, shared callback
+userdata and general `SDL_OpenAudio` callbacks are outside this restricted
+contract. It supplies no `SDL_CreateThread`, hard deadline or x64 sound-device
+support; another target needs its own helper package and acceptance.
+
+Acceptance must keep an uploaded loop playing with the GUI blocked on an empty
+pipe or computing without SDL calls; also test partial/flooded IPC, unread
+replies, either process dying, failed launch and exact chunk/descriptor/lease
+reclamation. Compare captured PCM and underruns before claiming improved
+continuity; long synchronous kernel work still delays both processes.
+
+### Contract required for actual sibling execution
+
+1. **Share the process image, not a COW clone.** Keep globals, heap contents,
+   allocator metadata, loaded-module ownership, descriptor table and brk under
+   one process-group owner. Each thread needs its own saved PC/values/arguments,
+   logical stack bounds/cursor, jump records, return value, identity and wait
+   state. A thread return must finish that thread; today's outermost continuation
+   return requests process/session exit. Function tokens and userdata remain C16
+   values; retain the image until its last continuation and callback reference
+   has gone. Stack addresses can be shared with another thread only while their
+   owning stack is live; never restore copied stack bytes over a sibling's work.
+2. **Let the existing kernel scheduler select runnable threads.** Extend its
+   task identity to associate a thread with a shared process group; do not add a
+   competing host scheduler or a second process run queue. A thread blocked in
+   read/select/sleep needs its own saved kernel continuation, syscall request,
+   `u_data` transient state, wait event and timeout. Switching siblings must not
+   park/restore their common memory or heap. Copying all of `u_data` is inadequate:
+   shared descriptor changes, brk, cwd and signal rules need explicit ownership.
+   The [scheduler](../../ports/fuzix/ripple/scheduler.c) currently indexes its
+   run/wait queues and timeouts by `ptab` slot; resource tables still assume that
+   slot is the process. This is the main integration cost for blocking I/O.
+3. **Preserve per-thread errors and protect shared libraries.** Guest libc has
+   one global `errno`; the runtime saves its address, not a thread-local value.
+   Saving/restoring that cell can bootstrap green-thread errno only if pointer
+   escape semantics are restricted; a full libc contract needs thread-local
+   access. SDL error buffers also need review. The guest
+   [allocator](../../ports/fuzix/ripple/libc/heap.c) and
+   [stdio](../../ports/fuzix/ripple/libc/stdio.c) mutate shared lists without thread
+   locks; allocator growth calls brk. Single-CPU execution still permits a
+   checkpoint between those mutations. Add scheduler-aware mutexes or bounded
+   no-switch critical sections, including the brk transaction. Never yield/spin
+   waiting for a lock whose owner cannot run, or sleep with a global no-switch
+   guard held. A restricted first audio worker should preallocate buffers and
+   avoid allocation, stdio and blocking I/O inside its callback.
+4. **Define lifecycle and device ownership before general use.** Thread exit and
+   join reclaim only the completed thread; process exit cancels/wakes all siblings
+   and releases resources once. Exec must retire every old sibling before
+   replacing the image. A safe first experimental policy can reject fork/exec
+   while multiple threads exist; eventual fork must specify which continuation
+   survives in the child and repair inherited locks. Define process-directed
+   signal selection, thread masks, fatal group exit and delivery only after
+   kernel resources are safe. Do not execute audio from the current signal
+   handler path. The [PCM lease](../../ports/fuzix/ripple/pcm.c) is checked with
+   `owner == udata.u_ptab` plus PID; a worker represented by a different task slot
+   needs a shared process-owner identity. Per-thread close must not inadvertently
+   reset another sibling's stream. Apply the same review to graphics and file
+   cleanup.
+5. **Keep checkpoint and memory contracts explicit.** Start with explicit yield
+   and sleep at dispatcher boundaries, then allow the existing compiler
+   checkpoints to select siblings after allocator/lock protection is proven.
+   The currently active syscall may be parked; its frame chain must not suppress
+   scheduling in another sibling. Preserve aggregate-return storage lifetimes,
+   read-view barriers and synchronous helper borrows. This first design does not
+   require arbitrary native-stack preemption and cannot promise a hard audio
+   deadline through unbounded native helpers or long kernel operations.
+
+### Stages and acceptance
+
+The isolated fixture is a few new files and a contract test, not production
+thread support. A working hosted prototype is a coordinated change across the
+runtime dispatcher/image model, compiler/service or syscall bridge, kernel task
+and wait state, and selected libc/SDL locks. Merely adding create/yield calls to
+SDL would leave the difficult requirements unresolved. Start with two siblings,
+explicit yield, preallocated bounded stacks, nonblocking PCM and restricted
+lifecycle; then prove blocked-main/audio progress and checkpointed compute.
+General SDL thread/mutex/semaphore APIs and unrestricted application callbacks
+are a later compatibility milestone.
+
+Headless acceptance should cover pointer-identical globals/heap and function
+userdata, disjoint locals/stacks, nested indirect calls and aggregate returns,
+errno preservation, lock-held checkpoints, join/self-join, capacity/allocation
+failure, starvation accounting, repeated create/close, and exact reclamation.
+Use a deliberately empty blocking pipe/select in the main thread while audio
+refills, plus a compute loop with no SDL calls; these distinguish actual sibling
+execution from cooperative pumping. Test callback pause/close, partial/EAGAIN
+PCM writes, signals, exit and the chosen fork/exec restriction. Compare captured
+PCM and queue underruns separately from physical speaker gap counters; muted
+headless success cannot establish hardware latency.
+
+X64 adoption is a separate owner-reviewed stage. Its
+[runtime](../../tools/x86_64/boot/runtime.c) and
+[process snapshots](../../tools/x86_64/boot/process.inc) also bind frames, heap,
+stack and errno to a process, but use fixed capacities and copied active C16 RAM.
+Its checkpoint grant follows a new 100 Hz timer tick, rather than the hosted
+5 ms wall-clock gate. A sibling must retain common backing while changing only
+thread state; ordinary process snapshot switching cannot provide that by itself.
+Preserve C16 layouts, checked helpers, current read-v1 rejection and both host RCC
+and portable native compiler compatibility. No ring-3, IRQ-stack or SMP change
+is implied. The ownership agreement in
+[native-memory-coordination.txt](native-memory-coordination.txt) delegates only
+the isolated x64 process-memory subtree to that workstream; it does not authorize
+SDL threading changes to existing runtime, compiler, kernel or x64 integration
+files. This investigation changes only this documentation section and runs no
+builds, guest images or hardware acceptance.

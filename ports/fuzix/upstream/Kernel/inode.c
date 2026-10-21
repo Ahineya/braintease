@@ -272,7 +272,7 @@ void writei(register inoptr ino, uint_fast8_t flag)
 
 int16_t doclose(uint_fast8_t uindex)
 {
-	int8_t oftindex;
+	oft_index_t oftindex;
 	struct oft *oftp;
 	register inoptr ino;
 	uint16_t flush_dev = NO_DEVICE;
@@ -303,7 +303,7 @@ int16_t doclose(uint_fast8_t uindex)
         wakeup(ino);selwake_inode(ino, SELECT_IN|SELECT_OUT);
     }
 	udata.u_files[uindex] = NO_FILE;
-	udata.u_cloexec &= ~(1UL << uindex);
+	uf_cloexec_clear(&udata, uindex);
 	oft_deref(oftindex);
 
 	/* if we closed a file in write mode, flush the device's cache after inode has been deferenced */

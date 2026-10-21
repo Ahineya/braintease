@@ -3,7 +3,7 @@ use super::VM;
 use crate::constants::*;
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind},
     style::ResetColor,
     terminal::{self, ClearType},
     ExecutableCommand,
@@ -39,6 +39,27 @@ impl VM {
     fn accept_terminal_event(&mut self, event: Event) {
         match event {
             Event::Key(key) => self.accept_terminal_key(key),
+            // The host event reader consumes mouse escape packets, just as it
+            // consumes arrow keys. Re-encode them for guest curses/mux input.
+            Event::Mouse(mouse) if self.display_mode != DISP_TEXT40 => {
+                let button = |b| match b { MouseButton::Left => 0, MouseButton::Middle => 1, MouseButton::Right => 2 };
+                let (mut code, released) = match mouse.kind {
+                    MouseEventKind::Down(b) => (button(b), false),
+                    MouseEventKind::Up(b) => (button(b), true),
+                    MouseEventKind::Drag(b) => (32 | button(b), false),
+                    MouseEventKind::Moved => (35, false),
+                    MouseEventKind::ScrollUp => (64, false),
+                    MouseEventKind::ScrollDown => (65, false),
+                    MouseEventKind::ScrollLeft => (66, false),
+                    MouseEventKind::ScrollRight => (67, false),
+                };
+                if code & 32 != 0 && self.input_buffer.len() > 65536 - 128 { return; }
+                if mouse.modifiers.contains(KeyModifiers::SHIFT) { code |= 4; }
+                if mouse.modifiers.contains(KeyModifiers::ALT) { code |= 8; }
+                if mouse.modifiers.contains(KeyModifiers::CONTROL) { code |= 16; }
+                self.input_buffer.extend(format!("\x1b[<{code};{};{}{}", u32::from(mouse.column)+1,
+                    u32::from(mouse.row)+1, if released { 'm' } else { 'M' }).bytes());
+            }
             // Crossterm consumes the host's paste delimiters. Restore them for
             // the guest terminal application, retaining text and controls as
             // a single ordered backlog rather than synthesizing key events.
@@ -143,6 +164,7 @@ impl VM {
     /// Disable TTY input mode
     pub(super) fn disable_tty_input(&mut self) {
         if self.tty_input_enabled {
+            let _ = io::stderr().execute(event::DisableMouseCapture);
             let _ = terminal::disable_raw_mode();
             self.tty_input_enabled = false;
         }
@@ -175,6 +197,7 @@ impl VM {
         }
 
         // Restore terminal
+        let _ = io::stderr().execute(event::DisableMouseCapture);
         let _ = terminal::disable_raw_mode();
         self.terminal_raw_mode = false;
     }
@@ -227,6 +250,7 @@ pub fn install_terminal_cleanup_hook() {
     let original_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
         // Try to restore terminal before panicking
+        let _ = io::stderr().execute(event::DisableMouseCapture);
         let _ = terminal::disable_raw_mode();
         let _ = io::stderr().execute(cursor::Show);
         let _ = io::stderr().execute(terminal::LeaveAlternateScreen);
@@ -240,6 +264,20 @@ pub fn install_terminal_cleanup_hook() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_mouse_packets_survive_host_event_decoding() {
+        use crossterm::event::MouseEvent;
+        let mut vm = VM::with_memory_size(64,4096);vm.display_mode=DISP_TTY;
+        for kind in [MouseEventKind::Down(MouseButton::Left),MouseEventKind::Drag(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),MouseEventKind::ScrollUp] {
+            vm.accept_terminal_event(Event::Mouse(MouseEvent {kind,column:4,row:2,modifiers:KeyModifiers::CONTROL}));
+        }
+        assert_eq!(vm.input_buffer.iter().copied().collect::<Vec<_>>(),b"\x1b[<16;5;3M\x1b[<48;5;3M\x1b[<16;5;3m\x1b[<80;5;3M");
+        vm.input_buffer.clear();vm.display_mode=DISP_TEXT40;
+        vm.accept_terminal_event(Event::Mouse(MouseEvent {kind:MouseEventKind::Moved,column:0,row:0,modifiers:KeyModifiers::NONE}));
+        assert!(vm.input_buffer.is_empty());
+    }
 
     #[test]
     fn clipboard_paste_preserves_boundaries_unicode_and_literal_controls() {

@@ -1,0 +1,47 @@
+{Module Todo/AddTodo
+  {Export AddTodoView}
+  {Rules 
+    {R "AddTodoView"
+      {/@ AddTodoView {App {State {NextId n_} {Todos todos...} {Filter f_}} _}}
+      {Div :class "flex gap-2"
+        {Div :class "flex gap-2 grow"
+          {Input 
+            :id "new-todo-input"
+            :type "text"
+            :placeholder "New todo..."
+            :class "border p-2 flex-grow rounded"
+            :value {Input todoInput}
+            :onKeydown {When {KeyIs "Enter"}
+                                {PreventDefault
+                                  {Seq
+                                    {AddTodo {Input todoInput}}
+                                    {ClearInput todoInput}}}}
+          }
+        }
+        {Button 
+          :class "bg-green-500 text-white px-4 py-2 rounded"
+          :onClick {Seq
+                      {AddTodo {Input todoInput}}
+                      {ClearInput todoInput}
+                   }
+          "Add"
+        }
+      }
+    }
+
+    {R "AddTodo/Action"
+      Apply(AddTodo(text_), {State {NextId n_} {Todos todos...} {Filter f_}})
+      {State 
+        {NextId Add(n_, 1)} 
+        {Todos todos... {Todo {Id n_} {Text text_} {Done False}}} 
+        {Filter f_}
+      }
+      :guard And(Not(Eq(text_, "")), Not(Eq(text_, Null)))
+    }
+    {R "AddTodo/Empty"
+      Apply(AddTodo(text_), {State s...})
+      {State s...}
+      :guard Or(Eq(text_, ""), Eq(text_, Null))
+    }
+  }
+}

@@ -89,11 +89,11 @@ blocking operations with `EINTR`.
 | Receive storage per local endpoint | 1,024 C16 cells |
 
 An established local connection uses two endpoints. Internet and local pools
-are independent but share the system inode/open-file tables. Descriptor limits are 32 per process on both kernels. Closing internet sockets
+are independent but share the system inode/open-file tables. Descriptor limits are 128 per process on the maintained kernels. Closing internet sockets
 may retain a slot during protocol cleanup; local slots are released immediately.
 The compact TCP TIME_WAIT table holds 128 entries. Listener descriptors and
 accepted connections share the 64 internet endpoints; these ceilings are not
-additive. A single process still has 32 descriptors for sockets and other files.
+additive. A single process has 128 descriptors shared by sockets and other files.
 
 Ripple keeps the control table in bank 5, the first sixteen internet endpoints
 in bank 6, and local endpoints in bank 7. Additional endpoint chunks, active TCP

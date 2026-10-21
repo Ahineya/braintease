@@ -1,7 +1,13 @@
 # FuseDE foundation
 
-FuseDE is the custom RVM/Riplix desktop. Shared application UI and the applications
-bar must also compile for Fuse-X. The [implementation plan](../../docs/fusede/implementation-plan.md)
+This is the earlier Nano-X/Slate desktop experiment. New FuseDE development
+follows the [Graphite roadmap](../../docs/graphics/graphite-roadmap.md), using
+the shared LVGL components and the portable single-window desktop policy.
+The code and assets here remain available for the existing RVM desktop and
+compatibility tests; they are not the foundation for the new application UI.
+Lucide source artwork continues to feed the Graphite icon pipeline.
+
+The original [implementation plan](../../docs/fusede/implementation-plan.md)
 records the asset research, current gaps, borderless/window roles, portable dock
 and next guest milestones.
 

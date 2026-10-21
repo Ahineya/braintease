@@ -24,8 +24,8 @@ def main():
             formatter = result.stdout.strip()
     if not formatter:
         parser.error('clang-format is required; pass its path with --clang-format')
-    files = [HERE / 'preprocessor.c']
-    for directory in ['src', 'ripple', 'asm', 'driver', 'guest']:
+    files = [HERE / 'preprocessor.c', HERE / 'native-format.h']
+    for directory in ['src', 'ripple', 'asm', 'driver', 'guest', 'qbe', 'x64', 'native', 'x64-link', 'native-driver', 'native-archive', 'native-sdk']:
         files += sorted((HERE / directory).glob('*.[ch]'))
     command = [formatter, *(['-i'] if args.format else ['--dry-run', '--Werror']), *map(str, files)]
     subprocess.run(command, check=True)

@@ -21,6 +21,11 @@
 #include "nx_clipboard.h"
 #define OUTPUT_CELLS 8192
 #define CLIENT_LIMIT 12
+#ifdef NXR_HOSTED
+#define PIXMAP_LIMIT 512
+#else
+#define PIXMAP_LIMIT 16
+#endif
 struct peer {
     unsigned used, sent, length, opened, bad, direct;
     char input[2*MAXREQUESTSZ], output[OUTPUT_CELLS];
@@ -94,7 +99,7 @@ static int resources(nxReq *r){
             for(w=listwp;w;w=w->next)++n;
             return n<256&&depth_ok(find_window(((nxNewWindowReq *)r)->parentid));
         case GrNumNewGC:case GrNumCopyGC:for(g=listgcp;g;g=g->next)++n;return n<128;
-        case GrNumNewPixmapEx:n=nxr_image_count();for(p=listpp;p;p=p->next)if(!nxr_internal_pixmap(p))++n;return n<16;
+        case GrNumNewPixmapEx:n=nxr_image_count();for(p=listpp;p;p=p->next)if(!nxr_internal_pixmap(p))++n;return n<PIXMAP_LIMIT;
         case GrNumCreateFontEx:for(font=listfontp;font;font=font->next)++n;return n<32;
         case GrNumNewCursor:for(cursor=listcursorp;cursor;cursor=cursor->next)++n;return n<64;
         case GrNumNewRegion:case GrNumNewBitmapRegion:for(region=listregionp;region;region=region->next)++n;return n<128;
@@ -108,7 +113,7 @@ static int resources(nxReq *r){
 /* Only audited requests are enabled. Fixed requests must match exactly;
  * variable requests check their full payload before any upstream code sees it. */
 static int valid(nxReq *r,unsigned n){
-    unsigned size=0,extra;char *data;
+    unsigned size=0,extra,i,total;char *data;
     if(r->reqType==251)return nxr_clipboard_valid(r,n);
     if(r->reqType==252)return nxr_workspace_valid(r,n);
     if(r->reqType==253)return nxr_image_valid(r,n);
@@ -120,6 +125,14 @@ static int valid(nxReq *r,unsigned n){
     if(n<size)return 0;
     extra=n-size;data=(char *)r+size;
     switch(r->reqType){
+        case GrNumSetGCLineAttributes:
+            return !extra&&(((nxSetGCLineAttributesReq *)r)->linestyle==GR_LINE_SOLID||
+                ((nxSetGCLineAttributesReq *)r)->linestyle==GR_LINE_ONOFF_DASH);
+        case GrNumSetGCDash:
+            /* The upstream engine stores the repeating pattern in 32 bits. */
+            if(((nxSetGCDashReq *)r)->count!=extra||extra>32)return 0;
+            total=0;for(i=0;i<extra;i++){if(data[i]<=0||data[i]>32)return 0;total+=data[i];}
+            return total<=32;
         case GrNumOpen:return !extra&&((nxOpenReq *)r)->c16_magic==0x4e583102UL&&((nxOpenReq *)r)->c16_direct<=1;
         case GrNumText:{nxTextReq *t=(nxTextReq *)r;return t->count>=0&&(unsigned)t->count==extra&&!(t->flags&(MWTF_UC16|MWTF_UC32|MWTF_XCHAR2B));}
         case GrNumGetGCTextSize:{nxGetGCTextSizeReq *t=(nxGetGCTextSizeReq *)r;return t->charcount==extra&&!(t->flags&MWTF_PACKMASK);}

@@ -39,6 +39,8 @@ def build_host(source,output,rfl,rcc,build=None):
             sources.append(ROOT/'rfl/host/cells.c')
         if '@rfl_text_paint' in text or '@rfl_text_input' in text:
             sources.append(ROOT/'rfl/host/text.c')
+        if "@rfl_sftp_" in text:
+            sources.append(ROOT/"ports/ssh/commander.c")
         units=[program]
         for i,path in enumerate(sources):
             ir=work/f'bridge-{i}.ir'

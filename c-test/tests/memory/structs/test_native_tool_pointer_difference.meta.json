@@ -1,0 +1,5 @@
+{
+  "use_runtime": true,
+  "description": "Pointer subtraction survives conditional constant-expression probing",
+  "expected": "Y\n"
+}

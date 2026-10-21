@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PORT = Path(__file__).resolve().parent
 SOURCES = ['wolfcrypt/src/' + n + '.c' for n in CRYPTO if n not in ('asn_orig', 'asn_tsp')]
 SOURCES += ['src/' + n + '.c' for n in ('ssl', 'tls', 'tls13', 'internal', 'keys', 'wolfio')]
-SOURCES += ['@/ripple_tls.c', '@/ripple_crypto.c', '@/ripple_http.c']
+SOURCES += ['@/ripple_tls.c', '@/ripple_crypto.c', '@/ripple_http.c', '@/../../libraries/deflate/deflate.c', '@/../../libraries/deflate/gzip.c']
 
 
 def build(output, compiler, target='native', jobs=3, config=None):
@@ -27,7 +27,7 @@ def build(output, compiler, target='native', jobs=3, config=None):
     flags = ['--target', target, '-DRIPPLE_MMU=1', '-DNO_64BIT', '-DWOLFSSL_USER_SETTINGS']
     includes = [PORT, config, source, ROOT / 'ports/fuzix/ripple/include',
                 ROOT / 'ports/fuzix/upstream/Library/include', ROOT / 'runtime/include',
-                ROOT / 'ports/fuzix/ripple']
+                ROOT / 'ports/fuzix/ripple', ROOT / 'libraries/deflate']
     digest = hashlib.sha256(str((compiler, compiler.stat().st_mtime_ns, flags)).encode())
     for directory in includes:
         for path in sorted(directory.glob('*.h') if directory == PORT else directory.rglob('*.h')):
@@ -76,6 +76,7 @@ def shared_library(inputs, sdk, compiler, linker=None):
     libc = sdk / 'lib/libc.fxl.1'
     output = sdk / 'lib/libtls.fxl.1'
     key = hashlib.sha256(str((linker, linker.stat().st_mtime_ns)).encode())
+    key.update(os.environ.get('RCC_NATIVE_MEMORY', 'checked').encode())
     key.update(libc.read_bytes())
     # The supported guest API is the portable facade. Exporting every wolfSSL
     # implementation symbol also roots optional APIs excluded by this port's

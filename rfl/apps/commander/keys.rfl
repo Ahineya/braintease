@@ -1,5 +1,5 @@
 import { UP, DOWN, LEFT, RIGHT, HOME, END, BACKSPACE, PAGE_UP, PAGE_DOWN, CLOSED, function_key } from "std/curses";
-export type Action = Navigate(i16) | First | Last | Enter | Parent | Switch | Reload | Copy | Move | Mkdir | Delete | View | Quit | Console | SinglePanel | ThemeMenu | About | Edit | Rename | NoAction;
+export type Action = Navigate(i16) | First | Last | Enter | Parent | Switch | Reload | Copy | Move | Mkdir | Delete | View | Quit | Console | SinglePanel | ThemeMenu | About | Edit | Rename | Network | NoAction;
 export fn action(key: i16, page: i16) -> Action {
     if (key == CLOSED || key == 3 || key == 113 || key == function_key(10)) {
         Quit
@@ -41,6 +41,8 @@ export fn action(key: i16, page: i16) -> Action {
         View
     } else if (key == function_key(9)) {
         ThemeMenu
+    } else if (key == 115) {
+        Network
     } else if (key == 15) {
         Console
     } else if (key == 16) {

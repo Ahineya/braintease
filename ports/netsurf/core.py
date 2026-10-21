@@ -34,6 +34,8 @@ def build_core(output, compiler, target, jobs=3):
     # The core uses the full floating-point SDK. NO_64BIT also remaps
     # double math calls to the SDK's absent float variants, so omit it here.
     flags = ['--target', target, '-DRIPPLE_MMU=1', '-DNDEBUG']
+    if target == 'native':
+        flags += ['-DRIPPLE_NETSURF_HOSTED=1']
     flags += [v for directory in core_includes(source) for v in ('-I', str(directory))]
     digest = hashlib.sha256(str((compiler, compiler.stat().st_mtime_ns, flags)).encode())
     for directory in [PORT / 'config', source]:

@@ -19,7 +19,7 @@ import time
 HERE = Path(__file__).resolve().parent
 PORT = HERE.parent / 'ports/fuzix'
 NETWORK = set('ifconfig ping telnet telnetd htget dig echoping ntpdate host nslookup lynx netsurf'.split())
-ALIASES = dict(mv='cp', ln='cp', vi='rift', tcl='picol', tclsh='picol', sokoban='sok', nslookup='host')
+ALIASES = dict(crond='cron', mv='cp', ln='cp', vi='rift', tcl='picol', tclsh='picol', sokoban='sok', nslookup='host')
 # The first GX device is MMU/RVM-only; native window service is a later milestone.
 RVM_ONLY = {'gterm', 'nxdraw', 'nano-X', 'nanowm', 'nxlaunch', 'nxterm', 'startx', 'nxeyes', 'nxclock', 'nxroach'}
 
@@ -28,7 +28,7 @@ def names():
     text = (PORT / 'Makefile').read_text()
     return sorted(set(re.findall(r'^APPS\s*[:+]=\s*(.*)$', text, re.M)[0].split() +
                       [n for line in re.findall(r'^APPS\s*\+=\s*(.*)$', text, re.M) for n in line.split()] +
-                      ['sh', 'mv', 'ln', 'vi', 'tcl', 'tclsh', 'sokoban', 'nslookup', 'netsurf']) - RVM_ONLY)
+                      ['crond', 'sh', 'mv', 'ln', 'vi', 'tcl', 'tclsh', 'sokoban', 'nslookup', 'netsurf', 'svcd', 'svc', 'console-session']) - RVM_ONLY)
 
 
 def recipe(name):
@@ -37,6 +37,10 @@ def recipe(name):
     name = ALIASES.get(name, name)
     base = PORT / 'upstream/Applications'
     flags = ['-DUIDGID=0']
+    if name in ('svcd', 'svc', 'console-session'):
+        directory = PORT.parent / 'services'
+        source = {'svcd':'manager.c', 'svc':'client.c', 'console-session':'console.c'}[name]
+        return [directory / source, directory / 'config.c', HERE.parent / 'libraries/ini/ini.c'], ['-I'+str(HERE.parent / 'libraries/ini')]
     if name == 'netsurf':
         roots = [PORT.parent / 'netsurf', *[HERE.parent / 'libraries' / name
                  for name in ('image', 'deflate', 'unicode')]]
@@ -90,6 +94,8 @@ def recipe(name):
         sources = [PORT / 'awk' / (s + '.c') for s in
                    'awkgram.tab b main parse proctab tran lib run lex'.split()]
         return sources + [PORT / 'ripple/awk-support.c'], ['-I' + str(PORT / 'awk'), '--float-format']
+    if name in ('cron', 'at', 'atrun'):
+        return [base / f'V7/cmd/{name}.c', PORT / 'ripple/schedule.c'], flags
     if name in 'find test expr make m4'.split():
         source = base / f'MWC/cmd/{name}.c'
     elif name in 'comm rev join split tsort tty nice time clear pr col diff diffh diff3 dc'.split():
@@ -131,7 +137,15 @@ def main():
     build = args.build.resolve()
     (build / 'apps').mkdir(parents=True, exist_ok=True)
     (build / 'application-logs').mkdir(exist_ok=True)
-    sdk = hashlib.sha256()
+    from memory_mode import selected as native_memory_mode
+    try:
+        memory_mode = native_memory_mode()
+    except ValueError as error:
+        parser.error(str(error))
+    sdk = hashlib.sha256(memory_mode.encode())
+    heap_profile=os.environ.get('FUSE_X_HEAP_PROFILE','hosted')
+    if heap_profile not in ('hosted','bounded'):parser.error('FUSE_X_HEAP_PROFILE must be hosted or bounded')
+    sdk.update(heap_profile.encode())
     sdk.update(os.environ.get('FUSE_X_SHARED_LIBRARIES','1').encode())
     sdk.update(str((args.compiler.resolve(), args.compiler.stat().st_mtime_ns)).encode())
     sdk.update((HERE.parent / 'target/release/librcc_native_runtime.a').read_bytes())
@@ -283,7 +297,7 @@ def main():
         print(f'{name}: {status}', flush=True)
         record = dict(name=name, status=status, runtime='not tested', fingerprint=key,
                     requirements=['hosted networking'] if name in NETWORK else [],
-                    sources=[str(s.relative_to(HERE.parent)) if name in ('rift', 'netsurf') else
+                    sources=[str(s.relative_to(HERE.parent)) if name in ('rift', 'netsurf', 'svcd', 'svc', 'console-session') else
                              str(s.relative_to(PORT.parent)) if name in ('lynx', 'basic', 'chat') else
                              str(s.relative_to(PORT)) for s in sources],
                     log=str(log), seconds=round(time.monotonic() - start, 2),

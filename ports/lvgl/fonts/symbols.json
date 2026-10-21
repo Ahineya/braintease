@@ -1,0 +1,21 @@
+{
+  "archive_sha256": "b20ee3acc1bba13c62d854f9ebd62e4c51e0b443b1e0225892e86442defa84df",
+  "sources": {
+    "14": {
+      "member": "lvgl-9.6.0/src/font/lv_font_montserrat_14.c",
+      "sha256": "636304b5f5ff30deea36893c17c701b20c310afb15ee7fe31bf85dceca05b397"
+    },
+    "28": {
+      "member": "lvgl-9.6.0/src/font/lv_font_montserrat_28.c",
+      "sha256": "3b35c15538fb57c89e6cc184b08a6bab455ee304c30d82343a1d4a3ede7788ce"
+    }
+  },
+  "codepoints": [
+    61452
+  ],
+  "sizes": [
+    14,
+    28
+  ],
+  "format": "static A8; exact nibble expansion of original A4"
+}

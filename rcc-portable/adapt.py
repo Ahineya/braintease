@@ -18,12 +18,12 @@ def adapt(name, source):
     if name == 'pp':
         return (HERE / 'preprocessor.c').read_text()
     if name == 'scan':
-        source = source.replace('FILE *file;', 'FILE *file;\n\tconst char *text;\n\tsize_t pos;')
+        source = source.replace('FILE *file;', 'FILE *file;\n\tconst char *text;\n\tchar *owned_text;\n\tsize_t pos, textlen;')
         source = source.replace('static void\nnextchar', '''static int
 inputget(struct scanner *s)
 {
     if (!s->text) return getc(s->file);
-    return s->text[s->pos] ? (unsigned char)s->text[s->pos++] : EOF;
+    return s->pos < s->textlen ? (unsigned char)s->text[s->pos++] : EOF;
 }
 
 static void
@@ -39,9 +39,51 @@ nextchar''')
         source = source.replace('getc(s->file)', 'inputget(s)').replace('ungetc(c, s->file)', 'inputback(s, c)').replace('ungetc(s->chr, s->file)', 'inputback(s, s->chr)')
         # Keep the actual file operations inside the input abstraction.
         source = source.replace('if (!s->text) return inputget(s);', 'if (!s->text) return getc(s->file);').replace('else inputback(s, c);', 'else ungetc(c, s->file);')
-        source = source.replace('s->file = file;', 's->file = file;\n\ts->text = NULL;\n\ts->pos = 0;\n\ts->chr = 0;\n\ts->sawspace = false;')
+        # Translation phase one: normalize CRLF/lone CR before backslash-newline
+        # splicing. Guest stdio does not translate text-mode line endings.
+        source = source.replace('inputget(struct scanner *s)', 'inputraw(struct scanner *s)', 1)
+        marker = 'static void\nnextchar'
+        source = source.replace(marker, '''static int
+inputget(struct scanner *s)
+{
+    int c = inputraw(s), next;
+    if (c != '\\r') return c;
+    next = inputraw(s);
+    if (next != '\\n') inputback(s, next);
+    return '\\n';
+}
+
+''' + marker, 1)
+        # RED test_preprocessor_deep_includes: keeping each parent FILE open
+        # exhausts guest descriptors before our advertised 128-level limit.
+        # Snapshot an include, close it immediately, and release its storage
+        # with that scanner. Root input retains streaming/stdin behavior.
+        source = source.replace('s->file = file;', '''s->file = file;
+    s->text = NULL;
+    s->owned_text = NULL;
+    s->textlen = 0;
+    if (file && file != stdin) {
+        struct buffer contents = {0};
+        int c, failed;
+        while ((c = getc(file)) != EOF)
+            bufadd(&contents, c);
+        failed = ferror(file);
+        if (fclose(file) || failed)
+            fatal("cannot read include %s:", name);
+        bufadd(&contents, 0);
+        s->text = s->owned_text = (char *)contents.str;
+        s->textlen = contents.len - 1;
+        s->file = NULL;
+    }
+    s->pos = 0;
+    s->chr = 0;
+    s->sawspace = false;''')
+        source = source.replace('if (file)\n\t\tnextchar(s);',
+                                'if (s->file || s->text)\n\t\tnextchar(s);')
+        source = source.replace('if (!scanner->file) {', 'if (!scanner->file && !scanner->text) {')
         source = source.replace('static void\nscanclose(void)', 'static void\nscanclose(void)')
         source = source.replace('fclose(scanner->file);', 'if (scanner->file && scanner->file != stdin) fclose(scanner->file);')
+        source = source.replace('free(scanner->buf.str);', 'free(scanner->owned_text);\n\tfree(scanner->buf.str);')
         begin = source.index('\tscanner->sawspace = false;\n\tfor (;;) {', source.index('void\nscan(struct token *t)'))
         end = source.index('\tif (scanner->usebuf)', begin)
         source = source[:begin] + '\tscanner->sawspace = false;\n\tt->kind = scankind(scanner, &t->loc);\n\tt->pphide = NULL;\n' + source[end:]
@@ -50,6 +92,7 @@ void scanstring(const char *text, struct location loc)
 {
     scanfrom(loc.file, NULL);
     scanner->text = text;
+    scanner->textlen = strlen(text);
     scanner->loc = loc;
     if (scanner->loc.col) --scanner->loc.col;
     nextchar(scanner);

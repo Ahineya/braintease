@@ -1,0 +1,33 @@
+// Mounted guest SFTP services. SSH itself runs in the sftp-mount process.
+import { IoError, Errno } from "std/posix";
+extern "C" {
+    fn rfl_sftp_status(index: u16, data: *mut u32, path: *mut u8) -> i16;
+    fn rfl_sftp_unmount(index: u16) -> i16;
+}
+export struct Connection {
+    index: u16,
+    path: String,
+    connected: bool,
+    pid: u32
+}
+export fn connections() -> Result<Vec<Connection>, IoError> {
+    let mut result: Vec<Connection> = [];
+    for (index in 0..4) {
+        let mut data: Vec<u32> = [0, 0];
+        let mut path: Vec<u8> = [];
+        for (i in 0..512) { path.push(0); }
+        let status = unsafe { rfl_sftp_status(index as u16, &mut data[0], &mut path[0]) };
+        if (status < 0) { return Err(Errno(-status)); }
+        if (data[0] != 0) {
+            let mut name = "";
+            let mut at: usize = 0;
+            while (at < path.len() && path[at] != 0) { name = name + from_byte(path[at]); at += 1; }
+            result.push(Connection { index: index as u16, path: name, connected: data[0] == 1, pid: data[1] });
+        }
+    }
+    Ok(result)
+}
+export fn unmount(index: u16) -> Result<unit, IoError> {
+    let status = rfl_sftp_unmount(index);
+    if (status < 0) { Err(Errno(-status)) } else { Ok({}) }
+}

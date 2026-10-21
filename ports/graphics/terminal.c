@@ -54,6 +54,24 @@ int vt_init_size(struct vt *t,unsigned cols,unsigned rows) {
     return 0;
 }
 void vt_init(struct vt *t) {vt_init_size(t,VT_DEFAULT_COLS,VT_DEFAULT_ROWS);}
+unsigned vt_mouse_report(struct vt *t,char *out,unsigned button,int x,int y,int released,int motion,unsigned modifiers) {
+    unsigned code,n;
+    if(!t->mouse_mode||!t->cols||!t->rows)return 0;
+    if(motion&&(t->mouse_mode==1000||(t->mouse_mode==1002&&button==3)))return 0;
+    if(button>67||(button>3&&button<64)||(released&&button>=64))return 0;
+    if(x<0)x=0;if(y<0)y=0;
+    if((unsigned)x>=t->cols)x=t->cols-1;if((unsigned)y>=t->rows)y=t->rows-1;
+    code=button|(modifiers&28)|(motion?32:0);
+    if(motion&&t->mouse_known&&t->mouse_x==(unsigned)x&&t->mouse_y==(unsigned)y&&t->mouse_code==code)return 0;
+    if(t->mouse_sgr)n=snprintf(out,40,"\033[<%u;%u;%u%c",code,(unsigned)x+1,(unsigned)y+1,released?'m':'M');
+    else {
+        if(x>=223||y>=223)return 0;
+        out[0]=27;out[1]='[';out[2]='M';out[3]=32+(released?3|(modifiers&28):code);
+        out[4]=33+x;out[5]=33+y;out[6]=0;n=6;
+    }
+    if(button<3&&!motion){if(released)t->mouse_buttons&=~(1U<<button);else t->mouse_buttons|=1U<<button;}
+    t->mouse_known=1;t->mouse_x=x;t->mouse_y=y;t->mouse_code=code;return n;
+}
 int vt_resize(struct vt *t,unsigned cols,unsigned rows) {
     struct vt_cell *next[2];
     unsigned plane,y,x,oldcols=t->cols,oldrows=t->rows,width,height;
@@ -130,6 +148,10 @@ static void csi(struct vt *t,unsigned c) {
             case 1:t->appcursor=on;break;
             case 7:t->wrap=on;t->pending=0;break;
             case 25:t->visible=on;break;
+            case 1000:case 1002:case 1003:
+                if(on)t->mouse_mode=t->params[i];else if(t->mouse_mode==t->params[i])t->mouse_mode=0;
+                t->mouse_known=t->mouse_buttons=0;break;
+            case 1006:t->mouse_sgr=on;t->mouse_known=0;break;
             case 2004:t->bracketed_paste=on;break;
             case 2026:t->synchronized=on;break;
             case 47:case 1047:case 1049:
@@ -278,15 +300,24 @@ void vt_feed(struct vt *t,const char *s,unsigned size) {
             /* Otherwise reprocess the rejected ASCII/control/ESC below. */
         }
         if(c<32||t->parser){t->last_at=0;t->grapheme.started=0;}
-        if(t->parser==3){if(c==7)t->parser=0;else if(c==27)t->parser=4;continue;}
-        if(t->parser==4){t->parser=c=='\\'?0:3;continue;}
+        if(t->parser==3){
+            if(c==7){if(t->osc_active&&t->osc)t->osc(t,0,1);t->osc_active=t->parser=0;}
+            else if(c==24||c==26){if(t->osc_active&&t->osc)t->osc(t,0,-1);t->osc_active=t->parser=0;}
+            else if(c==27)t->parser=4;
+            else if(t->osc_active&&t->osc)t->osc(t,c,0);
+            continue;
+        }
+        if(t->parser==4){
+            if(t->osc_active){if(t->osc)t->osc(t,0,c=='\\'?1:-1);t->osc_active=0;}
+            t->parser=c=='\\'?0:3;continue;
+        }
         if(t->parser==6){if(c==27)t->parser=4;continue;}
         if(t->parser==5){if(t->charset_target)t->g1=c=='0';else t->g0=c=='0';t->parser=0;continue;}
         if(t->parser==1) {
             t->parser=0;
             switch(c) {
             case '[':t->parser=2;t->count=t->private_mode=t->intermediate=0;memset(t->params,0,sizeof(t->params));break;
-            case ']':t->parser=3;break;
+            case ']':t->parser=3;t->osc_active=1;if(t->osc)t->osc(t,0,-1);break;
             case 'P':case '^':case '_':t->parser=6;break;
             case '(':case ')':t->charset_target=c==')';t->parser=5;break;
             case '7':t->sx=t->x;t->sy=t->y;break;
@@ -296,6 +327,7 @@ void vt_feed(struct vt *t,const char *s,unsigned size) {
             case 'M':if(t->y==t->top)scroll(t,-1);else if(t->y)--t->y;break;
             case 'c':
                 t->x=t->y=t->top=t->pending=t->alternate=t->appcursor=t->bracketed_paste=0;
+                t->mouse_mode=t->mouse_sgr=t->mouse_buttons=t->mouse_known=0;
                 t->bottom=t->rows-1;t->fg=7;t->bg=t->bold=t->reverse=t->underline=t->blink=0;t->visible=t->wrap=1;
                 t->g0=t->g1=t->shift=0;
                 erase(t,0,t->rows*t->cols);break;

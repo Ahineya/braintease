@@ -164,12 +164,12 @@ impl Cg<'_, '_> {
                 return Err("invalid resumable variadic call".into());
             }
             let offset = self.k(self.var_area as i64);
-            let base = self.runtime("rcc_native_gep", &[self.frame, offset])?;
+            let base = self.logical_gep(self.frame, offset)?;
             let mut cursor = base;
             for (index, arg) in args.iter().enumerate().skip(*fixed) {
                 let count = self.k(argument_words(arg, &self.types) as i64);
                 self.runtime("rcc_native_store", &[cursor, values[index], count])?;
-                cursor = self.runtime("rcc_native_gep", &[cursor, count])?;
+                cursor = self.logical_gep(cursor, count)?;
             }
             values.truncate(*fixed);
             values.push(base);
@@ -365,6 +365,8 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             va_input: None,
             var_area,
             bound_globals: BTreeMap::new(),
+            read_view: None,
+            read_region: false,
         };
         cg.bind_globals(function)?;
         let size = cg.k(i64::try_from(cells).map_err(|_| "native frame size overflow")?);
@@ -396,7 +398,11 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
         let mut pc = 0u64;
         for (block_index, block) in function.blocks.iter().enumerate() {
             cg.b.switch_to_block(cg.blocks[&block.id]);
+            cg.read_view = None;
+            let regions = super::memory::read_regions(&block.instructions);
             for (position, instruction) in block.instructions.iter().enumerate() {
+                cg.read_region = regions[position];
+                if !cg.read_region { cg.read_view = None; }
                 let backward = |target: &u32| {
                     function.blocks[..=block_index]
                         .iter()

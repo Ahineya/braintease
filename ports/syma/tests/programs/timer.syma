@@ -1,0 +1,13 @@
+{Universe
+ {Program {Effects {Pending {ReadLine input} {Timer timer {Delay 30}}} {Inbox}}}
+ {Rules
+  {R tick {Program {Effects {Pending ..} {Inbox {TimerComplete timer n_} ..}}}
+   {Program {Effects {Pending .. {Print tick {Message "TIMER_OK\n"}}} {Inbox ..}}}}
+  {R print-done {Program {Effects p_ {Inbox before.. {PrintComplete tick Success} after..}}}
+   {Program {Effects p_ {Inbox before.. after..}}}}
+  {R input {Program {Effects {Pending ..} {Inbox before.. {ReadLineComplete input {Text "Alice"}} after..}}}
+   {Program {Effects {Pending .. {Print done {Message "INPUT_OK\n"}}} {Inbox before.. after..}}}}
+  {R done {Program {Effects p_ {Inbox {PrintComplete done Success}}}}
+   {Program {Effects {Pending {Exit 0}} {Inbox}}}}
+ }
+}

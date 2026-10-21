@@ -45,7 +45,11 @@ int main(void) {
     p=realloc(q,32);C(p!=NULL && (unsigned char)p[0]==0xabcd);
     q=realloc(p,~0UL);C(q==NULL && (unsigned char)p[0]==0xabcd);free(p);
     for(n=0;n<40;n++) {large[n]=malloc(LARGE_CHUNK);if(!large[n])break;large[n][LARGE_CHUNK-1]=n;}
+#if defined(FUSE_X_USER) && !defined(FUSE_X_BOUNDED_HEAP)
+    C(n==40); /* The hosted heap is no longer exhausted by 40 MiB. */
+#else
     C(n>0 && n<40);
+#endif
     for(i=0;i<n;i++)C((unsigned char)large[i][LARGE_CHUNK-1]==i);
     for(i=0;i<n;i++)free(large[i]);
     p=malloc(140000UL);C(p!=NULL);free(p);

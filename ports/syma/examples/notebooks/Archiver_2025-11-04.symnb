@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "name": "Archiver",
+    "created": "2025-11-03T21:11:31.537Z",
+    "modified": "2025-11-04T18:33:20.755Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "VKNtDN64Pfabp_8lsjRLZ",
+      "type": "code",
+      "content": ":clear\n\n:rule Skip     {Skip n_ {terms..}} -> {Skipping n_ {terms..}}\n:rule Skipping {Skipping n_ {term_ terms..}} -> {Skipping Sub(n_ 1) {terms..}} :guard Gt(n_ 0)\n:rule Skipping/End {Skipping 0 {terms..}} -> {Ok {terms..}}\n:rule Skipping/TooMuch {Skipping _ {}} -> {Ok {}}\n\n:rule Take       {Take n_ Ok({terms..})} -> {Taking n_ {} {terms..}}\n:rule Taking     {Taking n_ {..} {term_ terms..}} -> {Taking Sub(n_, 1) {.. term_} {terms..}} :guard Gt(n_ 0)\n:rule Taking/End {Taking 0 {..} {terms..}} -> {Ok {..}}\n:rule Taking/TooMuch {Taking _ {..} {}} -> {Ok {}}\n\n:rule ReplaceAll {ReplaceAll {pat..} {.. pat.. ..} with_} -> {ReplaceAll {pat..} {.. with_ ..} with_}\n:rule ReplaceAll/End {ReplaceAll {drop..} {..} _} -> Ok({..})\n\n:rule FindSubseq {Find s..} -> {Prepare! Sub(Size({s..}) Sub(Size({s..}), 1)) Sub(Size({s..}), 1) {Perms {Variant 0 s..}}}\n\n; --------\n\n:rule multiline\nPrepare!/Compare\n    {Prepare! _ _ {Perms {Variant _ first_ stuff.. } } }\n->  {Compare! {Maxim 0 0 0 0} {Scratch {Orig first_ stuff..} {Comp stuff..}} {Comp stuff..} {Orig first_ stuff..}}\n:end\n\n; {Maxim maxrun_ cp_ curr_}\n:rule multiline\nCompare!/Step\n    {Compare! {Maxim maxrun_ maxpos_ pos_ currrun_} {Scratch {Orig a_ ..} {Comp b_ ..}} ..}\n->  {Compare! {Maxim maxrun_ maxpos_ Add(pos_ 1) Add(currrun_ 1)} {Scratch {Orig    ..} {Comp    ..}} ..}\n    :guard NormalEq(a_ b_)\n:end\n\n:rule multiline\nCompare!/Step/ConsecutiveTrue\n    {Compare! {Maxim maxrun_  maxpos_ pos_ currrun_} {Scratch {Orig a_ ..} {Comp b_ ..}} ..}\n->  {Compare! {Maxim currrun_ pos_    Add(pos_ 1) 0       } {Scratch {Orig    ..} {Comp    ..}} ..}\n    :guard And(Not(NormalEq(a_ b_)) Gt(currrun_ maxrun_))\n:end\n\n:rule multiline\nCompare!/Step/False\n    {Compare! {Maxim maxrun_  maxpos_ pos_ currrun_ } {Scratch {Orig a_ ..} {Comp b_ ..}} ..}\n->  {Compare! {Maxim maxrun_  maxpos_ Add(pos_ 1) 0        } {Scratch {Orig    ..} {Comp    ..}} ..}\n    :guard And(Not(NormalEq(a_ b_)) Not(Gt(currrun_ maxrun_)))\n:end\n\n:rule multiline\nCompare!/Step/End\n    {Compare! {Maxim maxrun_  maxpos_ pos_ currrun_ } {Scratch {Orig dropo..} {Comp}} {Comp drop_ comp..} {Orig orig..} ..}\n->  {Compare! {Maxim maxrun_  maxpos_ 0 0 } {Scratch {Orig orig..} {Comp comp..}} {Comp comp..} {Orig orig..}}\n:end\n\n:rule multiline\nCompare!/CompleteEnd\n    {Compare! {Maxim maxrun_  maxpos_ pos_ currrun_ } {Scratch {Orig dropo..} {Comp}} {Comp} {Orig orig..} ..}\n->  SentinelEnd(orig..)\n:guard Lte(maxrun_ 4)\n:end\n\n:rule multiline\nCompare!/End\n    {Compare! {Maxim maxrun_  maxpos_ pos_ currrun_ } {Scratch {Orig dropo..} {Comp}} {Comp} {Orig orig..} ..}\n->  {Pat Take(maxrun_ Skip(Sub(maxpos_ maxrun_) {orig..})) {Orig orig..}}\n:end\n\n; --------\n\n:rule multiline\nSubst/Step\n   {Subst     n_    {Substs ..            } {Pat Ok(subst_) {Orig seq..}}}\n-> {Subst Add(n_ 1) {Substs .. {n_ subst_}} ReplaceAll(subst_ {seq..} S(n_))}\n:end\n\n:rule multiline\nSubst/Next\n   {Subst n_ {Substs ..} Ok({substituted..})}\n-> {Subst n_ {Substs ..} {Find substituted..}}\n:end\n\n:rule multiline\nSubst/End\n   {Subst _ {Substs ..} SentinelEnd(compressed..)}\n-> {Compact {Dict ..} compressed..}\n:end\n\n:rule multiline\nCompact\n   {Compact {Dict .. {n_ {strs..}} ..} compressed..}\n-> {Compact {Dict .. {n_ Concat(strs..)} ..} compressed..}\n:end\n\n:rule multiline\nArchive/Syms\nArchive(s..) -> {Subst 0 {Substs} {Find s..}}\n:guard AreSyms(s..)\n:end\n\n:rule multiline\nArchive/String\nArchive(s_) -> {PrepareArchivation SplitBy(\"\" s_)}\n:guard IsStr(s_)\n:end\n\n:rule multiline\nArchive/String/Run\n    {PrepareArchivation Strings(s..)}\n-> {Subst 0 {Substs} {Find s..}}\n:end",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 25 rules\n"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    },
+    {
+      "id": "EH6Nsq5SBmU4CMHDyoo-1",
+      "type": "code",
+      "content": "Archive(\"aaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaa\")",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{Compact\n  {Dict {0 \"aaaaaaaaaaaaaaaaaaa\"}}\n  {S 0}\n  \"a\"\n  \"b\"\n  {S 0}\n  \"a\"\n}"
+        }
+      ],
+      "metadata": {},
+      "disabled": false
+    }
+  ]
+}

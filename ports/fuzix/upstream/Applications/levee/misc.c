@@ -346,6 +346,14 @@ line(char *s, int start, int endd, int *size)
     tabptr = 0;
     while (1) {
 	c = readchar();
+#if RIPPLE
+	/* The legacy insertion buffer cannot move within an unfinished insertion.
+	 * Ignore navigation instead of turning Down into newline or Left into erase.
+	 * Command mode and operator motions handle these keys through movemap. */
+	if (c >= KEY_UP && c <= KEY_IGNORE)
+	    error();
+	else
+#endif
 	if (c < 128 && movemap[c] == INSMACRO)	/* map!ped macro */
 	    insertmacro(mbuffer[lookup(c)].m_text, 1);
 	else if (c == DW) {

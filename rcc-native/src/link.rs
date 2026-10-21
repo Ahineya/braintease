@@ -37,6 +37,15 @@ pub fn compile_hosted_executable(
     applications: &[Module],
     output: &Path,
 ) -> Result<(), String> {
+    let (module, shared) = hosted_module(kernel, applications)?;
+    let bytes = super::compile_object_with_kernel(&module, &shared)?;
+    link_object(bytes, output)
+}
+
+pub(super) fn hosted_module(
+    kernel: &[Module],
+    applications: &[Module],
+) -> Result<(Module, std::collections::BTreeSet<String>), String> {
     use rcc_ir::ir::Linkage;
     let mut shared = std::collections::BTreeSet::new();
     for (index, module) in kernel.iter().enumerate() {
@@ -54,8 +63,7 @@ pub fn compile_hosted_executable(
     }
     let modules: Vec<_> = kernel.iter().chain(applications).cloned().collect();
     let module = super::link_modules(&modules)?;
-    let bytes = super::compile_object_with_kernel(&module, &shared)?;
-    link_object(bytes, output)
+    Ok((module, shared))
 }
 
 fn link_object(bytes: Vec<u8>, output: &Path) -> Result<(), String> {

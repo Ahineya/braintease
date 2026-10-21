@@ -1,0 +1,5 @@
+{
+  "description": "Function-typed parameter declarations decay to callable function pointers",
+  "expected": "Y",
+  "use_runtime": true
+}

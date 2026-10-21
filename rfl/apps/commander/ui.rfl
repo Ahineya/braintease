@@ -13,6 +13,35 @@ export fn visible_rows(screen: &Screen) -> usize {
     }
 }
 
+/// Shared panel geometry for painting and pointer hit testing.
+export fn panel_area(screen: &Screen, state: &Browser, right: bool) -> Rect {
+    let width = screen.columns();
+    let half = if (width < 40) {
+        width / 2
+    } else {
+        let wanted = (width as i32 * state.split as i32 / 100) as i16;
+        if (wanted < 20) {
+            20
+        } else if (wanted > width - 20) {
+            width - 20
+        } else {
+            wanted
+        }
+    };
+    Rect { row: 1, column: if (state.single || !right) {
+        0
+    } else {
+        half
+    }, rows: screen.rows() - 4, columns: if (state.single) {
+        width
+    } else if (right) {
+        width - half
+    } else {
+        half
+    }
+    }
+}
+
 fn panel(screen: &Screen, theme: &Theme, data: &FilePanel, x: i16, width: i16, focused: bool, cache: &mut PanelPaint) {
     let area = Rect { row: 1, column: x, rows: screen.rows() - 4, columns: width };
     let colors = PanelPalette { body: theme.text, directory: theme.directory, selected: theme.selected, inactive: theme.inactive, frame: theme.frame, title: theme.title, muted: theme.muted };
@@ -24,6 +53,7 @@ export struct Paint {
     width: i16,
     height: i16,
     single: bool,
+    split: i16,
     right: bool,
     left: PanelPaint,
     other: PanelPaint,
@@ -31,7 +61,7 @@ export struct Paint {
 }
 
 export fn painting() -> Paint {
-    Paint { valid: false, width: 0, height: 0, single: false, right: false, left: panel_paint(), other: panel_paint(), status: "" }
+    Paint { valid: false, width: 0, height: 0, single: false, split: 50, right: false, left: panel_paint(), other: panel_paint(), status: "" }
 }
 
 export fn render(screen: &Screen, theme: &Theme, state: &Browser) {
@@ -42,7 +72,7 @@ export fn render(screen: &Screen, theme: &Theme, state: &Browser) {
 export fn render_cached(screen: &Screen, theme: &Theme, state: &Browser, cache: &mut Paint) {
     let width = screen.columns();
     let height = screen.rows();
-    let full = !cache.valid || cache.width != width || cache.height != height || (cache.single && !state.single || !cache.single && state.single) || state.single && (cache.right && !state.right_active || !cache.right && state.right_active);
+    let full = !cache.valid || cache.width != width || cache.height != height || cache.split != state.split || (cache.single && !state.single || !cache.single && state.single) || state.single && (cache.right && !state.right_active || !cache.right && state.right_active);
     let selection_changed = full || (cache.right && !state.right_active || !cache.right && state.right_active) || cache.left.path != state.left.path || cache.other.path != state.right.path || cache.left.selected != state.left.cursor.selected || cache.other.selected != state.right.cursor.selected;
     if (full) {
         screen.background(theme.text);
@@ -59,7 +89,7 @@ export fn render_cached(screen: &Screen, theme: &Theme, state: &Browser, cache: 
     if (full) {
         screen.fill(0, 0, width, ' ', theme.status);
         screen.text(0, 1, "RFL Commander", theme.accent);
-        screen.text(0, 16, fitted("^A About  ^O Shell  ^P Layout  r Rename | " + theme.name, width - 17), theme.status);
+        screen.text(0, 16, fitted("s SFTP  ^O Shell  ^P Layout  r Rename | " + theme.name, width - 17), theme.status);
     }
     if (state.single) {
         if (state.right_active) {
@@ -68,7 +98,7 @@ export fn render_cached(screen: &Screen, theme: &Theme, state: &Browser, cache: 
             panel(screen, theme, &state.left, 0, width, true, &mut cache.left);
         }
     } else {
-        let half = width / 2;
+        let half = panel_area(screen, state, true).column;
         panel(screen, theme, &state.left, 0, half, !state.right_active, &mut cache.left);
         panel(screen, theme, &state.right, half, width - half, state.right_active, &mut cache.other);
     }
@@ -92,6 +122,7 @@ export fn render_cached(screen: &Screen, theme: &Theme, state: &Browser, cache: 
     cache.width = width;
     cache.height = height;
     cache.single = state.single;
+    cache.split = state.split;
     cache.right = state.right_active;
     cache.status = state.status;
     screen.cursor(height - 2, 0, false);

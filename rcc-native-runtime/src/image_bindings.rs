@@ -9,6 +9,7 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
     }
     unsafe extern "C" {
         fn rcc_native_poll(ctx: *mut c_void) -> u64;
+        fn rcc_native_memview_v1(ctx: *mut c_void, hint: u64, count: u64, flags: u64) -> u64;
         fn rcc_native_load(ctx: *mut c_void, a0: u64, a1: u64) -> u64;
         fn rcc_native_store(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
         fn rcc_native_gep(ctx: *mut c_void, a0: u64, a1: u64) -> u64;
@@ -60,6 +61,8 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         fn rcc_native_ext_memset(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
         fn rcc_native_ext_memcpy(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
         fn rcc_native_ext_memmove(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
+        fn rcc_native_ext___rcc_cell_copy(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
+        fn rcc_native_ext___rcc_cell_fill(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
         fn rcc_native_ext_strlen(ctx: *mut c_void, a0: u64) -> u64;
         fn rcc_native_ext_strcmp(ctx: *mut c_void, a0: u64, a1: u64) -> u64;
         fn rcc_native_ext_strncmp(ctx: *mut c_void, a0: u64, a1: u64, a2: u64) -> u64;
@@ -81,6 +84,7 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
     }
     Some(match (name, arity) {
         ("rcc_native_poll", 0) => rcc_native_poll as *const () as usize,
+        ("rcc_native_memview_v1", 3) => rcc_native_memview_v1 as *const () as usize,
         ("rcc_native_load", 2) => rcc_native_load as *const () as usize,
         ("rcc_native_store", 3) => rcc_native_store as *const () as usize,
         ("rcc_native_gep", 2) => rcc_native_gep as *const () as usize,
@@ -136,6 +140,8 @@ pub(super) fn resolve(name: &str, arity: usize) -> Option<usize> {
         ("rcc_native_ext_memset", 3) => rcc_native_ext_memset as *const () as usize,
         ("rcc_native_ext_memcpy", 3) => rcc_native_ext_memcpy as *const () as usize,
         ("rcc_native_ext_memmove", 3) => rcc_native_ext_memmove as *const () as usize,
+        ("rcc_native_ext___rcc_cell_copy", 3) => rcc_native_ext___rcc_cell_copy as *const () as usize,
+        ("rcc_native_ext___rcc_cell_fill", 3) => rcc_native_ext___rcc_cell_fill as *const () as usize,
         ("rcc_native_ext_strlen", 1) => rcc_native_ext_strlen as *const () as usize,
         ("rcc_native_ext_strcmp", 2) => rcc_native_ext_strcmp as *const () as usize,
         ("rcc_native_ext_strncmp", 3) => rcc_native_ext_strncmp as *const () as usize,

@@ -2,7 +2,7 @@ import { DirEntry, Metadata, IoError, read_dir, DIRECTORY, SYMLINK } from "std/p
 import { normalize, joined, parent, basename } from "lib/path";
 import { Selection, selection } from "lib/tui_list";
 import { Canvas, Rect, fitted, number } from "lib/tui";
-import { HLINE } from "std/curses";
+import { HLINE, MouseEvent } from "std/curses";
 
 /// Reusable directory model. Listings always contain a synthetic parent row.
 /// Refresh/navigation replace state only after a complete successful read.
@@ -75,6 +75,25 @@ export fn file_panel(path: String, show_hidden: bool) -> Result<FilePanel, IoErr
 }
 
 impl FilePanel {
+    /// Selects a clicked file row or navigates with the wheel. Coordinates and
+    /// frame metrics match draw/draw_cached; returns whether selection changed.
+    export fn mouse(&mut self, area: Rect, event: MouseEvent) -> bool {
+        if (!area.contains(event.row, event.column)) {
+            return false;
+        }
+        let old = self.cursor.selected;
+        let rows = visible_rows(area);
+        if (event.wheel() != 0) {
+            self.step(event.wheel(), rows);
+        } else if (event.pressed() && event.row >= area.row + 3 && event.row < area.row + area.rows - 1 && event.column > area.column && event.column < area.column + area.columns - 1) {
+            let index = self.cursor.top + (event.row - area.row - 3) as usize;
+            if (index < self.entries.len()) {
+                let count = self.entries.len();
+                self.cursor.select(index, count, rows);
+            }
+        }
+        old != self.cursor.selected
+    }
     /// Reuses a freshly read snapshot for the same directory, retaining this
     /// panel's independent selection/viewport. Entries remain copy-on-write.
     export fn share_listing(&mut self, source: &FilePanel) {

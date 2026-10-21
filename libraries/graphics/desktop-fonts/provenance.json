@@ -1,0 +1,27 @@
+{
+  "format": "GDF1",
+  "description": "Pinned Graphite Noto Sans 12/24 A8 glyph tables; 12 logical pixels at 1x/2x; no runtime resampling or external font service.",
+  "license": "OFL-1.1",
+  "source_ttf_sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+  "source_tables_sha256": {
+    "generated.json": "56b76ecccc7d525d817d627e82120263b26bf3b60e6d1ff03f7eb07c57c1a8b1",
+    "font-12.c": "a32fdbd2b9b26bfc66c2cb38cb36ee385b8e7b8226950d02e9f0316b658ce356",
+    "font-24.c": "b7f1f5b42e7d2de1ff9d187d80779b819e869ab9d1a27ff754ee98498013b767"
+  },
+  "codepoint_count": 727,
+  "record_bytes": 18,
+  "assets": {
+    "noto-12.bin": {
+      "sha256": "4993ec0b29a721135f31a29d686aeb0cb13eadb7356af1b0679c95838928e71f",
+      "bytes": 57096
+    },
+    "noto-24.bin": {
+      "sha256": "f2d96cf1f1f29c3e3d3febfef8c696eaf6999a6f5ce636e98cb9dd4b95b312b4",
+      "bytes": 175139
+    },
+    "LICENSE.NotoSans.txt": {
+      "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+      "bytes": 4377
+    }
+  }
+}

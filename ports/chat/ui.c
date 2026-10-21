@@ -76,6 +76,28 @@ static unsigned wrap(Row *rows, unsigned count, const char *s, unsigned width) {
     }
     return count;
 }
+static const char *shortcuts(int cols) {
+    return cols >= 100 ? "Enter send  ^O newline  ^W word  ^N new  F3 panel  F4 tools  Tab chats  Esc stop  F10 quit"
+        : cols >= 60 ? "Enter send  ^W word  F3 panel  F4 tools  Tab chats  F10 quit"
+        : "Enter send  ^W word  F3/F4";
+}
+/* Painting and hit testing use the same shortcut strings at every pane size. */
+static int shortcut_key(int cols, int column, uint32_t *key) {
+    static const char *labels[] = {"Enter send", "^O newline", "^W word", "^N new", "F3 panel", "F4 tools", "Tab chats", "Esc stop", "F10 quit", "F3/F4"};
+    static const unsigned keys[] = {13, 15, 23, 14, KEY_F(3), KEY_F(4), 9, 27, KEY_F(10), KEY_F(3)};
+    const char *line = shortcuts(cols), *at;
+    unsigned i;
+    for (i = 0; i < sizeof(keys) / sizeof(keys[0]); ++i) {
+        at = strstr(line, labels[i]);
+        if (at && column >= 1 + (int)(at - line) && column < 1 + (int)(at - line) + (int)strlen(labels[i]) && column < cols - 1) {
+            *key = keys[i];
+            if (i == 9 && column >= 1 + (int)(at - line) + 3) *key = KEY_F(4);
+            return *key >= 256 ? KEY_CODE_YES : OK;
+        }
+    }
+    return ERR;
+}
+
 int chat_ui(Chat *c) {
     ChatEditor *editor = calloc(1, sizeof(*editor));
     ChatMentions *matches = calloc(1, sizeof(*matches));
@@ -107,6 +129,7 @@ int chat_ui(Chat *c) {
     keypad(stdscr, 1);
     wtimeout(stdscr, 25);
     ripple_curses_bracketed_paste(1);
+    mousemask(BUTTON1_PRESSED | BUTTON4_PRESSED | BUTTON5_PRESSED, NULL);
     if (start_color() == OK) {
         init_pair(1, COLOR_WHITE, COLOR_BLUE);
         init_pair(2, COLOR_CYAN, COLOR_BLACK);
@@ -224,9 +247,7 @@ int chat_ui(Chat *c) {
                 if (cx >= cols - 1)
                     cx = cols - 2;
                 {
-                    const char *keys = cols >= 100 ? "Enter send  ^O newline  ^W word  ^N new  F3 panel  F4 tools  Tab chats  Esc stop  F10 quit"
-                        : cols >= 60 ? "Enter send  ^W word  F3 panel  F4 tools  Tab chats  F10 quit"
-                        : "Enter send  ^W word  F3/F4";
+                    const char *keys = shortcuts(cols);
                     text(LINES - 1, 1, keys, strlen(keys), cols - 2, bar);
                 }
                 curs_set(!focus);
@@ -246,6 +267,73 @@ int chat_ui(Chat *c) {
             continue;
         }
         dirty = 1;
+        if (kind == KEY_CODE_YES && key == KEY_MOUSE) {
+            MEVENT mouse;
+            unsigned selected_top, index, visible, maximum;
+            int wheel;
+            if (getmouse(&mouse) != OK || pasting || LINES < 14 || COLS < 32) continue;
+            wheel = mouse.bstate & BUTTON4_PRESSED ? -1 : mouse.bstate & BUTTON5_PRESSED ? 1 : 0;
+            if (mouse.x < 0 || mouse.x >= COLS || mouse.y < 0 || mouse.y >= LINES) continue;
+            if (mouse.y == LINES - 1 && (mouse.bstate & BUTTON1_PRESSED)) {
+                kind = shortcut_key(cols, mouse.x, &key);
+                if (kind == ERR) continue;
+                /* Continue through the normal keyboard action policy. */
+            } else if (matches->active && !focus && mouse.y >= LINES - 13 && mouse.y < LINES - 7) {
+                if (wheel && matches->count) {
+                    if (wheel < 0 && matches->selected) --matches->selected;
+                    if (wheel > 0 && matches->selected + 1 < matches->count) ++matches->selected;
+                } else if ((mouse.bstate & BUTTON1_PRESSED) && mouse.y > LINES - 13 && mouse.x >= 2 && mouse.x < cols - 2) {
+                    selected_top = matches->selected >= 5 ? matches->selected - 4 : 0;
+                    index = selected_top + mouse.y - (LINES - 12);
+                    if (index < matches->count) {
+                        matches->selected = index;
+                        if (chat_mention_apply(editor, matches)) mention_dirty = 1;
+                    }
+                }
+                continue;
+            } else if (side && mouse.x < (int)side && mouse.y >= 3 && mouse.y < 3 + height) {
+                if (wheel && c->count) {
+                    if (wheel < 0) chosen = chosen > 3 ? chosen - 3 : 0;
+                    else chosen = chosen + 3 < c->count ? chosen + 3 : c->count - 1;
+                    focus = 1;
+                    mention_dirty = 1;
+                } else if (mouse.bstate & BUTTON1_PRESSED) {
+                    selected_top = chosen >= (unsigned)height ? chosen - height + 1 : 0;
+                    index = selected_top + mouse.y - 3;
+                    if (index < c->count) {
+                        chosen = index;
+                        chat_select(c, chosen);
+                        focus = 0;
+                        scroll = 0;
+                        mention_dirty = 1;
+                    }
+                }
+                continue;
+            } else if (mouse.y >= LINES - 5 && mouse.y < LINES - 2 && mouse.x >= 2 && mouse.x < cols - 2 && (mouse.bstate & BUTTON1_PRESSED)) {
+                count = wrap(rows, 0, input, cols - 4);
+                at = 0;
+                for (i = 0; i < count; ++i)
+                    if ((unsigned long)(rows[i].p - input) <= editor->cursor) at = i;
+                selected_top = at >= 3 ? at - 2 : 0;
+                index = selected_top + mouse.y - (LINES - 5);
+                if (index >= count) index = count - 1;
+                editor->cursor = rows[index].p - input + ru_prefix((const unsigned char *)rows[index].p, rows[index].n, mouse.x - 2);
+                focus = 0;
+                mention_dirty = 1;
+                continue;
+            } else if (wheel && mouse.x >= (int)side + 2 && mouse.y >= 2 && mouse.y < 2 + height) {
+                count = wrap(rows, 0, c->display, cols - side - 3);
+                if (c->reply_size) {
+                    count = wrap(rows, count, c->worker ? "Assistant (streaming)\n" : "Assistant (unsaved)\n", cols - side - 3);
+                    count = wrap(rows, count, c->reply, cols - side - 3);
+                }
+                visible = height;
+                maximum = count > visible ? count - visible : 0;
+                if (wheel < 0) scroll = scroll + 3 < maximum ? scroll + 3 : maximum;
+                else scroll = scroll > 3 ? scroll - 3 : 0;
+                continue;
+            } else continue;
+        }
         if (kind == KEY_CODE_YES && key == KEY_RESIZE)
             continue;
         if (kind == KEY_CODE_YES && key == KEY_PASTE_BEGIN) {

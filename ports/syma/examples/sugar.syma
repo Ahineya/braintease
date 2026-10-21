@@ -1,0 +1,18 @@
+{Module Sugar/FindIn
+  {Export FindIn}
+  {RuleRules
+    {R FindIn
+      {R SYMARULENAME_ {Program .. {FindIn path_ pat_} ..} SYMAREST..}
+      {R SYMARULENAME_ {Program .. {FindIn Build {Parts pat_} SplitBy("." ToString(path_))} ..} SYMAREST..}
+    }
+    {R FindIn/Pick/End
+      {R SYMARULENAME_ {Program .. {FindIn Build {Parts a..} {Strings}} ..} SYMAREST..}
+      {R SYMARULENAME_ {Program .. {/ ..} a.. {/ ..} ..} SYMAREST..}
+    }
+
+    {R FindIn/Pick
+      {R SYMARULENAME2_ {Program .. {FindIn Build {Parts ..} {Strings .. s_}} ..} SYMAREST2..}
+      {R SYMARULENAME2_ {Program .. {FindIn Build {Parts {{Sym s_} {/ ..} .. {/ ..}} } {Strings ..}} ..} SYMAREST2..}
+    }
+  }
+}

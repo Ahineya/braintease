@@ -1,0 +1,229 @@
+/* agent.h
+ *
+ * Copyright (C) 2014-2026 wolfSSL Inc.
+ *
+ * This file is part of wolfSSH.
+ *
+ * wolfSSH is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfSSH is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with wolfSSH.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+
+/*
+ */
+
+
+#ifndef _WOLFSSH_AGENT_H_
+#define _WOLFSSH_AGENT_H_
+
+#include <wolfssh/settings.h>
+#include <wolfssh/ssh.h>
+
+#include <wolfssl/wolfcrypt/hash.h>
+#include <wolfssl/wolfcrypt/random.h>
+#include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/dh.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/rsa.h>
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+enum WS_AGENT_MessageIds {
+    MSGID_AGENT_FAILURE = 5,
+    MSGID_AGENT_SUCCESS = 6,
+    MSGID_AGENT_REQUEST_IDENTITIES = 11,
+    MSGID_AGENT_IDENTITIES_ANSWER = 12,
+    MSGID_AGENT_SIGN_REQUEST = 13,
+    MSGID_AGENT_SIGN_RESPONSE = 14,
+    MSGID_AGENT_ADD_IDENTITY = 17,
+    MSGID_AGENT_REMOVE_IDENTITY = 18,
+    MSGID_AGENT_REMOVE_ALL_IDENTITIES = 19,
+    MSGID_AGENT_ADD_SMARTCARD_KEY = 20,
+    MSGID_AGENT_REMOVE_SMARTCARD_KEY = 21,
+    MSGID_AGENT_LOCK = 22,
+    MSGID_AGENT_UNLOCK = 23,
+    MSGID_AGENT_ADD_ID_CONSTRAINED = 25,
+    MSGID_AGENT_ADD_SMARTCARD_KEY_CONSTRAINED = 26,
+    MSGID_AGENT_EXTENSION = 27,
+    MSGID_AGENT_EXTENSION_FAILURE = 28,
+};
+
+
+enum WS_AGENT_ConstraintIds {
+    AGENT_CONSTRAIN_LIFETIME = 1,
+    AGENT_CONSTRAIN_CONFIRM = 2,
+    AGENT_CONSTRAIN_EXTENSION = 3,
+};
+
+
+struct WOLFSSH_AGENT_KEY_RSA {
+    byte* n;
+    byte* e;
+    byte* d;
+    byte* iqmp;
+    byte* p;
+    byte* q;
+    word32 nSz, eSz, dSz, iqmpSz, pSz, qSz;
+};
+typedef struct WOLFSSH_AGENT_KEY_RSA WOLFSSH_AGENT_KEY_RSA;
+
+
+struct WOLFSSH_AGENT_KEY_ECDSA {
+    byte* curveName;
+    byte* q;
+    byte* d;
+    word32 curveNameSz, qSz, dSz;
+};
+typedef struct WOLFSSH_AGENT_KEY_ECDSA WOLFSSH_AGENT_KEY_ECDSA;
+
+
+union WOLFSSH_AGENT_KEY {
+    struct WOLFSSH_AGENT_KEY_RSA rsa;
+    struct WOLFSSH_AGENT_KEY_ECDSA ecdsa;
+};
+typedef union WOLFSSH_AGENT_KEY WOLFSSH_AGENT_KEY;
+
+
+struct WOLFSSH_AGENT_ID {
+    struct WOLFSSH_AGENT_ID* next;
+    byte* keyBuffer;
+    byte* keyBlob;
+    byte* comment;
+    WOLFSSH_AGENT_KEY key;
+    word32 keyBufferSz;
+    word32 keyBlobSz;
+    word32 commentSz;
+    byte id[WC_SHA256_DIGEST_SIZE];
+    byte keyType;
+};
+typedef struct WOLFSSH_AGENT_ID WOLFSSH_AGENT_ID;
+
+
+/* Bit fields for the MSGID_AGENT_SIGN_REQUEST flag. */
+#define AGENT_SIGN_RSA_SHA2_256 0x02
+#define AGENT_SIGN_RSA_SHA2_512 0x04
+
+
+enum AgentStates {
+    AGENT_STATE_INIT,
+    AGENT_STATE_LISTEN,
+    AGENT_STATE_CONNECTED,
+    AGENT_STATE_SIGNED,
+    AGENT_STATE_DONE,
+};
+
+
+/* Defined in wolfssh/internal.h. Held by pointer so this installed header
+ * does not have to include an internal one. */
+struct WOLFSSH_BUFFER;
+
+struct WOLFSSH_AGENT_CTX {
+    void* heap;
+    byte* msg;
+    WC_RNG rng;
+    word32 msgSz;
+    word32 msgIdx;
+    word32 channel;
+    WOLFSSH_AGENT_ID* idList;
+    word32 idListSz;
+    int error;
+    enum AgentStates state;
+    int requestSuccess;
+    int requestFailure;
+    byte lastMsgId;
+    /* One agent reply */
+    struct WOLFSSH_BUFFER* rxBuf;
+    /* Channel bytes waiting to be framed */
+    struct WOLFSSH_BUFFER* relayBuf;
+    word32 relayChannel;
+    byte relayActive;
+};
+typedef struct WOLFSSH_AGENT_CTX WOLFSSH_AGENT_CTX;
+
+
+typedef enum WS_AgentCbAction {
+    WOLFSSH_AGENT_LOCAL_SETUP,
+    WOLFSSH_AGENT_LOCAL_CLEANUP,
+} WS_AgentCbAction;
+
+typedef enum WS_AgentIoCbAction {
+    WOLFSSH_AGENT_IO_WRITE,
+    WOLFSSH_AGENT_IO_READ,
+} WS_AgentIoCbAction;
+
+
+typedef enum WS_AgentCbError {
+    WS_AGENT_SUCCESS,
+    WS_AGENT_SETUP_E,
+    WS_AGENT_NOT_AVAILABLE,
+    WS_AGENT_INVALID_ACTION,
+    WS_AGENT_PEER_E,
+} WS_AgentCbError;
+
+
+typedef int (*WS_CallbackAgent)(WS_AgentCbAction action, void* agentCbCtx);
+typedef int (*WS_CallbackAgentIO)(WS_AgentIoCbAction action, void* buf,
+        word32 bufSz, void* agentCbCtx);
+
+
+WOLFSSH_API WOLFSSH_AGENT_CTX* wolfSSH_AGENT_new(void* heap);
+WOLFSSH_API void wolfSSH_AGENT_free(WOLFSSH_AGENT_CTX* agent);
+WOLFSSH_LOCAL WOLFSSH_AGENT_ID* wolfSSH_AGENT_ID_new(byte keyType,
+        word32 keySz, void* heap);
+WOLFSSH_LOCAL void wolfSSH_AGENT_ID_free(WOLFSSH_AGENT_ID* id, void* heap);
+WOLFSSH_LOCAL void wolfSSH_AGENT_ID_list_free(WOLFSSH_AGENT_ID* id, void* heap);
+WOLFSSH_API int wolfSSH_CTX_set_agent_cb(WOLFSSH_CTX* ctx,
+        WS_CallbackAgent agentCb, WS_CallbackAgentIO agentIoCb);
+WOLFSSH_API int wolfSSH_set_agent_cb_ctx(WOLFSSH* ssh, void* ctx);
+WOLFSSH_API int wolfSSH_CTX_AGENT_enable(WOLFSSH_CTX* ctx, byte isEnabled);
+WOLFSSH_API int wolfSSH_AGENT_enable(WOLFSSH* ssh, byte isEnabled);
+/* Server side. Opens the auth-agent@openssh.com channel to the client once
+ * the peer's auth-agent-req@openssh.com asks for forwarding. wolfSSH_accept()
+ * does it on the default path; an application driving its own channels polls
+ * this instead. Opens one channel, then flushes what of the open is queued.
+ * Returns WS_SUCCESS, WS_BAD_ARGUMENT before the peer asks or on a client
+ * session, WS_WANT_READ or WS_WANT_WRITE while output is still queued,
+ * WS_FATAL_ERROR with WS_DISCONNECT in ssh->error once the session is over,
+ * WS_SSH_NULL_E, WS_MEMORY_E, or whatever the send reports. WS_SUCCESS says
+ * the open went out, not that the peer took it; a refusal reaches the
+ * channel-open-fail callback. An error raised after the open is on the wire,
+ * a failing highwater callback, leaves the channel open and the next poll
+ * answers WS_SUCCESS.
+ * Only that and the send record in ssh->error, so a poll ahead of the peer's
+ * request leaves the session fit for wolfSSH_accept(). */
+WOLFSSH_API int wolfSSH_AGENT_ChannelOpen(WOLFSSH* ssh);
+WOLFSSH_LOCAL int wolfSSH_AGENT_worker(WOLFSSH* ssh);
+WOLFSSH_API int wolfSSH_AGENT_Relay(WOLFSSH* ssh,
+        const byte* msg, word32* msgSz, byte* rsp, word32* rspSz);
+/* Moves whole agent messages between the channel named by channelId and the
+ * agent, holding a partial request or unfinished reply between calls; the
+ * same channelId must come back for the rest of either. While a reply is
+ * owed it names what holds it: WS_WANT_WRITE the transport, WS_WINDOW_FULL
+ * or WS_REKEYING the peer. Call again until WS_SUCCESS. Any other
+ * non-success code leaves the channel unusable. */
+WOLFSSH_API int wolfSSH_AGENT_RelayChannel(WOLFSSH* ssh, word32 channelId);
+WOLFSSH_API int wolfSSH_AGENT_SignRequest(WOLFSSH* ssh,
+        const byte* digest, word32 digestSz,
+        byte* sig, word32* sigSz,
+        const byte* keyBlob, word32 keyBlobSz, word32 flags);
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _WOLFSSH_AGENT_H_ */

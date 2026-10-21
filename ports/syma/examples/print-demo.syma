@@ -1,0 +1,16 @@
+{Module Demo/Print
+  {Import Core/Effect}
+
+  {Program
+    {Core/Effect/Eff {Print {FreshId} {Message Format("Hello, Syma Print!\n")}}}
+    {Core/Effect/Eff {Print {FreshId} {Message Format("Second message printed.\n")}}}
+    {Effects {Pending } {Inbox}}
+  }
+
+  {Rules
+    {R Format/Message
+      {Format m_}
+      Concat("Printed message: ", m_)
+    }
+  }
+}

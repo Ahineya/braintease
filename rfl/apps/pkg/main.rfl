@@ -1,0 +1,38 @@
+// One CLI for host and guest. The portable companion owns the wire format and
+// filesystem transactions; argument vectors never pass through a shell.
+import { arguments, environment, run_program, executable } from "std/posix";
+import {} from "std/result";
+
+fn engine() -> String {
+    match environment("PKG_ENGINE") {
+        Ok(Some(path)) if (!path.is_empty()) => { return path; },
+        _ => {},
+    }
+    let args = arguments();
+    if (!args.is_empty()) {
+        let name = args[0];
+        let mut slash: usize = 0;
+        for (i in 0..name.len()) {
+            if (name[i] == '/') { slash = i + 1; }
+        }
+        if (slash > 0) {
+            let sibling = name[0..slash] + "pkg-engine";
+            if (executable(sibling).unwrap_or(false)) { return sibling; }
+        }
+    }
+    "/usr/libexec/pkg-engine"
+}
+
+fn main() -> i16 {
+    let args = arguments();
+    let mut forwarded: Vec<String> = [];
+    for (i in 1..args.len()) { forwarded.push(args[i]); }
+    match run_program(engine(), forwarded) {
+        Ok(status) => if ((status & 127) != 0) {
+            (128 + (status & 127)) as i16
+        } else {
+            (status >> 8) as i16
+        },
+        Err(_) => { println("pkg: cannot run package engine; set PKG_ENGINE or install /usr/libexec/pkg-engine"); 127 },
+    }
+}

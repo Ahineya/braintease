@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the C16 frontend itself as a Fuse-X or Riplix/RVM executable.
+"""Build the C16 frontend for hosted native, freestanding x86 or Ripple guests.
 
 The portable host frontend compiles every compiler source. The existing SDK
 still supplies startup/libc and the host backend packages the resulting FXE or RXE.
@@ -45,7 +45,7 @@ def support(build):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-o', '--output', type=Path, default=HERE / 'build/apps/rcc-c.fxe')
-    parser.add_argument('--os', choices=['fuse-x', 'fuzix'], default='fuse-x')
+    parser.add_argument('--os', choices=['fuse-x', 'fuzix', 'x86_64'], default='fuse-x')
     parser.add_argument('--build', type=Path)
     parser.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     parser.add_argument('--metrics', action='store_true', help='report compiler heap requests and peak live cells')
@@ -54,9 +54,12 @@ def main():
     if args.map and args.os != 'fuzix':
         parser.error('--map applies to Riplix/RVM RXE builds')
     if args.build is None:
-        args.build = ROOT / ('fuse-x/build' if args.os == 'fuse-x' else 'build/fuzix')
+        args.build = ROOT / ('build/guest-native-x64-sdk' if args.os == 'x86_64' else
+                             'fuse-x/build' if args.os == 'fuse-x' else 'build/fuzix')
     if args.os == 'fuzix' and args.output == HERE / 'build/apps/rcc-c.fxe':
         args.output = args.output.with_suffix('.rxe')
+    if args.os == 'x86_64' and args.output == HERE / 'build/apps/rcc-c.fxe':
+        args.output = HERE / 'build/apps/rcc-c-x86.fxe'
     adapt()
     args.output.resolve().parent.mkdir(parents=True, exist_ok=True)
     formatter = support(HERE / 'build/guest-support')
@@ -65,10 +68,12 @@ def main():
     sources += [HERE / 'guest/strtoull.c', formatter]
     if args.metrics:
         sources += [HERE / 'guest/metrics.c']
-    command = [sys.executable, str(HERE / ('fuse_x.py' if args.os == 'fuse-x' else 'fuzix.py')), *map(str, sources),
+    command = [sys.executable, str(HERE / ('fuzix.py' if args.os == 'fuzix' else 'fuse_x.py')), *map(str, sources),
                '-I', str(HERE / 'guest/include'), '-I', str(HERE / 'build/frontend'),
                '-DRIPPLE_FLOAT_FORMAT', '--float-format', '--compiler', str(args.compiler),
                '--build', str(args.build), '-o', str(args.output)]
+    if args.os == 'x86_64':
+        command += ['--heap-profile', 'bounded', '--linker', str(ROOT / 'tools/x86_64/app_link.py')]
     for name in FORMATTERS:
         command += ['-D', f'{name}=rcc_c_{name}']
     if args.map:

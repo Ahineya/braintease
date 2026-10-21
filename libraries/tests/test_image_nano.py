@@ -9,5 +9,6 @@ with tempfile.TemporaryDirectory(prefix='image-nano-') as name:
     command=['cc','-std=c99','-O1','-Wall','-Wextra','-Werror','-Wno-unused-parameter','-Wno-misleading-indentation',
         '-fsanitize=undefined','-fno-sanitize-recover=all','-I'+str(folder),'-I'+str(ROOT/'ports/fusede/include'),
         str(ROOT/'libraries/tests/image_nano.c'),str(ROOT/'libraries/image/nano.c'),'-o',str(folder/'check')]
-    subprocess.run(command,check=True)
-    subprocess.run([folder/'check'],check=True)
+    for hosted in (False,True):
+        subprocess.run([*command,*(['-DRIPPLE_NETSURF_HOSTED=1'] if hosted else [])],check=True)
+        subprocess.run([folder/'check'],check=True)

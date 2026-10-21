@@ -8,14 +8,21 @@ RFL ?= $(ROOT)/target/release/rfl
 K := $(ROOT)/ports/fuzix/upstream/Kernel
 # Select the shared wide userspace ABI. Address spaces are implemented by the
 # native hosted platform, independent of Ripple's hardware MMU implementation.
-FLAGS := -DRIPPLE_FUZIX_NETWORK -DRIPPLE_MMU=1 --target native --bank-size 64000 -DRIPPLE_BULK_IO=0 -DRIPPLE_MMIO_NO_INLINE=1 -I$(CURDIR)/include -I$(ROOT)/ports/fuzix/ripple -I$(K)/include -I$(K)/dev -I$(ROOT)/runtime/include
+export FUSE_X_HEAP_PROFILE ?= hosted
+ifeq ($(FUSE_X_HEAP_PROFILE),bounded)
+HEAP_FLAGS := -DFUSE_X_BOUNDED_HEAP=1
+else ifneq ($(FUSE_X_HEAP_PROFILE),hosted)
+$(error FUSE_X_HEAP_PROFILE must be hosted or bounded)
+endif
+FLAGS := $(HEAP_FLAGS) -DRIPPLE_FUZIX_NETWORK -DRIPPLE_MMU=1 --target native --bank-size 64000 -DRIPPLE_BULK_IO=0 -DRIPPLE_MMIO_NO_INLINE=1 -I$(CURDIR)/include -I$(ROOT)/ports/fuzix/ripple -I$(K)/include -I$(K)/dev -I$(ROOT)/runtime/include
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512 usermem select
 NET_SRC := core config wire ipv4 link arp history icmp icmp_error udp tcp tcp_wire tcp_ack tcp_payload tcp_stream tcp_poll tcp_receive tcp_decode tcp_error tcp_listen tcp_passive tcp_wait
 UNITS := $(addprefix $(BUILD)/kernel/,$(addsuffix .ir,$(CORE))) $(BUILD)/kernel/memalloc_none.ir $(BUILD)/port/platform.ir $(BUILD)/port/devices.ir $(BUILD)/port/sysdev.ir $(BUILD)/port/check.ir $(BUILD)/port/memory.ir $(BUILD)/port/exec.ir $(BUILD)/port/jobcontrol.ir $(BUILD)/port/pty.ir $(BUILD)/port/version.ir $(BUILD)/runtime/vm_devices.ir $(BUILD)/runtime/vm_network.ir $(BUILD)/port/sockets.ir $(addprefix $(BUILD)/runtime/net/,$(addsuffix .ir,$(NET_SRC)))
-UNITS += $(BUILD)/port/hostfs.ir $(BUILD)/port/selectwait.ir $(BUILD)/port/deadline.ir $(BUILD)/port/clock.ir $(BUILD)/port/localsockets.ir
+UNITS += $(BUILD)/port/hostfs.ir $(BUILD)/port/remotefs.ir $(BUILD)/port/remotefs-node.ir $(BUILD)/port/selectwait.ir $(BUILD)/port/deadline.ir $(BUILD)/port/clock.ir $(BUILD)/port/localsockets.ir
 UNITS += $(BUILD)/port/scheduler.ir $(BUILD)/port/pipes.ir $(BUILD)/port/kernel-io.ir
 UNITS += $(BUILD)/port/console.ir
 UNITS += $(BUILD)/port/graphics.ir
+$(BUILD)/port/graphics.ir: $(ROOT)/ports/fuzix/ripple/raster-abi.h render-abi.h
 UNITS += $(BUILD)/port/pcm.ir $(BUILD)/runtime/vm_audio.ir $(BUILD)/runtime/vm_music.ir
 HEADERS_PCM := $(ROOT)/ports/fuzix/ripple/include/sys/pcm.h
 $(BUILD)/port/pcm.ir: $(HEADERS_PCM)
@@ -25,7 +32,33 @@ HEADERS := $(wildcard include/*.h $(K)/include/*.h $(ROOT)/ports/fuzix/ripple/*.
 HEADERS += $(wildcard $(ROOT)/ports/fuzix/ripple/*.inc)
 FLAGS += -I$(ROOT)/ports/graphics/include
 HEADERS += $(ROOT)/ports/graphics/include/gx.h
+HEAP_STAMP := $(shell python3 heap_profile.py --build '$(BUILD)' --profile '$(FUSE_X_HEAP_PROFILE)')
+ifeq ($(strip $(HEAP_STAMP)),)
+$(error Failed to record the heap profile)
+endif
+HEADERS += $(HEAP_STAMP)
 .PHONY: all tools test test-rfl
+.PHONY: freestanding-ir
+FREESTANDING_PLATFORM = $(BUILD)/port/freestanding$(if $(filter 1,$(FREESTANDING_BOOTSTRAP)),-bootstrap)-platform.ir
+freestanding-ir: $(filter-out $(BUILD)/port/platform.ir $(BUILD)/port/exec.ir,$(UNITS)) $(APPS) $(FREESTANDING_PLATFORM) $(BUILD)/port/freestanding-exec.ir $(BUILD)/port/freestanding-commands.ir
+	@printf '%s\n' $(filter-out $(BUILD)/port/platform.ir $(BUILD)/port/exec.ir,$(UNITS)) $(FREESTANDING_PLATFORM) $(BUILD)/port/freestanding-exec.ir > $(BUILD)/freestanding-kernel-inputs.txt
+	@printf '%s\n' $(APPS) $(BUILD)/port/freestanding-commands.ir > $(BUILD)/freestanding-app-inputs.txt
+$(BUILD)/port/freestanding-platform.ir: $(ROOT)/tools/x86_64/riplix/platform.c platform.c $(HEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
+	@mv $@.tmp $@
+$(BUILD)/port/freestanding-bootstrap-platform.ir: $(ROOT)/tools/x86_64/riplix/bootstrap.c $(ROOT)/tools/x86_64/riplix/platform.c platform.c $(HEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
+	@mv $@.tmp $@
+$(BUILD)/port/freestanding-exec.ir: $(ROOT)/tools/x86_64/riplix/exec.c exec.c $(HEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
+	@mv $@.tmp $@
+$(BUILD)/port/freestanding-commands.ir: $(ROOT)/tools/x86_64/riplix/commands.c $(HEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
+	@mv $@.tmp $@
 # The application inventory builds Lynx once, after the prerequisite programs.
 # Keeping it here too ran a second fingerprint/build pass in the same launch.
 APP_NAMES := native-hello cat ls cp sh rfl-demo rfl-fm rift qr-demo telegram music wavplay chat
@@ -37,12 +70,23 @@ EXECUTABLES := $(addprefix $(BUILD)/apps/,$(addsuffix .fxe,$(APP_NAMES)))
 # Track mode changes without touching the stamp on unchanged builds.
 export FUSE_X_SHARED_LIBRARIES ?= 1
 LINK_MODE := $(shell python3 link_mode.py --build '$(BUILD)')
+export RCC_NATIVE_MEMORY ?= checked
+ifneq ($(RCC_NATIVE_MEMORY),checked)
+ifneq ($(RCC_NATIVE_MEMORY),read-v1)
+$(error RCC_NATIVE_MEMORY must be checked or read-v1)
+endif
+endif
+MEMORY_MODE := $(shell RCC_NATIVE_MEMORY='$(RCC_NATIVE_MEMORY)' python3 memory_mode.py --build '$(BUILD)')
+ifeq ($(strip $(MEMORY_MODE)),)
+$(error Failed to record RCC_NATIVE_MEMORY)
+endif
 SDK_SOURCES := $(wildcard $(ROOT)/libraries/unicode/*.[ch] $(ROOT)/libraries/unicode/*.inc) $(wildcard $(ROOT)/ports/fuzix/ripple/libc/*.c $(ROOT)/ports/fuzix/upstream/Library/libs/*.c) $(ROOT)/ports/fuzix/ripple/userlib.c libc/bridge.c cc.py
-SDK_SOURCES += $(LINK_MODE)
+SDK_SOURCES += $(LINK_MODE) $(HEAP_STAMP) $(MEMORY_MODE) memory_mode.py
 SDK_HEADERS := $(K)/include/userstructs.h $(shell find $(ROOT)/ports/fuzix/ripple/include $(ROOT)/ports/fuzix/upstream/Library/include $(ROOT)/runtime/include -name '*.h')
 SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/exec-args.h
 SDK_HEADERS += include/memory-layout.h
 SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/identity.h
+SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/select-abi.h $(ROOT)/ports/fuzix/ripple/file-limits.h
 all: $(BUILD)/fuse-x $(EXECUTABLES) applications
 all: graphics
 .PHONY: bundle
@@ -107,9 +151,15 @@ $(BUILD)/runtime/%.ir: $(ROOT)/runtime/%.c $(HEADERS) $(wildcard $(ROOT)/runtime
 	@printf '  RCC %s\n' '$<'
 	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
 	@mv $@.tmp $@
-$(BUILD)/fuse-x: $(UNITS) $(APPS) $(ROOT)/target/release/librcc_native_runtime.a
+$(BUILD)/fuse-x: $(UNITS) $(APPS) $(ROOT)/target/release/librcc_native_runtime.a $(MEMORY_MODE)
 	@printf '  LINK %s\n' '$@'
 	@$(RCC) link-native $(addprefix --kernel ,$(UNITS)) $(APPS) -o $@ >$(BUILD)/link.log 2>&1 || { cat $(BUILD)/link.log >&2; exit 1; }
+# Boot tools are ordinary native userland; no x64/Freestanding activation.
+.PHONY: services
+services: $(addprefix $(BUILD)/apps/,$(addsuffix .fxe,svcd svc console-session))
+$(addprefix $(BUILD)/apps/,$(addsuffix .fxe,svcd svc console-session)): $(wildcard $(ROOT)/ports/services/*.[ch] $(ROOT)/libraries/ini/*.[ch]) apps.py $(SDK_SOURCES) $(SDK_HEADERS) $(RCC)
+	python3 apps.py $(@F:.fxe=) --compiler $(RCC) --build $(BUILD)
+
 $(BUILD)/apps/native-hello.fxe: examples/hello.c $(SDK_SOURCES) $(SDK_HEADERS) $(RCC)
 	@mkdir -p $(@D)
 	python3 cc.py $< --compiler $(RCC) --build $(BUILD) -o $@
@@ -147,7 +197,7 @@ $(BUILD)/apps/lynx.fxe: lynx-check
 	python3 apps.py lynx --compiler $(RCC) --build $(BUILD)
 .PHONY: applications
 applications: $(EXECUTABLES)
-	python3 apps.py --all --require lynx --require chat --compiler $(RCC) --build $(BUILD)
+	python3 apps.py --all --require lynx --require chat --require svcd --require svc --require console-session --require mux --compiler $(RCC) --build $(BUILD)
 $(BUILD)/apps/%.fxe: $(ROOT)/ports/fuzix/upstream/Applications/util/%.c $(SDK_SOURCES) $(SDK_HEADERS) $(RCC)
 	@mkdir -p $(@D)
 	python3 cc.py $< $(if $(filter ls,$*),-DUIDGID=0) --compiler $(RCC) --build $(BUILD) -o $@
@@ -219,3 +269,13 @@ test-kernel-io: $(BUILD)/fuse-x $(BUILD)/apps/sh.fxe
 test-pkill: $(BUILD)/fuse-x $(BUILD)/apps/sh.fxe
 	python3 apps.py pkill echo --compiler $(RCC) --build $(BUILD)
 	python3 $(ROOT)/ports/fuzix/tools/test_pkill.py --native --native-build $(BUILD)
+
+$(BUILD)/generated/remotefs-node.c: hostfs.c remotefs.py
+	@mkdir -p $(@D)
+	python3 remotefs.py $< $@
+$(BUILD)/port/remotefs-node.ir: $(BUILD)/generated/remotefs-node.c $(HEADERS) $(RCC)
+	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
+	@mv $@.tmp $@
+
+$(BUILD)/port/remotefs.ir: $(ROOT)/ports/ssh/remotefs.h
+$(BUILD)/apps/rfl-fm.fxe: $(ROOT)/ports/ssh/commander.c $(ROOT)/ports/ssh/remotefs.h

@@ -153,6 +153,7 @@ static void menu_action(int y)
     case MENU_TETRIS:single[0]="/bin/nxtetris";break;
     case MENU_IMAGES:single[0]="/bin/nxview";break;
     case MENU_KLOTSKI:single[0]="/bin/klotski";break;
+    case MENU_SHIKAKU:single[0]="/bin/shikaku";break;
     case MENU_SYNC:sync();show_message("Sync disk","Files synchronized to disk.");break;
     case MENU_EXIT:stopping=1;break;
     case MENU_SHUTDOWN:uadmin(1,0,NULL);perror("nxdsktop: shutdown");break;

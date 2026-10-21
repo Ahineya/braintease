@@ -1,0 +1,58 @@
+.TH AT 1
+.SH NAME
+at \- queue, list or cancel one-shot shell jobs
+.SH SYNOPSIS
+.B at
+[\-s spool] [\-f file] time [date]
+.br
+.B at
+[\-s spool] [\-f file] \-t YYYYMMDDhhmm[.ss]
+.br
+.B at
+[\-s spool] {\-l | \-r job-id}
+.SH DESCRIPTION
+Queue commands from standard input or -f file. The script captures the
+working directory, shell-compatible exported environment variables, and umask.
+Captured values and paths are shell-quoted. IFS, ENV and BASH_ENV are excluded.
+The original standard input after submission is not retained for execution.
+The command prints job followed by the job ID after atomic publication.
+.SH TIMES
+.nf
+at now
+at now + 5 minutes
+at now + 2 hours
+at now + 1 day
+at 14:30
+at 14:30 2028-02-29
+at -t 202802291430.00
+.fi
+HH:MM alone selects its next future occurrence. Explicit dates cannot be
+in the past. A relative day means 86400 seconds. Calendar dates use the local
+TZ or /etc/TZ rules; nonexistent DST local times are rejected. Timestamps are
+limited to the current unsigned 32-bit guest epoch range, through 2106.
+.SH QUEUE
+The default spool is /var/spool/at with private jobs, running and output
+subdirectories. -s selects an absolute alternate spool, at most 223 native
+characters long so complete job paths fit the current 256-character path budget. The spool and its
+subdirectories must be owned by the effective user and have no group/other
+permissions. There are no setuid binaries or cross-user submissions: use the
+system queue as root or a private queue and runner under your own account.
+On the default installed system cron invokes atrun once per minute when enabled.
+.PP
+-l lists pending jobs and local due times. -r removes one pending job by ID;
+claimed jobs cannot be cancelled with this interface.
+.SH RESULTS
+Each executed job's stdout and stderr go to spool/output/job-id, retained
+for inspection even after failure. Completed jobs are removed from running.
+The queue is at-most-once: interruption after claiming may leave a job in
+running; inspect it and its output before explicitly resubmitting. Automatic
+replay could duplicate external side effects and is deliberately avoided.
+.PP
+Submission writes a private temporary script, flushes it and publishes it
+through a hard link. Crashes may leave unpublished .t temporary files. Runtime
+claiming prevents duplicate execution by competing runners; full transactional
+power-loss recovery depends on the filesystem and is not guaranteed.
+.SH EXIT STATUS
+0 on success; 1 for queue, file or output failures; 2 for invalid options/times.
+.SH SEE ALSO
+atrun(1), cron(1)

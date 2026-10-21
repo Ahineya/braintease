@@ -1,0 +1,58 @@
+{
+  "metadata": {
+    "name": "Cancellation in groups",
+    "created": "2025-10-25T23:34:02.437Z",
+    "modified": "2025-10-26T00:07:45.364Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "PsfT6nPpqirN4GKDuWn2F",
+      "type": "markdown",
+      "content": "# Theorem: Cancellation in groups\nLet $(G,\\cdot)$ be a group. $\\forall a,x,y\\in G$:\n\n- Left cancellation: if $a\\cdot x=a\\cdot y$, then $x=y$.\n- Right cancellation: if $x\\cdot a=y\\cdot a$, then $x=y$.\n\n## Axioms:\n\n- Identity: $\\forall z\\in G$: $e \\cdot z = z$\n- Inverse: $\\forall  x\\in G$: $x^{-1} \\cdot x = e$\n- Associativity: $\\forall a,b,c\\in G$: $a\\cdot (b \\cdot c ) = (a\\cdot b) \\cdot c $",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "7rR6r-x9gI1AclTxR9OnA",
+      "type": "code",
+      "content": ":clear\n\n:rule Identity/A {.. e * z_ ..} -> {.. z_ ..}\n:rule Identity/B {.. z_ * e ..} -> {.. z_ ..}\n\n:rule Inverse {.. Inv(x_) * x_ ..} -> {.. e ..}\n:rule Inverse {.. x_ * Inv(x_) ..} -> {.. e ..}\n\n; Associativity is implied\n\n; QED\n:rule QED {Proof {{a * x = a * y } => {x = y}} {{x * a = y * a } => {x = y}} } -> QED",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 5 rules\n"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "0BFzqKdhYbnf4Q6dgCSZx",
+      "type": "markdown",
+      "content": "## Proof:\n\nMultiply both sides on the left by $a^{-1}$ (the inverse of a), and watch Syma do the rest.",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "uVwlpNxMMrI8EyaCumHSA",
+      "type": "code",
+      "content": "; Proof\n; Multiply both sides on the left by the inverse of a\n{Proof\n    {{a * x = a * y} => {Inv(a) * a * x = Inv(a) * a * y}}\n    {{x * a = y * a} => {Inv(a) * a * x = Inv(a) * a * y}}\n}",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "QED"
+        }
+      ],
+      "metadata": {}
+    }
+  ]
+}

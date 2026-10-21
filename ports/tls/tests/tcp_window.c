@@ -1,19 +1,24 @@
 /* Exercise the actual Unix profile with the independent packet codec fixture. */
 #define RIPPLE_FUZIX_NETWORK
 #include "../../../c-test/tests/runtime/net_tcp_test.h"
-#define C(x) do {if(!(x)){printf("tcp_window failed line %u\n",__LINE__);return 1;}}while(0)
-static unsigned char result[NET_TCP_RX_BUFFER];
+#define C(x) do {if(!(x)){printf("tcp_window failed: %s\n",#x);return 1;}}while(0)
+static unsigned char result[4096],send_buffer[8192],receive_buffer[4096],receive_map[512];
+static void open_buffered(void) {
+    reset();net_tcp_connect(&net,&tcp,&target,now);
+    net_tcp_buffers(&tcp,send_buffer,sizeof(send_buffer),receive_buffer,sizeof(receive_buffer),receive_map);
+    net_tcp_poll(&tcp,now);
+}
 int main(void) {
     unsigned short n,i;unsigned long first;
-    C(NET_TCP_RX_BUFFER==4096&&sizeof(NetTcp)*4<=64000UL);
-    reset();start();
-    C(read16(outgoing+48)==NET_TCP_RX_BUFFER&&read16(outgoing+56)==1460);
+    C(NET_TCP_RX_BUFFER==1024&&sizeof(NetTcp)*4<=64000UL);
+    open_buffered();
+    C(read16(outgoing+48)==4096&&read16(outgoing+56)==1460);
     packet(18,peer_next-1,tcp.snd_nxt,65535U,0);tick(1);
     for(i=0;i<1460;i++)data[i]=i&255;
     packet(24,tcp.rcv_nxt,tcp.snd_nxt,65535U,1460);tick(2);
     C(net_tcp_read(&tcp,result,sizeof(result),&n)==NET_OK&&n==1460);
     for(i=0;i<n;i++)C(result[i]==(i&255));
-    reset();start();
+    open_buffered();
     packet(18,peer_next-1,tcp.snd_nxt,65535U,0);tick(1);first=tcp.rcv_nxt;
     for(i=0;i<8;i++){packet(24,tcp.rcv_nxt,tcp.snd_nxt,65535U,512);tick(now+1);}
     C(tcp.rx_used==4096&&tcp.rcv_nxt==first+4096&&read16(outgoing+48)==0);

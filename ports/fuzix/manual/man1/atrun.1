@@ -1,0 +1,24 @@
+.TH ATRUN 1
+.SH NAME
+atrun \- execute due at jobs
+.SH SYNOPSIS
+.B atrun
+[\-s spool]
+.SH DESCRIPTION
+Scan a private queue, atomically claim due jobs and execute each with /bin/sh.
+The default queue is /var/spool/at. Jobs run concurrently; atrun waits for its
+workers and returns failure if any waited job fails. Standard input is
+/dev/null. Output is saved in spool/output/job-id.
+.PP
+Multiple runners may safely inspect the same queue. A hard link in running
+claims each pending file before its jobs entry is removed. Only the claimant
+starts the job. Claimed jobs are not automatically replayed after interruption.
+See at(1) for ownership, failure recovery and timestamp limits.
+.SH SERVICE
+cron invokes atrun once per minute, including when recurring crontab parsing
+fails. It can also be invoked manually for immediate processing of due jobs.
+.SH EXIT STATUS
+0 for successful processing or an empty queue; 1 for queue/dispatch/job failures;
+2 for invalid arguments.
+.SH SEE ALSO
+at(1), cron(1)

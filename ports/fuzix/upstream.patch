@@ -2517,10 +2517,6 @@
 +				if (argc>=3) {
 @@ -383,0 +397 @@
 +				else { fputs("pr: missing header\n", stderr); return 1; }
---- a/Applications/V7/cmd/sh/args.c
-+++ b/Applications/V7/cmd/sh/args.c
-@@ -4 +3,0 @@
--#
 --- a/Applications/V7/cmd/sh/blok.c
 +++ b/Applications/V7/cmd/sh/blok.c
 @@ -4 +3,0 @@
@@ -2681,22 +2677,6 @@
 +#define STRIP 0177
 +#define QUOTE 0200
 +#endif
---- a/Applications/V7/cmd/sh/macro.c
-+++ b/Applications/V7/cmd/sh/macro.c
-@@ -4 +3,0 @@
--#
-@@ -195 +194,5 @@
--	estabf(as);
-+	/* Expand only an unquoted leading ~ or ~/. Quote the inserted home so
-+	 * spaces and wildcard characters in HOME remain literal pathname data. */
-+	BOOL tilde = as[0] == '~' && (as[1] == 0 || as[1] == '/') &&
-+	    homenod.namval && *homenod.namval;
-+	estabf(tilde ? as + 1 : as);
-@@ -198,0 +202,4 @@
-+	if (tilde) {
-+		const char *home = homenod.namval;
-+		while (*home) pushstak(*home++ | QUOTE);
-+	}
 --- a/Applications/V7/cmd/sh/main.c
 +++ b/Applications/V7/cmd/sh/main.c
 @@ -4 +3,0 @@
@@ -2769,14 +2749,17 @@
 +            tcsetattr(input, TCSANOW, &terminal);
 +        if (getpid() == 1 || jobs_enabled())
 +            reapchildren();
-@@ -232 +286,2 @@
+@@ -232 +286,5 @@
 -			if (line_input(ps1nod.namval) < 0)
++#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
++            shell_mux_report(NULL);
++#endif
 +			const char *primary = prompt_text(ps1nod.namval);
 +			if (line_input(primary) < 0)
-@@ -234 +289 @@
+@@ -234 +292 @@
 -				prs(ps1nod.namval);
 +				prs(primary);
-@@ -254,2 +309,3 @@
+@@ -254,2 +312,3 @@
 -		if (line_input(ps2nod.namval) < 0)
 -			prs(ps2nod.namval);
 +		const char *secondary = prompt_text(ps2nod.namval);
@@ -2805,88 +2788,6 @@
 +++ b/Applications/V7/cmd/sh/print.c
 @@ -3 +2,0 @@
 -#
---- a/Applications/V7/cmd/sh/service.c
-+++ b/Applications/V7/cmd/sh/service.c
-@@ -4 +3,0 @@
--#
-@@ -14,0 +14 @@
-+#include <sys/wait.h>
-@@ -115 +115 @@
--	path = (*scanp ? scanp : 0);
-+	path = (*scanp ? scanp : (char *)0);
-@@ -185,0 +186,35 @@
-+/* Keep exit statuses when PID 1 reaps background/adopted children, or a
-+ * foreground wait happens to reap an unrelated background child first. */
-+static int deadpid[MAXP], deadstatus[MAXP], deadnext;
-+static void remember(int pid, int status)
-+{
-+    int i;
-+    for (i = 0; i < MAXP; i++)
-+        if (!deadpid[i])
-+            break;
-+    if (i == MAXP) {
-+        i = deadnext++;
-+        if (deadnext == MAXP)
-+            deadnext = 0;
-+    }
-+    deadpid[i] = pid;
-+    deadstatus[i] = status;
-+}
-+static int remembered(int pid, int *status)
-+{
-+    int i;
-+    for (i = 0; i < MAXP; i++)
-+        if (deadpid[i] && (pid <= 0 || deadpid[i] == pid)) {
-+            pid = deadpid[i];
-+            *status = deadstatus[i];
-+            deadpid[i] = 0;
-+            return pid;
-+        }
-+    return 0;
-+}
-+void reapchildren(void)
-+{
-+    int pid, status;
-+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
-+        if (!jobs_status(pid, status)) remember(pid, status);
-+}
-@@ -192,0 +228 @@
-+    memset(deadpid, 0, sizeof(deadpid));
-@@ -218,0 +255 @@
-+        int tracked = 0;
-@@ -224 +261,3 @@
--			p = wait(&w);
-+			p = remembered(i, &w);
-+            if (!p)
-+                p = wait(&w);
-@@ -228,0 +268 @@
-+                    tracked = 1;
-@@ -236,2 +276,10 @@
--		if (p == -1)
--			continue;
-+		if (p == -1) {
-+            if (errno == EINTR)
-+                continue;
-+            memset(pwlist, 0, sizeof(pwlist));
-+            pwc = 0;
-+            break;
-+        }
-+
-+        if (!tracked && i > 0)
-+            remember(p, w);
-@@ -260 +308,3 @@
--		if (rc == 0)
-+		/* A foreground pipeline reports its final command's status,
-+		 * regardless of the order in which the children are reaped. */
-+		if (p == i || i <= 0)
-@@ -306,2 +356,5 @@
--		if ( (argp = argp->argnxt) )
--			trim(*comargn);
-+		argp = argp->argnxt;
-+		/* Expansion is complete for every argument, including argv[0].
-+		 * Leaving quote bits on the command hides '/' from getpath(),
-+		 * corrupts argv[0], and prevents quoted builtin recognition. */
-+		trim(*comargn);
 --- a/Applications/V7/cmd/sh/sh.1
 +++ b/Applications/V7/cmd/sh/sh.1
 @@ -967,0 +968,11 @@
@@ -2929,72 +2830,6 @@
 -		c = peekc;
 +		/* Ripple char is 16 bits: discard the int-only lookahead marker. */
 +		c = peekc & ~MARK;
---- a/Applications/V7/cmd/sh/xec.c
-+++ b/Applications/V7/cmd/sh/xec.c
-@@ -4 +3,0 @@
--#
-@@ -35,0 +35,2 @@
-+        int job_owner = 0, gate[2] = {-1, -1}, managed = 0;
-+        char ready;
-@@ -96 +97,2 @@
--						exitsh(a1 ? stoi(a1) : oldexit);
-+						exitval = a1 ? stoi(a1) : oldexit;
-+						done();
-@@ -153 +155,6 @@
--						flags |= forked;
-+		                if (managed) {
-+                    close(gate[1]); jobs_child();
-+                    if (read(gate[0], &ready, 1) != 1) _exit(125);
-+                    close(gate[0]);
-+                }
-+				flags |= forked;
-@@ -176 +183,2 @@
--						await(-1);
-+						if (jobs_enabled()) jobs_await(a1 ? stoi(a1) : -1);
-+                        else await(a1 ? stoi(a1) : -1);
-@@ -217 +225 @@
--							execexp(a1, (UFD)&com[2]);	/* FIXME */
-+							execexp(a1, (intptr_t)&com[2]);	/* FIXME */
-@@ -252,0 +261,3 @@
-+            job_owner = jobs_begin(t, (treeflgs & FAMP) != 0);
-+            managed = jobs_current();
-+            if (managed && pipe(gate) < 0) error("cannot create job handshake");
-@@ -262,0 +274,4 @@
-+            if (parent && managed) {
-+                close(gate[0]); jobs_parent(parent);
-+                write(gate[1], "x", 1); close(gate[1]);
-+            }
-@@ -271,2 +286,3 @@
--				if ((treeflgs & (FAMP | FPOU)) == 0)
--					await(parent);
-+                if ((treeflgs & (FAMP | FPOU)) == 0) {
-+                    if (managed) jobs_wait(); else await(parent);
-+                }
-@@ -274 +290 @@
--					post(parent);
-+                    { if (!managed) post(parent); }
-@@ -277,0 +294 @@
-+                jobs_end(job_owner);
-@@ -280,0 +298,5 @@
-+                if (managed) {
-+                    close(gate[1]); jobs_child();
-+                    if (read(gate[0], &ready, 1) != 1) _exit(125);
-+                    close(gate[0]);
-+                }
-@@ -290 +312,2 @@
--				if (treeflgs & FINT) {
-+                if (managed) jobs_child_signals();
-+				if ((treeflgs & FINT) && !managed) {
-@@ -306 +329 @@
--				if (treeflgs & FINT && ioset == 0)
-+				if ((treeflgs & FINT) && !managed && ioset == 0)
-@@ -327,0 +351 @@
-+            int pipeline_owner = jobs_begin(t, 0);
-@@ -332,0 +357 @@
-+            jobs_end(pipeline_owner);
-@@ -439 +464 @@
--void execexp(char *s, UFD f)
-+void execexp(char *s, intptr_t f)
 --- a/Applications/V7/cmd/split.c
 +++ b/Applications/V7/cmd/split.c
 @@ -7,85 +7,11 @@
@@ -4787,16 +4622,49 @@
 @@ -218 +220 @@
 -#if TERMCAP | ST
 +#if TERMCAP | ST | RIPPLE
+@@ -304,0 +307,6 @@
++#if RIPPLE
++    /*^N*/ GO_UP,			/* KEY_UP */
++    /*^O*/ GO_DOWN,		/* KEY_DOWN */
++    /*^P*/ GO_LEFT,		/* KEY_LEFT */
++    /*^Q*/ GO_RIGHT,		/* KEY_RIGHT */
++#else
+@@ -308,0 +317 @@
++#endif
 --- a/Applications/levee/insert.c
 +++ b/Applications/levee/insert.c
 @@ -136 +136 @@
 -	if ((count-1)*len < endd-cp)
 +	if ((long)(count-1)*len < endd-cp)
+--- a/Applications/levee/levee.1
++++ b/Applications/levee/levee.1
+@@ -83,0 +84,12 @@
++.PP
++The Riplix Unix build accepts ANSI CSI and SS3 arrow keys in visual command
++mode and as operator motions, like the corresponding h, j, k and l motions.
++Its legacy insertion buffer does not support arrow navigation; arrow keys
++are ignored with a bell until Escape returns to command mode. Function keys
++are unbound. Escape alone leaves insert mode after a short sequence timeout.
++.PP
++To check the keyboard, open a file with several lines, press Escape and try
++all four arrows; they should move like h, j, k and l. Try d followed by Right
++to delete one character, then u to undo. During insertion, arrows should ring
++the bell without inserting characters or newlines. Escape followed by :q!
++and Enter quits without saving the test.
 --- a/Applications/levee/levee.h
 +++ b/Applications/levee/levee.h
 @@ -166 +166 @@
 -#if !(ST | TERMCAP)
 +#if !(ST | TERMCAP | RIPPLE)
+@@ -196,0 +197,8 @@
++
++/* Unix ANSI navigation tokens use otherwise unbound control characters.
++ * Keeping them below 128 also preserves the editor's macro/motion table ABI. */
++#define KEY_UP    14
++#define KEY_DOWN  15
++#define KEY_LEFT  16
++#define KEY_RIGHT 17
++#define KEY_IGNORE 18
 --- a/Applications/levee/main.c
 +++ b/Applications/levee/main.c
 @@ -24,0 +25 @@
@@ -4849,24 +4717,32 @@
 @@ -314 +314 @@
 -	    tabstack[20],
 +	    tabstack[160],
-@@ -349 +349 @@
+@@ -349 +349,9 @@
 -	if (movemap[c] == INSMACRO)	/* map!ped macro */
++#if RIPPLE
++	/* The legacy insertion buffer cannot move within an unfinished insertion.
++	 * Ignore navigation instead of turning Down into newline or Left into erase.
++	 * Command mode and operator motions handle these keys through movemap. */
++	if (c >= KEY_UP && c <= KEY_IGNORE)
++	    error();
++	else
++#endif
 +	if (c < 128 && movemap[c] == INSMACRO)	/* map!ped macro */
-@@ -352 +352 @@
+@@ -352 +360 @@
 -	    while (!wc(s[ip-1]) && ip > start)
 +	    while (ip > start && !wc(s[ip-1]))
-@@ -354 +354 @@
+@@ -354 +362 @@
 -	    while (wc(s[ip-1]) && ip > start)
 +	    while (ip > start && wc(s[ip-1]))
-@@ -370 +370 @@
+@@ -370 +378 @@
 -	else if (c=='\n' || c=='\r' || c==ESC) {
 +	else if (c=='\n' || c=='\r' || c==ESC || c==3) {
-@@ -372 +372 @@
+@@ -372 +380 @@
 -            return (c==ESC) ? ESC : EOL;
 +            return (c==ESC || c==3) ? ESC : EOL;
-@@ -382,0 +383 @@
+@@ -382,0 +391 @@
 +                        if (tabptr >= 160) { error(); continue; }
-@@ -386 +387 @@
+@@ -386 +395 @@
 -		    case 3 : ixp += 3; break;
 +		    case 3 : ixp += 6; break;
 --- a/Applications/levee/modify.c
@@ -4915,14 +4791,17 @@
 +    if (popw(&undo,curp) && popw(&undo,&lump) && ((long)bufmax + lump < SIZE)) {
 --- a/Applications/levee/unixcall.c
 +++ b/Applications/levee/unixcall.c
-@@ -29,0 +30,3 @@
+@@ -29,0 +30,6 @@
 +#include <stdlib.h>
 +#include <signal.h>
 +#include <errno.h>
-@@ -43 +46 @@
++#if RIPPLE
++#include <sys/select.h>
++#endif
+@@ -43 +49 @@
 -strput(char *s)
 +int strput(char *s)
-@@ -63,0 +67,8 @@
+@@ -63,0 +70,8 @@
 +static void suspend_editor(int sig) {
 +    fixcon();
 +    /* signal() is one-shot: this second TSTP uses the default stop action. */
@@ -4931,21 +4810,132 @@
 +    initcon();
 +    redisplay(TRUE);
 +}
-@@ -69,0 +81 @@
+@@ -69,0 +84 @@
 +        signal(SIGTSTP, suspend_editor);
-@@ -77 +89 @@
+@@ -77 +92 @@
 -	new.c_iflag &= ~(IXOFF|IXANY|ICRNL|INLCR);
 +	new.c_iflag &= ~(IXON|IXOFF|IXANY|ICRNL|INLCR);
-@@ -79,0 +92,2 @@
+@@ -80 +95,4 @@
+-
 +        new.c_cc[VMIN] = 1;
 +        new.c_cc[VTIME] = 0;
-@@ -80,0 +95 @@
++
 +        strput("\033[?1049h\033[H");
-@@ -88,0 +104 @@
+@@ -88,0 +107 @@
 +         strput("\033[?1049l");
-@@ -98,2 +114,8 @@
+@@ -93,0 +113,31 @@
++#if RIPPLE
++/* A lone Escape must leave insert mode without waiting for another key. A
++ * terminal may split an arrow sequence across reads, so allow a short bounded
++ * wait for each suffix byte. Interrupted suffix waits are bounded as well. */
++static int keybyte(int suffix)
++{
++    unsigned char c;
++    int retries = 0;
++
++    for (;;) {
++        if (suffix) {
++            fd_set ready;
++            struct timeval delay;
++            int n;
++            FD_ZERO(&ready);
++            FD_SET(0, &ready);
++            delay.tv_sec = 0;
++            delay.tv_usec = 50000;
++            n = select(1, &ready, NULL, NULL, &delay);
++            if (n < 0 && errno == EINTR && ++retries < 4) continue;
++            if (n != 1) return -1;
++        }
++        if (read(0, &c, 1) != 1) {
++            if (errno == EINTR && (!suffix || ++retries < 4)) continue;
++            if (suffix) return -1;
++            fixcon(); exit(1);
++        }
++        return c;
++    }
++}
++
+@@ -95,0 +146,76 @@
++    static unsigned char pending[16];
++    static unsigned count, next;
++    static int discard;
++    unsigned n;
++    int c;
++
++    for (;;) {
++        /* Replay an incomplete or non-ANSI escape without losing the command
++         * typed immediately after Escape (notably Escape followed by :q!). */
++        if (next < count) {
++            c = pending[next++];
++            return c < 128 ? c : 0;
++        }
++        count = next = 0;
++        if (discard) {
++            /* Drain an overlong CSI in bounded pieces; its tail must not turn
++             * into editor commands. A timeout abandons the incomplete key. */
++            for (n = 0; n < sizeof(pending); n++) {
++                c = keybyte(TRUE);
++                if (c < 0 || (c >= 0x40 && c <= 0x7e)) {
++                    discard = FALSE;
++                    break;
++                }
++            }
++            return KEY_IGNORE;
++        }
++        c = keybyte(FALSE);
++        if (c == 26) { raise(SIGTSTP); continue; }
++        if (c != ESC) return c < 128 ? c : 0;
++        c = keybyte(TRUE);
++        if (c < 0) return ESC;
++        pending[count++] = c;
++        if (c != '[' && c != 'O') return ESC;
++
++        while (count < sizeof(pending)) {
++            c = keybyte(TRUE);
++            if (c < 0) return ESC;
++            pending[count++] = c;
++            /* Linux console's historical F1..F5 form has a second '['. */
++            if (pending[0] == '[' && count == 2 && c == '[') {
++                c = keybyte(TRUE);
++                if (c < 0) return ESC;
++                pending[count++] = c;
++                if (c >= 'A' && c <= 'E') {
++                    count = 0;
++                    return KEY_IGNORE;
++                }
++                return ESC;
++            }
++            if (c >= 0x40 && c <= 0x7e) {
++                n = count;
++                count = 0;
++                /* CSI A..D, SS3 A..D and the normal xterm modifier form.
++                 * Other complete keys are unbound, consumed as a single key. */
++                if (c >= 'A' && c <= 'D' &&
++                    (n == 2 || (pending[0] == '[' &&
++                     ((n == 3 && pending[1] == '1') ||
++                      (n == 5 && pending[1] == '1' && pending[2] == ';' &&
++                       pending[3] >= '2' && pending[3] <= '8'))))) {
++                    if (c == 'A') return KEY_UP;
++                    if (c == 'B') return KEY_DOWN;
++                    if (c == 'C') return KEY_RIGHT;
++                    return KEY_LEFT;
++                }
++                return KEY_IGNORE;
++            }
++            if (c < 0x20 || c > 0x3f) return ESC;
++        }
++        count = 0;
++        discard = TRUE;
++        return KEY_IGNORE;
++    }
++}
++#else
++int getKey(void)
++{
+@@ -98,3 +224,10 @@
 -    read(0,&c,1);
 -    return c;
+-}
 +    for (;;) {
 +        if (read(0, &c, 1) != 1) {
 +            if (errno == EINTR) continue;
@@ -4954,6 +4944,8 @@
 +        if (c == 26) { raise(SIGTSTP); continue; }
 +        return c < 128 ? c : 0;
 +    }
++}
++#endif
 --- a/Applications/levee/wildargs.c
 +++ b/Applications/levee/wildargs.c
 @@ -31 +31 @@
@@ -9447,12 +9439,26 @@
 @@ -770 +938 @@
 -            blkfromk(&dev->s_nfree, buf, 0, sizeof(int) + 50 * sizeof(blkno_t));
 +            blkfromk(&dev->s_nfree, buf, 0, sizeof(dev->s_nfree) + FILESYS_TABSIZE * sizeof(blkno_t));
-@@ -872,2 +1040,2 @@
+@@ -786 +954 @@
+-int_fast8_t oft_alloc(void)
++oft_result_t oft_alloc(void)
+@@ -789 +957 @@
+-    register uint_fast8_t j = 0;
++    register oft_index_t j = 0;
+@@ -828 +996 @@
+-void oft_deref(uint_fast8_t of)
++void oft_deref(oft_index_t of)
+@@ -845 +1013 @@
+-    register uint8_t *p;
++    register oft_index_t *p;
+@@ -870,4 +1038,2 @@
+-    /* Copy the CLOEXEC mask acrosss so dup inherits it */
+-    /* doclose means the existing bit state is clear */
 -    if (udata.u_cloexec & (1U << oldd))
 -	    udata.u_cloexec |= 1U << newd;
-+    if (udata.u_cloexec & (1UL << oldd))
-+	    udata.u_cloexec |= 1UL << newd;
-@@ -898 +1066,10 @@
++    /* dup, dup2 and F_DUPFD create a handle with close-on-exec cleared. */
++    uf_cloexec_clear(&udata, newd);
+@@ -898 +1064,10 @@
 -    if (mode == MODE_R(F_PIPE))
 +#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
 +    /* Ripple sockets use only the inode cache, without a disk allocation. */
@@ -9464,7 +9470,7 @@
 +#endif
 +
 +    if (mode == MODE_R(F_PIPE)) {
-@@ -899,0 +1077,8 @@
+@@ -899,0 +1075,8 @@
 +#ifdef CONFIG_RIPPLE_IO
 +        if (ino->c_dev == NO_DEVICE) {
 +            if (ino->c_refs == 1) ripple_pipe_release(ino);
@@ -9473,10 +9479,10 @@
 +        }
 +#endif
 +    }
-@@ -908 +1093 @@
+@@ -908 +1091 @@
 -        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE))
 +        if (mode == MODE_R(F_REG) || mode == MODE_R(F_DIR) || mode == MODE_R(F_PIPE) || mode == MODE_R(F_LNK))
-@@ -939,0 +1125,13 @@
+@@ -939,0 +1123,13 @@
 +#if defined(CONFIG_RIPPLE) && defined(CONFIG_NET)
 +    if (issocket(ino) && ino->c_dev == NO_DEVICE) {
 +        ino->c_flags &= ~CDIRTY;
@@ -9490,10 +9496,10 @@
 +        return;
 +    }
 +#endif
-@@ -950 +1148 @@
+@@ -950 +1146 @@
 -    return !!(ino->c_node.i_mode & F_CDEV);
 +    return getmode(ino) == MODE_R(F_CDEV) || getmode(ino) == MODE_R(F_BDEV);
-@@ -967,38 +1165,26 @@
+@@ -967,38 +1163,26 @@
 -int f_trunc_blocks(register inoptr ino, uint16_t nblock)
 -{
 -    register uint16_t dev;
@@ -9558,28 +9564,31 @@
 +        --j;
 +        freeblk(dev, ino->c_node.i_addr[j], 0, 0);
 +        ino->c_node.i_addr[j] = 0;
-@@ -1037 +1223 @@
+@@ -1037 +1221 @@
 -void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
 +void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock)
-@@ -1041 +1227,2 @@
+@@ -1041 +1225,2 @@
 -    uint16_t span, first, keep;
 +    uint32_t span = 1, first, keep;
 +    unsigned depth;
-@@ -1055 +1242 @@
+@@ -1055 +1240 @@
 -        span = level == 1 ? 1 : BLKSIZE / sizeof(blkno_t);
 +        for (depth = 1; depth < level; depth++) span *= BLKSIZE / sizeof(blkno_t);
-@@ -1160,0 +1348,4 @@
+@@ -1117 +1302 @@
+-    register uint_fast8_t oftindex;
++    register oft_index_t oftindex;
+@@ -1160,0 +1346,4 @@
 +    mode = ino->c_node.i_mode;
 +    /* Root bypasses read/write and directory search permissions, but a
 +       nondirectory still needs at least one execute bit. Keep access(X_OK)
 +       and both executable loaders consistent, before script fallback. */
-@@ -1162,3 +1353,2 @@
+@@ -1162,3 +1351,2 @@
 -        return(07);
 -
 -    mode = ino->c_node.i_mode;
 +        return getmode(ino) == MODE_R(F_DIR) || (mode & 0111) ? 07 : 06;
 +
-@@ -1182,8 +1372,13 @@
+@@ -1182,8 +1370,13 @@
 -    if (ino->c_flags & CRDONLY)
 -        return;
 -
@@ -9601,12 +9610,12 @@
 +#ifdef CONFIG_RIPPLE_IO
 +    }
 +#endif
-@@ -1255,0 +1451,4 @@
+@@ -1255,0 +1449,4 @@
 +#ifdef CONFIG_RIPPLE
 +    kprintf("fp->s_mounted=0x%x, fp->s_isize=0x%x, fp->s_fsize=0x%lx\n",
 +    fp->s_mounted, fp->s_isize, (unsigned long)fp->s_fsize);
 +#else
-@@ -1257,0 +1457 @@
+@@ -1257,0 +1455 @@
 +#endif
 --- a/Kernel/include/kdata.h
 +++ b/Kernel/include/kdata.h
@@ -9618,10 +9627,16 @@
 -#ifndef CONFIG_DYNAMIC_BUFPOOL
 @@ -29,0 +31 @@
 +extern struct blkbuf *bufpool;
-@@ -88 +90 @@
+@@ -34,0 +37,3 @@
++#ifdef CONFIG_DYNAMIC_OFT
++extern struct oft *of_tab;
++#else
+@@ -35,0 +41 @@
++#endif
+@@ -88 +94 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -91 +93 @@
+@@ -91 +97 @@
 -#define FUZIX_SYSCALL_COUNT 68
 +#define FUZIX_SYSCALL_COUNT 71
 --- a/Kernel/include/kernel.h
@@ -9647,27 +9662,41 @@
 +#else
 @@ -71,0 +87 @@
 +#endif
-@@ -163 +179 @@
+@@ -76 +92 @@
+-/* Maximum UFTSIZE can be is 16, then you need to alter the O_CLOEXEC code */
++/* Large Ripple profiles use a word bitmap for close-on-exec, below. */
+@@ -130 +146,9 @@
+-#define NO_FILE   (0xFF)
++#if OFTSIZE > 255
++typedef uint16_t oft_index_t;
++typedef int16_t oft_result_t;
++#define NO_FILE 0xFFFFU
++#else
++typedef uint8_t oft_index_t;
++typedef int_fast8_t oft_result_t;
++#define NO_FILE 0xFF
++#endif
+@@ -163 +187 @@
 -typedef int32_t off_t;	/* 32MB file and fs size limit */
 +typedef int32_t off_t;	/* Signed file positions, measured in platform C characters. */
-@@ -165,0 +182,3 @@
+@@ -165,0 +190,3 @@
 +#ifdef CONFIG_RIPPLE
 +typedef uint32_t blkno_t;
 +#else
-@@ -166,0 +186,5 @@
+@@ -166,0 +194,5 @@
 +#endif
 +#ifndef FS_DIRECT
 +#define FS_DIRECT 18
 +#define FS_LEVELS 2
 +#endif
-@@ -177 +201,5 @@
+@@ -177 +209,5 @@
 -#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
 +#ifdef CONFIG_RIPPLE
 +#define BLKOVERSIZE32 0x80 /* Signed 32-bit C-character offsets. */
 +#else
 +#define BLKOVERSIZE32 0xFE
 +#endif
-@@ -200,0 +229,7 @@
+@@ -200,0 +237,7 @@
 +#if defined(CONFIG_RIPPLE) && RIPPLE_BULK_IO
 +#define blktok(kaddr,buf,off,len) \
 +    ripple_buffer_copy((kaddr), (buf)->__bf_data + (off), (len))
@@ -9675,74 +9704,108 @@
 +    ripple_buffer_copy((buf)->__bf_data + (off), (kaddr), (len))
 +#define blkzero(buf) ripple_buffer_zero((buf)->__bf_data)
 +#else
-@@ -204,0 +240,2 @@
+@@ -204,0 +248,2 @@
 +#define blkzero(buf)             memset(buf->__bf_data, 0, BLKSIZE)
 +#endif
-@@ -210 +246,0 @@
+@@ -210 +254,0 @@
 -#define blkzero(buf)		memset(buf->__bf_data, 0, BLKSIZE)
-@@ -237 +273,4 @@
+@@ -237 +281,4 @@
 -} dinode;               /* Exactly 64 bytes long! */
 +#ifdef CONFIG_RIPPLE
 +    uint16_t i_reserved[12]; /* 64 C16 cells / 128 physical octets. */
 +#endif
 +} dinode; /* Ripple V3: 64 C16 cells; conventional platforms: 64 octets. */
-@@ -266,0 +306 @@
+@@ -266,0 +314 @@
 +#define F_LNK   0120000
-@@ -310 +350 @@
+@@ -297,3 +345,3 @@
+-    uint8_t    c_refs;          /* In-core reference count */
+-    uint8_t    c_readers;	/* Count of readers by oft entry */
+-    uint8_t    c_writers;	/* Count of writers by oft entry */
++    oft_index_t c_refs;         /* In-core reference count */
++    oft_index_t c_readers;      /* Count of readers by oft entry */
++    oft_index_t c_writers;      /* Count of writers by oft entry */
+@@ -310 +358 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
-@@ -320,0 +361,3 @@
+@@ -320,0 +369,3 @@
 +#ifdef CONFIG_RIPPLE
 +    uint16_t d_padding; /* DIR_LEN characters, 64 physical octets */
 +#endif
-@@ -331 +374 @@
+@@ -331 +382 @@
 -    uint16_t      s_fsize;
 +    blkno_t       s_fsize;
-@@ -347,0 +391 @@
+@@ -348,0 +400 @@
 +
-@@ -484,0 +529 @@
+@@ -379 +431 @@
+-    uint8_t   o_refs;     /* Reference count: depends on # of active children */
++    oft_index_t o_refs;   /* Handles across active children, including dup. */
+@@ -484,0 +537 @@
 +#define PFL_EXECED 32
-@@ -517 +562 @@
+@@ -517 +570 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_JOB_CONTROL)
-@@ -562,0 +608,3 @@
+@@ -562,0 +616,3 @@
 +#ifdef CONFIG_RIPPLE
 +    unsigned long u_sigtramp; /* RXE user signal entry in separate IMEM */
 +#endif
-@@ -582,0 +631,3 @@
-+#if UFTSIZE > 16
+@@ -582 +638,6 @@
+-    uint8_t     u_files[UFTSIZE];       /* Process file table: indices into open file table, or NO_FILE. */
++    oft_index_t u_files[UFTSIZE];       /* Open-file table indices, or NO_FILE. */
++#if UFTSIZE > 32
++    uint16_t    u_cloexec[(UFTSIZE + 15) / 16];
++#elif UFTSIZE > 16
 +    uint32_t    u_cloexec;       /* Close on exec flags, including high FDs. */
 +#else
-@@ -583,0 +635 @@
+@@ -583,0 +645 @@
 +#endif
-@@ -638,0 +691,4 @@
+@@ -618,0 +681,13 @@
++/* Descriptor flags belong to handles, not shared open-file entries. Keep the
++ * legacy scalar layout for small ports and avoid shifts wider than a C16 word. */
++#if UFTSIZE > 32
++#define uf_cloexec_test(u,n) ((u)->u_cloexec[(n) >> 4] & (1U << ((n) & 15)))
++#define uf_cloexec_set(u,n) ((u)->u_cloexec[(n) >> 4] |= (1U << ((n) & 15)))
++#define uf_cloexec_clear(u,n) ((u)->u_cloexec[(n) >> 4] &= ~(1U << ((n) & 15)))
++#else
++#define uf_cloexec_test(u,n) ((u)->u_cloexec & (1UL << (n)))
++#define uf_cloexec_set(u,n) ((u)->u_cloexec |= (1UL << (n)))
++#define uf_cloexec_clear(u,n) ((u)->u_cloexec &= ~(1UL << (n)))
++#endif
++#define uf_cloexec_reset(u) memset(&(u)->u_cloexec, 0, sizeof((u)->u_cloexec))
++
+@@ -638,0 +714,4 @@
 +#ifdef CONFIG_RIPPLE
 +    /* Ripple exec keeps these on its private kernel stack, not in disk buffers. */
 +    uint8_t a_buf[RIPPLE_ARG_MAX];
 +#else
-@@ -639,0 +696 @@
+@@ -639,0 +719 @@
 +#endif
-@@ -652 +709 @@
+@@ -652 +732 @@
 -#define _WSTOPPED	0xFF
 +#define _WSTOPPED	0x7F
-@@ -757,0 +815,2 @@
+@@ -757,0 +838,2 @@
 +#define ELOOP           61              /* Too many symbolic links */
 +#define EOVERFLOW       60              /* Result does not fit caller ABI */
-@@ -993,0 +1053,5 @@
+@@ -993,0 +1076,5 @@
 +#define N_NOFOLLOW 1 /* Do not follow a terminal symbolic link. */
 +#define N_NODEREF  2 /* Also reject terminal link/ for directory mutation. */
 +#define N_MKDIR    4 /* Allow a missing terminal directory with trailing /. */
 +extern inoptr n_open_flags(uint8_t *uname, inoptr *parent, unsigned flags);
 +extern int readlinki(inoptr ino, uint8_t *target);
-@@ -999,0 +1064 @@
+@@ -999,0 +1087 @@
 +extern bool ch_link_parent(inoptr directory, inoptr parent);
-@@ -1026 +1091 @@
+@@ -1009 +1097 @@
+-extern int_fast8_t oft_alloc(void);
++extern oft_result_t oft_alloc(void);
+@@ -1011 +1099 @@
+-extern void oft_deref(uint_fast8_t of);
++extern void oft_deref(oft_index_t of);
+@@ -1026 +1114 @@
 -extern int f_trunc_blocks(inoptr ino, uint16_t nblock);
 +extern int f_trunc_blocks(inoptr ino, blkno_t nblock);
-@@ -1028 +1093 @@
+@@ -1028 +1116 @@
 -extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock);
 +extern void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, blkno_t nblock);
-@@ -1042,0 +1108,9 @@
+@@ -1042,0 +1131,9 @@
 +#ifdef CONFIG_RIPPLE_IO
 +extern void *ripple_kernel_alloc(unsigned);
 +extern int ripple_queue_read(struct s_queue *, uint8_t *, unsigned, unsigned);
@@ -9752,14 +9815,17 @@
 +extern void ripple_pipe_release(inoptr);
 +extern void ripple_pipe_io(inoptr, unsigned, unsigned);
 +#endif
-@@ -1081 +1155 @@
+@@ -1081 +1178 @@
 -#ifdef CONFIG_LEVEL_2
 +#if defined(CONFIG_LEVEL_2) || defined(CONFIG_SELECT)
-@@ -1089,0 +1164,3 @@
+@@ -1089,0 +1187,6 @@
 +#ifdef CONFIG_SELECT
 +extern void ripple_select_exit(ptptr p);
++#ifdef CONFIG_DYNAMIC_OFT
++extern void ripple_select_init(void);
 +#endif
-@@ -1313,0 +1391 @@
++#endif
+@@ -1313,0 +1417 @@
 +extern arg_t _symlink(void), _readlink(void), _lstat(void);
 --- a/Kernel/include/netdev.h
 +++ b/Kernel/include/netdev.h
@@ -9929,13 +9995,16 @@
 +				if (LOWORD(udata.u_offset) >= FS_DIRECT * BLKSIZE)
 @@ -235,0 +249 @@
 +                selwake_inode(ino, SELECT_IN);
+@@ -261 +275 @@
+-	int8_t oftindex;
++	oft_index_t oftindex;
 @@ -287,0 +302,3 @@
 +    if (getmode(ino) == MODE_R(F_PIPE)) {
 +        wakeup(ino);selwake_inode(ino, SELECT_IN|SELECT_OUT);
 +    }
 @@ -289 +306 @@
 -	udata.u_cloexec &= ~(1 << uindex);
-+	udata.u_cloexec &= ~(1UL << uindex);
++	uf_cloexec_clear(&udata, uindex);
 @@ -400 +417,11 @@
 -}
 +#ifdef CONFIG_RIPPLE
@@ -9956,17 +10025,23 @@
 @@ -28,0 +30,2 @@
 +#elif defined(CONFIG_RIPPLE_IO)
 +struct blkbuf *bufpool, *bufpool_end;
-@@ -111,0 +115,3 @@
+@@ -33,0 +37,3 @@
++#ifdef CONFIG_DYNAMIC_OFT
++struct oft *of_tab;
++#else
+@@ -34,0 +41 @@
++#endif
+@@ -111,0 +119,3 @@
 +    _symlink,       /* 68: guest symbolic link creation */
 +    _readlink,      /* 69: read link contents without following */
 +    _lstat,         /* 70: stat the link itself */
-@@ -113,4 +119 @@
+@@ -113,4 +123 @@
 -	_nosys,			/* 68-71 reserved */
 -	_nosys,
 -	_nosys,
 -	_nosys,
 +    _nosys,         /* 71 reserved */
-@@ -124,0 +128,9 @@
+@@ -124,0 +132,9 @@
 +#elif defined(CONFIG_JOB_CONTROL)
 +    _nosys,
 +#ifdef CONFIG_SELECT
@@ -10035,6 +10110,9 @@
 @@ -269 +291 @@
 -			p->p_status = P_RUNNING;
 +			proc_setstate(p,P_RUNNING);
+@@ -295 +317 @@
+-	uint8_t *j, *e;
++	oft_index_t *j, *e;
 @@ -311 +333 @@
 -	p->p_status = P_READY;
 +	proc_setstate(p,P_READY);
@@ -10257,6 +10335,9 @@
 +    memset(bufpool,0,NBUFS*sizeof(struct blkbuf));
 +    bufpool_end=bufpool+NBUFS;
 +#endif
+@@ -82 +94 @@
+-	register uint8_t *j, *e;
++	register oft_index_t *j, *e;
 @@ -98 +110 @@
 -	init_process->p_status = P_RUNNING;
 +	proc_setstate(init_process,P_RUNNING);
@@ -10283,11 +10364,22 @@
 +     * initialized, before creating any process mappings. */
 +    pagemap_init();
 +#endif
-@@ -387,0 +413 @@
-+#ifndef CONFIG_RIPPLE_IO
-@@ -388,0 +415 @@
+@@ -386,0 +412,10 @@
++#ifdef CONFIG_DYNAMIC_OFT
++    /* Keep growing tables out of the fixed kernel-global bank. Allocate once
++     * from supervisor storage before any process can acquire a descriptor. */
++    of_tab = ripple_kernel_alloc(OFTSIZE * sizeof(*of_tab));
++    if (!of_tab) panic("open file table");
++    memset(of_tab, 0, OFTSIZE * sizeof(*of_tab));
++#ifdef CONFIG_SELECT
++    ripple_select_init();
 +#endif
-@@ -431,0 +459,3 @@
++#endif
+@@ -387,0 +423 @@
++#ifndef CONFIG_RIPPLE_IO
+@@ -388,0 +425 @@
++#endif
+@@ -431,0 +469,3 @@
 +#ifdef CONFIG_PLATFORM_CLOCK
 +        plt_clock_init();
 +#endif
@@ -10354,9 +10446,13 @@
 +    return count;
 +}
 +
-@@ -294,0 +324 @@
+@@ -291 +320,2 @@
+-	int_fast8_t u1, u2, oft1, oft2;
++	int_fast8_t u1, u2;
++	oft_result_t oft1, oft2;
+@@ -294,0 +325 @@
 +    if (!valaddr_w((void *)fildes, 2*sizeof(int), 2*sizeof(int))) return -1;
-@@ -306 +336,6 @@
+@@ -306 +337,6 @@
 -	if (!(ino = i_open(root_dev, 0))) {
 +#ifdef CONFIG_RIPPLE_IO
 +    ino = ripple_pipe_new();
@@ -10364,7 +10460,7 @@
 +    ino = i_open(root_dev, 0);
 +#endif
 +	if (!ino) {
-@@ -334,2 +369,8 @@
+@@ -334,2 +370,8 @@
 -	// write results to userspace
 -	return uputi(u1, fildes) | uputi(u2, fildes + 1);
 +    /* Validation happened before allocation; still unwind both descriptors if
@@ -10375,14 +10471,14 @@
 +        return -1;
 +    }
 +    return 0;
-@@ -361 +402 @@
+@@ -361 +403 @@
 -	ino = n_open(path, &pino);
 +	ino = n_open_flags(path, &pino, N_NOFOLLOW | N_NODEREF);
-@@ -446,0 +488,3 @@
+@@ -446,0 +489,3 @@
 +#ifdef CONFIG_RIPPLE_IO
 +        nbytes -= nbytes % DIR_LEN;
 +#else
-@@ -447,0 +492 @@
+@@ -447,0 +493 @@
 +#endif
 --- a/Kernel/syscall_fs2.c
 +++ b/Kernel/syscall_fs2.c
@@ -10403,13 +10499,16 @@
 +#endif
 --- a/Kernel/syscall_fs3.c
 +++ b/Kernel/syscall_fs3.c
+@@ -20 +20 @@
+-	int_fast8_t oftindex;
++	oft_result_t oftindex;
 @@ -43 +43,2 @@
 -	ino = n_open(name, &parent);
 +	ino = n_open_flags(name, &parent,
 +            (flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL) ? N_NOFOLLOW : 0);
 @@ -143 +144 @@
 -		udata.u_cloexec |= (1 << uindex);
-+		udata.u_cloexec |= (1UL << uindex);
++		uf_cloexec_set(&udata, uindex);
 @@ -209 +210 @@
 -	if (!(ino = n_open_argn()))
 +	if (!(ino = n_open_flags(name1, NULL, N_NOFOLLOW)))
@@ -10418,13 +10517,13 @@
 +	if ((ino2 = n_open_flags(name2, &parent2, N_NOFOLLOW | N_NODEREF)) != NULL) {
 @@ -291 +292 @@
 -		return udata.u_cloexec & (1U << fd) ? O_CLOEXEC : 0;
-+		return udata.u_cloexec & (1UL << fd) ? O_CLOEXEC : 0;
++		return uf_cloexec_test(&udata, fd) ? O_CLOEXEC : 0;
 @@ -294 +295 @@
 -			udata.u_cloexec |= (1U << fd);
-+			udata.u_cloexec |= (1UL << fd);
++			uf_cloexec_set(&udata, fd);
 @@ -296 +297 @@
 -			udata.u_cloexec &= ~(1U << fd);
-+			udata.u_cloexec &= ~(1UL << fd);
++			uf_cloexec_clear(&udata, fd);
 @@ -339,0 +341 @@
 +#undef len
 @@ -458 +460,3 @@
@@ -11043,13 +11142,183 @@
 +		loadavg[i] = ((unsigned long)uts.loadavg[i] * 100UL) >> 8;
 --- a/Library/libs/qsort.c
 +++ b/Library/libs/qsort.c
-@@ -149 +149,2 @@
+@@ -16 +16,4 @@
+-#include <string.h>
++/* SPDX-License-Identifier: LGPL-2.1-only */
++/* C16 heapsort: size_t indices and constant auxiliary storage.
++ * No shared pivot buffer: comparators may call qsort recursively. */
++#include <stdlib.h>
+@@ -18,42 +21,6 @@
+-char *_qbuf = 0;		/* pointer to storage for qsort() */
+-
+-#define	PIVOT			((i+j)>>1)
+-#define moveitem(dst,src,size)	if(dst != src) memcpy(dst, src, size)
+-
+-static void _wqsort(void *basep, int lo, int hi,
+-               int (*cmp)(const void *, const void *))
+-{
+-   int   k;
+-   register int i, j, t;
+-   register int *p = &k;
+-   short *base = basep;
+-
+-   while (hi > lo)
+-   {
+-      i = lo;
+-      j = hi;
+-      t = PIVOT;
+-      *p = base[t];
+-      base[t] = base[i];
+-      base[i] = *p;
+-      while (i < j)
+-      {
+-	 while (((*cmp) ((base + j), p)) > 0)
+-	    --j;
+-	 base[i] = base[j];
+-	 while ((i < j) && (((*cmp) ((base + i), p)) <= 0))
+-	    ++i;
+-	 base[j] = base[i];
+-      }
+-      base[i] = *p;
+-      if ((i - lo) < (hi - i))
+-      {
+-	 _wqsort(base, lo, (i - 1), cmp);
+-	 lo = i + 1;
+-      }
+-      else
+-      {
+-	 _wqsort(base, (i + 1), hi, cmp);
+-	 hi = i - 1;
+-      }
+-   }
++static void exchange(char *a, char *b, size_t width) {
++  while (width--) {
++    char cell = *a;
++    *a++ = *b;
++    *b++ = cell;
++  }
+@@ -62,35 +29,12 @@
+-static void _lqsort(long *base, int lo, int hi, int (*cmp)(const void *, const void *))
+-{
+-   long  k;
+-   register int i, j, t;
+-   register long *p = &k;
+-
+-   while (hi > lo)
+-   {
+-      i = lo;
+-      j = hi;
+-      t = PIVOT;
+-      *p = base[t];
+-      base[t] = base[i];
+-      base[i] = *p;
+-      while (i < j)
+-      {
+-	 while (((*cmp) ((base + j), p)) > 0)
+-	    --j;
+-	 base[i] = base[j];
+-	 while ((i < j) && (((*cmp) ((base + i), p)) <= 0))
+-	    ++i;
+-	 base[j] = base[i];
+-      }
+-      base[i] = *p;
+-      if ((i - lo) < (hi - i))
+-      {
+-	 _lqsort(base, lo, (i - 1), cmp);
+-	 lo = i + 1;
+-      }
+-      else
+-      {
+-	 _lqsort(base, (i + 1), hi, cmp);
+-	 hi = i - 1;
+-      }
+-   }
++static void sift(char *base, size_t root, size_t count, size_t width,
++                 int (*compare)(const void *, const void *)) {
++  while (root < count / 2) {
++    size_t child = root * 2 + 1;
++    if (child + 1 < count &&
++        compare(base + child * width, base + (child + 1) * width) < 0)
++      child++;
++    if (compare(base + root * width, base + child * width) >= 0)
++      return;
++    exchange(base + root * width, base + child * width, width);
++    root = child;
++  }
+@@ -99,37 +43,14 @@
+-static void _nqsort(void *basep, int lo, int hi, int size,
+-	       int (*cmp)(const void *, const void *))
+-{
+-   register int i, j;
+-   register char *p = _qbuf;
+-   char *base = basep;
+-
+-   while (hi > lo)
+-   {
+-      i = lo;
+-      j = hi;
+-      p = (base + size * PIVOT);
+-      moveitem(_qbuf, p, size);
+-      moveitem(p, (base + size * i), size);
+-      moveitem((base + size * i), _qbuf, size);
+-      p = _qbuf;
+-      while (i < j)
+-      {
+-	 while (((*cmp) ((base + size * j), p)) > 0)
+-	    --j;
+-	 moveitem((base + size * i), (base + size * j), size);
+-	 while ((i < j) && (((*cmp) ((base + size * i), p)) <= 0))
+-	    ++i;
+-	 moveitem((base + size * j), (base + size * i), size);
+-      }
+-      moveitem((base + size * i), p, size);
+-      if ((i - lo) < (hi - i))
+-      {
+-	 _nqsort(base, lo, (i - 1), size, cmp);
+-	 lo = i + 1;
+-      }
+-      else
+-      {
+-	 _nqsort(base, (i + 1), hi, size, cmp);
+-	 hi = i - 1;
+-      }
+-   }
++void qsort(void *data, size_t count, size_t width,
++           int (*compare)(const void *, const void *)) {
++  char *base = data;
++  size_t i;
++  if (count < 2)
++    return;
++  if (!width || count > (size_t)-1 / width)
++    return;
++  for (i = count / 2; i; i--)
++    sift(base, i - 1, count, width, compare);
++  for (i = count - 1; i; i--) {
++    exchange(base, base + i * width, width);
++    sift(base, 0, i, width, compare);
++  }
+@@ -137,21 +57,0 @@
+-
+-void qsort(void *base, size_t num, size_t size,
+-	  int (*cmp)(const void *,const void *))
+-{
+-   char  _qtemp[128];
+-
+-   if (_qbuf == 0)
+-   {
+-      if (size > sizeof(_qtemp))/* records too large! */
+-	 return;
+-      _qbuf = _qtemp;
+-   }
 -   if (size == 2)
-+   /* Ripple: C sizes count 16-bit cells, not physical octets. */
-+   if (size == sizeof(short))
-@@ -151 +152 @@
+-      _wqsort(base, 0, num - 1, cmp);
 -   else if (size == 4)
-+   else if (size == sizeof(long))
+-      _lqsort(base, 0, num - 1, cmp);
+-   else
+-      _nqsort(base, 0, num - 1, size, cmp);
+-   if (_qbuf == _qtemp)
+-      _qbuf = 0;
+-}
 --- a/Library/libs/scalbn.c
 +++ b/Library/libs/scalbn.c
 @@ -11 +11 @@
@@ -11238,6 +11507,11 @@
 @@ -16 +16 @@
 -      return 512;
 +      return 256;
+@@ -37,2 +37,2 @@
+-      /* In theory down to RAM */
+-      return 256;
++      /* Dynamic FILE objects support every kernel descriptor, subject to RAM. */
++      return info.max_open;
 @@ -40,2 +40 @@
 -      /* Not supported yet */
 -      return 1;
@@ -11361,3 +11635,1424 @@
 @@ -45 +45 @@
 -   strcpy(buf + 8, _itoa(minor(st.st_dev)));
 +   strcpy(buf + 8, _itoa(minor(st.st_rdev)));
+--- a/Library/libs/getcwd.c
++++ b/Library/libs/getcwd.c
+@@ -18,0 +19,2 @@
++/* Match the allocation-free contract: sh owns its brk/stak arena. */
++static DIR stream;
+@@ -43 +45 @@
+-	if ((dp = opendir(path_buf)) == 0)
++	if ((dp = opendir_r(&stream, path_buf)) == 0)
+@@ -47,0 +50 @@
++				closedir_r(dp);
+@@ -55 +58 @@
+-				closedir(dp);
++				closedir_r(dp);
+@@ -61 +64 @@
+-	closedir(dp);
++	closedir_r(dp);
+--- a/Applications/util/tree.c
++++ b/Applications/util/tree.c
+@@ -0,0 +1,3 @@
++/* Derived from FUZIX Applications/util/tree.c (pinned upstream revision).
++ * Riplix adaptation: sorted physical walk, symlink labels, depth/hidden filters,
++ * checked allocation/path/I/O errors. Never traverses symbolic links. */
+@@ -1,0 +5 @@
++#include <stdlib.h>
+@@ -3 +7,5 @@
+-#include <ftw.h>
++#include <unistd.h>
++#include <getopt.h>
++#include <sys/stat.h>
++#include <dirent.h>
++#include <errno.h>
+@@ -5,9 +13,21 @@
+-static char *argn;
+-
+-int iterator(const char *fp, const struct stat *sb, int type, struct FTW *ftw)
+-{
+-    const char *tp = fp + ftw->base;
+-    unsigned n = ftw->level;
+-    while(n > 1) {
+-        printf("|   ");
+-        n--;
++static int hidden,dirs,failed;
++static unsigned depth_limit=65535U;
++static unsigned long directory_count,file_count;
++struct item { char *name; mode_t mode; };
++static int compare(const void *a,const void *b) {
++    return strcmp(((const struct item *)a)->name,((const struct item *)b)->name);
++}
++static char *path_join(const char *a,const char *b) {
++    size_t n=strlen(a),m=strlen(b); char *p;
++    if (n+m+2>256) { errno=ENAMETOOLONG; return NULL; }
++    p=malloc(n+m+2);
++    if (p) { memcpy(p,a,n); p[n]='/'; memcpy(p+n+1,b,m+1); }
++    return p;
++}
++static void error(const char *path) { fprintf(stderr,"tree: "); perror(path); failed=1; }
++static void label(const char *path,const char *name,mode_t mode) {
++    fputs(name,stdout);
++    if (S_ISLNK(mode)) {
++        char target[256]; ssize_t n=readlink(path,target,sizeof(target)-1);
++        if (n<0) error(path);
++        else { target[n]=0; printf(" -> %s",target); }
+@@ -15,4 +35 @@
+-    if (n)
+-        printf("+---");
+-    printf("%s\n", tp);
+-    return 0;
++    putchar('\n');
+@@ -20,5 +37,42 @@
+-
+-void tree(const char *path)
+-{
+-    if (nftw(path, iterator, 2, FTW_PHYS) < 0)
+-            fprintf(stderr, "%s: failed to walk '%s'.\n", argn, path);
++static void walk(const char *path,unsigned level,const char *prefix) {
++    DIR *dir; struct dirent *de; struct item *items=NULL;
++    size_t count=0,capacity=0,i;
++    if (level>=depth_limit) return;
++    dir=opendir(path); if (!dir) { error(path); return; }
++    for (;;) {
++        char *full; struct stat st;
++        errno=0; de=readdir(dir);
++        if (!de) { if (errno) error(path); break; }
++        if (!strcmp(de->d_name,".") || !strcmp(de->d_name,"..") || (!hidden && de->d_name[0]=='.')) continue;
++        full=path_join(path,de->d_name);
++        if (!full) { error(path); continue; }
++        if (lstat(full,&st)<0) { error(full); free(full); continue; }
++        free(full);
++        if (dirs && !S_ISDIR(st.st_mode)) continue;
++        if (count==capacity) {
++            size_t next=capacity?capacity*2:16; struct item *p;
++            if (next<capacity || next>((size_t)-1)/sizeof(*p)) { errno=ENOMEM; error(path); break; }
++            p=realloc(items,next*sizeof(*p)); if (!p) { error(path); break; }
++            items=p; capacity=next;
++        }
++        items[count].name=strdup(de->d_name);
++        if (!items[count].name) { error(path); break; }
++        items[count++].mode=st.st_mode;
++    }
++    closedir(dir); qsort(items,count,sizeof(*items),compare);
++    for (i=0;i<count;i++) {
++        char *full=path_join(path,items[i].name);
++        if (full) {
++            printf("%s%s",prefix,i+1==count?"`-- ":"|-- ");
++            label(full,items[i].name,items[i].mode);
++            if (S_ISDIR(items[i].mode)) {
++                size_t n=strlen(prefix); char *next=malloc(n+5);
++                directory_count++;
++                if (!next) error(full);
++                else { memcpy(next,prefix,n); strcpy(next+n,i+1==count?"    ":"|   "); walk(full,level+1,next); free(next); }
++            } else file_count++;
++            free(full);
++        } else error(path);
++        free(items[i].name);
++    }
++    free(items);
+@@ -26,10 +80,23 @@
+-
+-int main(int argc, char *argv[])
+-{
+-    argn = argv[0];
+-    if (argc == 1)
+-        tree(".");
+-    else  while(*++argv)
+-        tree(*argv);
+-    return 0;
+-}
+\ No newline at end of file
++int main(int argc,char **argv) {
++    int c,i; unsigned long n; char *end;
++    while ((c=getopt(argc,argv,"adL:"))!=-1) {
++        if (c=='a') hidden=1;
++        else if (c=='d') dirs=1;
++        else if (c=='L') {
++            errno=0; n=strtoul(optarg,&end,10);
++            if (errno || !*optarg || *end || optarg[0]=='-' || !n || n>65535UL) goto usage;
++            depth_limit=(unsigned)n;
++        } else goto usage;
++    }
++    for (i=optind;i<argc || (i==optind && i==argc);i++) {
++        const char *path=i<argc?argv[i]:"."; struct stat st;
++        if (lstat(path,&st)<0) error(path);
++        else { label(path,path,st.st_mode); if (S_ISDIR(st.st_mode)) walk(path,0,""); }
++        if (i==argc) break;
++    }
++    if (dirs) printf("\n%lu directories\n",directory_count);
++    else printf("\n%lu directories, %lu files\n",directory_count,file_count);
++    return failed || ferror(stdout);
++usage:
++    fprintf(stderr,"usage: tree [-ad] [-L LEVEL] [--] [DIRECTORY ...]\n"); return 2;
++}
+--- a/Applications/util/getopt.c
++++ b/Applications/util/getopt.c
+@@ -5,3 +5,2 @@
+-
+-#include <err.h>
+-#include <errno.h>
++/* Riplix adaptation: guard argv, quote every output argument for Bourne sh,
++ * and publish no partial argument vector after an option/allocation error. */
+@@ -10 +9,2 @@
+-#include <unistd.h>
++#include <string.h>
++#include <getopt.h>
+@@ -12,24 +12,7 @@
+-int
+-main(int argc, char *argv[])
+-{
+-	int c;
+-	int status = 0;
+-
+-	optind = 2;	/* Past the program name and the option letters. */
+-	while ((c = getopt(argc, argv, argv[1])) != -1)
+-		switch (c) {
+-		case '?':
+-			status = 1;	/* getopt routine gave message */
+-			break;
+-		default:
+-			if (optarg != NULL)
+-				printf(" -%c %s", c, optarg);
+-			else
+-				printf(" -%c", c);
+-			break;
+-		}
+-	printf(" --");
+-	for (; optind < argc; optind++)
+-		printf(" %s", argv[optind]);
+-	printf("\n");
+-	return status;
++struct argument { char *text; struct argument *next; };
++static int append(struct argument ***tail,const char *s) {
++    struct argument *a=malloc(sizeof(*a));
++    if (!a) return 0;
++    a->text=strdup(s); a->next=NULL;
++    if (!a->text) { free(a); return 0; }
++    **tail=a; *tail=&a->next; return 1;
+@@ -36,0 +20,24 @@
++static void quote(const char *s) {
++    putchar('\'');
++    while (*s) { if (*s=='\'') fputs("'\\''",stdout); else putchar(*s); s++; }
++    putchar('\'');
++}
++int main(int argc,char **argv) {
++    int c,status=0; const char *options; struct argument *head=NULL,**tail=&head,*a;
++    if (argc<2) { fprintf(stderr,"usage: getopt OPTSTRING [ARGUMENT ...]\n"); return 2; }
++    options=argv[1]; optind=2;
++    while ((c=getopt(argc,argv,options))!=-1) {
++        char option[3];
++        if (c=='?' || c==':') { status=1; continue; }
++        option[0]='-'; option[1]=(char)c; option[2]=0;
++        if (!append(&tail,option) || (optarg && !append(&tail,optarg))) { status=1; break; }
++    }
++    if (!status && !append(&tail,"--")) status=1;
++    while (!status && optind<argc) if (!append(&tail,argv[optind++])) status=1;
++    if (!status) {
++        for (a=head;a;a=a->next) { if (a!=head) putchar(' '); quote(a->text); }
++        putchar('\n');
++    }
++    while (head) { a=head->next; free(head->text); free(head); head=a; }
++    return status || ferror(stdout);
++}
+--- a/Applications/V7/cmd/cron.c
++++ b/Applications/V7/cmd/cron.c
+@@ -2 +2,3 @@
+-/* ANSIfied for FUZIX */
++/* Riplix adaptation: rewritten parser/runner; supervised foreground operation,
++ * local-time matching, bounded input, concurrent children and graceful stop. */
++#include "../../../../ripple/schedule.h"
+@@ -4,60 +6,20 @@
+-/* FIXME: hardcoded UID 1 assumption */
+-
+-#include <sys/types.h>
+-#include <stdio.h>
+-#include <stdlib.h>
+-#include <string.h>
+-#include <unistd.h>
+-#include <ctype.h>
+-#include <signal.h>
+-#include <time.h>
+-#include <sys/stat.h>
+-
+-#define	LISTS	512
+-
+-#define	EXACT	100
+-#define	ANY	101
+-#define	LIST	102
+-#define	RANGE	103
+-#define	EOS	104
+-
+-char crontab[] = "/usr/lib/crontab";
+-time_t itime;
+-struct tm *loct;
+-int flag;
+-char *list;
+-unsigned listsize;
+-
+-
+-char *cmp(char *p, int v)
+-{
+-	register char *cp;
+-
+-	cp = p;
+-	switch (*cp++) {
+-
+-	case EXACT:
+-		if (*cp++ != v)
+-			flag++;
+-		return (cp);
+-
+-	case ANY:
+-		return (cp);
+-
+-	case LIST:
+-		while (*cp != LIST)
+-			if (*cp++ == v) {
+-				while (*cp++ != LIST);
+-				return (cp);
+-			}
+-		flag++;
+-		return (cp + 1);
+-
+-	case RANGE:
+-		if (*cp > v || cp[1] < v)
+-			flag++;
+-		return (cp + 2);
+-	}
+-	if (cp[-1] != v)
+-		flag++;
+-	return (cp);
++static volatile sig_atomic_t stopping;
++static void stop(int sig) { (void)sig; stopping=1; }
++static int launch(const char *command, const char *spool) {
++    pid_t pid=fork();
++    if (pid<0) { perror("cron: fork"); return -1; }
++    if (!pid) {
++        int fd;
++        signal(SIGTERM,SIG_DFL); signal(SIGINT,SIG_DFL); signal(SIGHUP,SIG_DFL);
++        fd=open("/dev/null",O_RDONLY);
++        if (fd<0 || dup2(fd,0)<0) { perror("cron: stdin"); _exit(126); }
++        if (fd>2) close(fd);
++        if (chdir("/")<0) _exit(126);
++        if (spool) {
++            char *args[]={"atrun","-s",(char *)spool,NULL}; execv("/bin/atrun",args);
++        } else {
++            char *args[]={"sh","-c",(char *)command,NULL}; execv("/bin/sh",args);
++        }
++        perror("cron: exec"); _exit(127);
++    }
++    return 0;
+@@ -65,13 +27,11 @@
+-
+-int number(int c)
+-{
+-	int n = 0;
+-
+-	while (isdigit(c)) {
+-		n = n * 10 + c - '0';
+-		c = getchar();
+-	}
+-	ungetc(c, stdin);
+-	if (n >= 100)
+-		return (-1);
+-	return (n);
++static int reap(int wait_all) {
++    int status, failed=0; pid_t pid;
++    for (;;) {
++        pid=waitpid(-1,&status,wait_all?0:WNOHANG);
++        if (pid<0 && errno==EINTR) continue;
++        if (pid<=0) break;
++        if (!WIFEXITED(status) || WEXITSTATUS(status)) {
++            fprintf(stderr,"cron: job %u failed (wait status %d)\n",(unsigned)pid,status); failed=1;
++        }
++    }
++    return failed;
+@@ -79,11 +39,46 @@
+-
+-
+-void slp(void)
+-{
+-	int i;
+-	time_t t;
+-
+-	time(&t);
+-	i = itime - t;
+-	if (i > 0)
+-		sleep(i);
++int main(int argc, char **argv) {
++    const char *config="/etc/crontab", *spool=AT_SPOOL;
++    int i, once=0, check=0, explicit_time=0, failed=0; unsigned long epoch=0, last=0;
++    int have_last=0; time_t now;
++    for (i=1;i<argc;i++) {
++        if ((!strcmp(argv[i],"-c") || !strcmp(argv[i],"-s")) && i+1<argc) {
++            if (argv[i][1]=='c') config=argv[++i]; else spool=argv[++i];
++        } else if (!strcmp(argv[i],"--once")) once=1;
++        else if (!strcmp(argv[i],"-t")) check=1;
++        else if (!strcmp(argv[i],"-f")) { /* Always foreground. */ }
++        else if (!strcmp(argv[i],"--no-at")) spool=NULL;
++        else if (!strcmp(argv[i],"--time") && i+1<argc) {
++            if (!sched_number(argv[++i],SCHED_EPOCH_MAX,&epoch)) goto usage;
++            explicit_time=1;
++        } else goto usage;
++    }
++    if (explicit_time && !once) goto usage;
++    if (!getenv("PATH") && putenv("PATH=/bin:/usr/bin")) { perror("cron: environment"); return 1; }
++    signal(SIGTERM,stop); signal(SIGINT,stop); signal(SIGHUP,SIG_IGN);
++    do {
++        struct cron_entry *head=NULL, *e; struct tm *tm;
++        now=explicit_time?(time_t)epoch:time(NULL);
++        if (now==(time_t)-1) { perror("cron: clock"); return 1; }
++        if (check || !have_last || (unsigned long)now/60>last) {
++            last=(unsigned long)now/60; have_last=1;
++            if (sched_cron_load(config,&head)<0) { perror(config); failed=1; }
++            else if (!check) {
++                tm=localtime(&now);
++                if (!tm) { sched_cron_free(head); return 1; }
++                for (e=head;e && !stopping;e=e->next)
++                    if (sched_cron_match(e,tm) && launch(e->command,NULL)<0) failed=1;
++            }
++            sched_cron_free(head);
++            /* The queue runner is independent of malformed/missing crontabs. */
++            if (!check && spool && !stopping && launch(NULL,spool)<0) failed=1;
++        }
++        if (check) return failed;
++        if (reap(once)) failed=1;
++        if (!once && !stopping) sleep(1);
++    } while (!once && !stopping);
++    /* svcd signals the entire service group, including jobs, on shutdown.
++     * A direct TERM stops new dispatch; outstanding children retain the group. */
++    return once?failed:0;
++usage:
++    fprintf(stderr,"usage: cron [-f] [-c FILE] [-s SPOOL] [--no-at] [-t | --once [--time EPOCH]]\n");
++    return 2;
+@@ -91,165 +85,0 @@
+-
+-void ex(char *s)
+-{
+-	int st;
+-
+-	if (fork()) {
+-		wait(&st);
+-		return;
+-	}
+-	if (fork())
+-		exit(0);
+-	freopen("/", "r", stdin);
+-	execl("/bin/sh", "sh", "-c", s, 0);
+-	exit(0);
+-}
+-
+-void init(void)
+-{
+-	register int i, c;
+-	register char *cp;
+-	register char *ocp;
+-	register int n;
+-
+-	freopen(crontab, "r", stdin);
+-	/* free() then realloc() of the freed pointer is a use after
+-	   free; the list is being restarted from scratch anyway. */
+-	free(list);
+-	list = malloc(LISTS);
+-	if (list == NULL)
+-		exit(1);
+-	listsize = LISTS;
+-	cp = list;
+-
+-      loop:
+-	if (cp > list + listsize - 100) {
+-		char *olist;
+-		int coff = cp - list;
+-		listsize += LISTS;
+-		olist = realloc(list, listsize);
+-		if (olist == NULL)
+-			exit(1);
+-		list = olist;
+-		cp = list + coff;
+-	}
+-	ocp = cp;
+-	for (i = 0;; i++) {
+-		do
+-			c = getchar();
+-		while (c == ' ' || c == '\t');
+-		if (c == EOF || c == '\n')
+-			goto ignore;
+-		if (i == 5)
+-			break;
+-		if (c == '*') {
+-			*cp++ = ANY;
+-			continue;
+-		}
+-		if ((n = number(c)) < 0)
+-			goto ignore;
+-		c = getchar();
+-		if (c == ',')
+-			goto mlist;
+-		if (c == '-')
+-			goto mrange;
+-		if (c != '\t' && c != ' ')
+-			goto ignore;
+-		*cp++ = EXACT;
+-		*cp++ = n;
+-		continue;
+-
+-	      mlist:
+-		*cp++ = LIST;
+-		*cp++ = n;
+-		do {
+-			if ((n = number(getchar())) < 0)
+-				goto ignore;
+-			*cp++ = n;
+-			c = getchar();
+-		} while (c == ',');
+-		if (c != '\t' && c != ' ')
+-			goto ignore;
+-		*cp++ = LIST;
+-		continue;
+-
+-	      mrange:
+-		*cp++ = RANGE;
+-		*cp++ = n;
+-		if ((n = number(getchar())) < 0)
+-			goto ignore;
+-		c = getchar();
+-		if (c != '\t' && c != ' ')
+-			goto ignore;
+-		*cp++ = n;
+-	}
+-	while (c != '\n') {
+-		if (c == EOF)
+-			goto ignore;
+-		if (c == '%')
+-			c = '\n';
+-		*cp++ = c;
+-		c = getchar();
+-	}
+-	*cp++ = '\n';
+-	*cp++ = 0;
+-	goto loop;
+-
+-      ignore:
+-	cp = ocp;
+-	while (c != '\n') {
+-		if (c == EOF) {
+-			*cp++ = EOS;
+-			*cp++ = EOS;
+-			fclose(stdin);
+-			return;
+-		}
+-		c = getchar();
+-	}
+-	goto loop;
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	register char *cp;
+-	time_t filetime = 0;
+-
+-	setuid(1);
+-	if (fork())
+-		exit(0);
+-	chdir("/");
+-	freopen(crontab, "r", stdin);
+-	freopen("/", "r", stdout);
+-	freopen("/", "r", stderr);
+-	signal(SIGHUP, SIG_IGN);
+-	signal(SIGINT, SIG_IGN);
+-	signal(SIGQUIT, SIG_IGN);
+-	time(&itime);
+-	itime -= localtime(&itime)->tm_sec;
+-	fclose(stdin);
+-
+-	for (;; itime += 60, slp()) {
+-		struct stat cstat;
+-
+-		if (stat(crontab, &cstat) == -1)
+-			continue;
+-		if (cstat.st_mtime > filetime) {
+-			filetime = cstat.st_mtime;
+-			init();
+-		}
+-		loct = localtime(&itime);
+-		loct->tm_mon++;	/* 1-12 for month */
+-		for (cp = list; *cp != EOS;) {
+-			flag = 0;
+-			cp = cmp(cp, loct->tm_min);
+-			cp = cmp(cp, loct->tm_hour);
+-			cp = cmp(cp, loct->tm_mday);
+-			cp = cmp(cp, loct->tm_mon);
+-			cp = cmp(cp, loct->tm_wday);
+-			if (flag == 0) {
+-				slp();
+-				ex(cp);
+-			}
+-			while (*cp++ != 0);
+-		}
+-	}
+-}
+--- a/Applications/V7/cmd/at.c
++++ b/Applications/V7/cmd/at.c
+@@ -2 +2,4 @@
+-/* ANSIfied for FUZIX */
++/* Riplix adaptation: rewritten queue publisher and time parser. No setuid;
++ * private per-owner spool, atomic publication, quoted environment/cwd, list/rm. */
++#include "../../../../ripple/schedule.h"
++extern char **environ;
+@@ -4,61 +7,4 @@
+-/*
+- * at time mon day
+- * at time wday
+- * at time wday 'week'
+- *
+- */
+-#include <stdio.h>
+-#include <ctype.h>
+-#include <time.h>
+-#include <signal.h>
+-#include <stdlib.h>
+-#include <string.h>
+-#include <unistd.h>
+-
+-#define HOUR 100
+-#define HALFDAY	(12*HOUR)
+-#define DAY	(24*HOUR)
+-#define THISDAY "/usr/spool/at"
+-
+-const char *days[] = {
+-	"sunday",
+-	"monday",
+-	"tuesday",
+-	"wednesday",
+-	"thursday",
+-	"friday",
+-	"saturday",
+-};
+-
+-struct monstr {
+-	const char *mname;
+-	int mlen;
+-} months[] = {
+-	{
+-	"january", 31}, {
+-	"february", 28}, {
+-	"march", 31}, {
+-	"april", 30}, {
+-	"may", 31}, {
+-	"june", 30}, {
+-	"july", 31}, {
+-	"august", 31}, {
+-	"september", 30}, {
+-	"october", 31}, {
+-	"november", 30}, {
+-	"december", 31}, {
+-0, 0},};
+-
+-char fname[100];
+-int utimev;			/* requested time in grains */
+-int now;			/* when is it */
+-int uday;			/* day of year to be done */
+-int uyear;			/* year */
+-int today;			/* day of year today */
+-FILE *file;
+-FILE *ifile;
+-
+-void onintr(int sig)
+-{
+-	unlink(fname);
+-	exit(1);
++static int env_name(const char *s, const char *end) {
++    if (s==end || (!isalpha((unsigned char)*s) && *s!='_')) return 0;
++    while (++s<end) if (!isalnum((unsigned char)*s) && *s!='_') return 0;
++    return 1;
+@@ -66,13 +12,29 @@
+-
+-const char *prefix(const char *begin, const char *full)
+-{
+-	int c;
+-	while ((c = *begin++) != 0) {
+-		if (isupper(c))
+-			c = tolower(c);
+-		if (*full != c)
+-			return (0);
+-		else
+-			full++;
+-	}
+-	return (full);
++static int list_remove(const char *spool, const char *id) {
++    char *jobs=sched_path(spool,"jobs"), *running=sched_path(spool,"running");
++    DIR *dir; struct dirent *de; int failed=0;
++    if (!jobs || !running) { free(jobs); free(running); return 1; }
++    if (id) {
++        char *p, *r; struct stat st;
++        if (!sched_id(id)) { fprintf(stderr,"at: invalid job id\n"); failed=1; goto done; }
++        p=sched_path(jobs,id); r=sched_path(running,id);
++        if (!p || !r) { free(p); free(r); failed=1; goto done; }
++        if (!lstat(r,&st)) { fprintf(stderr,"at: job already claimed\n"); failed=1; }
++        else if (unlink(p)<0) { perror(p); failed=1; }
++        free(p); free(r); goto done;
++    }
++    dir=opendir(jobs); if (!dir) { perror(jobs); failed=1; goto done; }
++    errno=0;
++    while ((de=readdir(dir))!=NULL) {
++        char *path; time_t due; struct tm *t;
++        if (!sched_id(de->d_name)) continue;
++        path=sched_path(jobs,de->d_name);
++        if (!path) { failed=1; break; }
++        if (sched_job(path,de->d_name,&due)<0) { perror(path); failed=1; }
++        else if ((t=localtime(&due))!=NULL)
++            printf("%s %04d-%02d-%02d %02d:%02d:%02d\n",de->d_name,t->tm_year+1900,t->tm_mon+1,t->tm_mday,t->tm_hour,t->tm_min,t->tm_sec);
++        free(path); errno=0;
++    }
++    if (errno) { perror(jobs); failed=1; }
++    closedir(dir);
++done:
++    free(jobs); free(running); return failed || ferror(stdout);
+@@ -80,80 +42,30 @@
+-
+-void makeutime(const char *pp)
+-{
+-	register int val;
+-	register const char *p;
+-
+-	/* p points to a user time */
+-	p = pp;
+-	val = 0;
+-	while (isdigit(*p)) {
+-		val = val * 10 + (*p++ - '0');
+-	}
+-	if (p - pp < 3)
+-		val *= HOUR;
+-
+-	for (;;) {
+-		switch (*p) {
+-
+-		case ':':
+-			++p;
+-			if (isdigit(*p)) {
+-				if (isdigit(p[1])) {
+-					val += (10 * *p + p[1] - 11 * '0');
+-					p += 2;
+-					continue;
+-				}
+-			}
+-			fprintf(stderr, "at: bad time format:\n");
+-			exit(1);
+-
+-		case 'A':
+-		case 'a':
+-			if (val >= HALFDAY + HOUR)
+-				val = DAY + 1;	/* illegal */
+-			if (val >= HALFDAY && val < (HALFDAY + HOUR))
+-				val -= HALFDAY;
+-			break;
+-
+-		case 'P':
+-		case 'p':
+-			if (val >= HALFDAY + HOUR)
+-				val = DAY + 1;	/* illegal */
+-			if (val < HALFDAY)
+-				val += HALFDAY;
+-			break;
+-
+-		case 'n':
+-		case 'N':
+-			val = HALFDAY;
+-			break;
+-
+-		case 'M':
+-		case 'm':
+-			val = 0;
+-			break;
+-
+-
+-		case '\0':
+-		case ' ':
+-			/* 24 hour time */
+-			if (val == DAY)
+-				val -= DAY;
+-			break;
+-
+-		default:
+-			fprintf(stderr, "at: bad time format\n");
+-			exit(1);
+-
+-		}
+-		break;
+-	}
+-	if (val < 0 || val >= DAY) {
+-		fprintf(stderr, "at: time out of range\n");
+-		exit(1);
+-	}
+-	if (val % HOUR >= 60) {
+-		fprintf(stderr, "at: illegal minute field\n");
+-		exit(1);
+-	}
+-	utimev = val;
++static int when(int argc, char **argv, time_t *due) {
++    time_t now=time(NULL); unsigned long count,scale; struct tm local,*t;
++    char stamp[32]; unsigned long hour,minute; const char *colon; char h[3],m[3];
++    if (now==(time_t)-1 || !argc) return 0;
++    if (!strcmp(argv[0],"now")) {
++        if (argc==1) { *due=now; return 1; }
++        if (argc!=4 || strcmp(argv[1],"+") || !sched_number(argv[2],SCHED_EPOCH_MAX,&count)) return 0;
++        if (!strcmp(argv[3],"minute") || !strcmp(argv[3],"minutes")) scale=60;
++        else if (!strcmp(argv[3],"hour") || !strcmp(argv[3],"hours")) scale=3600;
++        else if (!strcmp(argv[3],"day") || !strcmp(argv[3],"days")) scale=86400;
++        else return 0;
++        if (count>(SCHED_EPOCH_MAX-(unsigned long)now)/scale) return 0;
++        *due=now+count*scale; return 1;
++    }
++    colon=strchr(argv[0],':');
++    if (!colon || colon-argv[0]<1 || colon-argv[0]>2 || strlen(colon+1)!=2 || argc>2) return 0;
++    memcpy(h,argv[0],colon-argv[0]); h[colon-argv[0]]=0; strcpy(m,colon+1);
++    if (!sched_number(h,23,&hour) || !sched_number(m,59,&minute)) return 0;
++    t=localtime(&now); if (!t) return 0; local=*t;
++    if (argc==2) {
++        const char *d=argv[1]; unsigned i;
++        if (strlen(d)!=10 || d[4]!='-' || d[7]!='-') return 0;
++        for (i=0;i<10;i++) if (i!=4 && i!=7 && !isdigit((unsigned char)d[i])) return 0;
++        sprintf(stamp,"%.4s%.2s%.2s%02lu%02lu",d,d+5,d+8,hour,minute);
++        return sched_time(stamp,due) && *due>=now;
++    }
++    local.tm_hour=(int)hour; local.tm_min=(int)minute; local.tm_sec=0; local.tm_isdst=-1;
++    if (!sched_local(&local,due)) return 0;
++    if (*due<=now) { local.tm_mday++; local.tm_isdst=-1; if (!sched_local(&local,due)) return 0; }
++    return *due!=(time_t)-1 && (unsigned long)*due<=SCHED_EPOCH_MAX;
+@@ -161,71 +73,51 @@
+-
+-
+-int makeuday(int argc, const char *argv[])
+-{
+-	/* the presumption is that argv[2], argv[3] are either
+-	   month day OR weekday [week].  Returns either 2 or 3 as last
+-	   argument used */
+-	/* first of all, what's today */
+-	time_t tm;
+-	int found = -1;
+-	const char **ps;
+-	struct tm *detail;
+-	struct monstr *pt;
+-
+-	time(&tm);
+-	detail = localtime(&tm);
+-	uday = today = detail->tm_yday;
+-	uyear = detail->tm_year + 1900;
+-	now = detail->tm_hour * 100 + detail->tm_min;
+-	if (argc <= 2)
+-		return (1);
+-	/* is the next argument a month name ? */
+-	for (pt = months; pt->mname; pt++) {
+-		if (prefix(argv[2], pt->mname)) {
+-			if (found < 0)
+-				found = pt - months;
+-			else {
+-				fprintf(stderr, "at: ambiguous month\n");
+-				exit(1);
+-			}
+-		}
+-	}
+-	if (found >= 0) {
+-		if (argc <= 3)
+-			return (2);
+-		uday = atoi(argv[3]) - 1;
+-		if (uday < 0) {
+-			fprintf(stderr, "at: illegal day\n");
+-			exit(1);
+-		}
+-		while (--found >= 0)
+-			uday += months[found].mlen;
+-		if (detail->tm_year % 4 == 0 && uday > 59)
+-			uday += 1;
+-		return (3);
+-	}
+-	/* not a month, try day of week */
+-	found = -1;
+-	for (ps = days; ps < days + 7; ps++) {
+-		if (prefix(argv[2], *ps)) {
+-			if (found < 0)
+-				found = ps - days;
+-			else {
+-				fprintf(stderr,
+-					"at: ambiguous day of week\n");
+-				exit(1);
+-			}
+-		}
+-	}
+-	if (found < 0)
+-		return (1);
+-	/* find next day of this sort */
+-	uday = found - detail->tm_wday;
+-	if (uday <= 0)
+-		uday += 7;
+-	uday += today;
+-	if (argc > 3 && strcmp("week", argv[3]) == 0) {
+-		uday += 7;
+-		return (3);
+-	}
+-	return (2);
++static int publish(const char *spool, const char *input, time_t due) {
++    char *jobs=sched_path(spool,"jobs"), *temp=NULL, *target=NULL;
++    char name[32], id[32], cwd[256]; FILE *f=NULL,*in=stdin; unsigned serial;
++    int fd=-1,c,failed=1; mode_t mask; char **env;
++    if (!jobs || !getcwd(cwd,sizeof(cwd))) { perror("at: directory"); goto done; }
++    if (input && !(in=fopen(input,"r"))) { perror(input); goto done; }
++    for (serial=0;serial<65535U;serial++) {
++        sprintf(name,".t%05u-%05u",(unsigned)getpid(),serial);
++        temp=sched_path(jobs,name); if (!temp) goto done;
++        fd=open(temp,O_WRONLY|O_CREAT|O_EXCL,0600);
++        if (fd>=0) break;
++        free(temp); temp=NULL; if (errno!=EEXIST) { perror(jobs); goto done; }
++    }
++    if (fd<0) goto done;
++    f=fdopen(fd,"w"); if (!f) { close(fd); goto done; }
++    if (chmod(temp,0600)<0) { perror(temp); goto done; }
++    fprintf(f,"# riplix-at 1 %lu\n",(unsigned long)due);
++    mask=umask(077); umask(mask); fprintf(f,"umask %03o\n",(unsigned)mask);
++    for (env=environ;env && *env;env++) {
++        const char *equal=strchr(*env,'=');
++        if (!equal || !env_name(*env,equal)) continue;
++        /* Do not let a captured parser setting alter the generated prologue. */
++        if ((equal-*env==3 && !strncmp(*env,"IFS",3)) ||
++            (equal-*env==3 && !strncmp(*env,"ENV",3)) ||
++            (equal-*env==8 && !strncmp(*env,"BASH_ENV",8))) continue;
++        fwrite(*env,1,(size_t)(equal-*env),f); fputc('=',f); sched_quote(f,equal+1);
++        fputs("; export ",f); fwrite(*env,1,(size_t)(equal-*env),f); fputc('\n',f);
++    }
++    fputs("cd ",f); sched_quote(f,cwd); fputs(" || exit 1\n",f);
++    while ((c=fgetc(in))!=EOF) fputc(c,f);
++    fputc('\n',f);
++    if (ferror(in) || ferror(f) || fflush(f)<0) { perror("at: write"); goto done; }
++#ifdef RIPPLE_MMU
++    /* This kernel's sync interface flushes all files, rather than one fd. */
++    sync();
++#else
++    if (fsync(fileno(f))<0) { perror("at: sync"); goto done; }
++#endif
++    if (fclose(f)<0) { f=NULL; goto done; } f=NULL;
++    for (serial=0;serial<65535U;serial++) {
++        sprintf(id,"j%010lu-%05u-%05u",(unsigned long)due,(unsigned)getpid(),serial);
++        target=sched_path(jobs,id); if (!target) goto done;
++        if (link(temp,target)==0) { failed=0; break; }
++        free(target); target=NULL; if (errno!=EEXIST) { perror("at: publish"); goto done; }
++    }
++    if (!failed) printf("job %s\n",id);
++done:
++    if (f) fclose(f);
++    if (temp) unlink(temp);
++    if (in && in!=stdin) fclose(in);
++    free(target); free(temp); free(jobs); return failed || ferror(stdout);
+@@ -233,12 +125,20 @@
+-
+-
+-void filename(char *dir, int y, int d, int t)
+-{
+-	register int i;
+-
+-	for (i = 0;; i += 53) {
+-		sprintf(fname, "%s/%04d.%03d.%04d.%02d", dir, y, d, t,
+-			(getpid() + i) % 100);
+-		if (access(fname, 0) == -1)
+-			return;
+-	}
++int main(int argc, char **argv) {
++    const char *spool=AT_SPOOL,*input=NULL,*stamp=NULL,*remove=NULL; int i,list=0; time_t due;
++    for (i=1;i<argc;i++) {
++        if (!strcmp(argv[i],"--")) { i++; break; }
++        if (!strcmp(argv[i],"-l")) list=1;
++        else if ((!strcmp(argv[i],"-s") || !strcmp(argv[i],"-f") || !strcmp(argv[i],"-t") || !strcmp(argv[i],"-r")) && i+1<argc) {
++            char option=argv[i][1]; const char *value=argv[++i];
++            if (option=='s') spool=value; else if (option=='f') input=value;
++            else if (option=='t') stamp=value; else remove=value;
++        } else break;
++    }
++    if ((list || remove) && (i!=argc || input || stamp || (list && remove))) goto usage;
++    if (!list && !remove) {
++        if (stamp ? i!=argc || !sched_time(stamp,&due) || due<time(NULL) : !when(argc-i,argv+i,&due)) goto usage;
++    }
++    if (sched_spool(spool,1)<0) { perror(spool); return 1; }
++    if (list || remove) return list_remove(spool,remove);
++    return publish(spool,input,due);
++usage:
++    fprintf(stderr,"usage: at [-s SPOOL] [-f FILE] {now [+ N minutes|hours|days] | HH:MM [YYYY-MM-DD] | -t YYYYMMDDhhmm[.ss]}\n       at [-s SPOOL] {-l | -r JOB}\n"); return 2;
+@@ -246,58 +145,0 @@
+-
+-int main(int argc, const char *argv[])
+-{
+-	register int c;
+-	char pwbuf[100];
+-	FILE *pwfil;
+-	int larg;
+-
+-	/* argv[1] is the user's time: e.g.,  3AM */
+-	/* argv[2] is a month name or day of week */
+-	/* argv[3] is day of month or 'week' */
+-	/* another argument might be an input file */
+-	if (argc < 2) {
+-		fprintf(stderr, "at: arg count\n");
+-		exit(1);
+-	}
+-	makeutime(argv[1]);
+-	larg = makeuday(argc, argv) + 1;
+-	if (uday == today && larg <= 2 && utimev <= now)
+-		uday++;
+-	c = uyear % 4 == 0 ? 366 : 365;
+-	if (uday >= c) {
+-		uday -= c;
+-		uyear++;
+-	}
+-	filename(THISDAY, uyear, uday, utimev);
+-	ifile = stdin;
+-	if (argc > larg)
+-		ifile = fopen(argv[larg], "r");
+-	if (ifile == NULL) {
+-		fprintf(stderr, "at: cannot open input: %s\n", argv[larg]);
+-		exit(1);
+-	}
+-	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+-		signal(SIGINT, onintr);
+-	file = fopen(fname, "a");
+-	chmod(fname, 0644);
+-	if (file == NULL) {
+-		fprintf(stderr, "at: cannot open memo file\n");
+-		exit(1);
+-	}
+-	if ((pwfil = popen("pwd", "r")) == NULL) {
+-		fprintf(stderr, "at: can't execute pwd\n");
+-		exit(1);
+-	}
+-	fgets(pwbuf, 100, pwfil);
+-	pclose(pwfil);
+-	fprintf(file, "cd %s", pwbuf);
+-	if (environ) {
+-		char **ep = environ;
+-		while (*ep)
+-			fprintf(file, "%s\n", *ep++);
+-	}
+-	while ((c = getc(ifile)) != EOF) {
+-		putc(c, file);
+-	}
+-	exit(0);
+-}
+--- a/Applications/V7/cmd/atrun.c
++++ b/Applications/V7/cmd/atrun.c
+@@ -1,0 +2,3 @@
++/* Riplix adaptation: atomic hard-link claim before unlinking pending jobs;
++ * concurrent invocations cannot dispatch the same queued file twice. */
++#include "../../../../ripple/schedule.h"
+@@ -3,30 +6,34 @@
+-/*
+- * Run programs submitted by at.
+- */
+-#include <stdio.h>
+-#include <stdlib.h>
+-#include <string.h>
+-#include <unistd.h>
+-#include <time.h>
+-#include <dirent.h>
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-
+-# define ATDIR "/usr/spool/at"
+-# define PDIR	"past"
+-# define LASTF "/usr/spool/at/lasttimedone"
+-
+-int	nowtime;
+-int	nowdate;
+-int	nowyear;
+-
+-void makenowtime(void)
+-{
+-	time_t t;
+-	struct tm *tp;
+-
+-	time(&t);
+-	tp = localtime(&t);
+-	nowtime = tp->tm_hour*100 + tp->tm_min;
+-	nowdate = tp->tm_yday;
+-	nowyear = tp->tm_year + 1900;
++static int run(const char *jobs,const char *running,const char *output,const char *id,time_t now) {
++    char *pending=sched_path(jobs,id), *claimed=sched_path(running,id), *log=sched_path(output,id);
++    time_t due; pid_t pid; int result=0;
++    if (!pending || !claimed || !log) { result=1; goto done; }
++    if (sched_job(pending,id,&due)<0) { if (errno!=ENOENT) { perror(pending); result=1; } goto done; }
++    if (due>now) goto done;
++    if (link(pending,claimed)<0) {
++        if (errno!=EEXIST && errno!=ENOENT) { perror(claimed); result=1; }
++        goto done;
++    }
++    if (unlink(pending)<0) { perror(pending); result=1; goto done; }
++    pid=fork();
++    if (pid<0) { perror("atrun: fork (claimed job retained)"); result=1; goto done; }
++    if (!pid) {
++        pid_t child; int status,fd,in;
++        fd=open(log,O_WRONLY|O_CREAT|O_EXCL,0600);
++        if (fd<0) { perror(log); _exit(1); }
++        in=open("/dev/null",O_RDONLY);
++        if (in<0 || dup2(in,0)<0 || dup2(fd,1)<0 || dup2(fd,2)<0) _exit(1);
++        if (in>2) close(in);
++        if (fd>2) close(fd);
++        child=fork();
++        if (child<0) { perror("atrun: shell fork"); _exit(1); }
++        if (!child) {
++            char *args[]={"sh",claimed,NULL};
++            execv("/bin/sh",args); perror("atrun: shell"); _exit(127);
++        }
++        while (waitpid(child,&status,0)<0) if (errno!=EINTR) _exit(1);
++        if (!WIFEXITED(status) || WEXITSTATUS(status)) fprintf(stderr,"atrun: job failed (wait status %d)\n",status);
++        if (unlink(claimed)<0) _exit(1);
++        _exit(!WIFEXITED(status) || WEXITSTATUS(status) ? 1:0);
++    }
++done:
++    free(pending); free(claimed); free(log); return result;
+@@ -34,11 +41,23 @@
+-
+-void updatetime(int t)
+-{
+-	FILE *tfile;
+-
+-	tfile = fopen(LASTF, "w");
+-	if (tfile == NULL) {
+-		fprintf(stderr, "can't write lastfile\n");
+-		exit(1);
+-	}
+-	fprintf(tfile, "%04d\n", t);
++int main(int argc, char **argv) {
++    const char *spool=AT_SPOOL; char *jobs,*running,*output;
++    DIR *dir; struct dirent *de; time_t now; int failed=0,status; pid_t child;
++    if (argc==3 && !strcmp(argv[1],"-s")) spool=argv[2];
++    else if (argc!=1) { fprintf(stderr,"usage: atrun [-s SPOOL]\n"); return 2; }
++    if (sched_spool(spool,1)<0) { perror(spool); return 1; }
++    jobs=sched_path(spool,"jobs"); running=sched_path(spool,"running"); output=sched_path(spool,"output");
++    if (!jobs || !running || !output) { free(jobs); free(running); free(output); return 1; }
++    now=time(NULL); if (now==(time_t)-1) { free(jobs); free(running); free(output); return 1; }
++    dir=opendir(jobs);
++    if (!dir) { perror(jobs); free(jobs); free(running); free(output); return 1; }
++    for (;;) {
++        errno=0; de=readdir(dir);
++        if (!de) { if (errno) { perror(jobs); failed=1; } break; }
++        if (sched_id(de->d_name) && run(jobs,running,output,de->d_name,now)) failed=1;
++    }
++    closedir(dir); free(jobs); free(running); free(output);
++    for (;;) {
++        child=waitpid(-1,&status,0);
++        if (child<0) { if (errno==EINTR) continue; break; }
++        if (!WIFEXITED(status) || WEXITSTATUS(status)) failed=1;
++    }
++    return failed;
+@@ -46,69 +64,0 @@
+-
+-void run(char *file)
+-{
+-	struct stat stbuf;
+-	int pid, i;
+-	char sbuf[64];
+-
+-	if (fork()!=0)
+-		return;
+-	for (i=0; i<15; i++)
+-		close(i);
+-	dup(dup(open("/dev/null", 0)));
+-	/* FIXME: cheaper to do the copy inline */
+-	sprintf(sbuf, "/bin/mv %s %s", file, PDIR);
+-	system(sbuf);
+-	chdir(PDIR);
+-	if (stat(file, &stbuf) == -1)
+-		exit(1);
+-	if (setgid(stbuf.st_gid) < 0 || setuid(stbuf.st_uid) < 0)
+-		exit(1);
+-	if ((pid = fork()) != 0) {
+-		if (pid == -1)
+-			exit(1);
+-		wait((int *)0);
+-		unlink(file);
+-		exit(0);
+-	}
+-	nice(3);
+-	execl("/bin/sh", "sh", file, 0);
+-	execl("/usr/bin/sh", "sh", file, 0);
+-	fprintf(stderr, "Can't execl shell\n");
+-	exit(1);
+-}
+-
+-#define DIRSIZ	30
+-
+-int main(int argc, const char *argv[])
+-{
+-	int tt, day, year, uniq;
+-	struct dirent *d;
+-	char file[DIRSIZ+1];
+-	DIR *dirf;
+-
+-	if (chdir(ATDIR) < 0) {
+-		fprintf(stderr, "Can't chdir\n");
+-		exit(1);
+-	}
+-	makenowtime();
+-	if ((dirf = opendir(".")) == NULL) {
+-		fprintf(stderr, "Cannot read at directory\n");
+-		exit(1);
+-	}
+-	while ((d = readdir(dirf)) != NULL) {
+-		strncpy(file, d->d_name, DIRSIZ);
+-		file[DIRSIZ] = '\0';
+-		if (sscanf(file, "%4d.%3d.%4d.%2d", &year, &day, &tt, &uniq) != 4)
+-			continue;
+-		if (nowyear < year)
+-			continue;
+-		if (nowyear==year && nowdate < day)
+-			continue;
+-		if (nowyear==year && nowdate==day && nowtime < tt)
+-			continue;
+-		run(file);
+-	}
+-	closedir(dirf);
+-	updatetime(nowtime);
+-	exit(0);
+-}
+--- a/Applications/V7/cmd/sh/args.c
++++ b/Applications/V7/cmd/sh/args.c
+@@ -4 +3,0 @@
+-#
+@@ -41 +40,5 @@
+-	if (argc > 1 && *argp[1] == '-') {
++	/* Explicit end of options also permits positional arguments starting '-'. */
++	if (argc > 1 && eq(argp[1], "--")) {
++		argp[1] = argp[0];
++		argc--;
++	} else if (argc > 1 && *argp[1] == '-') {
+--- a/Applications/V7/cmd/sh/xec.c
++++ b/Applications/V7/cmd/sh/xec.c
+@@ -4 +3,0 @@
+-#
+@@ -35,0 +35,2 @@
++        int job_owner = 0, gate[2] = {-1, -1}, managed = 0;
++        char ready;
+@@ -96 +97,2 @@
+-						exitsh(a1 ? stoi(a1) : oldexit);
++						exitval = a1 ? stoi(a1) : oldexit;
++						done();
+@@ -153 +155,6 @@
+-						flags |= forked;
++		                if (managed) {
++                    close(gate[1]); jobs_child();
++                    if (read(gate[0], &ready, 1) != 1) _exit(125);
++                    close(gate[0]);
++                }
++				flags |= forked;
+@@ -176 +183,2 @@
+-						await(-1);
++						if (jobs_enabled()) jobs_await(a1 ? stoi(a1) : -1);
++                        else await(a1 ? stoi(a1) : -1);
+@@ -191 +199 @@
+-							int argc;
++							int argc, reset = eq(a1, "--");
+@@ -193 +201 @@
+-							if (argc > 1)
++							if (argc > 1 || reset)
+@@ -217 +225 @@
+-							execexp(a1, (UFD)&com[2]);	/* FIXME */
++							execexp(a1, (intptr_t)&com[2]);	/* FIXME */
+@@ -252,0 +261,3 @@
++            job_owner = jobs_begin(t, (treeflgs & FAMP) != 0);
++            managed = jobs_current();
++            if (managed && pipe(gate) < 0) error("cannot create job handshake");
+@@ -262,0 +274,4 @@
++            if (parent && managed) {
++                close(gate[0]); jobs_parent(parent);
++                write(gate[1], "x", 1); close(gate[1]);
++            }
+@@ -271,2 +286,3 @@
+-				if ((treeflgs & (FAMP | FPOU)) == 0)
+-					await(parent);
++                if ((treeflgs & (FAMP | FPOU)) == 0) {
++                    if (managed) jobs_wait(); else await(parent);
++                }
+@@ -274 +290 @@
+-					post(parent);
++                    { if (!managed) post(parent); }
+@@ -277,0 +294 @@
++                jobs_end(job_owner);
+@@ -280,0 +298,5 @@
++                if (managed) {
++                    close(gate[1]); jobs_child();
++                    if (read(gate[0], &ready, 1) != 1) _exit(125);
++                    close(gate[0]);
++                }
+@@ -290 +312,2 @@
+-				if (treeflgs & FINT) {
++                if (managed) jobs_child_signals();
++				if ((treeflgs & FINT) && !managed) {
+@@ -306 +329 @@
+-				if (treeflgs & FINT && ioset == 0)
++				if ((treeflgs & FINT) && !managed && ioset == 0)
+@@ -327,0 +351 @@
++            int pipeline_owner = jobs_begin(t, 0);
+@@ -332,0 +357 @@
++            jobs_end(pipeline_owner);
+@@ -439 +464 @@
+-void execexp(char *s, UFD f)
++void execexp(char *s, intptr_t f)
+--- a/Applications/V7/cmd/sh/macro.c
++++ b/Applications/V7/cmd/sh/macro.c
+@@ -4 +3,0 @@
+-#
+@@ -143,0 +143,3 @@
++						/* Keep empty positional arguments in quoted "$@". */
++						if (quote && dolg && *id == '@' && !*v)
++							pushstak(QUOTE);
+@@ -195 +197,5 @@
+-	estabf(as);
++	/* Expand only an unquoted leading ~ or ~/. Quote the inserted home so
++	 * spaces and wildcard characters in HOME remain literal pathname data. */
++	BOOL tilde = as[0] == '~' && (as[1] == 0 || as[1] == '/') &&
++	    homenod.namval && *homenod.namval;
++	estabf(tilde ? as + 1 : as);
+@@ -198,0 +205,4 @@
++	if (tilde) {
++		const char *home = homenod.namval;
++		while (*home) pushstak(*home++ | QUOTE);
++	}
+--- a/Applications/V7/cmd/sh/service.c
++++ b/Applications/V7/cmd/sh/service.c
+@@ -4 +3,0 @@
+-#
+@@ -13,0 +13,3 @@
++#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
++#include "shell-prompt.h"
++#endif
+@@ -14,0 +17,2 @@
++#include <fcntl.h>
++#include <sys/wait.h>
+@@ -61,2 +65,5 @@
+-			} else if (iof & IOAPP && (fd = open(ion, 1)) >= 0) {
+-				lseek(fd, 0L, 2);
++			} else if (iof & IOAPP) {
++				/* A one-time seek races other writers (notably cron jobs). */
++				fd = open(ion, O_WRONLY | O_CREAT | O_APPEND, 0666);
++				if (fd < 0)
++					failed(ion, badcreate);
+@@ -115 +122 @@
+-	path = (*scanp ? scanp : 0);
++	path = (*scanp ? scanp : (char *)0);
+@@ -129,0 +137,3 @@
++#if defined(RIPPLE_MMU) || defined(FUSE_X_USER)
++        if (flags & prompt) shell_mux_report(at);
++#endif
+@@ -185,0 +196,35 @@
++/* Keep exit statuses when PID 1 reaps background/adopted children, or a
++ * foreground wait happens to reap an unrelated background child first. */
++static int deadpid[MAXP], deadstatus[MAXP], deadnext;
++static void remember(int pid, int status)
++{
++    int i;
++    for (i = 0; i < MAXP; i++)
++        if (!deadpid[i])
++            break;
++    if (i == MAXP) {
++        i = deadnext++;
++        if (deadnext == MAXP)
++            deadnext = 0;
++    }
++    deadpid[i] = pid;
++    deadstatus[i] = status;
++}
++static int remembered(int pid, int *status)
++{
++    int i;
++    for (i = 0; i < MAXP; i++)
++        if (deadpid[i] && (pid <= 0 || deadpid[i] == pid)) {
++            pid = deadpid[i];
++            *status = deadstatus[i];
++            deadpid[i] = 0;
++            return pid;
++        }
++    return 0;
++}
++void reapchildren(void)
++{
++    int pid, status;
++    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
++        if (!jobs_status(pid, status)) remember(pid, status);
++}
+@@ -192,0 +238 @@
++    memset(deadpid, 0, sizeof(deadpid));
+@@ -218,0 +265 @@
++        int tracked = 0;
+@@ -224 +271,3 @@
+-			p = wait(&w);
++			p = remembered(i, &w);
++            if (!p)
++                p = wait(&w);
+@@ -228,0 +278 @@
++                    tracked = 1;
+@@ -236,2 +286,10 @@
+-		if (p == -1)
+-			continue;
++		if (p == -1) {
++            if (errno == EINTR)
++                continue;
++            memset(pwlist, 0, sizeof(pwlist));
++            pwc = 0;
++            break;
++        }
++
++        if (!tracked && i > 0)
++            remember(p, w);
+@@ -260 +318,3 @@
+-		if (rc == 0)
++		/* A foreground pipeline reports its final command's status,
++		 * regardless of the order in which the children are reaped. */
++		if (p == i || i <= 0)
+@@ -280,2 +340,2 @@
+-		while ( (c = *p) ) {
+-			*p++ = c & STRIP;
++		char *source = at;
++		while ( (c = *source++) ) {
+@@ -283 +343,6 @@
+-		}
++			/* Quote-only markers preserve an empty argument during split,
++			 * but must not truncate a concatenated argument here. */
++			if (c & STRIP)
++				*p++ = c & STRIP;
++		}
++		*p = 0;
+@@ -306,2 +371,5 @@
+-		if ( (argp = argp->argnxt) )
+-			trim(*comargn);
++		argp = argp->argnxt;
++		/* Expansion is complete for every argument, including argv[0].
++		 * Leaving quote bits on the command hides '/' from getpath(),
++		 * corrupts argv[0], and prevents quoted builtin recognition. */
++		trim(*comargn);
+--- a/Applications/util/cal.c
++++ b/Applications/util/cal.c
+@@ -48,0 +49,9 @@
++#include <unistd.h>
++#include <getopt.h>
++#include <errno.h>
++/* Riplix: validate whole numeric operands; retain BSD calendar/reform rules. */
++static int calendar_number(const char *s, int high) {
++    char *end; long n;
++    errno=0; n=strtol(s,&end,10);
++    return !errno && *s && !*end && n>=1 && n<=high ? (int)n : 0;
++}
+@@ -52 +61 @@
+-void errx(int exv, char *str)
++static void calendar_error(int exv, const char *str)
+@@ -171,2 +180,2 @@
+-	if ((month = atoi(*argv++)) < 1 || month > 12)
+-	    errx(1, "illegal month value: use 1-12");
++	if ((month = calendar_number(*argv++, 12)) < 1 || month > 12)
++	    calendar_error(1, "illegal month value: use 1-12");
+@@ -175,2 +184,2 @@
+-	if ((year = atoi(*argv)) < 1 || year > 9999)
+-	    errx(1, "illegal year value: use 1-9999");
++	if ((year = calendar_number(*argv, 9999)) < 1 || year > 9999)
++	    calendar_error(1, "illegal year value: use 1-9999");
+@@ -181,0 +191 @@
++	if (!local_time) calendar_error(1, "clock is out of range");
+@@ -197 +207 @@
+-    return(0);
++    return ferror(stdout) ? 1 : 0;

@@ -1,0 +1,22 @@
+{Module Test
+  {Import Sugar/FindIn from "./sugar.syma" open macro}
+  {Program
+    {Test {Gogogo {Hello 1 "Hello"} {Hello 2 "Hi"} {Hello 3 "Hey"}}}
+  }
+  {Rules
+    {R TestFindIn
+      {Program abef.. {FindIn Test/Test.Test/Gogogo {Hello 2 h_}} aaf..}
+      {Program abef.. h_ aaf..}
+    }
+    
+    {R TestFindIn/Manual
+      {Program .. {Test .. {Gogogo .. {Hello 2 h_} ..} ..} ..}
+      {Program .. h_ ..}
+    }
+
+    {R TestFindIn/Handmade
+      {Zoob .. {Achacha .. {Pooqva 11 h_} .. } ..}
+      h_
+    }
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "revision": "bc9e915d4ade5d8beb3991aa18748dd388293dfe",
+  "files": {
+    "library/core-fromjson-lex.syma": {
+      "source": "packages/stdlib/syma/core-fromjson-lex.syma",
+      "sha256": "9cffd7eed018f94dd61e169e99e61e4929a5f6771b98bd104035fa2855e7f629"
+    },
+    "library/core-kv.syma": {
+      "source": "packages/stdlib/syma/core-kv.syma",
+      "sha256": "13b3c2e7fcbf107f4b6d86f22b6063ff0305c2f9ed804c4b920bcbde28050f71"
+    },
+    "library/core-list.syma": {
+      "source": "packages/stdlib/syma/core-list.syma",
+      "sha256": "8944dd6bd7eebcec7a32c791877a4cf5e8c7bc30df194bafec54aae30ff8d529"
+    },
+    "library/core-json.syma": {
+      "source": "packages/stdlib/syma/core-json.syma",
+      "sha256": "9da168f87df117902c551b53435e17dc59d00d7a22fca3f8deb7e9118b68cf4d"
+    },
+    "library/core-fun.syma": {
+      "source": "packages/stdlib/syma/core-fun.syma",
+      "sha256": "51509fb6762bf1057545c2518b76da3d712f4e502660e0249cb6069e3f0dcda8"
+    },
+    "library/core-syntax-global.syma": {
+      "source": "packages/stdlib/syma/core-syntax-global.syma",
+      "sha256": "d2f54c636b6aa6869659e266f36c18aeba1178afd0531f61c03b48dfbdf475e8"
+    },
+    "library/core-ops.syma": {
+      "source": "packages/stdlib/syma/core-ops.syma",
+      "sha256": "5516804d256915a021f46d65e3d21512865d02f7f8580e19feb30a50fdd69575"
+    },
+    "library/core-tojson.syma": {
+      "source": "packages/stdlib/syma/core-tojson.syma",
+      "sha256": "aafd2f353c728897def29d1a33ce521710808c882002934089639e90be24718f"
+    },
+    "library/algebra-simplify.syma": {
+      "source": "packages/stdlib/syma/algebra-simplify.syma",
+      "sha256": "2708232cbc705365670fb8f885f6e1b0d354339b32e8a535161b073b3fa70720"
+    },
+    "library/core-plumb.syma": {
+      "source": "packages/stdlib/syma/core-plumb.syma",
+      "sha256": "d2569054c2ae8030e914fb9e2795c14cd75223ac8bf97b91e0c3719307a57d94"
+    },
+    "library/core-fromjson-annotate.syma": {
+      "source": "packages/stdlib/syma/core-fromjson-annotate.syma",
+      "sha256": "e99c7adf8e241e90aa662c17c9a97a774c554532644f93c5d081967254e9347e"
+    },
+    "library/core-fromjson.syma": {
+      "source": "packages/stdlib/syma/core-fromjson.syma",
+      "sha256": "868c3ceb165b5a74de564af8362088bff1254ff38164f506f640f25c1ca1a00e"
+    },
+    "library/core-effect.syma": {
+      "source": "packages/stdlib/syma/core-effect.syma",
+      "sha256": "ccaeea67a0b095804cce222604c933824fa0bc1b11379118f6f0652b7be2a1ae"
+    },
+    "library/core-zipper.syma": {
+      "source": "packages/stdlib/syma/core-zipper.syma",
+      "sha256": "a72c3b6b988168a71f6bcdebe6c55544a429db8a2ac5ddd512681253effbb26a"
+    },
+    "library/core-set.syma": {
+      "source": "packages/stdlib/syma/core-set.syma",
+      "sha256": "a7fa64b8fca8b34582e39e2be01429ed63179d0529c3965eda5cfe95875a197a"
+    },
+    "library/notebook-ui.syma": {
+      "source": "packages/stdlib/syma/notebook-ui.syma",
+      "sha256": "86b9971a00d4353431a295039159ecba64df2932e067b3eb03cd53154cf442e2"
+    },
+    "library/core-rope.syma": {
+      "source": "packages/stdlib/syma/core-rope.syma",
+      "sha256": "70669ffadf50faef27b8a22be4c814f259766ab9b2643f4a2c70daa6fca33d14"
+    },
+    "library/core-main.syma": {
+      "source": "packages/stdlib/syma/core-main.syma",
+      "sha256": "0caf6e9fc689f10b91b70fbb04337c7262f907d62ff76d81f53e24edc8506093"
+    },
+    "library/core-lift.syma": {
+      "source": "packages/stdlib/syma/core-lift.syma",
+      "sha256": "b0de46c05de86765ca3c691f78d9d3930847aca0c2be3eb6b226fc49fa6a3f4d"
+    },
+    "library/core-test.syma": {
+      "source": "packages/stdlib/syma/core-test.syma",
+      "sha256": "e8c6d7a7f25b3aefb81a621972f6c2ed5278a369bed20a402ff1579978b57448"
+    },
+    "library/core-fun-withsugar.syma": {
+      "source": "packages/stdlib/syma/core-fun-withsugar.syma",
+      "sha256": "b7be52dabed1b18a1440ed534ab39ac2a9e27fbe8a404e2176b51ddc6e7c3c73"
+    },
+    "library/core-string.syma": {
+      "source": "packages/stdlib/syma/core-string.syma",
+      "sha256": "f3193678613f8c3d010d6aed2b4667691a400c8f02adeb20deed6fe8fcae1b23"
+    },
+    "examples/logic.syma": {
+      "source": "packages/demos/syma/logic.syma",
+      "sha256": "9fc73fe2236d1552fe882ee6e4a67a0f596f223c2976af5a414e7398504d1266"
+    },
+    "examples/sugar.syma": {
+      "source": "packages/demos/syma/sugar.syma",
+      "sha256": "4c6f7a698a0215548bd98ce99869cfaaef82535febd8e72d405fbb969a6662d6"
+    },
+    "examples/test.syma": {
+      "source": "packages/demos/syma/test.syma",
+      "sha256": "5b11c88aaf4cb208eb03a629d99d37d56731babf3eac7f718f7a863e80e52f19"
+    },
+    "examples/input-demo-isomorphic.syma": {
+      "source": "packages/demos/syma/input-demo-isomorphic.syma",
+      "sha256": "48a13d90b4e5fa0455f7ef3a96fc7e283d16093fddb4ec4a10157130e371a4bc"
+    },
+    "examples/syma-html-syma.syma": {
+      "source": "packages/demos/syma/syma-html-syma.syma",
+      "sha256": "6763de5f6a45934e83194927c9a4a63dd4b9690dfa51d257b3e82229c41b3918"
+    },
+    "examples/file-json-roundtrip.syma": {
+      "source": "packages/demos/syma/file-json-roundtrip.syma",
+      "sha256": "c56340c9b3ba7dabef944dd1142bc033881b103eb3ae443c469f7da26ff2dbea"
+    },
+    "examples/input-demo.syma": {
+      "source": "packages/demos/syma/input-demo.syma",
+      "sha256": "03b65a5d03bcabebff03d193d4522efbcd9e6e54a8e19ad748f223604d8fa841"
+    },
+    "examples/print-demo.syma": {
+      "source": "packages/demos/syma/print-demo.syma",
+      "sha256": "81df7cbf74527dfa037ab34ae1e625fe1eca5b2795b907080ac0988881cb0f0b"
+    },
+    "examples/experiments/to-rpn.syma": {
+      "source": "packages/demos/syma/experiments/to-rpn.syma",
+      "sha256": "a0bd83bd17cc9517197c0d5ba0f7a5f1ac91a7d55afd97dd31d360bd9991ee76"
+    },
+    "examples/experiments/binary.syma": {
+      "source": "packages/demos/syma/experiments/binary.syma",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "examples/experiments/one-of.syma": {
+      "source": "packages/demos/syma/experiments/one-of.syma",
+      "sha256": "831828f0e4915bbf8e776574db29200f872af6918e63fa97e4e3b518f5821572"
+    },
+    "examples/experiments/to-html.syma": {
+      "source": "packages/demos/syma/experiments/to-html.syma",
+      "sha256": "2125c3e659972148f2693ae7a8cb57094e7c58c069fb1300f883dfe8927d4d59"
+    },
+    "examples/experiments/bf.syma": {
+      "source": "packages/demos/syma/experiments/bf.syma",
+      "sha256": "8b5a76098f2b6b90c789192a46989ddd452e41ba7f09b7d934f63e48ab4b6d31"
+    },
+    "examples/experiments/unary.syma": {
+      "source": "packages/demos/syma/experiments/unary.syma",
+      "sha256": "14504081bec71c3e4b9d230a51b00022f7932fc7ad20e30f83cc0f7b2976845b"
+    },
+    "examples/experiments/syma-parser.syma": {
+      "source": "packages/demos/syma/experiments/syma-parser.syma",
+      "sha256": "615cc1907b5060100b0678f9ccfe33981849986ada600507f9134cf08996335d"
+    },
+    "examples/experiments/rpn-calc.syma": {
+      "source": "packages/demos/syma/experiments/rpn-calc.syma",
+      "sha256": "64d57bb00a7c8b21e8302effcf819b83fda3d26c5162fed1ff82e35b2aca4730"
+    },
+    "examples/experiments/simple-dsl.syma": {
+      "source": "packages/demos/syma/experiments/simple-dsl.syma",
+      "sha256": "66684281f9bab58fe3decde037b113b1f74537bfea4a0d37eeeab8c595e39f68"
+    },
+    "examples/experiments/syma-prolog.syma": {
+      "source": "packages/demos/syma/experiments/syma-prolog.syma",
+      "sha256": "65acb30d9332cf7eb1ef79298002c70a3605812cc30d5f478e0d72fbe1684a02"
+    },
+    "examples/experiments/parsed.syma": {
+      "source": "packages/demos/syma/experiments/parsed.syma",
+      "sha256": "5b053d90ebd1f00de728a4264cda5f78816174a8d1d0c04ab810f744b0c15261"
+    },
+    "examples/todo/add-todo.syma": {
+      "source": "packages/demos/syma/todo/add-todo.syma",
+      "sha256": "f938adab385324606859706162e183e23202fc2d1a1ba36948c5eb7e569a58df"
+    },
+    "examples/todo/filters.syma": {
+      "source": "packages/demos/syma/todo/filters.syma",
+      "sha256": "bd6e0d49ecf6e6adfd4c72c23064dce869ff0aeb5cf27ee7293846ffb72baf28"
+    },
+    "examples/todo/todolist.syma": {
+      "source": "packages/demos/syma/todo/todolist.syma",
+      "sha256": "02f9a6d6327a78f4059df6ce862a7c86778cdb471462abc7fd6455c7f565cc2f"
+    },
+    "examples/todo/todo.syma": {
+      "source": "packages/demos/syma/todo/todo.syma",
+      "sha256": "571e231d53747e26754d7cdd7e505800b8a29ec355cf5e7581b5a1a8f570148e"
+    },
+    "examples/todo/state.syma": {
+      "source": "packages/demos/syma/todo/state.syma",
+      "sha256": "d8223fbf2215d939da088766a719d799564f989fe76772324f54d74dc7da274c"
+    },
+    "examples/vm/ram.syma": {
+      "source": "packages/demos/syma/vm/ram.syma",
+      "sha256": "dbf8b31fd573f98101eceee0f4312bc8925f3e8079d727dde529b3e6d882a344"
+    },
+    "examples/vm/vm.syma": {
+      "source": "packages/demos/syma/vm/vm.syma",
+      "sha256": "1432b900698561f0a946d68f4e66036fd9b2f39efc57f47ecb5cd44bf55d835e"
+    },
+    "examples/vm/registers.syma": {
+      "source": "packages/demos/syma/vm/registers.syma",
+      "sha256": "8249407a66f14a48cb82b666e2c6e8b56436fb2f0a566fe0ba277bfe85991984"
+    },
+    "examples/notebooks/FP_2025-11-12.symnb": {
+      "source": "packages/demos/syma/notebooks/FP_2025-11-12.symnb",
+      "sha256": "b505c89021057bc043bd19810e2805a902238550dfd2025e9d3d630a45541004"
+    },
+    "examples/notebooks/Optimizing Brainfuck_2025-10-29.symnb": {
+      "source": "packages/demos/syma/notebooks/Optimizing Brainfuck_2025-10-29.symnb",
+      "sha256": "2a0b9adf1cddce37e50c93151f2116113aab2c347aec50d3b29e379fa3e6a2f9"
+    },
+    "examples/notebooks/Unary_2025-10-25.symnb": {
+      "source": "packages/demos/syma/notebooks/Unary_2025-10-25.symnb",
+      "sha256": "6b31e7590d4473144190284fdf0aaee25ebb45f93c2fa8728094e375d82ffc3d"
+    },
+    "examples/notebooks/Maze solver_2025-10-26.symnb": {
+      "source": "packages/demos/syma/notebooks/Maze solver_2025-10-26.symnb",
+      "sha256": "c5948e274b685f24ee95ea7423d036e1e3007e5deb03f9d9cc6eaf8082468b98"
+    },
+    "examples/notebooks/Cancellation in groups_2025-10-26.symnb": {
+      "source": "packages/demos/syma/notebooks/Cancellation in groups_2025-10-26.symnb",
+      "sha256": "eaf60e5c63e3febcc5b5cdff98f4485953a88ee3106d74fcd9ce887d2dff5d77"
+    },
+    "examples/notebooks/BigInt Fibonacci_2025-11-13.symnb": {
+      "source": "packages/demos/syma/notebooks/BigInt Fibonacci_2025-11-13.symnb",
+      "sha256": "87ccbc61d4aff0d704aa5988b3292386d3a93d2ccfdc2d9d12fca779204b20d5"
+    },
+    "examples/notebooks/Archiver_2025-11-04.symnb": {
+      "source": "packages/demos/syma/notebooks/Archiver_2025-11-04.symnb",
+      "sha256": "06a4cc7cd64d696e84f4203b982328aefa78fbed57062f67bd542dd298219d59"
+    }
+  },
+  "reference_files": {
+    "packages/core/src/core/engine/helpers.js": "23358ebf535eb9e11ebb6a0d31969732eb046595ad89a6a99cb9e56131c759b1",
+    "packages/core/src/core/engine/match.js": "d70902d206ea55315df058ef48cec4c86d7f57689457bab3c07f7602b9b33c6e",
+    "packages/core/src/core/engine/normalize.js": "66309845658bb3a0229bf52492bbe054eee1fb266a00c7966bd50093d2f75271",
+    "packages/core/src/core/engine/subst.js": "f3ae039eab1c0de9d62b4b5b558883fa9a923c4258d7226465177c1670c01ba2",
+    "packages/core/src/core/module-compiler.js": "6f7d980f35c46e4a943c916ec07d4352c3415f275226cea088d41038bda52b94",
+    "packages/core/src/core/parser.js": "5cd8388ae060590e51e00bf5c4111d4cac16bca0322feadacdba95f38939e0ec",
+    "packages/core/src/core/tests/meta-safe.test.js": "fcb5d8b728db581cfe428060b19b30ce95c67ead80a41546d32c860bf749aadb",
+    "packages/core/src/core/tests/pattern-alternation.test.js": "13989bd26b7c88048f4a5c66c8b54cf3461b6c52668f13ed6b00e2115698773a",
+    "packages/core/src/core/tests/pattern-auto-dequoting.test.js": "4af6fb10499f7237ebe1874a490959ef62736b061764c23024fd2e9de503f39f",
+    "packages/core/src/core/tests/pattern-match-cache.test.js": "e23bd0b3ff8b3d71606f72e5c4094cd11c7f84dfee3b992da9322bf77a6e367e",
+    "packages/core/src/core/tests/pattern-negation.test.js": "c2ae2ecd5f950f64cf66503cd542cf64438e90d231d2e55eb0eca32efee2dfca",
+    "packages/core/src/core/tests/pattern-one-or-more.test.js": "4e04877acc06179c33afae49a73eb0c16abd59bbae9f84cf357525e828dcf8ae",
+    "packages/core/src/core/tests/pattern-preservation.test.js": "c859d62429099505f10d5b6be11767d082af8423d8aed526614037ef4c4b6a40",
+    "packages/core/src/core/tests/pattern-regex-guard.test.js": "189301efd683aa1464de079442f3ea879c173e667af0dbfd4d867c9f9e81f8e7",
+    "packages/core/src/core/tests/pattern-regex.test.js": "a3d4f5e1457bf0dcbc9a87b06aab6d3eee6b7207750ea091f44f0a4f4c49193d",
+    "packages/core/src/core/tests/rule-rules.test.js": "8107ccafbfc57b0c0de1d4677ca0e32c7efd7b8ba317dbe586716b05e47a344c",
+    "packages/core/src/core/tests/rules-with.test.js": "60c5f84b99315ab765714a2092f7fea698199405a52125c89597d0bcdb7795c3",
+    "packages/core/src/core/universe-helpers.js": "68616e32d9ba80a223da8a276381c427e2cde70ae90f942552c7049aa3002855",
+    "packages/core/src/primitives.js": "0eb874f05a27a0d3b7c472bc291a26bec10f9f94ba998bca8ff8fa1d22f7e4ed",
+    "packages/core/src/primitives.test.js": "56315e5d0dc312fef2eefbf075b9fe61f764e2d0cc92f7097458f4e7212a05a8",
+    "packages/core/src/rest-pattern-guard.test.js": "00f0639b26c9c82f308952bc53554eab68aba39853789bfc11303cbe449032a1"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "engine": {
+    "name": "LGeneral",
+    "version": "1.4.4",
+    "url": "https://prdownloads.sourceforge.net/lgeneral/lgeneral-1.4.4.tar.gz",
+    "archive": "lgeneral-1.4.4.tar.gz",
+    "sha256": "0a26b495716cdcab63b49a294ba31649bc0abe74ce0df48276e52f4a6f323a95",
+    "license": "GPL-2.0-or-later"
+  },
+  "data": {
+    "name": "K.u.k. General",
+    "version": "1.1.1",
+    "url": "https://deb.debian.org/debian/pool/main/l/lgeneral-data/lgeneral-data_1.1.1.orig.tar.gz",
+    "archive": "lgeneral-data-1.1.1.tar.gz",
+    "sha256": "35735288fcb6000acf0c0eb335974e51c774a9bf724efa39ce4c6fd4e242c2dc",
+    "license": "CC-BY-SA-3.0"
+  }
+}

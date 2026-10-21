@@ -28,9 +28,10 @@ def installed_image(system, build, apps, folder):
     return output
 
 
-def frame(frames, title, size, output, document_bg=(238,242,246)):
+def frame(frames, title, size, output, document_bg=(238,242,246), pump=None):
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
+        if pump: pump()
         try:
             windows = json.loads((frames / 'windows.json').read_text())
             item = next(w for w in windows if w['title'] == title and w['visible'])
@@ -73,12 +74,12 @@ def native(args):
             guest.wait(lambda: b'Nano-X ready' in guest.log, 'Nano-X ready')
             guest.shell('netsurf --trace /usr/share/netsurf/index.html &'); guest.shell('p=$!')
             guest.wait(lambda: b'NETSURF_GUI_LOADED FuseDE Browser' in guest.log, 'browser loaded', seconds=120)
-            _, before = frame(frames, 'NetSurf: FuseDE Browser', (600,420), args.output/'native-wide.png')
+            _, before = frame(frames, 'NetSurf: FuseDE Browser', (600,420), args.output/'native-wide.png', pump=guest.pump)
             wid = int(re.search(rb'NETSURF_GUI_READY (\d+)', guest.log).group(1))
             result = guest.shell(f'nxhostcheck ctl resize {wid} 340 420')
             assert b'ROOTLESS_CONTROL_OK' in result, result
             guest.wait(lambda: b'NETSURF_GUI_RESIZE 340 420' in guest.log, 'browser resize')
-            _, after = frame(frames, 'NetSurf: FuseDE Browser', (340,420), args.output/'native-narrow.png')
+            _, after = frame(frames, 'NetSurf: FuseDE Browser', (340,420), args.output/'native-narrow.png', pump=guest.pump)
             assert before != after
             def colour(rgb,w,x,y,expected):
                 p=(y*w+x)*3
@@ -94,13 +95,13 @@ def native(args):
                 pending=event_file.with_suffix('.tmp')
                 pending.write_text(json.dumps(dict(window=host['id'],resize=[w,h])))
                 pending.replace(event_file)
-                frame(frames,'NetSurf: FuseDE Browser',(w,h),args.output/f'native-resize-{w}x{h}.png')
+                frame(frames,'NetSurf: FuseDE Browser',(w,h),args.output/f'native-resize-{w}x{h}.png',pump=guest.pump)
             guest.shell(f'nxhostcheck ctl close {wid}')
             result = guest.shell('wait $p; echo NETSURF_EXIT:$?')
             assert b'NETSURF_EXIT:0' in result, result
             guest.shell('netsurf --trace /ns-error-style.html &'); guest.shell('p=$!')
             guest.wait(lambda: b'NETSURF_GUI_LOADED Error stylesheet' in guest.log, 'internal error stylesheet')
-            frame(frames, 'NetSurf: Error stylesheet', (600,420), args.output/'native-error-style.png', (224,224,224))
+            frame(frames, 'NetSurf: Error stylesheet', (600,420), args.output/'native-error-style.png', (224,224,224),pump=guest.pump)
             wid = int(re.findall(rb'NETSURF_GUI_READY (\d+)', guest.log)[-1])
             guest.shell(f'nxhostcheck ctl close {wid}')
             result = guest.shell('wait $p; echo ERROR_STYLE_EXIT:$?')

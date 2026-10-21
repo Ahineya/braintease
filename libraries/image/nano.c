@@ -58,20 +58,29 @@ done:
 /* Explicit retained-resource API. The owner invalidates entries before freeing
  * or changing RGBA, and supplies a GC clipped to the passed rectangle. Three
  * entries leave the connection's fourth resource slot for the tile fallback. */
+#ifdef RIPPLE_NETSURF_HOSTED
+#define CACHE_ENTRIES 40
+#define TEXT_ENTRIES 8
+#define PHOTO_CELLS 4194304UL
+#define TEXT_CELLS 1048576UL
+#else
 #define CACHE_ENTRIES 3
-#define CACHE_CELLS 65536UL
+#define TEXT_ENTRIES 0
+#define PHOTO_CELLS 65536UL
+#define TEXT_CELLS 65536UL
+#endif
 struct retained {
     const RiImage *image;
     FDE_IMAGE id;
-    unsigned width,height,repeat;
+    unsigned width,height,repeat,kind;
     int scale_w,scale_h;
     unsigned long cells,used;
 };
 static struct retained retained[CACHE_ENTRIES];
-static unsigned long retained_cells,retained_clock;
+static unsigned long retained_cells[2],retained_clock;
 static void release_retained(struct retained *entry) {
     if(entry->id)fde_image_destroy(entry->id);
-    retained_cells-=entry->cells;
+    retained_cells[entry->kind]-=entry->cells;
     memset(entry,0,sizeof(*entry));
 }
 void ri_nano_forget(const RiImage *image) {
@@ -82,17 +91,21 @@ void ri_nano_clear(void) {
     unsigned i;
     for(i=0;i<CACHE_ENTRIES;i++)release_retained(retained+i);
 }
-static struct retained *oldest_retained(void) {
-    unsigned i;struct retained *entry=retained;
-    for(i=0;i<CACHE_ENTRIES;i++) {
-        if(retained[i].id&&(!entry->id||retained[i].used<entry->used))entry=retained+i;
-    }
+static unsigned first_entry(unsigned kind) { return TEXT_ENTRIES&& !kind ? TEXT_ENTRIES : 0; }
+static unsigned last_entry(unsigned kind) { return TEXT_ENTRIES&&kind ? TEXT_ENTRIES : CACHE_ENTRIES; }
+static struct retained *oldest_retained(unsigned kind) {
+    unsigned i;struct retained *entry=NULL;
+    for(i=first_entry(kind);i<last_entry(kind);i++)
+        if(retained[i].id&&(!entry||retained[i].used<entry->used))entry=retained+i;
     return entry;
 }
-static struct retained *retain_image(const RiImage *im,int w,int h,unsigned repeat) {
+static struct retained *retain_image(const RiImage *im,int w,int h,unsigned repeat,unsigned kind) {
     unsigned i,n,pass,sw=im->width,sh=im->height,alpha=!im->opaque;
     unsigned short chunk[2048];unsigned long cells,at,offset,pixels;
     struct retained *entry;
+    unsigned long budget;
+    if(!TEXT_ENTRIES)kind=0;
+    budget=kind?TEXT_CELLS:PHOTO_CELLS;
     /* Expand small CSS patterns once, instead of one synchronous request for
      * every 4x2 tile. Keep the exact integral period and nearest-neighbour phase. */
     if(repeat) {
@@ -101,25 +114,24 @@ static struct retained *retain_image(const RiImage *im,int w,int h,unsigned repe
         sh=(repeat&RI_REPEAT_Y)?((31/h)+1)*h:h;
     }
     pixels=(unsigned long)sw*sh;cells=pixels*(alpha?2:1);
-    if(sw>512||sh>512||cells>CACHE_CELLS)return NULL;
-    for(i=0;i<CACHE_ENTRIES;i++) {
+    if(sw>512||sh>512||cells>budget)return NULL;
+    for(i=first_entry(kind);i<last_entry(kind);i++) {
         entry=retained+i;
         if(entry->image==im&&entry->repeat==repeat&&
            (!repeat||(entry->scale_w==w&&entry->scale_h==h))) {
             entry->used=++retained_clock;return entry;
         }
     }
-    while(retained_cells>CACHE_CELLS-cells)release_retained(oldest_retained());
-    entry=oldest_retained();
-    for(i=0;i<CACHE_ENTRIES;i++)if(!retained[i].id){entry=retained+i;break;}
+    while(retained_cells[kind]>budget-cells)release_retained(oldest_retained(kind));
+    entry=oldest_retained(kind);
+    for(i=first_entry(kind);i<last_entry(kind);i++)if(!retained[i].id){entry=retained+i;break;}
+    if(!entry)return NULL;
     release_retained(entry);
     entry->id=fde_image_create(sw,sh,alpha?FDE_IMAGE_ALPHA:0);
     /* Other clients share the server budget. Drop our own LRU and retry once. */
     if(!entry->id) {
-        struct retained *old=oldest_retained();
-        /* An empty slot is not an eviction candidate. */
-        for(i=0;i<CACHE_ENTRIES;i++)if(retained[i].id&&(!old->id||retained[i].used<old->used))old=retained+i;
-        if(old->id)release_retained(old);
+        struct retained *old=oldest_retained(kind);
+        if(old)release_retained(old);
         entry->id=fde_image_create(sw,sh,alpha?FDE_IMAGE_ALPHA:0);
     }
     if(!entry->id)return NULL;
@@ -136,9 +148,9 @@ static struct retained *retain_image(const RiImage *im,int w,int h,unsigned repe
         if(fde_image_upload(entry->id,offset,chunk,n)<0) { fde_image_destroy(entry->id);memset(entry,0,sizeof(*entry));return NULL; }
         offset+=n;
     }
-    entry->image=im;entry->width=sw;entry->height=sh;entry->repeat=repeat;
+    entry->kind=kind;entry->image=im;entry->width=sw;entry->height=sh;entry->repeat=repeat;
     entry->scale_w=w;entry->scale_h=h;entry->cells=cells;entry->used=++retained_clock;
-    retained_cells+=cells;return entry;
+    retained_cells[kind]+=cells;return entry;
 }
 static long tile_origin(int start,int origin,unsigned extent) {
     long phase=((long)start-origin)%(long)extent;
@@ -149,7 +161,7 @@ int ri_nano_draw_rects(const RiImage *im,GR_DRAW_ID target,GR_GC_ID gc,
                       const struct fde_rect *rects,unsigned count,unsigned tint) {
     struct retained *entry;
     if(!im||!im->rgba||!im->width||!im->height||!rects||!count||count>9||tint>1)return RI_CORRUPT;
-    entry=retain_image(im,im->width,im->height,0);
+    entry=retain_image(im,im->width,im->height,0,tint);
     if(!entry)return RI_LIMIT;
     return fde_image_draw(entry->id,target,gc,rects,count,tint?FDE_IMAGE_TINT:0)<0?RI_LIMIT:RI_OK;
 }
@@ -164,7 +176,7 @@ int ri_nano_draw_cached(const RiImage *im,GR_DRAW_ID target,GR_GC_ID gc,int x,in
     if(!(flags&RI_REPEAT_Y)){if(t<y)t=y;if(b>(long)y+h)b=(long)y+h;}
     if(l>=r||t>=b)return RI_OK;
     /* Oversized destinations retain the bounded visible-tile fallback. */
-    if(w>1920||h>1080||(entry=retain_image(im,w,h,flags))==NULL)
+    if(w>1920||h>1080||(entry=retain_image(im,w,h,flags,0))==NULL)
         return ri_nano_draw(im,target,gc,x,y,w,h,clip,flags);
     start=flags?tile_origin(l,x,entry->width):x;
     for(ty=flags?tile_origin(t,y,entry->height):y;ty<b;ty+=flags?entry->height:h)

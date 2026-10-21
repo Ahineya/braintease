@@ -1,0 +1,18 @@
+
+:rule ToHTML/Start {ToHTML syma...} -> {FlattenTree {syma...}}
+
+:rule FlattenTree {.. {..} ..} -> {.. [ .. ] ..} :scope FlattenTree :innermost
+
+:rule FlattenTree->ExtractAttrs {FlattenTree things..} -> {ExtractAttrs {} things..}
+:rule ExtractAttrs {ExtractAttrs {..} {a_ b_ ..}} -> {ExtractAttrs {.. {Attr Substring(ToString(a_) 1) b_}} {..}} :guard Eq(Substring(ToString(a_) 0 1) ":")
+:rule ExtractAttrs/Pass/Str {ExtractAttrs {..} {a_ ..}} -> {ExtractAttrs {.. {Text a_}} {..}} :guard IsStr(a_)
+:rule ExtractAttrs/Pass {ExtractAttrs {..} {a_ ..}} -> {ExtractAttrs {.. a_} {..}}
+:rule ExtractAttrs->Print {ExtractAttrs {..} {}} -> {Print Default "" {TagStack} {..}}
+
+:rule Print/TagOpen {Print Default s_ {TagStack ..} {[ tag_ ..}} -> {Print InTag Concat(s_ "<" ToLower(ToString(tag_))) {TagStack .. tag_} {..}}
+:rule Print/TagOpen {Print InTag s_ {TagStack ..} {[ tag_ ..}} -> {Print InTag Concat(s_ "><" ToLower(ToString(tag_))) {TagStack .. tag_} {..}}
+:rule Print/Attr {Print InTag s_ {TagStack ..} {{Attr k_ v_} ..}} -> {Print InTag Concat(s_, " " k_ "=\"" v_ "\"") {TagStack ..} {..}}
+:rule Print/Text {Print InTag s_ {TagStack ..} {{Text text_} ..}} -> {Print Default Concat(s_, ">" text_) {TagStack ..} {..}}
+:rule Print/TagClose {Print Default s_ {TagStack .. tag_} {] ..}} -> {Print Default Concat(s_ "</" ToLower(ToString(tag_)) ">") {TagStack ..} {..}}
+
+:rule Print/End {Print Default s_ {TagStack} {}} -> {HTML s_}

@@ -91,7 +91,7 @@ void add_argument(const char *s)
 
 void create_init(void)
 {
-	register uint8_t *j, *e;
+	register oft_index_t *j, *e;
 
 	udata.u_top = PROGLOAD + 512;	/* Plenty for the boot */
 	init_process = ptab_alloc();
@@ -409,6 +409,16 @@ void fuzix_main(void)
     pagemap_init();
 #endif
 	bufinit();
+#ifdef CONFIG_DYNAMIC_OFT
+    /* Keep growing tables out of the fixed kernel-global bank. Allocate once
+     * from supervisor storage before any process can acquire a descriptor. */
+    of_tab = ripple_kernel_alloc(OFTSIZE * sizeof(*of_tab));
+    if (!of_tab) panic("open file table");
+    memset(of_tab, 0, OFTSIZE * sizeof(*of_tab));
+#ifdef CONFIG_SELECT
+    ripple_select_init();
+#endif
+#endif
 	fstabinit();
 #ifndef CONFIG_RIPPLE_IO
 	pagemap_init();

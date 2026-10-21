@@ -1,0 +1,5 @@
+{
+  "description": "sizeof parenthesized expression includes postfix subscripting",
+  "use_runtime": true,
+  "expected": "Y\n"
+}

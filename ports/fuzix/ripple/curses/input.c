@@ -9,6 +9,62 @@
 #include "curspriv.h"
 
 static int pushed[64], count, batching, paste_active, paste_match;
+static mmask_t mouse_mask;
+static MEVENT mouse_event;
+static int mouse_pending,mouse_motion;
+void ripple_curses_mouse_restore(int active) {
+    fputs("\033[?1000l\033[?1002l\033[?1003l\033[?1006l",stdout);
+    if(active&&mouse_mask) {
+        fputs("\033[?1006h",stdout);
+        fputs(mouse_mask&REPORT_MOUSE_POSITION?"\033[?1003h":mouse_motion?"\033[?1002h":"\033[?1000h",stdout);
+    }
+    fflush(stdout);
+}
+mmask_t mousemask(mmask_t mask,mmask_t *old) {
+    if(old)*old=mouse_mask;
+    mouse_mask=mask&(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION);
+    mouse_pending=0;
+    if(!isendwin())ripple_curses_mouse_restore(1);
+    return mouse_mask;
+}
+void ripple_curses_mouse_mode(int mode) {
+    mouse_motion=mode>=2;
+    mousemask(mode?ALL_MOUSE_EVENTS|(mode>=3?REPORT_MOUSE_POSITION:0):0,NULL);
+}
+int getmouse(MEVENT *event) {
+    if(!event||!mouse_pending)return ERR;
+    *event=mouse_event;mouse_pending=0;return OK;
+}
+int wenclose(const WINDOW *w,int y,int x) {
+    return w&&y>=w->_begy&&x>=w->_begx&&y-w->_begy<=w->_maxy&&x-w->_begx<=w->_maxx;
+}
+int wmouse_trafo(const WINDOW *w,int *y,int *x,bool to_screen) {
+    if(!w||!y||!x)return FALSE;
+    if(to_screen){if(*y<0||*x<0||*y>w->_maxy||*x>w->_maxx)return FALSE;*y+=w->_begy;*x+=w->_begx;}
+    else {if(!wenclose(w,*y,*x))return FALSE;*y-=w->_begy;*x-=w->_begx;}
+    return TRUE;
+}
+static int mouse_sequence(const int *s,int n) {
+    unsigned values[3]={0,0,0},part=0,i,code,button;int digit=0;
+    mmask_t state;
+    if(n<9||s[2]!='<'||(s[n-1]!='M'&&s[n-1]!='m'))return ERR;
+    for(i=3;i<(unsigned)n-1;i++) {
+        if(s[i]==';'){if(!digit||part==2)return ERR;part++;digit=0;}
+        else if(s[i]>='0'&&s[i]<='9'){if(values[part]>3276||(values[part]==3276&&s[i]>'7'))return ERR;values[part]=values[part]*10+s[i]-'0';digit=1;}
+        else return ERR;
+    }
+    if(part!=2||!digit||!values[1]||!values[2]||values[0]>127)return ERR;
+    code=values[0];button=code&3;
+    if(code&64){if(button>1||s[n-1]=='m')return ERR;state=button?BUTTON5_PRESSED:BUTTON4_PRESSED;}
+    else {
+        state=button==3?0:(s[n-1]=='m'?BUTTON1_RELEASED:BUTTON1_PRESSED)<<(button*5);
+        if(code&32)state|=REPORT_MOUSE_POSITION;
+    }
+    if(code&4)state|=BUTTON_SHIFT;if(code&8)state|=BUTTON_ALT;if(code&16)state|=BUTTON_CTRL;
+    if(!(state&mouse_mask&(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION)))return 0;
+    mouse_event.id=0;mouse_event.x=values[1]-1;mouse_event.y=values[2]-1;mouse_event.z=0;
+    mouse_event.bstate=state;mouse_pending=1;return KEY_MOUSE;
+}
 #ifdef RIPPLE_CURSES_HOST
 static unsigned char host_input[4096];
 static unsigned host_at, host_used;
@@ -67,6 +123,7 @@ static int input(int delay) {
 static int sequence(const int *s, int n) {
     int last = s[n - 1], number = 0, i;
     if (s[1] != '[' && s[1] != 'O') return ERR;
+    if(s[1]=='['&&s[2]=='<')return mouse_sequence(s,n);
     if (last == 'A') return KEY_UP;
     if (last == 'B') return KEY_DOWN;
     if (last == 'C') return KEY_RIGHT;
@@ -149,6 +206,7 @@ again:
             if (n >= 3 && c >= '@' && c <= '~') break;
         }
         key = n >= 3 ? sequence(s, n) : ERR;
+        if (key == 0) goto again;
         if (key != ERR) return key;
         while (n > 1) ungetch(s[--n]);
         return 27;

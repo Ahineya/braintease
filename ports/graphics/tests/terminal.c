@@ -10,6 +10,24 @@ static int scrolled;
 static void feed(const char *s){vt_feed(&t,s,strlen(s));}
 static void reply(struct vt *v,const char *s){(void)v;strcpy(answer,s);}
 static void scroll(struct vt *v,int n){assert(v->top==1&&v->bottom==3);scrolled+=n;}
+static char osc_text[64];static unsigned osc_length,osc_completed,osc_aborted;
+static void observe_osc(struct vt *v,unsigned c,int event){
+    (void)v;
+    if(event<0){osc_length=0;osc_aborted++;}
+    else if(event>0){osc_text[osc_length]=0;osc_completed++;}
+    else if(osc_length+1<sizeof(osc_text))osc_text[osc_length++]=c;
+}
+static void osc_stream(void){
+    const char *packet="\033]777;mux;1;12;2f;2d\033\\";unsigned i,n=strlen(packet);
+    for(i=0;i<=n;i++){
+        init();t.osc=observe_osc;osc_completed=osc_aborted=0;
+        vt_feed(&t,packet,i);vt_feed(&t,packet+i,n-i);
+        assert(osc_completed==1&&osc_aborted==1&&!strcmp(osc_text,"777;mux;1;12;2f;2d")&&t.x==0);
+    }
+    feed("\033]idle\007");assert(osc_completed==2&&!strcmp(osc_text,"idle"));
+    feed("\033]cancel\030X");assert(osc_completed==2&&osc_aborted==4);
+    feed("\033Pnot-an-osc\033\\Y");assert(osc_completed==2&&osc_aborted==4);
+}
 static uint32_t ch(unsigned y,unsigned x){return vt_cells(&t)[y*t.cols+x].ch;}
 static unsigned pattern(unsigned plane,unsigned y,unsigned x){return '!'+(plane*17+y*11+x)%90;}
 static void sizes(void) {
@@ -111,7 +129,27 @@ int main(void) {
     init();feed("\033[1;80H\344\270\255");assert(ch(1,0)==0x4e2d&&ch(1,1)==RU_CONTINUATION);
     init();feed("\033[1;79H\344\270\255");assert(vt_resize(&t,79,30)==0&&ch(0,78)==RU_REPLACEMENT);
     init();feed("\342\320\226");assert(ch(0,0)==RU_REPLACEMENT&&ch(0,1)==0x416);
-    sizes();vt_destroy(&t);
+    {
+        char report[40];init();
+        assert(!vt_mouse_report(&t,report,0,2,3,0,0,0));
+        feed("\033[?1006h\033[?1002h");
+        assert(t.mouse_mode==1002&&t.mouse_sgr);
+        assert(vt_mouse_report(&t,report,0,2,3,0,0,16)&&!strcmp(report,"\033[<16;3;4M"));
+        assert(t.mouse_buttons==1);
+        assert(vt_mouse_report(&t,report,0,3,3,0,1,0)&&!strcmp(report,"\033[<32;4;4M"));
+        assert(!vt_mouse_report(&t,report,0,3,3,0,1,0));
+        assert(vt_mouse_report(&t,report,0,-4,999,1,0,0)&&!strcmp(report,"\033[<0;1;30m")&&!t.mouse_buttons);
+        assert(!vt_mouse_report(&t,report,3,4,3,0,1,0));
+        feed("\033[?1003h");assert(vt_mouse_report(&t,report,3,4,3,0,1,0));
+        assert(!strcmp(report,"\033[<35;5;4M"));
+        assert(vt_mouse_report(&t,report,64,4,3,0,0,0)&&!strcmp(report,"\033[<64;5;4M"));
+        assert(!vt_mouse_report(&t,report,64,4,3,1,0,0));
+        feed("\033[?1003l\033[?1000h\033[?1006l");
+        assert(!vt_mouse_report(&t,report,0,4,3,0,1,0));
+        assert(vt_mouse_report(&t,report,2,4,3,0,0,0)==6&&!memcmp(report,"\033[M\042\045\044",6));
+        feed("\033c");assert(!t.mouse_mode&&!t.mouse_sgr&&!t.mouse_buttons);
+    }
+    osc_stream();sizes();vt_destroy(&t);
     puts("terminal: ANSI/editing, configurable geometry, both-screen resize preservation, cursor clamping and fragmented parser/resize bounds passed");
     return 0;
 }

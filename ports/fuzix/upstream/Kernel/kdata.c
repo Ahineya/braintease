@@ -34,7 +34,11 @@ struct blkbuf *bufpool, *bufpool_end;
 struct p_tab ptab[PTABSIZE];
 struct p_tab *ptab_end;		/* Points to first byte off end */
 struct p_tab *alarms;		/* Linked list of processes with timers */
+#ifdef CONFIG_DYNAMIC_OFT
+struct oft *of_tab;
+#else
 struct oft of_tab[OFTSIZE];	/* Open File Table */
+#endif
 struct cinode i_tab[ITABSIZE];	/* In-core inode table */
 struct mount fs_tab[NMOUNTS];	/* In-core mount table */
 

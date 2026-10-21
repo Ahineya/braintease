@@ -62,6 +62,14 @@ def exercise(args,system,directory):
         # Ctrl-U in prompts clears the existing name.
         visible('1:work')
         key(b'%');settle();pane_command('echo RIGHT_PANE', 'RIGHT_PANE');visible('FIRST_PANE')
+        # Outer terminal mouse coordinates focus a pane and drag a divider.
+        g.send(b'\x1b[<0;3;3M\x1b[<0;3;3m')
+        pane_command('echo MOUSE_LEFT', 'MOUSE_LEFT')
+        g.send(b'\x1b[<0;60;3M\x1b[<0;60;3m')
+        pane_command('muxcheck --size', 'MUX_GEOMETRY 40 22')
+        g.send(b'\x1b[<0;40;3M\x1b[<32;50;3M\x1b[<0;50;3m');settle()
+        pane_command('muxcheck --size', 'MUX_GEOMETRY 30 22')
+        g.send(b'\x1b[<0;50;3M\x1b[<32;40;3M\x1b[<0;40;3m');settle()
         key(b'"');settle();pane_command('echo LOWER_PANE', 'LOWER_PANE');visible('RIGHT_PANE')
         key(b'z');visible('ZOOM');g.wait(lambda:'RIGHT_PANE' not in g.screen.text(),'zoom hides sibling panes')
         key(b'z');visible('RIGHT_PANE')

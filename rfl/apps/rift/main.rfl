@@ -1,6 +1,6 @@
 import {} from "std/result";
 import {} from "std/option";
-import { start, Screen, InputEvent, NO_KEY, CLOSED, RESIZE, PASTE_BEGIN, PASTE_END, function_key } from "std/curses";
+import { start, Screen, InputEvent, MouseEvent, MOUSE_DRAG, NO_KEY, CLOSED, RESIZE, PASTE_BEGIN, PASTE_END, function_key } from "std/curses";
 import { arguments, working_directory, error_message, read_dir, REGULAR } from "std/posix";
 import { trim, starts_with, ends_with } from "std/string";
 import { joined, basename, parent } from "lib/path";
@@ -12,7 +12,7 @@ import { Settings, configured, decimal, persist } from "./config";
 import { input_run, input_count, input_scalar } from "lib/text_curses";
 import { View, Vi, view, controls, event as vi_event, reset } from "./vi";
 import { replace } from "std/mem";
-import { render, visible, height, Paint, painting } from "./ui";
+import { render, visible, height, Paint, painting, position, tab_width, first_tab } from "./ui";
 import { available, launch } from "./tools";
 struct App {
     documents: Vec<Document>,
@@ -228,7 +228,7 @@ fn quit(screen: &Screen, theme: &Theme, app: &mut App, force: bool) {
 }
 
 fn help(screen: &Screen, theme: &Theme) {
-    message(screen, palette(theme), "Rift — programmer's editor", ["RFL interface and vi commands; portable C text engine.", "F10 menus: File, Edit, Search, Run, Tabs, Help.", "Ctrl-N New  Ctrl-O/F3 Open  Ctrl-S/F2 Save", "Ctrl-W Close tab  Ctrl-Q Quit  F4 Tabs", "F5 Save and Run  F6/F9 next/previous tab", "F7 Find  F8 Tools  F1 Help", "", "Normal: h j k l, arrows, w b e / W B E", "0 ^ $ gg G, counts (3w, 2dd, d2w), % brackets", "f/F/t/T character search; ; repeat, , reverse", "i a I A o O insert; Esc returns to Normal", "d/c/y + motion; dd cc yy; D C S; x X s r", "ci) ci] ci} ci\" ci' ciw; a) a] a} aw objects", "v/V visual selection; d c y > < act on selection", "p/P paste; u undo; Ctrl-R redo; . repeat change", ">> << indent; J join; Ctrl-W deletes insert word", "/ ? literal search, n/N repeat; : command prompt", "", ":w :w PATH :q :q! :wq :x :qa :qa!", ":e PATH :tabnew PATH :bn :bp :bd :NUMBER", ":set number/nonumber autoindent/noautoindent", ":set expandtab/noexpandtab tabstop=1..16", ":set wrap/nowrap textwidth=0..4096", ":set formatoptions+=t / formatoptions-=t", "Options save automatically to ~/.riftrc.", ":run :tools :theme :help", "", "Up to 8 tabs; 512 KiB/file; UTF-8/grapheme editing.", "CRLF preserved. NUL/binary data is rejected.", "Changes outside Rift require overwrite confirmation.", "Runs use guest tools, PATH and [run] INI overrides.", "Compilers are usable only if installed in the guest.", "Plugins/completion/diagnostics/LSP are future work."]);
+    message(screen, palette(theme), "Rift — programmer's editor", ["RFL interface and vi commands; portable C text engine.", "F10 menus: File, Edit, Search, Run, Tabs, Help.", "Ctrl-N New  Ctrl-O/F3 Open  Ctrl-S/F2 Save", "Ctrl-W Close tab  Ctrl-Q Quit  F4 Tabs", "F5 Save and Run  F6/F9 next/previous tab", "F7 Find  F8 Tools  F1 Help", "Mouse: click caret/tabs/menus, drag visual selection, wheel move", "Shift-drag selects terminal text for copying.", "", "Normal: h j k l, arrows, w b e / W B E", "0 ^ $ gg G, counts (3w, 2dd, d2w), % brackets", "f/F/t/T character search; ; repeat, , reverse", "i a I A o O insert; Esc returns to Normal", "d/c/y + motion; dd cc yy; D C S; x X s r", "ci) ci] ci} ci\" ci' ciw; a) a] a} aw objects", "v/V visual selection; d c y > < act on selection", "p/P paste; u undo; Ctrl-R redo; . repeat change", ">> << indent; J join; Ctrl-W deletes insert word", "/ ? literal search, n/N repeat; : command prompt", "", ":w :w PATH :q :q! :wq :x :qa :qa!", ":e PATH :tabnew PATH :bn :bp :bd :NUMBER", ":set number/nonumber autoindent/noautoindent", ":set expandtab/noexpandtab tabstop=1..16", ":set wrap/nowrap textwidth=0..4096", ":set formatoptions+=t / formatoptions-=t", "Options save automatically to ~/.riftrc.", ":run :tools :theme :help", "", "Up to 8 tabs; 512 KiB/file; UTF-8/grapheme editing.", "CRLF preserved. NUL/binary data is rejected.", "Changes outside Rift require overwrite confirmation.", "Runs use guest tools, PATH and [run] INI overrides.", "Compilers are usable only if installed in the guest.", "Plugins/completion/diagnostics/LSP are future work."]);
 }
 
 fn search(screen: &Screen, theme: &Theme, app: &mut App, backward: bool) {
@@ -461,9 +461,14 @@ fn command(screen: &Screen, theme: &mut Theme, app: &mut App, input: String) {
     }
 }
 
-fn menu(screen: &Screen, theme: &mut Theme, app: &mut App) {
+fn menu(screen: &Screen, theme: &mut Theme, app: &mut App, initial: Option<usize>) {
     normal(app);
-    let category = match choose(screen, palette(&*theme), "Rift menu", ["File", "Edit", "Search", "Run", "Tabs", "Help"], 0) {
+    let category = match if (initial.is_some()) {
+        initial
+    } else {
+        choose(screen, palette(&*theme), "Rift menu", ["File", "Edit", "Search", "Run", "Tabs", "Help"], 0)
+    }
+    {
         Some(i) => i,
         None => {
             return;
@@ -544,7 +549,7 @@ fn menu(screen: &Screen, theme: &mut Theme, app: &mut App) {
 }
 
 fn edit(app: &mut App, key: i16, rows: usize) {
-    edit_event(app, InputEvent { kind: 1, value: key as u32 }, rows);
+    edit_event(app, InputEvent { kind: 1, value: key as u32, mouse: None }, rows);
 }
 
 fn edit_event(app: &mut App, event: InputEvent, rows: usize) {
@@ -604,6 +609,127 @@ fn burst(app: &mut App, event: InputEvent, literal: bool) -> bool {
     }
 }
 
+// Return a keyboard action for the clickable shortcut bar, otherwise consume.
+fn mouse(screen: &Screen, theme: &mut Theme, app: &mut App, event: MouseEvent, dragging: &mut bool) -> i16 {
+    if (event.released()) {
+        *dragging = false;
+        return NO_KEY;
+    }
+    if (screen.columns() < 40 || screen.rows() < 10) {
+        *dragging = false;
+        return NO_KEY;
+    }
+    if (event.pressed()) {
+        *dragging = false;
+        if (event.row == 0) {
+            let starts: Vec<i16> = [8, 14, 20, 28, 33, 39];
+            let ends: Vec<i16> = [12, 18, 26, 31, 37, 43];
+            for (i in 0..starts.len()) {
+                if (event.column >= starts[i] && event.column < ends[i]) {
+                    menu(screen, theme, app, Some(i));
+                    return NO_KEY;
+                }
+            }
+        }
+        if (event.row == 1 && event.column >= 0 && event.column < screen.columns()) {
+            let at = first_tab(screen.columns(), app.documents.len(), app.active) + (event.column / tab_width(app.documents.len())) as usize;
+            if (at < app.documents.len()) {
+                normal(app);
+                app.active = at;
+            }
+            return NO_KEY;
+        }
+        if (event.row == screen.rows() - 1) {
+            let starts: Vec<i16> = [1, 10, 19, 28, 37, 45, 55, 65];
+            let ends: Vec<i16> = [8, 17, 26, 35, 43, 53, 63, 75];
+            let keys: Vec<i16> = [function_key(1), function_key(2), function_key(3), function_key(4), function_key(5), function_key(10), 105, 58];
+            for (i in 0..starts.len()) {
+                if (event.column >= starts[i] && event.column < ends[i]) {
+                    return keys[i];
+                }
+            }
+        }
+    }
+    if (event.column < 0 || event.column >= screen.columns() || event.row < 2 || event.row >= screen.rows() - 3) {
+        return NO_KEY;
+    }
+    let active = app.active;
+    if (event.wheel() != 0) {
+        *dragging = false;
+        let mut v = app.views[active];
+        {
+            let b = &app.documents[active].buffer;
+            let current = if (app.settings.wrap) {
+                b.wrap_at(v.cursor, v.columns, app.settings.tabstop)
+            } else {
+                b.row(v.cursor)
+            };
+            let rows = height(screen);
+            let mut top = if (event.wheel() < 0) {
+                if (v.top > 3) {
+                    v.top - 3
+                } else {
+                    0 as usize
+                }
+            } else {
+                v.top + 3
+            };
+            // Build only the visible wrap prefix; a complete scan is needed
+            // only when this scroll reaches the end of the document.
+            if (!app.settings.wrap || !b.wrapped(top + rows - 1, v.columns, app.settings.tabstop).present) {
+                let count = if (app.settings.wrap) {
+                    b.wrap_at(b.len(), v.columns, app.settings.tabstop) + 1
+                } else {
+                    b.lines()
+                };
+                let last = if (count > rows) {
+                    count - rows
+                } else {
+                    0 as usize
+                };
+                if (top > last) {
+                    top = last;
+                }
+            }
+            v.top = top;
+            let target = if (current < top) {
+                top
+            } else if (current >= top + rows) {
+                top + rows - 1
+            } else {
+                current
+            };
+            if (target != current) {
+                v.cursor = if (app.settings.wrap) {
+                    b.wrap_column(target, b.visual(v.cursor, app.settings.tabstop) - b.wrapped(current, v.columns, app.settings.tabstop).left, v.columns, app.settings.tabstop).unwrap_or(b.len())
+                } else {
+                    b.column(target, v.goal, app.settings.tabstop)
+                };
+            }
+        }
+        app.views[active] = v;
+    } else if (event.pressed() || event.motion() && *dragging) {
+        let at = position(screen, &app.documents[active].buffer, app.views[active], &app.settings, event.row, event.column);
+        if (event.pressed()) {
+            let insert = app.vi.mode == 1;
+            normal(app);
+            app.vi.anchor = at;
+            if (insert) {
+                app.vi.mode = 1;
+                app.documents[active].buffer.begin(at);
+            } *dragging = true;
+        } else if (at != app.vi.anchor) {
+            app.documents[active].buffer.end(app.views[active].cursor);
+            app.vi.mode = 2;
+        }
+        let mut v = app.views[active];
+        v.cursor = at;
+        v.goal = app.documents[active].buffer.visual(at, app.settings.tabstop);
+        app.views[active] = v;
+    }
+    NO_KEY
+}
+
 fn run(screen: &Screen, initial: Theme, app: &mut App) {
     let mut theme = initial;
     let mut dirty = true;
@@ -612,12 +738,30 @@ fn run(screen: &Screen, initial: Theme, app: &mut App) {
     let mut pasting = false;
     let mut paste_mode: i16 = 0;
     screen.bracketed_paste(true);
+    screen.mouse(MOUSE_DRAG);
+    let mut dragging = false;
     while (!app.quit) {
         if (dirty) {
             draw(screen, &theme, app, &mut old, full);
             dirty = false;
         }
-        let event = screen.event();
+        let mut event = screen.event();
+        match event.mouse {
+            Some(pointer) => {
+                let action = mouse(screen, &mut theme, app, pointer, &mut dragging);
+                dirty = true;
+                full = pointer.pressed() && pointer.row < 2;
+                if (action == NO_KEY) {
+                    continue;
+                }
+                event = InputEvent { kind: 1, value: action as u32, mouse: None };
+            },
+            None => {
+                if (event.kind != NO_KEY) {
+                    dragging = false;
+                }
+            }
+        }
         let key = event.key();
         if (event.kind == NO_KEY) {
             continue;
@@ -688,7 +832,7 @@ fn run(screen: &Screen, initial: Theme, app: &mut App) {
         } else if (key == function_key(8)) {
             tools(screen, &theme);
         } else if (key == function_key(10)) {
-            menu(screen, &mut theme, app);
+            menu(screen, &mut theme, app, None);
         } else if (app.vi.mode == 0 && app.vi.operator == 0 && app.vi.pending == 0 && (key == 58 || key == 47 || key == 63)) {
             if (key == 58) {
                 normal(app);

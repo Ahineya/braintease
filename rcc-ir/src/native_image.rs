@@ -196,6 +196,8 @@ pub fn application_service(name: &str) -> bool {
             | "memset"
             | "memcpy"
             | "memmove"
+            | "__rcc_cell_copy"
+            | "__rcc_cell_fill"
             | "strlen"
             | "strcmp"
             | "strncmp"

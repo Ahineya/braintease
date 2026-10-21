@@ -1,11 +1,11 @@
-import { start, Screen, color_pair, BOLD, REVERSE, RESIZE, CLOSED, PAGE_UP, PAGE_DOWN, function_key } from "std/curses";
+import { start, Screen, MOUSE_BUTTONS, color_pair, BOLD, REVERSE, RESIZE, CLOSED, NO_KEY, PAGE_UP, PAGE_DOWN, function_key } from "std/curses";
 import { arguments, environment } from "std/posix";
 import { client, Client, QR_LOGIN, PASSWORD, READY, SENDING, FAILED } from "lib/telegram";
 import { encode, QrCode } from "lib/qr";
 import { loader, Config, Role } from "lib/tui_theme";
 import { install } from "lib/tui_curses";
 import { LineEdit, line_edit } from "lib/tui_input";
-import { fitted, number } from "lib/tui";
+import { Rect, fitted, number } from "lib/tui";
 import { Selection, selection } from "lib/tui_list";
 import {} from "std/result";
 
@@ -206,6 +206,7 @@ fn main() -> i16 {
         return 1;
     }
     screen.timeout(25);
+    screen.mouse(MOUSE_BUTTONS);
     let mut qr: Option<QrCode> = None;
     let mut uri = "";
     let mut input = line_edit("");
@@ -286,7 +287,76 @@ fn main() -> i16 {
             redraw = false;
         }
         let event = screen.event();
-        let key = event.key();
+        let mut key = event.key();
+        match event.mouse {
+            Some(pointer) => {
+                if (pointer.pressed() && pointer.row == screen.rows() - 1 && pointer.column < 9) {
+                    key = function_key(10);
+                } else if (screen.rows() >= 30 && screen.columns() >= 80 && (service.state() == READY || service.state() == SENDING)) {
+                    let height = screen.rows() - 8;
+                    let width = if (screen.columns() > 213) {
+                        180
+                    } else {
+                        screen.columns() - 33
+                    };
+                    if (selected.mouse(Rect { row: 4, column: 1, rows: height, columns: 27 }, pointer, service.chat_count())) {
+                        if (pointer.pressed()) {
+                            focus = 0;
+                            key = 13;
+                        }
+                        redraw = true;
+                    } else if (query.mouse(Rect { row: 2, column: 3, rows: 1, columns: 24 }, pointer)) {
+                        focus = 2;
+                        redraw = true;
+                    } else if (service.can_send() && input.mouse(Rect { row: screen.rows() - 3, column: 31, rows: 1, columns: width }, pointer)) {
+                        focus = 1;
+                        redraw = true;
+                    } else if ((Rect { row: 4, column: 31, rows: height, columns: width }).contains(pointer.row, pointer.column) && pointer.wheel() != 0) {
+                        let lines = service.history_lines(width as usize);
+                        let maximum = if (lines > height as usize) {
+                            lines - height as usize
+                        } else {
+                            0 as usize
+                        };
+                        if (pointer.wheel() < 0) {
+                            if (scroll >= maximum) {
+                                waiting_older = service.more_history();
+                            }
+                            scroll = if (scroll + 3 < maximum) {
+                                scroll + 3
+                            } else {
+                                maximum
+                            };
+                        } else {
+                            scroll = if (scroll > 3) {
+                                scroll - 3
+                            } else {
+                                0 as usize
+                            };
+                        }
+                        redraw = true;
+                    } else if (pointer.pressed() && pointer.row == screen.rows() - 1) {
+                        if (pointer.column >= 11 && pointer.column < 20) {
+                            key = 9;
+                        } else if (pointer.column >= 23 && pointer.column < 31) {
+                            focus = 2;
+                            redraw = true;
+                        } else if (pointer.column >= 34 && pointer.column < 49) {
+                            key = 13;
+                        } else if (pointer.column >= 52 && pointer.column < 67) {
+                            focus = 1;
+                            key = PAGE_UP;
+                        } else if (pointer.column >= 70) {
+                            key = function_key(5);
+                        }
+                    }
+                }
+                if (key == NO_KEY) {
+                    continue;
+                }
+            },
+            None => {}
+        }
         if (key == CLOSED || key == function_key(10)) {
             return 0;
         }
@@ -305,8 +375,11 @@ fn main() -> i16 {
             if (key == 27) {
                 return 0;
             }
-            if (event.kind == 0 && event.value >= 128) { service.password_scalar(event.value); }
-            else { service.password_key(key); }
+            if (event.kind == 0 && event.value >= 128) {
+                service.password_scalar(event.value);
+            } else {
+                service.password_key(key);
+            }
         } else if (service.state() == FAILED && key == 114) {
             service.reconnect();
         } else if (service.state() == READY || service.state() == SENDING) {

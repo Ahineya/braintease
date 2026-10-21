@@ -1,0 +1,603 @@
+HP RIPLIX X64 INTEGRATION PLAN — agreed 2026-10-20
+================================================
+
+The user accepted proceeding with the roadmap on 2026-10-21. The maintained
+master plan is docs/x64-master-plan.md; retain this file for operational
+decisions and dated hardware/install receipts. Adopt an established filesystem
+rather than inventing a new disk format; selection/porting evaluation is open.
+
+2026-10-21 roadmap reconciliation — proposed next order
+------------------------------------------------------
+This section supersedes historical status snapshots below, not their receipts.
+It matches the user's modern, fast, cohesive GUI OS goal to existing plans.
+The sequence below is a proposal for discussion, not a new source delegation,
+filesystem choice, ABI change or authorization to overwrite installed apps.
+
+Current physical baseline:
+- Fast GOP console, NVMe persistence, offline apps, combined default USB boot,
+  service supervision, pkg installation and SSH/SFTP/Telnet have worked on HP.
+  Dedicated p3 reserves 30 GiB; the current C16 V3 filesystem uses 1 GiB.
+- Orderly reboot is physically confirmed. Shutdown syncs and stops; ACPI S5
+  power-off, suspend/resume and general laptop power management are pending.
+- Userland wifid controls retry/backoff and pause/reconnect. Native firmware,
+  association and key handling remain privileged; the test profile is embedded.
+  This is not yet a userland supplicant or saved-profile network selector.
+- Current EFI 502111b00b958e189ffdad168a9184cd9e3d61f2c0cfc24468ba85fac5c3f8c6
+  has ordinary GTK-refresh support. A 602-second single SSH process and binary
+  SFTP round trip passed without reassociation. A later periodic check recorded
+  GTK refreshes=1, generation=1, attempts=1 and no duplicates/rejections. A held
+  SSH session across an actual rotation remains OPEN. Fresh pairwise handshake
+  requests still use the explicit reconnect fallback. Do not call all rekeys
+  seamless or interpret periodic SSH snapshots as continuous-session proof.
+- Native instructions still use C16 layouts/private calls and checkpoint
+  scheduling at ring 0 on one CPU. The isolated process-memory prototype is
+  host-tested, not installed PTEs, ring 3, timer preemption or SMP.
+- RVM/Fuse-X GUI, input, audio and application acceptance is reusable work,
+  not proof of a bare-metal HP backend. Keep target identities separate.
+
+Suggested sequence, with independent lanes running alongside it:
+
+1. Finish the reliable remote development loop.
+   Observe a real GTK rotation with the association and a held session intact;
+   test sustained traffic, idle operation, reconnect fallback and manual pause.
+   Keep local console independent of network/service failure. Stage kernel/EFI
+   updates separately from application packages, retaining a known-good image.
+   Wi-Fi profiles and DHCP integration can proceed above the driver boundary;
+   shared DHCP work elsewhere is not automatically connected to HP eth0.
+
+   Internal EFI installation can follow this baseline without waiting for GUI,
+   LP64, a new filesystem or every app. Keep Ubuntu and USB recovery, create an
+   independent Riplix EFI path/entry, trial a one-shot boot, then set the default
+   after physical acceptance. For unattended remote kernel updates add verified
+   candidate publication, health confirmation and a real failed-boot recovery
+   mechanism. Merely changing BootOrder/BootNext does not recover a hung kernel.
+   Implement and verify ESP access/update tooling; current EFI embeds kernel.
+
+2. Make the existing console a dependable application platform.
+   Fix Escape, extended arrows, Home/End/Insert/Delete/Page keys, F keys,
+   independent modifiers and bounded multi-character input buffering. Emit the
+   sequences understood by the shared terminal/curses stack. Fn may be handled
+   entirely by firmware; inventory actual scan/ACPI events before promising a
+   distinct Fn key. Media/lid/tablet events may need HP WMI/Intel HID/ACPI work.
+
+   Report real console geometry via the terminal-size device contract, then
+   verify TIOCGWINSZ, termios, ANSI cursor/erase/scroll behavior and restoration
+   after exit/signals. input.c currently omits Escape and discards most extended
+   keys; runtime.c lacks terminal-size command 11. These are concrete platform
+   gaps, not evidence that a different shell is required. Check Levee's own
+   geometry limits separately. Test physical console and remote PTYs separately.
+
+   Bring mux first, then Commander/mc and Rift with matching C16 x64 SDK/bindings,
+   resources, PTY/job-control behavior and package manifests. mux has no graphics
+   dependency (docs/terminal-multiplexer.md). Add chat and Telegram after checking
+   their target crypto/TLS/entropy/time/socket contracts, not just compilation.
+   Telegram's existing host crypto device needs a bare-metal implementation;
+   networking alone does not supply those operations. Music/wavplay follow PCM.
+   Keep app catalogs with their current owner; install incrementally through pkg.
+
+3. Start execution foundations now, in parallel with driver/app work.
+   Follow docs/arch/native-x64.md, not the old heavier-apps-before-preemption
+   milestone. Measure switch copies and scheduling gaps; integrate reviewed
+   process-owned hardware backing/PTEs under current safe checkpoints first.
+   Define allocator/mapping/rollback/TLB and borrowed-view lifetimes with the
+   isolated process-memory owner before changing the production platform.
+   Separate user-compatible helpers from privileged services, then establish
+   ring-3 code/data/stack, saved CPU/FP contexts, fault containment and checked
+   user copies. Next add timer-driven single-CPU userspace preemption while
+   keeping initial kernel critical sections non-preemptible and bounded.
+   Acceptance includes a syscall-free busy loop beside a responsive shell,
+   fork/exec/signals, failed exec rollback and complete page reclamation.
+
+   LP64 contract/SDK design may run alongside this, but is not a prerequisite
+   for C16 isolation. Use explicit Riplix ABI-tagged static ELF64, System V AMD64
+   calls, ordinary byte addressing/alignment and checked syscall adapters.
+   ELF does not imply Linux binary compatibility. Freeze file-octet versus
+   C16-cell semantics before mixed binary I/O. Use Clang as the first oracle;
+   extend guest RCC/RFL targets afterward while retaining C16 compatibility.
+   Guest compiler hosting, guest image construction and LP64 output are separate
+   milestones. OS_BOOTSTRAP.md still records a host platform/loader capsule and
+   pending complete in-guest image acceptance; do not call it fully self-hosted.
+
+4. Grow hardware interaction and an early software-rendered desktop.
+   Define one timestamped input/event contract with keyboard modifiers, pointer
+   buttons/motion/wheel, focus and capture. Adapt it to terminal mouse reports
+   and GX events, rather than letting apps read devices directly. Shared curses
+   and mux already have xterm SGR mouse/reporting contracts to reuse.
+
+   HP has i8042 keyboard but NO usable PS/2 AUX touchpad path. Its Synaptics
+   SYNA32F6 touchpad is HID-over-I2C on Intel LPSS/DesignWare. External USB mice
+   need xHCI + USB enumeration + HID; the built-in touchpad needs ACPI resource/
+   interrupt discovery + I2C + HID descriptors. These are separate transports
+   which should share HID/input decoding. Prioritize a practical pointer path,
+   then reuse I2C/HID for ELAN2514 touchscreen/stylus later; gestures, calibration,
+   rotation and tablet behavior have their own acceptance.
+
+   Bring a bare-metal GX display/input backend and software composition over
+   the existing GOP framebuffer. Reuse shared LVGL controls/themes and existing
+   window/surface/event lifetime contracts; evaluate the Nano-X/FuseDE pieces
+   against that common contract instead of creating incompatible GUI stacks.
+   Fuse-X host windows and RVM desktop are not HP display backends. A small GUI
+   prototype can proceed early; a responsive multi-app desktop needs execution
+   isolation/preemption, correct input and bounded rendering/memory budgets.
+   GPU acceleration is not a prerequisite for first windows or LVGL.
+
+5. Add audio and fuller laptop power support as bounded hardware projects.
+   Reuse docs/arch/audio.md's PCM configure/write/select/drain contract.
+   HP's 8086:7e28 SOF/HDA path plus cs35l41 I2C amplifiers needs codec/DSP/
+   firmware/topology investigation; a generic HDA driver is not proof of speaker
+   output. Choose a verified first output path, add DMA/buffer ownership and
+   underrun accounting, then test music/wavplay while network/UI work continues.
+
+   Add real ACPI S5 power-off, battery/AC/lid/backlight and measured idle/thermal
+   behavior. Suspend/resume is later cross-driver work: save/quiesce DMA, restore
+   clocks/devices and reconnect networking safely. Reset already works; do not
+   restart that milestone from scratch. Audio latency must be measured under
+   contention; hard real-time scheduling is not implied by ordinary preemption.
+
+   Bluetooth is USB 8087:0033, independent of AX211 Wi-Fi. Headphones require
+   USB transport/HCI and firmware, discovery/bonding/security, an audio profile
+   and codec/routing/buffering support. Sequence after basic USB and PCM; it is
+   not merely another output switch on the Wi-Fi driver.
+
+6. Build safer storage and advanced execution/display without blocking all apps.
+   Investigate a replacement filesystem in parallel now; no format is selected.
+   C16 V3 has 30-character names and no journal. Longer names change directory
+   encoding, SDK limits, tools and recovery; changing NAME_MAX alone is invalid.
+   Specify byte-oriented disk transport, VFS/mount dispatch, filename encoding,
+   permissions/links, capacity limits and flush/ordering semantics first.
+   Bring a new backend on disposable images/a separate test volume, validate
+   malformed media and read-only access, then writes/crash recovery with injected
+   power cuts and independent checking. Only promote it to root after migration,
+   installer and recovery support pass. Journaling needs actual commit/barrier
+   correctness; it is not supplied by a new block driver. It need not wait for
+   LP64, but must share the explicit octet/C16 adaptation contract.
+
+   Threads can begin on one CPU after execution/TLS/synchronization contracts;
+   they do not require SMP. SMP follows stable single-CPU isolation/scheduling,
+   kernel ownership/locking, per-CPU stacks/FP state, AP startup, TLB shootdowns
+   and interrupt/device concurrency. HP has 12 cores / 14 logical CPUs. Avoid
+   allowing every core into today's global runtime/kernel without that work.
+
+   Split native Intel graphics into display/modesetting/backlight and rendering
+   acceleration. HP is Meteor Lake 8086:7d45. Establish safe buffers/presentation,
+   device memory and reset/fault ownership before command submission. Measure
+   software composition first; add acceleration behind the same surface API.
+   GPU and SMP are substantial projects, not prerequisites for a useful desktop.
+
+Driver reuse and performance policy
+-----------------------------------
+Before each new hardware milestone, inspect Linux and OpenBSD sources for the
+EXACT device/revision and firmware protocol, as requested by the user. Prefer
+reusing well-bounded driver logic where its license and dependencies fit.
+Record which source/version supplied structures and ordering. Porting still
+needs Riplix PCI/ACPI, IRQ, DMA, timer, synchronization and error-recovery
+adapters; do not create an unbounded Linux compatibility layer accidentally.
+Imported structures are explicit wire/device layouts, not C16/native ABI guesses.
+
+Keep a workload baseline: boot-to-local-shell and remote-ready time, input-to-
+paint latency, frame damage/bytes copied, switch latency, CPU idle wakeups,
+memory reclamation and audio underruns. Run an idle desktop and a busy app beside
+SSH/storage/audio. Shared retained rendering already improved Commander/Rift;
+native instruction execution alone did not remove avoidable application work.
+
+Parallel ownership and integration gates
+----------------------------------------
+- Existing process-memory delegation remains ONLY tools/x86_64/process-memory/.
+  Its next platform adapter needs a separately agreed API/file scope. This
+  roadmap does not grant edits to runtime.c/process.inc/kernel.c/arch.S/timer.c.
+- Platform owner serializes allocator/PTE/IRQ/DMA/loader changes, boot-image
+  integration and physical promotion. One accepted HP candidate at a time;
+  continue driver/UI unit tests without repeatedly moving the stick.
+- Keyboard decoder/TTY fixtures, isolated I2C/HID or USB transport modules,
+  audio protocol/backend experiments and filesystem offline tooling can each
+  be separate bounded tasks after exact new subtrees and host interfaces are
+  agreed. Shared PCI/ACPI/DMA/input APIs have a single integrating owner.
+- Existing GUI/LVGL work can continue on shared widgets/renderers and hosted
+  backends. The HP GX adapter is separate; coordinate graphics API changes.
+- Packaging/app owners can prepare x64 C16 builds, resources and dependency
+  manifests while platform support is developed. A package must not advertise
+  unavailable graphics/audio/crypto capabilities or mix hosted and HP objects.
+- LP64 ABI probes/SDK/compiler work and filesystem format/VFS design can proceed
+  separately from Wi-Fi. Shared kernel headers, file-octet semantics, executable
+  tags and compiler-reserved sources need explicit coordinated changes.
+- Use small independent tests first, then one combined QEMU candidate and a
+  physical hardware gate. Host prototypes and hosted app success do not satisfy
+  ring-3, physical device, crash durability or uninterrupted rekey acceptance.
+
+Source map (paths relative to repository root)
+-----------------------------------------------
+Execution/LP64/SMP: docs/arch/native-x64.md; docs/arch/native-memory-coordination.txt;
+  tools/x86_64/process-memory/DESIGN.md.
+Hardware inventory: tools/x86_64/hardware/hp-envy-16-ac0xxx.txt (historical Ubuntu
+  snapshot; its old Secure Boot/partition/acceptance status is not current).
+Network/boot/service acceptance: tools/x86_64/README.md; this plan's dated
+  receipts; tools/x86_64/hardware/hp-wifi.txt; ports/services/README.md;
+  ports/ssh/README.md; docs/networking/{roadmap,dhcp,reliability}.md.
+Apps/packages: docs/terminal-multiplexer.md; ports/pkg/README.md;
+  rfl/apps/rift/README.md; ports/telegram/README.md;
+  docs/rfl/commander-rift-performance.md.
+GUI/input: docs/graphics/{architecture,roadmap,lvgl-and-x11}.md;
+  docs/fusede/{roadmap,implementation-plan}.md; docs/fuse-x/roadmap.md.
+Audio: docs/arch/audio.md. Storage: docs/arch/c16-filesystem.md.
+Guest bootstrap boundary: rcc-portable/native-sdk/OS_BOOTSTRAP.md.
+Detailed bare-metal Bluetooth, replacement filesystem selection and GPU/SMP
+implementation plans are still gaps, not previously agreed completed designs.
+
+Goal
+----
+One ordinary boot opens the persistent NVMe root, connects Wi-Fi, starts
+configured remote services, and keeps a usable local shell. Eventually boot
+from internal storage alongside Ubuntu, with Riplix default. Develop and install
+apps remotely; later stage verified kernel updates, reboot and reconnect.
+
+Current accepted building blocks
+-------------------------------
+Physical NVMe persistence and offline CLI apps passed. Separate RAM-root AX211
+image passed protected traffic, two Telnet PTYs,320 independent round trips,
+binary HTTP/readback, DNS and an external ping. This is bounded acceptance;
+Wi-Fi rekey/reconnect and unattended long-duration reliability remain pending.
+Services and SSH/SFTP have hosted/RVM acceptance; pkg has x64 QEMU acceptance.
+They are not yet jointly accepted on the HP. Current small filesystem is128MiB
+inside the dedicated30GiB reservation, not30GiB usable storage.
+
+Agreed order and acceptance
+--------------------------
+1. Unified default USB: combine exact-identity NVMe root + AX211 + network
+   tools and service manager. Automatic networking/remote service startup,
+   local shell independent of optional service failure, orderly service stop
+   before disk sync. Test storage/network coexistence, failed network startup,
+   two-boot persistence and physical remote login before calling it accepted.
+2. Userland networking: saved profiles/credentials, scan/connect/disconnect/
+   status, interface/address policy and service readiness above native driver.
+   CLI first, curses selection later. Initially static IPv4; DHCP follows.
+   Add rekey/reconnect and longer tests before unattended reliance. Driver/DMA
+   stays privileged. Internet/DNS probes do not gate local console or address
+   readiness. Embedded credential remains a temporary transition until the
+   runtime control path is implemented and verified.
+3. SSH/SFTP + pkg: check x64 executable binding, bounded entropy and crypto
+   availability, persistent unique host keys and public-key authorization.
+   Verify real OpenSSH exec/PTY/SFTP/scp and rekey on HP. Keep Telnet during
+   transition. Seed pkg bootstrap and authenticated mini repository key; test
+   signed refresh/install from192.168.100.179:8088 on the actual HP. Configure
+   /usr/bin:/bin precedence consistently; preserve explicit /bin/sh recovery.
+4. Apps through pkg: user is packaging the existing collection. X64 owner
+   supplies platform integration/bootstrap, not a competing catalog. Priorities
+   include mux, commander/mc, rift and released guest toolchain. Compile/package
+   for riplix-x64-c16, never hosted binaries. GUI/audio/drivers and heavier-load
+   preemption remain staged work, not prerequisites for initial remote access.
+5. Internal boot: own Riplix EFI directory + firmware entry alongside Ubuntu.
+   Trial one boot before making Riplix default; preserve Ubuntu selection and
+   USB recovery. Internal boot is an explicit goal, not permanent USB dependence.
+6. Remote boot updates: distinguish pkg applications from kernel/EFI updates.
+   Implement verified candidate staging, previous working version, health
+   confirmation and actual failed-boot recovery; BootOrder alone cannot recover
+   a hung kernel. Add orderly platform reset and test reboot/reconnect. Current
+   EFI embeds kernel; guest ESP/boot-update access is not yet implemented.
+
+Storage and media authorization
+-------------------------------
+User explicitly permits reformatting the dedicated Riplix filesystem without
+Riplix-data backups during this stage. This does NOT include Ubuntu, its EFI
+files, other partitions, GPT identities or unrelated Mac/USB files. Revalidate
+model/serial/GUID/geometry and unmounted dedicated p3 before any write. No more
+Ubuntu shrinking or partition resizing is required. Keep existing30GiB p3.
+Start with a tested1GiB C16 V3 filesystem, within current signed stream bounds;
+full30GiB usable filesystem needs a later address/format implementation. Use
+adequate inode capacity for packages. Keep disk/partition write-window guards.
+
+Keep Linux recovery EFI and its supporting USB files intact. Retain a small
+network-enabled RAM-root Riplix as a separate Boot From EFI File option, plus
+accepted fallbacks. A full Riplix live/recovery environment is deferred. Promote
+only the tested unified candidate into the normal USB fallback boot path.
+Do not eject the stick prematurely: complete source review, host checks,
+production-image QEMU acceptance, write/readback and final media checks first.
+
+2026-10-20 work session
+----------------------
+USB is on the Mac; HP awake in Ubuntu with authorized root SSH port2222.
+User away approximately one hour: maximize host/QEMU/integration work now;
+no HP reboot or physical Riplix acceptance claim until user can test. Read-only
+inspection confirms original disk GUID, p1/p2 identities and dedicated p3 at
+1937491968..2000406527,32212254720 bytes. Ubuntu/ESP remain mounted normally;
+p3 has no mount. Physical filesystem changes only after candidate validation.
+
+Ownership
+---------
+X64 owner retains boot/runtime/drivers/image integration and this plan. Existing
+process-memory subtree delegation remains isolated. Shared compiler/SDK/kernel/
+service/SSH changes require specific coordination; do not overwrite others'
+work. Package catalog is being assembled by the user/other workstream. Record
+small exact-hash test/install receipts; avoid accumulating large backups.
+
+Prepared combined system — 2026-10-20
+------------------------------------
+Dedicated p3 now has a clean1GiB C16 V3 filesystem,8192 inodes and about893MiB
+free before package installation. Existing offline apps/data are retained.
+Only p3 was opened writable; full1GiB readback passed, both GPT copies match
+preflight. No additional Riplix backup was created, per explicit authorization.
+Ubuntu, internal ESP, NVRAM and boot order were not changed. HP remains Ubuntu.
+
+Both removable-media USB boot paths now contain the combined candidate:
+NVMe root + AX211 + native entropy + svcd + IP configuration + Telnet + SSH.
+SSH generates its unique host key on the first successful guest boot; only the
+Mac client's public authorization key is seeded. No private client key is on
+media. The static x64 pkg engine, publisher pin and current installer are at
+/root/pkg-setup. Run sh /root/pkg-setup/install.sh, then PATH=/usr/bin:/bin; export PATH.
+This installs pkg and test/[ from the signed mini repository. The RFL frontend
+is a separate Fuse-X target; do not install Fuse-X executables on x64.
+
+BOOTPREV.EFI retains the previous offline kernel but uses the CURRENT NVMe
+root; it is not a filesystem rollback. BOOTWIFI.EFI on either USB volume is the
+accepted independent network-enabled RAM root. All existing Linux recovery,
+its supporting files, earlier EFI fallbacks and old rescue data are unchanged.
+
+Validation: small two-boot network/storage regression plus13 rejection cases;
+full1GiB QEMU two-boot network/service/entropy/OpenSSH exec and65801-byte SFTP;
+same host public key across both guest boots; exact HP EFI two-boot TCG and KVM
+with absent-radio failure/local-shell path and offline-app smoke; final current
+bootstrap installs pkg/test and verifies live mini signed index in disposable
+KVM. Whole8MiB outside-partition hash unchanged in generic fixtures; exact-HP
+1TB sparse fixture checks GPT and seven canaries, NOT whole outside disk.
+One Ubuntu OVMF pre-loader Not Found retry remains an emulator firmware issue
+of unresolved cause. Physical combined acceptance is still required.
+
+EFI SHA256: 9360974af50f4223bcbeff1ef85e79e8369eda00079eed0d8ea7564c63aec432
+Root SHA256: de7512f5c7aaec6772680f8047821f9cfd4abd4fe153d917a59c0dc0ad03f363
+Receipts: build/x86_64-hp-system/{candidate,root-audit,install-result,
+usb-written,kvm-result}.json; build/x86_64-system/production-check-3/;
+build/x86_64-system/pkg-kvm/. Post-suite root changes were only the bracket
+alias and current bootstrap installer; final bootstrap passed afterward.
+
+Physical handoff
+----------------
+Insert USB into HP and boot its normal first USB entry. No manual network.sh
+or telnetd command is needed. Wait for service startup/host-key generation.
+At console: svc --runtime /var/run/svcd status; ifconfig; entropycheck.
+Expected address192.168.100.107; Telnet23 and SSH22. If startup fails, collect
+svc status and /var/run/svcd/{network,ssh-keys,sshd}.log. Keep local console.
+Mac SSH authorization: build/x86_64-system/keys/client (private,0600).
+Use an independent known-hosts file and verify the new public key from console
+before pinning; do not reuse Ubuntu's SSH identity or discard its known key.
+Try pkg bootstrap, pkg search, one optional package, remote file persistence,
+shutdown, reboot and reconnect. Report physical acceptance before internal boot.
+
+Remaining boundaries
+--------------------
+SSID/PMK still embedded temporarily; runtime profile/credentials and Wi-Fi
+scan/connect controls, DHCP, rekey/reconnect and long uptime remain next work.
+Services-manager and sshd source still set /bin:/usr/bin in places; normal init,
+Telnet/libc now prefer /usr/bin:/bin. Coordinate those remaining environments
+with their owners; export PATH explicitly for current package sessions.
+Internal own EFI entry, one-boot trial/default dual boot, safe kernel updates
+and platform reset remain later gates. USB-free boot remains the goal.
+
+Final media status: both FAT checks passed; USB safely ejected. All126 existing
+recovery payloads hash-preserved. Disposable local/Ubuntu VM staging removed;
+current images, incremental caches, compact receipts and private Mac client key
+retained. Physical HP combined test is the next gate.
+
+First combined HP boot accepted — 2026-10-20
+-------------------------------------------
+User confirms ifconfig and services up. Actual physical SSH remote command,
+entropycheck, gateway3/3 ping,65812-byte exact binary SFTP roundtrip, signed
+mini477-entry refresh/bootstrap and pkghello install/run passed. Network done,
+host-key setup done, sshd/telnetd running with zero retries after traffic.
+Session remains running; no reboot requested. Combined two-boot persistence,
+longer Wi-Fi/rekey/reconnect and internal boot gates remain pending. Previous
+independent NVMe persistence acceptance still applies to its earlier image.
+Physical receipt: build/x86_64-hp-system/physical/result.json.
+
+Boot display change prepared in source only: aligned pending/green OK/red ERR
+markers, exact textual failure reasons; detailed AX211 trace remains serial.
+Removed stale manual network.sh instruction and RAM-only description. Renderer
+pixel/serial alignment tests pass under fatal UBSan for RGB/BGR and native
+Wi-Fi adapter compiles with production flags. No new EFI installed for this
+cosmetic change; full candidate boot validation accompanies next image update.
+
+V7 Bourne environment syntax: PATH=/usr/bin:/bin; export PATH
+The export-assignment shorthand fails; package owner notified in coordination.
+
+Real physical package acceptance — 2026-10-20
+---------------------------------------------
+Signed mini refresh and explicit seed adoption installed grep/cowsay/basic plus
+basic-data on HP. Invoked managed /usr/bin executables: grep pipeline, cow
+output, BASIC packaged hello.bas (squares1..25) all passed. Metadata identifies
+riplix-x64-c16 executables and any-target data; services remain healthy without
+retries. Apps left installed, marker /root/package-check ready for reboot test.
+Receipt: build/x86_64-hp-system/physical/real-packages-result.json.
+Current catalog109 x64 apps; mux, commander/mc and rift are not yet in that
+x64 catalog. Clean shutdown/reboot with USB retained is next acceptance gate;
+verify packages, marker, same SSH host key and automatic services before moving
+on to runtime Wi-Fi management and internal dual boot.
+
+Beacon-loss interruption and recovery priority — 2026-10-20
+-----------------------------------------------------------
+Second physical boot retained packages, data, same SSH host key and automatic
+network/services; grep/cowsay/BASIC reran remotely. Later the radio stopped on
+live beacon loss with TX head/tail/SSN85, queued0. SSH then timed out. This is
+bounded persistence acceptance, not sustained Wi-Fi reliability. Old image did
+not retain actual missed-beacon counters in its photographed failure output.
+
+Candidate follows pinned Linux v6.12 AX210/new-TX consumer: API4 five LE32
+fields, warn above8 since RX, stop only at19 consecutive AND4 since last RX.
+The prior cutoff10 since RX incorrectly stopped a moderate warning. Independent
+oracle test reproduced RED at10/10; all16 host suites pass corrected rule.
+OpenBSD iwx tries a directed probe; Linux new-TX path differs from old generic
+mac80211 probing. Candidate matches the new-TX rule, not an unreviewed probe
+or an assumption that RF loss cannot happen. Four counters retained in serial.
+
+User-requested recovery priority: runtime reconnect BEFORE unattended/internal
+boot reliance. Native explicit down/reset/start must prove DMA quiescence before
+reusing pool, clear old session state, use fresh CPU nonce/keys, and preserve
+NVMe filesystem/SSH host keys. It must not recursively run blocking full startup
+inside a NIC poll callback. Unconfirmed device stop retains DMA and requires
+reboot; do not retry through a failed safety boundary. Userland Wi-Fi service
+owns saved profile, connect/disconnect/status, bounded retry/backoff and address
+readiness; link success can restore local remote-service availability without
+requiring internet/DNS. Existing SSH sessions cannot transparently survive a
+real link outage. Test AP outage/return, wrong credentials, RF kill, repeated
+retries, driver stop failure and concurrent local shell/disk I/O. Current driver
+remains startup-only with no runtime reinitialize/control API; this correction
+does not claim automatic reconnection. General ACPI reset/power-off is separate.
+
+Beacon candidate exact EFI: 729bcb1b59ba4bcfe8834d9091fe72ab9841f6381eaf7256884bfe84b416f4f2
+Exact two-boot QEMU acceptance passed; USB-only update, physical RF retry next.
+See hp-wifi-live.txt and build/x86_64-hp-beacon/ for source/test/media receipts.
+User confirms HP is off; no clean-shutdown screen was observed remotely.
+
+
+X64 MANUAL RADIO CONTROL VALIDATED / REKEY LIMIT OBSERVED — 2026-10-20
+====================================================================
+Physical beacon-corrected image retained packages/data/pinned host key and
+automatic IP/services; gateway3/3,90s idle +24 rounds10s apart passed. A later
+SFTP upload timed out. User confirms HP awake: WiFi link stopped, live protected
+rekey requires reconnect (user transcribed relay; source literal is rekey).
+This is the known fail-closed unsupported EAPOL rekey path, not evidence of
+another beacon-threshold fault. No unattended reliability acceptance claimed.
+
+Private x64 ABI0x104 and /bin/wifi now implement status/down/reconnect for the
+same embedded test profile. Strict76-cell descriptor validation before effects,
+confirmed stop before DMA/pool reuse, repeated discovery resets MSI/MSIX fields,
+full fresh CPU SNonce/authentication/keys. Synchronous local-console development
+control; startup can pause guest work. No automatic retries, DHCP, profile/
+credential selection or in-place GTK/PTK rekey. Unsafe stop blocks/halts; never
+retry through it. Query returns last link error and attempt/generation counts.
+Userland IP config persists; daemons that exited may need explicit svc restart.
+No shared SDK/kernel/network/service/SSH source edits for this control.
+
+Reviewed cached primary Linux restart_cleanup and OpenBSD stop/init consumers;
+review/hashes: build/x86_64-wifi-control/restart-source-review.json. Host tests
+cover100 mocked fresh-start cycles, failed startup/stop, busy/absent/counters,
+malformed descriptors and no hardware effects on rejection. Exact EFI passed
+two full QEMU USB/NVMe boots with utility absent-radio outcomes, persistence,
+entropy/offline/process/pipe/timer/shutdown and unchanged GPT/seven canaries.
+QEMU does not emulate AX211; physical radio restart remains required.
+
+Candidate EFI c762560efc02c9f0da02494b1af45aebfa325609f02ae7682f009edc81e521b2.
+Retains prior accepted compiled kernel/apps/math; rebuilds native adapter/
+runtime/control only. Root fixture includes utility; PHYSICAL NVMe does not:
+SFTP staging failed before transfer. After next boot, upload /bin/wifi promptly
+then test local status/down/reconnect and remote recovery. USB-only refresh
+preserves installed packages and all Linux/recovery payloads. Internal boot,
+reset and unattended Wi-Fi policy remain later gates. Inline-asm compiler RED
+reproducer remains for compiler owner; utility uses checked volatile fallback.
+
+Manual-control USB handoff complete — 2026-10-20
+Both default USB EFI paths now contain c762560efc02c9f0da02494b1af45aebfa325609f02ae7682f009edc81e521b2.
+All130 existing recovery payloads hash-preserved; FAT checks/read-only readback
+passed; safely ejected. HP NVMe was not written.18 host suites including restart
+and mailbox guards pass fatal UBSan; exact candidate passed two QEMU boots.
+Physical /bin/wifi is NOT installed yet: after next ordinary boot, stage utility
+via pinned SSH/SFTP, sync, then validate local radio down/reconnect and daemon
+recovery. Current known network192.168.100.107; user must not expect command
+available before that upload. Automatic policy/rekey still not implemented.
+
+
+X64 RECOVERY PRIORITY / ARP GATE REGRESSION — 2026-10-20
+=======================================================
+User reports repeated physical power cycles fail with protected ARP reply timeout.
+Local OS shell still runs. Ubuntu maintenance SSH2222 available; USB on Mac.
+Priority now network recovery and orderly reboot before keyboard/GUI/apps.
+
+Found legacy zero-SPA diagnostic still gating live startup. Captured expected-
+correct host RED in arp-red.log: a full WPA2 fake AP without diagnostic ARP must
+produce live NIC, but old code sent diagnostic TX instead. Live mode now ignores
+that standalone diagnostic, retains handshake/key/DMA/crypto guards, and hands
+ARP to normal IP stack. Standalone protected-ARP diagnostic still strict.
+
+Owned x64 userland recovery: wifid supervised through explicit wifi.ini;
+network requires wifi (ready=exec means recovery manager alive, NOT address
+ready). Existing network oneshot/net-ready still gates daemon boot readiness.
+Association trigger moves after PID1 for system-services WiFi profiles only;
+protocol code and embedded profile remain native temporarily. Bounded native
+startup is synchronous and may pause guest work; never invoked from NIC poll.
+Retry policy2,4,8,16,32,60 seconds; explicit wifi down creates persistent pause,
+wifi reconnect clears it. Status polls live notifications. Recovered generation
+runs explicit /etc/wifi-online.sh to configure address and request configured
+network/telnetd/sshd services, including recovery after prior retry exhaustion.
+No shared service-manager/SSH/network-stack source changes or new supplicant
+claim. Proper in-place rekey/profiles/asynchronous protocol still later.
+
+Orderly reboot uses private x64 command0x105 to arm firmware reset, existing
+shutdown path stops services/syncs/quiesces devices, then writes only checked
+FADT byte-SystemIO RESET_REG/RESET_VALUE. HP read-only descriptor: port0xb2,
+value0xfb, flag advertised; QEMU reset acceptance pending. Unsupported descriptor
+refuses reboot; no guessed port fallback. Actual ACPI S5 power-off remains later.
+
+Maintenance stays on HP: full filesystem export was blocked by automatic
+approval review due to private SSH material, so no guest payload is copied to
+Mac. Uploaded checker/new tools only; on-HP COW dry-run validates declared paths,
+all unrelated regular/device inode metadata/content retained, clean fsck and
+both GPT identities. Apply is gated behind exact candidate acceptance and the
+reviewed whole-root input hash. Only changed pages of existing1GiB p3 will be
+written, with full readback; installed packages/data/SSH keys preserved.
+
+
+X64 RECOVERY/REBOOT CANDIDATE VALIDATED AND INSTALLED — 2026-10-20
+================================================================
+Exact EFI cab9aabf3ae70d643a72ad18fee8d63cf023e9620a7974c78c9423d00c80a04e.
+20 Wi-Fi host suites pass fatal UBSan, including real daemon-loop mocks:
+failed boot at0/2/6s, rekey-loss recovery, online hooks, pause/resume, unsafe-stop
+refusal, TERM and unsupported control. Pure policy covers60s cap/clock wrap.
+Existing standalone ARP diagnostic remains strict; live regression now passes
+without any diagnostic ARP response. ACPI parser guards and actual HP FADT
+fixture pass; HP reset descriptor byte-SystemIO0xb2/value0xfb supported.
+
+Exact EFI two-boot QEMU USB/NVMe/entropy/offline/process/pipe/timer/persistence
+passed, plus actual firmware reset on second boot after orderly service stop,
+filesystem sync, NIC quiescence and final block flush. No RF emulation or HP
+reboot claim. A source-only conditional guard was added for diagnostic builds;
+relink changed PE timestamp only. Restoring recorded timestamp reproduced exact
+accepted EFI AND full USB image hashes. Future private rebuild pins timestamp.
+
+Installed directly ON HP via Ubuntu, no root payload exported. Only six paths:
+/bin/{wifi,wifid,reboot}, /etc/services/{wifi,network}.ini,
+/etc/wifi-online.sh.678 changed pages/1,388,544 bytes within1GiB p3. Whole1GiB
+readback and clean fsck verified;358 unrelated existing files/inode metadata
+retained including package database/data/SSH identity. Both GPT copies unchanged;
+Ubuntu/ESP/NVRAM untouched. Root after SHA256 26b5b51fbc2f50cb43c7a2cecb224ffab17c1d1fc5265179665a5fae966271b0.
+No raw filesystem backup/export was made. Disk identity/geometry and reviewed
+whole-root input hash gated exclusive writes. Acceptance receipts remain under
+build/x86_64-wifi-recovery/; HP temporary checker/binaries may be removed.
+
+Physical next gate: boot new USB, inspect wifi/ifconfig/svc status, reconnect via
+pinned SSH, explicitly test local pause/resume and forced link-loss recovery,
+then remote reboot/reconnect with user present. Normal shutdown still syncs/
+halts; S5 power-off, full userland supplicant/profiles and seamless rekey remain
+unimplemented. Native authentication is still synchronous/embedded-profile;
+automatic policy is userland and never restarts inside NIC poll. Network manager
+ready=exec denotes daemon alive, not IP/internet; existing net-ready oneshot
+and explicit online hook govern address readiness and remote service requests.
+
+Recovery/reboot media handoff complete — 2026-10-20
+Both default USB EFI paths verified against accepted cab9aabf...c80a04e;
+all130 existing recovery payloads unchanged, FAT checks/read-only readback pass;
+safely ejected. Recovery tools and six managed paths already installed on HP
+NVMe with complete readback; no remote upload dependency on the next boot.
+Ubuntu remains running; temporary on-HP installer code removed. Physical RF
+and actual HP reboot acceptance still pending. Boot USB normally; use wifi
+status, ifconfig, svc --runtime /var/run/svcd status and wifi.log for diagnosis.
+
+
+INTERNAL RIPLIX DEFAULT BOOT ACCEPTED — 2026-10-21
+=================================================
+Combined console/recovery EFI dab393f9ca5aa4fcd2a616e16b1e4868f0f9047bd389492c7cf437bc681f4147
+passes23 Wi-Fi suites/26 checks and exact2boot QEMU reset/persistence/input/grid
+acceptance. Both USB defaults refreshed/read back/FAT checked; prior recovery
+preserved and USB ejected. Dedicated internal EFI/Riplix candidate+known-good
+and manifest staged, eight original ESP files and both GPT copies unchanged.
+No installer p3/root write or private SSH export. See hardware/internal-boot.txt.
+
+Physical one-shot Riplix boot/SSH/services/gateway/DNS passed. Orderly reboot
+back to Ubuntu confirmed BootCurrent0001 after temporary root SSH was reopened.
+Riplix entry0000 promoted to BootOrder0000,2001,0001,2005, preserving every
+existing prior entry in relative order. Two old references2002/2004 had no
+matching boot variable and were removed. Default boot without BootNext/USB
+then passed SSH/services/gateway/DNS again; Wi-Fi generation1/attempt1,
+GTK0/rejection0. Receipt: build/x86_64-internal-boot/physical-acceptance.json.
+
+HP remains in Riplix, reachable via SSH192.168.100.107:22. Ubuntu and USB recovery
+are manual firmware selections. Physical key/display tests and sustained RF
+remain pending. ESP update publication, health rollback and selecting next
+Ubuntu boot from Riplix are distinct future work. Existing userland apps/data
+and LVGL work remain unchanged.

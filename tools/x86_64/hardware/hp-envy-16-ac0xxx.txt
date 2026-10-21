@@ -1,0 +1,150 @@
+HP ENVY X360 16-ac0xxx — RIPLIX HARDWARE TARGET
+============================================
+Inspected over SSH on 2026-10-19, while Ubuntu was running. All remote probes
+were read-only. No packages, partitions, boot entries, firmware settings or
+drivers were changed. Hardware support has NOT yet been tested by booting Riplix.
+
+Observed machine
+----------------
+Model: HP Envy x360 2-in-1 Laptop 16-ac0xxx; board 8C66.
+Firmware: Insyde EFI 2.9; HP BIOS F.04, dated 2025-04-23.
+CPU: Intel Core Ultra 7 155U; 12 cores / 14 online logical CPUs.
+Address widths reported by Linux: 46-bit physical, 48-bit virtual.
+CPU features include SSE2, PAT, NX, constant/nonstop TSC, APIC/x2APIC,
+TSC-deadline timer and VT-x. Begin with the boot CPU only; SMP is later work.
+Memory: two onboard 8 GB LPDDR5 devices; configured at 6400 MT/s.
+Ubuntu reports MemTotal 15,272,164 KiB after firmware reservations.
+OS: Ubuntu 26.04.1 LTS, kernel 7.0.0-34-generic, booted via UEFI.
+
+Boot and display findings
+-------------------------
+Secure Boot is ENABLED. Ubuntu uses \EFI\ubuntu\shimx64.efi. An EFI USB boot
+option is present. Our unsigned BOOTX64.EFI needs an agreed firmware trust/
+signing strategy or a user-selected Secure Boot setting change before use.
+No such change was made during inspection.
+
+Graphics: Intel Meteor Lake-P Intel Graphics, PCI 0000:00:02.0, 8086:7d45.
+Ubuntu currently uses i915; both i915 and xe are listed as possible modules.
+Built-in panel: connected eDP, 1920x1200. Current Linux framebuffer is 32 bpp,
+stride 7680, named i915drmfb. Linux initially registered simpledrm before i915.
+
+Important address evidence:
+- GPU register BAR: 0x4818000000, 16 MiB.
+- GPU framebuffer aperture BAR: 0x4000000000, 256 MiB (256 GiB base).
+Both are above the kernel's initial 64 GiB identity mapping. The original
+firmware GOP framebuffer base/pixel format could not be recovered from the
+available Linux sysfs/debugfs paths; the active i915 framebuffer is not proof
+of those original values. Capture GOP data in our own UEFI diagnostics.
+
+At inventory time kernel.c rejected framebuffer addresses at/above 64 GiB.
+The subsequent USB milestone now maps the visible GOP span through the checked
+native device mapper; a backed 768 GiB PCI-buffer console test passed in QEMU.
+This is not yet acceptance of this HP's original firmware GOP handoff.
+Keep the physical RAM allocator and C16 address space separate from device
+address coverage. Firmware GOP is the first console path; native Intel display
+modesetting, acceleration, backlight and power management are later milestones.
+
+Keyboard, pointer and convertible devices
+----------------------------------------
+The BUILT-IN KEYBOARD is an AT translated set-2 device on i8042, ports 0x60/0x64,
+IRQ1. Linux uses the serio/atkbd path. FADT IA-PC boot flags are 0x0003,
+including the 8042-present flag. This fits the existing QEMU keyboard driver's
+controller family; actual cold-boot initialization and scan translation still
+need hardware acceptance. PS/2 AUX is disabled on this machine.
+
+Touchpad: Synaptics SYNA32F6:00, 06cb:cfc6, HID over I2C behind PCI 00:15.2.
+Touchscreen/stylus: ELAN2514:00, 04f3:42cf, HID over I2C behind PCI 00:15.3.
+Those controllers use Intel LPSS / Synopsys DesignWare I2C in Linux.
+HP WMI / Intel HID supply hotkeys, switches and tablet/lid events.
+First shell input can target the built-in keyboard; pointer, stylus, rotation,
+tablet mode and power events require their own I2C/HID/ACPI driver work.
+
+Interrupts and clocks
+---------------------
+MADT revision 5: local APIC base 0xfee00000, PCAT-compatible flag set.
+Processor records use MADT type 9 (local x2APIC), not just legacy type 0.
+There are 14 enabled records among 48 slots; remaining slots are disabled.
+I/O APIC: ID 2, base 0xfec00000, GSI base 0; Linux reports GSI range 0..119.
+ISA overrides: IRQ0 -> GSI2; IRQ9 -> GSI9 with flags 0x000d.
+An x2APIC NMI record (type 10) is also present.
+Linux reports cluster x2APIC routing and symmetric I/O mode.
+
+PCI ECAM: MCFG segment 0, buses 0..255, base 0xc0000000.
+ACPI SCI: IRQ9. ACPI PM timer I/O: 0x1808.
+HPET table: base 0xfed00000, minimum tick 128. HOWEVER Linux logs
+"HPET dysfunctional in PC10. Force disabled." Do not select HPET solely because
+its table exists. Linux settles on TSC; detected TSC frequency is 2688 MHz.
+FADT flags are 0x0020c4e5; hardware-reduced ACPI is not set.
+
+Subsequent USB milestone: RSDP handoff, checked ACPI discovery and boot-CPU
+APIC/timer initialization are implemented. Both xAPIC/TCG and x2APIC/KVM pass;
+the exact MADT above passes the host parser test. External I/O APIC/LINT lines
+are masked; NMI records are bounded/skipped, not configured. No device routing,
+AML, SMP startup or power management is implemented. Counter-only IRQs and
+safe C16 checkpoints are preserved. The HP's physical controller handoff still
+needs a cold-boot test. DMAR/IOMMU and interrupt remapping
+need explicit handoff consideration before introducing hardware DMA drivers.
+
+Storage and existing Ubuntu layout
+----------------------------------
+Internal disk: WD PC SN560 SDDPNQE-1T00-2006, 1,024,209,543,168 bytes.
+Controller: NVMe, PCI 0000:01:00.0, 15b7:5017; Linux driver nvme.
+BAR0: 0x86000000, 16 KiB. Logical/physical sectors reported as 512 bytes.
+There is no SATA controller in the observed PCI inventory.
+
+GPT, 512-byte sectors:
+- p1: starts at LBA 2048, 2,201,600 sectors; FAT32 EFI system partition,
+  mounted at /boot/efi (~1.05 GiB).
+- p2: starts at LBA 2,203,648, 1,998,202,880 sectors; ext4 Ubuntu root.
+- Only 1,383,936 usable bytes remain after p2; no useful spare Riplix partition.
+Ubuntu root reports ~844 GB available INSIDE ext4. That is filesystem free
+space, not unallocated partition space. Any eventual side-by-side installation
+needs a separate partitioning/resizing plan and its own user authorization.
+
+First hardware boot uses the embedded RAM root. UEFI loads the self-contained
+image from USB before ExitBootServices, so this stage does not depend on a
+Riplix USB-storage or NVMe driver. Subsequent storage work should use QEMU's
+NVMe model, retain the existing native block adapter boundary, then implement
+GPT/selected-partition bounds and read-only hardware discovery before enabling
+physical writes. The current virtio whole-image driver is QEMU support.
+
+Other observed devices
+----------------------
+- USB xHCI: Intel 8086:7e7d (00:14.0), Thunderbolt USB 8086:7ec0 (00:0d.0).
+- Wi-Fi: Intel CNVi / AX211, PCI 8086:7e40, subsystem 8086:0094; iwlwifi.
+- Bluetooth: USB 8087:0033; btusb.
+- Camera: Quanta HP 5MP, USB 0408:546b; uvcvideo.
+- Audio: Intel 8086:7e28; SOF Meteor Lake/HDA, with cs35l41 I2C amplifiers.
+- Sensor hub: Intel 8086:7e45; intel_ish_ipc.
+- NPU: Intel 8086:7d1d; intel_vpu. Not required for initial Riplix operation.
+Firmware DBG2/DBGP advertise a legacy 0x3f8 serial resource. This does not prove
+that a physically accessible UART or useful external serial connection exists.
+
+Suggested first hardware acceptance
+-----------------------------------
+1. Completed QEMU regression for high physical framebuffer addressing and ACPI.
+2. Completed boot-CPU APIC/timer VM tests and actual HP type-9 MADT parsing.
+3. Prepare a USB RAM-root image with early on-screen UEFI diagnostics and a
+   readable gterm console. Settle Secure Boot handling before trying it.
+4. User boots it using the firmware's one-time USB selection. Require visible
+   console output, boot progress, keyboard input, shell commands,
+   timercheck and orderly shutdown. Keep this image in RAM-root mode.
+5. Add device-specific persistent storage, I2C input and power support after
+   the basic USB shell is repeatable. Plan Ubuntu coexistence separately.
+
+Evidence and limits
+-------------------
+Raw local captures: build/hardware/hp-envy-16-ac0xxx-2026-10-19/
+  inventory.json: lscpu, PCI/USB, disks, input, firmware/ACPI summaries.
+  boot-details.json: PCI BARs, read-only GPT, free space, filtered boot log.
+  framebuffer-details.json: graphics resources and unavailable GOP probes.
+The initial multi-target findmnt call failed; subsequent per-target probes in
+boot-details.json succeeded. No diagnostic packages were installed. This is a
+Linux-side inventory and source review, not Riplix hardware-boot acceptance.
+See hp-usb-boot.txt for the later USB preparation and remote KVM acceptance.
+
+References for interpreting firmware fields:
+UEFI SecureBoot variable and boot-image authentication:
+https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html
+ACPI IA-PC boot architecture flags / MADT structures:
+https://uefi.org/specifications

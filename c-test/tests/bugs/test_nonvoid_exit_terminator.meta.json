@@ -1,0 +1,5 @@
+{
+  "expected": "Y",
+  "use_runtime": true,
+  "description": "Non-void functions ending in exit are valid and do not fall through"
+}

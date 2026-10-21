@@ -1,0 +1,11 @@
+{Universe
+ {Program {Effects {Pending {FileWrite w {Path "/tmp/syma-io"} {Content "Привіт\u0000світ"}}} {Inbox}}}
+ {Rules
+  {R write {Program {Effects p_ {Inbox {FileWriteComplete w Ok}}}}
+   {Program {Effects {Pending {FileRead r {Path "/tmp/syma-io"}}} {Inbox}}}}
+  {R read {Program {Effects p_ {Inbox {FileReadComplete r {Content "Привіт\u0000світ"}}}}}
+   {Program {Effects {Pending {Print p {Message "IO_OK\n"}}} {Inbox}}}}
+  {R done {Program {Effects p_ {Inbox {PrintComplete p Success}}}}
+   {Program {Effects {Pending {Exit 0}} {Inbox}}}}
+ }
+}

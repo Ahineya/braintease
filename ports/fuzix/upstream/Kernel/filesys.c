@@ -951,10 +951,10 @@ void blk_free(uint16_t devno, blkno_t blk)
  * entries in the open file table.
  */
 
-int_fast8_t oft_alloc(void)
+oft_result_t oft_alloc(void)
 {
     register struct oft *ofp;
-    register uint_fast8_t j = 0;
+    register oft_index_t j = 0;
 
     for(ofp = of_tab; ofp < of_tab + OFTSIZE ; ++ofp, ++j) {
         if(ofp->o_refs == 0) {
@@ -993,7 +993,7 @@ void deflock(register struct oft *ofptr)
  *	from a user file table then drop any file locks, dereference the inode
  *	and mark empty
  */
-void oft_deref(uint_fast8_t of)
+void oft_deref(oft_index_t of)
 {
     register struct oft *ofptr;
 
@@ -1010,7 +1010,7 @@ void oft_deref(uint_fast8_t of)
 
 int_fast8_t uf_alloc_n(uint_fast8_t base)
 {
-    register uint8_t *p;
+    register oft_index_t *p;
 
     if (base >= UFTSIZE) {
         udata.u_error = EINVAL;
@@ -1035,10 +1035,8 @@ void uf_copy(uint_fast8_t oldd, uint_fast8_t newd)
 {
     udata.u_files[newd] = udata.u_files[oldd];
     ++of_tab[udata.u_files[oldd]].o_refs;
-    /* Copy the CLOEXEC mask acrosss so dup inherits it */
-    /* doclose means the existing bit state is clear */
-    if (udata.u_cloexec & (1UL << oldd))
-	    udata.u_cloexec |= 1UL << newd;
+    /* dup, dup2 and F_DUPFD create a handle with close-on-exec cleared. */
+    uf_cloexec_clear(&udata, newd);
 }
 
 int uf_alloc_copy(uint_fast8_t oldd, uint_fast8_t base)
@@ -1301,7 +1299,7 @@ void validblk(uint16_t dev, register blkno_t num)
  */
 inoptr getinode(uint_fast8_t uindex)
 {
-    register uint_fast8_t oftindex;
+    register oft_index_t oftindex;
     register inoptr inoindex;
 
     if(uindex >= UFTSIZE || udata.u_files[uindex] == NO_FILE) {

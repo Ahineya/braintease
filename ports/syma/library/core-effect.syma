@@ -1,0 +1,37 @@
+{Module
+  Core/Effect
+  {Export Eff PrintEff}
+  {Rules
+    {R Eff
+      {.. {Eff ef_} ..}
+      {Splat {Eff ef_} {.. ..}}
+      :scope Program
+    }
+
+    {R Eff->Pending
+      {Program {Eff ef_} .. {Effects {Pending ..} ..} ..}
+      {Program .. {Effects {Pending .. ef_} ..} ..}
+    }
+
+    {R Eff:SimplePrint
+      {PrintEff message_}
+      {Eff {Print SimplePrint {Message message_}}}
+      :innermost
+    }
+
+    {R Eff:SimplePrint/Done
+      {Program .. {Effects .. {Inbox {PrintComplete SimplePrint _} ..}} ..}
+      {Program .. {Effects .. {Inbox ..}} ..}
+    }
+    
+    {R Eff:MoveLeft
+      {Program .. {Eff e..} ..}
+      {Program {Eff e..} .. ..}
+    }
+
+    {R Eff:UnfreezeApply
+      {Apply {Inert Eff(..)} ..}
+      Splat(Eff(..) ..)
+    }
+  }
+}

@@ -1,0 +1,54 @@
+; Adapted from Syma-Overview.symnb, cell 67. See PROVENANCE.txt.
+{Module OOP/Transform
+  {Export Transform}
+  {Rules
+    {R Transform
+      ; Gated start — if we didn't use the Ok() sentinel, this rule would match from the very start, without waiting the desugarer to do its stuff in the program inner terms.
+      {Transform Ok(..)}
+      ; Transformer prepares a structure to hold knowledge about classes
+      {Parse Classes {InheritanceChains} {Bodies} ..}
+    }
+
+    ; We know there are to possible shapes that define classes.
+    ; If it is just a :class Animal {..}, we put it into the inheritance chain without specifying a parent class
+    {R Classes
+      {Parse Classes {InheritanceChains ..        } {Bodies                ..} .. :class name_ {body..} ..}
+      {Parse Classes {InheritanceChains .. {name_}} {Bodies {name_ body..} ..} ..                       ..}
+    }
+
+    ; But if it has the :extends clause, we put it into the inheritance chain together
+    {R Classes/Extends
+      {Parse Classes {InheritanceChains                 ..} {Bodies                ..} .. :class name_ :extends parent_ {body..} ..}
+      {Parse Classes {InheritanceChains {name_ parent_} ..} {Bodies {name_ body..} ..} ..                                   ..}
+    }
+
+    ; We now know, that because of the program structure, parent classes are always on the "right" of their children.
+    ; This allows us to recursively enrich children chains to hold the full inheritance chain.
+    ; Let me translate. "If a child has a parent which also has a parent, put the grandparent into the child inheritance chain"
+    {R ParseClass/NormalizeInheritanceChains
+      {Parse Classes {InheritanceChains .. {name_ .. parent_             } .. {parent_ grandparent_} ..} ..}
+      {Parse Classes {InheritanceChains .. {name_ .. parent_ grandparent_} .. {parent_ grandparent_} ..} ..}
+    }
+
+    ; And we are done with classes, let's now enrich our structure with {Instances} to hold the mapping
+    ; of variables to their classes. Type inference for the poor.
+    {R ParseClass/End
+      {Parse Classes                    ..}
+      {Parse Instantiations {Instances} ..}
+    }
+
+    ; Same trick — if something quacks like a duck — it is a duck.
+    {R ParseInstance
+      {Parse Instantiations {Instances ..                     } .. :var name_ := :new {class_} ..}
+      {Parse Instantiations {Instances .. {name_ class_ name_}} ..                             ..}
+    }
+
+    ; And now we treat everything that is left out as an imperative commands, and put them to the very "left".
+    ; You know why to the "left"? To do something like the inner join with our metadata in the VM, of course.
+    ; We also gate it with {Ok}, so our VM will know when it is ready to start.
+    {R ParseInstance/End
+      {Parse Instantiations {Instances ..} {InheritanceChains ..} {Bodies ..} rest..}
+      {Ok {Commands rest..} {Instances ..} {InheritanceChains ..} {Bodies ..}}
+    }
+  }
+}

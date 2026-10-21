@@ -12,6 +12,12 @@ bank/offset pointers, and 64,000 cells per bank. Its private calling convention
 passes a runtime context and scalar carriers. Host libraries require explicit
 adapters; ordinary host C objects do not share this ABI.
 
+The accepted [native x64 migration](../arch/native-x64.md) initially targets
+freestanding Riplix: conventional applications alongside compatibility code,
+then a native kernel build. Fuse-X retains the current hosted ABI until a
+separate macOS implementation is validated; bare-metal page tables and ring-3
+entry cannot be transplanted into the host application.
+
 Resumable native frames preserve return continuations and live values across
 suspension. This provides the mechanism for cloning nested C execution without
 copying host thread stacks or using macOS `fork()` as the guest process model.

@@ -48,7 +48,7 @@ static int session(int fd) {
     if(child<0){close(master);return 1;}
     if(!child) {
         char *args[]={"sh",NULL};
-        char *env[]={"PATH=/bin:/usr/bin",root_home_environment,"USER=root","TERM=ansi",
+        char *env[]={"PATH=/usr/bin:/bin",root_home_environment,"USER=root","TERM=ansi",
                      "PS1=riplix# ","SHELL=/bin/sh","EDITOR=/bin/vi","LOGNAME=root",NULL};
         int slave;
         close(master);close(fd);

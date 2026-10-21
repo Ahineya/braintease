@@ -1,0 +1,17 @@
+{Module
+  Core/Lift
+  {Export}
+  {Rules
+    {R "LiftApplyThroughProgram"
+      Apply(act_, Program(.. App(..) ..))
+      Program(.. Apply(act_, App(..)), ..)
+      :prio 1000
+    }
+
+    {R "LiftApplyThroughApp"
+       Apply(act_, App(.. State(..) ..))
+       App(.. Apply(act_, State(..)), ..)
+       :prio 1000
+    }
+  }
+}

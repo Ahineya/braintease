@@ -11,6 +11,7 @@
 #include <time.h>
 #include <ripple_tls.h>
 #include "ripple_http.h"
+#include "../../libraries/deflate/gzip.h"
 #define LINE 1024
 static int sock=-1,out=-1;
 static RippleTLS *tls;
@@ -24,6 +25,7 @@ static unsigned request_used,profile,response_octets;
 /* --response is a generic streaming IPC/CLI mode: one response, final headers,
  * dechunked entity, exit status on stderr/errors. No TLS state crosses it. */
 static unsigned response_mode, worker_mode, header_count;
+static unsigned long body_limit=262144UL;
 static char connected_host[254];
 static unsigned connected_port, connected_secure;
 static const char *failure;
@@ -204,11 +206,62 @@ static int body_bytes(unsigned long length) {
         if(r<=0){if(!r)errno=EIO;return -1;}
         n=used-head;space=sizeof(output)-buffered;
         if(n>space)n=space;if((unsigned long)n>length)n=length;
-        if((response_mode&&saved+buffered+n>262144UL)||saved+buffered+n>2147483647UL){errno=EFBIG;return -1;}
+        if((response_mode&&saved+buffered+n>body_limit)||saved+buffered+n>2147483647UL){errno=EFBIG;return -1;}
         memcpy(output+buffered,input+head,n);
         buffered+=n;head+=n;length-=n;
         if(buffered==sizeof(output)&&flush_body())return -1;
     }
+    return 0;
+}
+/* Transfer framing remains separate from content coding. The inflater reads
+ * only entity octets, so it cannot consume the next persistent HTTP response. */
+struct compressed_entity {
+    unsigned chunked,has_length,after_chunk,finished;
+    unsigned long remaining,received,header_budget;
+};
+static int entity_next(void *opaque) {
+    struct compressed_entity *e=opaque;int value;char text[LINE+1],*p;unsigned digit;unsigned long n;
+    if(e->finished)return -1;
+    if(e->chunked&&!e->remaining) {
+        if(e->after_chunk&&(byte()!='\r'||byte()!='\n')){errno=EINVAL;return -2;}
+        if(line(text,&e->header_budget))return -2;
+        p=text;n=0;if(!isxdigit(*p)){errno=EINVAL;return -2;}
+        while(isxdigit(*p)) {
+            digit=isdigit(*p)?*p-'0':tolower(*p)-'a'+10;
+            if(n>(body_limit-digit)/16){errno=EFBIG;return -2;}n=n*16+digit;++p;
+        }
+        if(*p&&*p!=';'){errno=EINVAL;return -2;}
+        if(!n) {
+            do {if(line(text,&e->header_budget))return -2;
+                if(*text&&!strchr(text,':')){errno=EINVAL;return -2;}
+            }while(*text);
+            e->finished=1;return -1;
+        }
+        e->remaining=n;e->after_chunk=1;
+    }
+    if((e->chunked||e->has_length)&&!e->remaining){e->finished=1;return -1;}
+    value=byte();
+    if(value<0) {
+        if(value==-2&&!e->chunked&&!e->has_length){e->finished=1;return -1;}
+        if(value==-2)errno=EIO;return -2;
+    }
+    if(e->received==body_limit){errno=EFBIG;return -2;}
+    ++e->received;if(e->chunked||e->has_length)--e->remaining;
+    return value;
+}
+static int decoded_body(void *unused,const unsigned char *data,unsigned n) {
+    (void)unused;
+    if(worker_mode?frame(RIPPLE_HTTP_BODY,data,n):nu_write(out,data,n,30000UL))return -1;
+    saved+=n;return 0;
+}
+static int gzip_body(unsigned chunked,unsigned has_length,unsigned long length) {
+    struct compressed_entity e;uint32_t produced=0;int32_t result;
+    memset(&e,0,sizeof(e));e.chunked=chunked;e.has_length=has_length;
+    e.remaining=chunked?0:length;e.header_budget=65536UL;
+    if(has_length&&length>body_limit){errno=EFBIG;return -1;}
+    errno=0;
+    result=ri_gzip_stream(entity_next,decoded_body,&e,body_limit,body_limit,&produced);
+    if(result){if(!errno)errno=result==TINF_BUF_ERROR?EFBIG:EINVAL;return -1;}
     return 0;
 }
 static int body(unsigned chunked,unsigned has_length,unsigned long length) {
@@ -247,7 +300,7 @@ static int output_file(const char *name) {
 }
 static int download(const char *address,const char *destination,const char *ca_file) {
     char url[1280],next[1280],host[254],path[LINE+1],text[LINE+1],location[LINE+1],*value,*end;
-    unsigned port,secure,redirects=0,status,info,has_length,chunked,fields,close_after,reused;
+    unsigned port,secure,redirects=0,status,info,has_length,chunked,fields,close_after,reused,gzip,have_encoding;
     unsigned long length,budget;struct hostent *h;struct sockaddr_in peer;
     saved=buffered=request_used=head=used=response_used=response_octets=0;failure=NULL;tls_failed=0;
     if(strlen(address)>=sizeof(url))goto invalid;
@@ -273,7 +326,7 @@ retry:
            request_write(" HTTP/1.1\r\nHost: ",17)||request_write(host,strlen(host)))goto stale;
         if(port!=(secure?443:80)){sprintf(text,":%u",port);if(request_write(text,strlen(text)))goto stale;}
         strcpy(text,"\r\nUser-Agent: Ripple-htget/0.4\r\nAccept-Encoding: identity\r\nConnection: close\r\n");
-        if(worker_mode)strcpy(text,"\r\nUser-Agent: Ripple-htget/0.4\r\nAccept-Encoding: identity\r\nConnection: keep-alive\r\n");
+        if(worker_mode)strcpy(text,"\r\nUser-Agent: Ripple-htget/0.4\r\nAccept-Encoding: gzip\r\nConnection: keep-alive\r\n");
         if(request_write(text,strlen(text)))goto stale;
         for(fields=0;fields<header_count;fields++)
             if(request_write(extra_headers[fields],strlen(extra_headers[fields]))||request_write("\r\n",2))goto stale;
@@ -290,20 +343,25 @@ retry:
                !isdigit(text[9])||!isdigit(text[10])||!isdigit(text[11])||(text[12]&&text[12]!=' '))goto malformed;
             status=(text[9]-'0')*100+(text[10]-'0')*10+text[11]-'0';
             if(status<100||status>599||status==101)goto malformed;
-            has_length=chunked=fields=0;length=0;location[0]=0;
+            has_length=chunked=fields=gzip=have_encoding=0;length=0;location[0]=0;
             for(;;) {
                 if(line(text,&budget))goto failed;
                 if(!*text)break;if(++fields>128)goto malformed;
                 /* Entity output is already dechunked. A standard reader can
                  * consume it to EOF; do not advertise chunk framing on stdout. */
-                if(response_mode&&strncasecmp(text,"Transfer-Encoding:",18)&&append_header(text))goto failed;
+                if(response_mode&&strncasecmp(text,"Transfer-Encoding:",18)&&
+                   strncasecmp(text,"Content-Length:",15)&&strncasecmp(text,"Content-Encoding:",17)&&append_header(text))goto failed;
                 value=strchr(text,':');if(!value||value==text)goto malformed;*value++=0;
                 for(end=text;*end;end++)if(!isalnum(*end)&&!strchr("!#$%&'*+-.^_`|~",*end))goto malformed;
                 while(*value==' '||*value=='\t')++value;
                 end=value+strlen(value);while(end>value&&(end[-1]==' '||end[-1]=='\t'))*--end=0;
                 if(!strcasecmp(text,"Content-Length")){if(has_length||decimal(value,&length))goto malformed;has_length=1;}
                 else if(!strcasecmp(text,"Transfer-Encoding")){if(chunked||strcasecmp(value,"chunked"))goto malformed;chunked=1;}
-                else if(!strcasecmp(text,"Content-Encoding")&&strcasecmp(value,"identity"))goto malformed;
+                else if(!strcasecmp(text,"Content-Encoding")) {
+                    if(have_encoding++)goto malformed;
+                    if(!strcasecmp(value,"gzip"))gzip=1;
+                    else if(strcasecmp(value,"identity"))goto malformed;
+                }
                 else if(!strcasecmp(text,"Connection")) {
                     const char *part=value,*stop;
                     while(*part) {
@@ -320,10 +378,14 @@ retry:
             if(status<200&&++info>4)goto malformed;
         }while(status<200);
         if(response_mode) {
+            if(has_length&&!gzip) {
+                snprintf(text,sizeof(text),"Content-Length: %lu",length);
+                if(append_header(text))goto failed;
+            }
             if(append_header("")||emit(RIPPLE_HTTP_HEADERS,response_headers,response_used))goto failed;
             out=1;
             if(status!=204&&status!=304&&status!=301&&status!=302&&status!=303&&status!=307&&status!=308&&
-               body(chunked,has_length,length))goto failed;
+               (gzip?gzip_body(chunked,has_length,length):body(chunked,has_length,length)))goto failed;
             response_report();out=-1;
             /* Redirect bodies are intentionally skipped; never reuse their
              * unread bytes as the next response. Close-delimited responses,
@@ -340,7 +402,7 @@ retry:
         }
         if(status<200||status>=300){fprintf(stderr,"htget: HTTP status %u\n",status);return 1;}
         if(output_file(destination))goto failed;
-        if(status!=204&&body(chunked,has_length,length))goto failed;
+        if(status!=204&&(gzip?gzip_body(chunked,has_length,length):body(chunked,has_length,length)))goto failed;
         response_report();
         if(interrupted){errno=EINTR;goto failed;}
         if(out!=1) {
@@ -368,6 +430,11 @@ int ripple_http_main(int argc,char **argv) {
     while(arg<argc&&argv[arg][0]=='-'&&strcmp(argv[arg],"-")) {
         if(!strcmp(argv[arg],"--response")){response_mode=1;arg++;}
         else if(!strcmp(argv[arg],"--worker")){worker_mode=response_mode=1;arg++;}
+        else if(!strcmp(argv[arg],"--body-limit")&&arg+1<argc) {
+            unsigned long value;
+            if(decimal(argv[arg+1],&value)||!value||value>33554432UL)break;
+            body_limit=value;arg+=2;
+        }
         else if(!strcmp(argv[arg],"--cacert")&&arg+1<argc){ca_file=argv[arg+1];arg+=2;}
         else if(!strcmp(argv[arg],"--header")&&arg+1<argc&&header_count<4&&allowed_header(argv[arg+1])) {
             extra_headers[header_count++]=argv[arg+1];arg+=2;
@@ -376,8 +443,8 @@ int ripple_http_main(int argc,char **argv) {
     if(worker_mode?(argc!=arg||header_count):(argc-arg!=2||(header_count&&!response_mode)||
        (response_mode&&strcmp(argv[arg+1],"-")))) {
         fputs("usage: htget [--cacert FILE] [--response [--header LINE]...] http[s]://HOST[:PORT]/PATH FILE|-\n"
-              "       htget --worker [--cacert FILE]\n"
-              "--response: stdout only, no redirects, headers plus dechunked body (256 KiB maximum)\n",stderr);
+              "       htget --worker [--body-limit OCTETS] [--cacert FILE]\n"
+              "--response: stdout only, no redirects, headers plus dechunked body (256 KiB default, --body-limit up to 32 MiB)\n",stderr);
         return argc==2&&!strcmp(argv[1],"--help")?0:1;
     }
     profile=getenv("RIPPLE_TLS_PROFILE")!=NULL;

@@ -1,0 +1,13 @@
+{Module Todo/State
+  {Export InitialState}
+  {Defs 
+    {InitialState State(
+        {NextId 2},
+        {Todos 
+          {Todo {Id 0} {Text "Learn Syma"} {Done False}} 
+          {Todo {Id 1} {Text "Build awesome apps"} {Done True}}
+        },
+        {Filter All}
+      )}
+  }
+}

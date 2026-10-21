@@ -7,8 +7,10 @@
 #include "config-common.h"
 #include "process-limits.h"
 #define PTABSIZE RIPPLE_PROCESS_SLOTS
-#define UFTSIZE 32
-#define OFTSIZE 192
+#include "file-limits.h"
+#define UFTSIZE RIPPLE_FILE_LIMIT
+#define OFTSIZE RIPPLE_OPEN_FILE_LIMIT
+#define CONFIG_DYNAMIC_OFT
 #define ITABSIZE 128
 #define CONFIG_RIPPLE_SCHED
 #define CONFIG_RIPPLE_IO

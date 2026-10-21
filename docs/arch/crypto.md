@@ -53,7 +53,7 @@ separate ABI 2 record layout below.
 | Operation | ID | Input a | Input b | Input c | Output |
 | --- | --- | --- | --- | --- | --- |
 | Modular exponentiation | 5 | base, 1–256 octets | odd 2048-bit modulus, exactly 256 octets | exponent, 1–512 octets | 256 octets |
-| PBKDF2-HMAC-SHA512 | 6 | password, 0–512 octets | salt, 0–512 octets | 4-octet big-endian iteration count, 1–100000 | 64 octets |
+| PBKDF2-HMAC-SHA512 | 6 | password, 0–512 octets | salt, 0–512 octets | 4-octet big-endian iteration count, 1–1000000 | 64 octets |
 | AES-256-IGE encrypt | 7 | aligned data, 0–512 octets | 32-octet key | 32-octet IV | same size as input |
 | AES-256-IGE decrypt | 8 | aligned data, 0–512 octets | 32-octet key | 32-octet IV | same size as input |
 | SHA-256 | 9 | data, 0–512 octets | empty | empty | 32 octets |
@@ -82,7 +82,9 @@ OpenSSL's convention. It applies no padding. For multiple requests, carry the
 last ciphertext/plaintext blocks into the next IV, in that order. Empty input
 returns empty output. There are no host-side cipher contexts or key handles.
 All requests remain synchronous; even accelerated derivation temporarily holds
-the mailbox and kernel call. Iteration and buffer caps bound each request.
+the mailbox and kernel call. Iteration and buffer caps bound each request. The one-million-round ceiling also
+allows the SSH key tools to use 200000-round PBKDF2-HMAC-SHA512 for encrypted
+PKCS#8 private keys; this does not alter existing callers' work factors.
 The full 100000-round guest PBKDF2 fixture measured 55 ms on the development Mac
 in an October 18 native run; this is an observation, not a latency guarantee.
 

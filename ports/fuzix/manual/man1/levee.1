@@ -17,6 +17,10 @@ Ctrl-C cancels raw input. The editor restores the terminal on exit.
 .PP
 The buffer holds at most 29999 native characters. Terminal dimensions are
 validated; this is a small vi implementation rather than full Vim.
+.PP
+ANSI and SS3 arrow keys move in command mode and operator motions. During
+insertion, arrows beep and are ignored; function keys are unbound. Use Escape
+before arrow navigation, then i to resume inserting.
 .SH EXAMPLES
 .nf
 levee notes

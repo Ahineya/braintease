@@ -22,7 +22,7 @@ static unsigned clock_ready;
 unsigned fuse_write_check;
 unsigned fuse_running;
 unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_console_closed;
-unsigned fuse_gui;
+unsigned fuse_gui, fuse_rescue;
 const char *fuse_value;
 static char saved_value[1024];
 char *fuse_boot_parameters = "ro";
@@ -281,7 +281,7 @@ int main(int argc, char **argv) {
     if (argc < 3 ||
         (strcmp(argv[1], "--run") && strcmp(argv[1], "--boot-check") && strcmp(argv[1], "--write-check") &&
          strcmp(argv[1], "--read-check"))) {
-        kputs("usage: fuse-x --run ROOTFS.IMG [--share HOST_DIRECTORY] [--headless] [--gui] [--telnet] [--one-shot]\n"
+        kputs("usage: fuse-x --run ROOTFS.IMG [--share HOST_DIRECTORY] [--headless] [--gui] [--telnet] [--one-shot] [--rescue]\n"
               "       fuse-x --boot-check ROOTFS.IMG\n"
               "       fuse-x --write-check ROOTFS.IMG VALUE\n"
               "       fuse-x --read-check ROOTFS.IMG VALUE\n");
@@ -295,6 +295,7 @@ int main(int argc, char **argv) {
             else if(!strcmp(argv[i],"--gui")) fuse_gui=1;
             else if(!strcmp(argv[i],"--telnet")) fuse_telnet=1;
             else if(!strcmp(argv[i],"--one-shot")) fuse_one_shot=1;
+            else if(!strcmp(argv[i],"--rescue")) fuse_rescue=1;
             else if(!strcmp(argv[i],"--share") && i+1<argc && !*fuse_host_directory) {
                 ++i;
                 if(!*argv[i] || strlen(argv[i])>=sizeof(fuse_host_directory))return 2;

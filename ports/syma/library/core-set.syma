@@ -1,0 +1,83 @@
+{Module Core/Set
+  {Export
+    IsEmpty Has Len Add Remove Union Intersect Difference SymmetricDifference Toggle
+    IsSubset IsEqual
+  }
+  {Rules
+    {:rule "Set/ToSet" {ToSet {_ rest..}} -> {Set rest..}}
+    {:rule "Set/Unique" {Set a.. x_ b.. x_ c..} -> {Set a.. x_ b.. c..}}
+    {:rule "Set/Has" {Has x_ {Set before.. x_ after..}} -> True}
+    {:rule "Set/Has/Not" {Has x_ {Set ..}} -> False}
+    {:rule "Set/IsEmpty" {IsEmpty {Set}} -> True}
+    {:rule "Set/IsEmpty/Not" {IsEmpty {Set _ ..}} -> False}
+    {:rule "Set/Len/Empty" Len({Set}) -> 0}
+    {:rule "Set/Len/Step" Len({Set _ rest..}) -> {+ Len({Set rest..}) 1}}
+    {:rule "Set/Add" {Add x_ {Set s..}} -> {Set x_ s..}}
+    {:rule "Set/Remove" {Remove x_ {Set before.. x_ after..}} -> {Set before.. after..}}
+    {:rule "Set/Union" {Union {Set a..} {Set b..}} -> {Set a.. b..}}
+    {:rule "Set/Intersect"
+      {Intersect {Set a..} {Set b..}}
+      -> {Intersect ReorderIfNeeded {Set a..} {Set b..}}
+    }
+    {:rule "Set/Intersect/ReorderIfNeeded/SmallFirst"
+      {Intersect ReorderIfNeeded a_ b_}
+      -> {Intersect Reordered {Set} b_ a_}
+      :guard {> Len(a_) Len(b_)}
+    }
+    {:rule "Set/Intersect/ReorderIfNeeded/Done"
+      {Intersect ReorderIfNeeded a_ b_}
+      -> {Intersect Reordered {Set} a_ b_}
+      :guard {<= Len(a_) Len(b_)}
+    }
+    {:rule "Set/Intersect/Step/Has"
+      {Intersect Reordered {Set rest..} {Set before.. x_ after..} {Set a..}}
+      -> {Intersect Reordered {Set rest.. x_} {Set before.. after..} {Set a..}}
+      :guard {Has x_ {Set a..}}
+    }
+    {:rule "Set/Intersect/Step/NotHas"
+      {Intersect Reordered {Set rest..} {Set before.. x_ after..} {Set a..}}
+      -> {Intersect Reordered {Set rest..} {Set before.. after..} {Set a..}}
+      :guard {Not {Has x_ {Set a..}}}
+    }
+    {:rule"Set/Intersect/Done" {Intersect Reordered result_ {Set} {Set b..}} -> result_}
+    {:rule "Set/Difference"
+      {Difference {Set a..} {Set b..}}
+      -> {Set a..}
+      :guard {IsEmpty {Intersect {Set a..} {Set b..}}}
+    }
+    {:rule "Set/Difference/Has" 
+      {Difference {Set a..} {Set before.. x_ after..}} 
+      -> {Difference {Remove x_ {Set a..}} {Set before.. after..}} :guard {Has x_ {Set a..}}
+    }
+    {:rule "Set/Difference/NotHas" 
+      {Difference {Set a..} {Set before.. x_ after..}} 
+      -> {Difference {Set a..} {Set before.. after..}} 
+      :guard {Not {Has x_ {Set a..}}}
+    }
+    {:rule "Set/Difference/Done" {Difference result_ {Set}} -> result_}
+    {:rule "Set/SymmetricDifference" 
+      {SymmetricDifference {Set a..} {Set b..}} 
+      -> {Union {Difference {Set a..} {Set b..}} {Difference {Set b..} {Set a..}}}
+    }
+
+    {:rule "Set/Toggle/Has"
+      {Toggle x_ {Set before.. x_ after..}}
+      -> {Set before.. after..}
+    }
+
+    {:rule "Set/Toggle/NotHas"
+      {Toggle x_ {Set s..}}
+      -> {Set x_ s..}
+    }
+    
+    {:rule "Set/IsSubset"
+      {IsSubset a_ b_}
+      -> {IsEmpty {Difference a_ b_}}
+    }
+
+    {:rule "Set/IsEqual"
+      {IsEqual a_ b_}
+      -> {And {IsEmpty {Difference a_ b_}} {IsEmpty {Difference b_ a_}}}
+    }
+  }
+}

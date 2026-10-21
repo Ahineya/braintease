@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Persistent guest HTTP/TLS worker: framing, keep-alive and recovery."""
 import argparse
+import gzip
 import json
 from pathlib import Path
 import ssl
@@ -28,6 +29,19 @@ class Services(TLSService):
         if path=='two':assert b'Cookie: ' not in request
         if path=='long':assert request.count(b'X-A: ')==4 and len(request)>4096
         prefix=b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n'
+        if path.startswith('gzip-'):
+            assert b'Accept-Encoding: gzip\r\n' in request,request
+            body=bytes(range(256))*20 if path=='gzip-binary' else b'GZIP BODY'
+            if path=='gzip-limit':body=b'x'*262145
+            encoded=gzip.compress(body,mtime=0)
+            if path=='gzip-concat':encoded=gzip.compress(b'GZIP ',mtime=0)+gzip.compress(b'BODY',mtime=0)
+            if path=='gzip-bad-crc':encoded=encoded[:-8]+bytes([encoded[-8]^1])+encoded[-7:]
+            if path=='gzip-short':encoded=encoded[:-1]
+            headers=prefix+b'Content-Encoding: gzip\r\n'
+            if path=='gzip-chunked':
+                chunks=b''.join(f'{len(encoded[i:i+7]):x}\r\n'.encode()+encoded[i:i+7]+b'\r\n' for i in range(0,len(encoded),7))
+                return headers+b'Transfer-Encoding: chunked\r\n\r\n'+chunks+b'0\r\n\r\n'
+            return headers+b'Content-Length: '+str(len(encoded)).encode()+b'\r\n\r\n'+encoded
         if path=='binary':return prefix+b'Content-Length: 5120\r\n\r\n'+bytes(range(256))*20
         if path=='empty':return b'HTTP/1.1 204 No Content\r\n\r\n'
         if path=='notmodified':return b'HTTP/1.1 304 Not Modified\r\nContent-Length: 999999\r\n\r\n'

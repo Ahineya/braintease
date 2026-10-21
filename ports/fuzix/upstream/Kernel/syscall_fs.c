@@ -317,7 +317,8 @@ int fildes[];
 
 arg_t _pipe(void)
 {
-	int_fast8_t u1, u2, oft1, oft2;
+	int_fast8_t u1, u2;
+	oft_result_t oft1, oft2;
 	register inoptr ino;
 	register struct oft *oftp;
 

@@ -8,6 +8,9 @@
 #include "../../../libraries/image/nano.h"
 #include "../image/content.h"
 #include <unistd.h>
+#include <errno.h>
+#include <sys/select.h>
+#include "content/fetch.h"
 #include <nano-X.h>
 #include "../../../ports/nanox/ripple/nx_clipboard.h"
 #include "netsurf/clipboard.h"
@@ -35,6 +38,14 @@
 #define RANDOM_URL "http://wiby.me/surprise/"
 static GR_WINDOW_ID wid;
 static GR_GC_ID gc;
+static GR_DRAW_ID draw_target;
+static void render_invalidate(const struct rect *area);
+static void render_clear(void);
+#ifdef RIPPLE_NETSURF_HOSTED
+static bool render_enabled=true;
+#else
+static bool render_enabled=false;
+#endif
 static bool running = true, tracing, dirty = true, chrome_dirty = true, editing, select_address;
 static int width = 600, height = 420;
 static char address[1024], status_text[256];
@@ -67,6 +78,7 @@ static void full_damage(void) { damage=viewport(); dirty=true; }
 static nserror invalidate(struct gui_window *gw, const struct rect *area)
 {
     struct rect r, limit=viewport();
+    render_invalidate(area);
     if (!area) { full_damage(); return NSERROR_OK; }
     r=*area; r.x0-=gw->sx; r.x1-=gw->sx; r.y0+=TOOLBAR-gw->sy; r.y1+=TOOLBAR-gw->sy;
     if (!intersect(&r,&limit)) return NSERROR_OK;
@@ -125,7 +137,7 @@ static void place_caret(struct gui_window *gw, int x, int y, int h, const struct
 static nserror window_event(struct gui_window *gw, enum gui_window_event event)
 {
     if(event==GW_EVENT_START_THROBBER)loaded=false;
-    if(event==GW_EVENT_NEW_CONTENT) { gw->sx=gw->sy=0; caret=false; loaded=false; full_damage(); }
+    if(event==GW_EVENT_NEW_CONTENT) { gw->sx=gw->sy=0; caret=false; loaded=false; render_invalidate(NULL); full_damage(); }
     if(event==GW_EVENT_REMOVE_CARET) { damage_caret(); caret=false; }
     if(event==GW_EVENT_UPDATE_EXTENT)scroll_to(gw->sx,gw->sy);
     chrome_dirty=true; return NSERROR_OK;
@@ -139,12 +151,13 @@ static struct gui_window *window_create(struct browser_window *bw, struct gui_wi
     GrSelectEvents(wid,GR_EVENT_MASK_EXPOSURE|GR_EVENT_MASK_UPDATE|GR_EVENT_MASK_CLOSE_REQ|
         GR_EVENT_MASK_KEY_DOWN|GR_EVENT_MASK_BUTTON_DOWN|GR_EVENT_MASK_BUTTON_UP|
         GR_EVENT_MASK_MOUSE_POSITION|GR_EVENT_MASK_MOUSE_EXIT);
+    draw_target=wid;
     GrMapWindow(wid); GrSetFocus(wid); full_damage();
     if(tracing)fprintf(stderr,"NETSURF_GUI_READY %u\n",wid);
     return &window;
 }
 static void window_destroy(struct gui_window *gw)
-{ gw->bw=NULL; if(wid)GrDestroyWindow(wid); wid=0; running=false; }
+{ render_clear(); gw->bw=NULL; if(wid)GrDestroyWindow(wid); wid=0; running=false; }
 static nserror launch_url(struct nsurl *url)
 { set_status(&window,"Unsupported address scheme. Use HTTP, HTTPS, local files or data URLs."); return NSERROR_NO_FETCH_HANDLER; }
 static struct gui_misc_table misc_table={.schedule=schedule,.launch_url=launch_url};
@@ -171,6 +184,31 @@ static struct netsurf_table tables={.misc=&misc_table,.window=&window_table,.fet
     .layout=&layout_table,.bitmap=&bitmap_table,.llcache=&c16_cache_table,.clipboard=&clipboard_table};
 #include "ui.inc"
 
+/* Nano-X's select integration also services events queued by synchronous
+ * drawing requests. No Nano-X calls occur between prepare and service. */
+static GR_EVENT selected_event;
+static void selected(GR_EVENT *event) { selected_event=*event; }
+static void wait_ready(GR_EVENT *event) {
+    fd_set reads,writes,errors;int max=-1,result;long delay;
+    struct timeval timeout;
+    FD_ZERO(&reads);FD_ZERO(&writes);FD_ZERO(&errors);
+    if(fetch_fdset(&reads,&writes,&errors,&max)!=NSERROR_OK) {
+        running=false;event->type=GR_EVENT_TYPE_NONE;return;
+    }
+    delay=next_timeout();
+    if(delay<0||dirty||chrome_dirty)delay=0;
+    timeout.tv_sec=delay/1000;timeout.tv_usec=(delay%1000)*1000;
+    selected_event.type=GR_EVENT_TYPE_NONE;
+    GrPrepareSelect(&max,&reads);
+    result=select(max+1,&reads,&writes,&errors,&timeout);
+    if(result<0) {
+        FD_ZERO(&reads);
+        if(errno!=EINTR)running=false;
+    }
+    GrServiceSelect(&reads,selected);
+    *event=selected_event;
+}
+
 int main(int argc, char **argv)
 {
     struct browser_window *bw=NULL;
@@ -187,9 +225,10 @@ int main(int argc, char **argv)
         else if(!strcmp(argv[i],"--clear-cache"))clear_cache=true;
         else if(!strcmp(argv[i],"--images"))images_enabled=true;
         else if(!strcmp(argv[i],"--no-images"))images_enabled=false;
+        else if(!strcmp(argv[i],"--no-render-cache"))render_enabled=false;
         else if(!strcmp(argv[i],"--no-javascript")) { /* Reserved safe policy; no JS engine is linked. */ }
         else if(!strcmp(argv[i],"--javascript")) { fputs("netsurf: JavaScript is not available in this build\n",stderr); return 2; }
-        else if(!strcmp(argv[i],"--help")) { puts("netsurf [--images|--no-images] [--no-javascript] [--cache-dir DIR|--no-disk-cache] [--clear-cache] [--trace] [--cacert FILE] [URL | file:///path | /absolute/path]\nCtrl+L: address  Alt+Left/Right: history  F5: reload  Ctrl+Q: quit\nImages and JavaScript are off by default. Options: Alt+O or toolbar menu."); return 0; }
+        else if(!strcmp(argv[i],"--help")) { puts("netsurf [--images|--no-images] [--no-render-cache] [--no-javascript] [--cache-dir DIR|--no-disk-cache] [--clear-cache] [--trace] [--cacert FILE] [URL | file:///path | /absolute/path]\nCtrl+L: address  Alt+Left/Right: history  F5: reload  Ctrl+Q: quit\nImages and JavaScript are off by default. Options: Alt+O or toolbar menu."); return 0; }
         else if(argv[i][0]=='-') { fprintf(stderr,"netsurf: unknown option %s\n",argv[i]); return 2; }
         else initial=argv[i];
     }
@@ -227,7 +266,7 @@ int main(int argc, char **argv)
             loaded=true;
             if(tracing) { fprintf(stderr,"NETSURF_GUI_LOADED %s\nNETSURF_GUI_DOCUMENT %s\n",browser_window_get_title(bw),nsurl_access(browser_window_access_url(bw))); fflush(stderr); }
         }
-        GrGetNextEventTimeout(&event,next_timeout());
+        wait_ready(&event);
         /* A trackpad burst should scroll to its final position before one
          * redraw, rather than painting the whole viewport for every pulse.
          * Keep the batch finite so fetch/timer callbacks still make progress. */
@@ -244,7 +283,7 @@ cleanup:
     if(initialized)netsurf_exit();
     nf_atlas_clear();
     ri_nano_clear();
-    free(nf_data);nf_data=NULL;
+    free(nf_data);nf_data=NULL;free(nf_checked);nf_checked=NULL;
     if(options)nsoption_finalise(NULL,NULL);
     if(registered)nslog_finalise();
     if(opened) { if(gc)GrDestroyGC(gc); if(clip_region)GrDestroyRegion(clip_region); GrClose(); }

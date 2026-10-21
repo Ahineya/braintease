@@ -30,6 +30,9 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <errno.h>
+#if RIPPLE
+#include <sys/select.h>
+#endif
 
 int
 min(int a, int b)
@@ -107,6 +110,113 @@ void fixcon(void)
     }
 }
 
+#if RIPPLE
+/* A lone Escape must leave insert mode without waiting for another key. A
+ * terminal may split an arrow sequence across reads, so allow a short bounded
+ * wait for each suffix byte. Interrupted suffix waits are bounded as well. */
+static int keybyte(int suffix)
+{
+    unsigned char c;
+    int retries = 0;
+
+    for (;;) {
+        if (suffix) {
+            fd_set ready;
+            struct timeval delay;
+            int n;
+            FD_ZERO(&ready);
+            FD_SET(0, &ready);
+            delay.tv_sec = 0;
+            delay.tv_usec = 50000;
+            n = select(1, &ready, NULL, NULL, &delay);
+            if (n < 0 && errno == EINTR && ++retries < 4) continue;
+            if (n != 1) return -1;
+        }
+        if (read(0, &c, 1) != 1) {
+            if (errno == EINTR && (!suffix || ++retries < 4)) continue;
+            if (suffix) return -1;
+            fixcon(); exit(1);
+        }
+        return c;
+    }
+}
+
+int getKey(void)
+{
+    static unsigned char pending[16];
+    static unsigned count, next;
+    static int discard;
+    unsigned n;
+    int c;
+
+    for (;;) {
+        /* Replay an incomplete or non-ANSI escape without losing the command
+         * typed immediately after Escape (notably Escape followed by :q!). */
+        if (next < count) {
+            c = pending[next++];
+            return c < 128 ? c : 0;
+        }
+        count = next = 0;
+        if (discard) {
+            /* Drain an overlong CSI in bounded pieces; its tail must not turn
+             * into editor commands. A timeout abandons the incomplete key. */
+            for (n = 0; n < sizeof(pending); n++) {
+                c = keybyte(TRUE);
+                if (c < 0 || (c >= 0x40 && c <= 0x7e)) {
+                    discard = FALSE;
+                    break;
+                }
+            }
+            return KEY_IGNORE;
+        }
+        c = keybyte(FALSE);
+        if (c == 26) { raise(SIGTSTP); continue; }
+        if (c != ESC) return c < 128 ? c : 0;
+        c = keybyte(TRUE);
+        if (c < 0) return ESC;
+        pending[count++] = c;
+        if (c != '[' && c != 'O') return ESC;
+
+        while (count < sizeof(pending)) {
+            c = keybyte(TRUE);
+            if (c < 0) return ESC;
+            pending[count++] = c;
+            /* Linux console's historical F1..F5 form has a second '['. */
+            if (pending[0] == '[' && count == 2 && c == '[') {
+                c = keybyte(TRUE);
+                if (c < 0) return ESC;
+                pending[count++] = c;
+                if (c >= 'A' && c <= 'E') {
+                    count = 0;
+                    return KEY_IGNORE;
+                }
+                return ESC;
+            }
+            if (c >= 0x40 && c <= 0x7e) {
+                n = count;
+                count = 0;
+                /* CSI A..D, SS3 A..D and the normal xterm modifier form.
+                 * Other complete keys are unbound, consumed as a single key. */
+                if (c >= 'A' && c <= 'D' &&
+                    (n == 2 || (pending[0] == '[' &&
+                     ((n == 3 && pending[1] == '1') ||
+                      (n == 5 && pending[1] == '1' && pending[2] == ';' &&
+                       pending[3] >= '2' && pending[3] <= '8'))))) {
+                    if (c == 'A') return KEY_UP;
+                    if (c == 'B') return KEY_DOWN;
+                    if (c == 'C') return KEY_RIGHT;
+                    return KEY_LEFT;
+                }
+                return KEY_IGNORE;
+            }
+            if (c < 0x20 || c > 0x3f) return ESC;
+        }
+        count = 0;
+        discard = TRUE;
+        return KEY_IGNORE;
+    }
+}
+#else
 int getKey(void)
 {
     unsigned char c;
@@ -120,3 +230,4 @@ int getKey(void)
         return c < 128 ? c : 0;
     }
 }
+#endif

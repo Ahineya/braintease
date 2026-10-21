@@ -102,7 +102,7 @@ fn helper_arity(name: &str) -> Option<usize> {
         | "rcc_native_function"
         | "rcc_native_process_save"
         | "rcc_native_process_argument" => 2,
-        "rcc_native_store" | "rcc_native_process_call" => 3,
+        "rcc_native_store" | "rcc_native_process_call" | "rcc_native_memview_v1" => 3,
         "rcc_native_process_request" => 4,
         _ => return None,
     })

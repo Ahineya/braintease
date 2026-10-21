@@ -13,16 +13,19 @@ static void update_clock(void){
     if(strcmp(header_clock,text)){strcpy(header_clock,text);dirty=1;}
 }
 static const char *help_lines[]={
-    "mux - tabs, tiled panes and persistent sessions",
+    "mux - tiled/desktop tabs and persistent sessions",
     "Commands below follow Ctrl-B (configurable).",
-    "c           New tab       n / p       Next / previous tab",
+    "c / f       New tiled / desktop tab; n / p next / previous",
     "1 .. 8      Select tab    ,           Rename tab",
-    "%           Split left/right",
-    "\"           Split top/bottom",
+    "% / \"     Split left/right or top/bottom (tiled)",
+    "w           New desktop window; t rename its title",
+    "e           Run program   M           Minimize desktop window",
+    "m / v       Move / resize window: arrows, Enter/Esc finish",
     "Tab / o     Next pane     h j k l     Focus left/down/up/right",
     "+ / -       Resize split  z           Zoom / restore pane",
     "!           Move running pane to a new tab",
-    "S           Save layout   C / D       Restart command / directory",
+    "A           Automatic restart recipe (clear C / D overrides)",
+    "S           Save workspace  C / D     Override command / directory",
     "[           Scrollback    ]           Paste copied text",
     "d           Detach        x           Close pane (confirm)",
     "?           This help     r           Redraw",
@@ -41,7 +44,16 @@ static void put(unsigned x,unsigned y,uint32_t ch,unsigned colour){
     unsigned at;if(x>=cols||y>=rows)return;at=y*cols+x;
     if(screen[at].ch!=ch||screen[at].colour!=colour){screen[at].ch=ch;screen[at].colour=colour;damaged[y]=1;}
 }
-static void label(unsigned x,unsigned y,const char *s,unsigned colour,unsigned limit){while(*s&&x<limit&&x<cols){unsigned c=(unsigned char)*s++;put(x++,y,c>=32&&c<127?c:'?',colour);}}
+static void label(unsigned x,unsigned y,const char *s,unsigned colour,unsigned limit){
+    size_t at=0,n=strlen(s),end,j;unsigned width;uint32_t c;
+    while(at<n&&x<limit&&x<cols){
+        if((unsigned char)s[at]>=32&&(unsigned char)s[at]<127&&(at+1==n||(unsigned char)s[at+1]<128)){put(x++,y,(unsigned char)s[at++],colour);continue;}
+        end=ru_next_grapheme((const unsigned char *)s,n,at,&width);j=at;c=ru_next((const unsigned char *)s,end,&j);
+        while(j<end)c=ru_append(c,ru_next((const unsigned char *)s,end,&j));
+        if(!width){at=end;continue;}if(x+width>limit||x+width>cols)break;
+        put(x++,y,c<32||c==127?'?':c,colour);if(width==2)put(x++,y,RU_CONTINUATION,colour);at=end;
+    }
+}
 static void fill_row(unsigned y,unsigned colour){unsigned x;for(x=0;x<cols;x++)put(x,y,' ',colour);}
 static int screen_size(unsigned width,unsigned height){
     struct vt_cell *a,*b;
@@ -55,33 +67,61 @@ static int screen_size(unsigned width,unsigned height){
 }
 static unsigned tab_label(unsigned i,char *text){
     unsigned activity=0,j;for(j=0;j<PANES;j++)if(panes[j].used&&panes[j].tab==(int)i&&panes[j].activity)activity=1;
-    snprintf(text,48," %u:%s%s ",i+1,tabs[i].name,activity?"*":"");return strlen(text);
+    snprintf(text,48," %u:%s%s%s ",i+1,tabs[i].name,tabs[i].floating?" [D]":"",activity?"*":"");return ru_columns((const unsigned char *)text,strlen(text));
 }
 static void draw_header(void){
     unsigned x=0,i,start=0,total=0,width,colour,limit=cols>=20?cols-7:cols;char text[48];
-    fill_row(0,0x17);
+    fill_row(0,0x87);
     for(i=0;i<=(unsigned)current;i++)if(tabs[i].used)total+=tab_label(i,text);
     while(total+(start?1:0)>limit&&start<(unsigned)current){if(tabs[start].used)total-=tab_label(start,text);start++;}
-    if(start){put(x++,0,'<',0x1f);}
+    if(start){put(x++,0,'<',0x8f);}
     for(i=start;i<TABS;i++)if(tabs[i].used){
-        colour=(int)i==current?0x70:0x17;width=tab_label(i,text);
+        colour=(int)i==current?0x70:0x87;width=tab_label(i,text);
         label(x,0,text,colour,limit);x+=width;
-        if(x>=limit){if(i<TABS-1)put(limit-1,0,'>',0x1f);break;}
+        if(x>=limit){if(i<TABS-1)put(limit-1,0,'>',0x8f);break;}
     }
-    if(limit<cols)label(limit,0,header_clock,0x1f,cols);
+    if(limit<cols)label(limit,0,header_clock,0x8f,cols);
 }
 static void draw_footer(void){
     char text[240];struct pane *p=focused();
-    fill_row(rows-1,0x17);
-    if(mode==2)snprintf(text,sizeof(text),"Rename tab: %s_",prompt);
+    fill_row(rows-1,0x87);
+    if(mode==6||mode==7)snprintf(text,sizeof(text)," %s window: arrows / h j k l; Enter/Esc finish",mode==6?"Move":"Resize");
+    else if(mode==9){if(message[0])snprintf(text,sizeof(text)," Run: %s",message);else if(cols>=30&&rows>=10)strcpy(text," Run program | Enter launch  Esc cancel  Ctrl-U clear");else snprintf(text,sizeof(text),"Run: %s_",prompt+(prompt_len>100?prompt_len-100:0));}
+    else if(mode==8)snprintf(text,sizeof(text),"Window title: %s_",prompt);
+    else if(mode==2)snprintf(text,sizeof(text),"Rename tab: %s_",prompt);
     else if(mode==3)snprintf(text,sizeof(text),"Search history: /%s_",prompt);
     else if(mode==4)snprintf(text,sizeof(text),"Restart command (empty=shell): %s_",prompt+ (prompt_len>100?prompt_len-100:0));
     else if(mode==5)snprintf(text,sizeof(text),"Restart directory: %s_",prompt+ (prompt_len>100?prompt_len-100:0));
     else if(closing)strcpy(text,"Close this pane and its running job? y / n");
     else if(mode==1)snprintf(text,sizeof(text)," HISTORY %u/%u %s  j/k PgUp/PgDn  Space select  y copy  / search  q return",copy_line+1,p->count+p->vt.rows,mark_set?"SELECT":"");
     else if(message[0])snprintf(text,sizeof(text)," %s",message);
+    else if(tabs[current].floating&&p->minimized)strcpy(text," All windows minimized | click a task or ^B Tab to restore | ^B e Run");
+    else if(tabs[current].floating)snprintf(text,sizeof(text)," %s | desktop | ^%c: e Run  w window  M minimize  m/v move/resize  ? help%s",session_name,options.prefix+'@',prefix_pending?" | PREFIX":"");
     else snprintf(text,sizeof(text)," %s | pane %d | ^%c: ? help  c tab  %%/\" split  z zoom  d detach%s%s",session_name,tabs[current].focus+1,options.prefix+'@',tabs[current].zoom?" | ZOOM":"",prefix_pending?" | PREFIX":"");
-    label(0,rows-1,text,0x17,cols);
+    label(0,rows-1,text,0x87,cols);
+}
+#include "floating.inc"
+static int run_box(unsigned *left,unsigned *top,unsigned *width){
+    if(cols<30||rows<10)return 0;
+    *width=cols>72?68:cols-4;*left=(cols-*width)/2;*top=(rows-7)/2;return 1;
+}
+static void draw_run(void){
+    unsigned left,top,width,x,y,remaining,removed;size_t at=0;const char *hint;
+    if(!run_box(&left,&top,&width))return;
+    for(y=top;y<top+7;y++)for(x=left;x<left+width;x++)put(x,y,' ',0x07);
+    for(x=left+1;x<left+width-1;x++){put(x,top,0x2500,0x0f);put(x,top+6,0x2500,0x0f);}
+    for(y=top+1;y<top+6;y++){put(left,y,0x2502,0x0f);put(left+width-1,y,0x2502,0x0f);}
+    put(left,top,0x250c,0x0f);put(left+width-1,top,0x2510,0x0f);
+    put(left,top+6,0x2514,0x0f);put(left+width-1,top+6,0x2518,0x0f);
+    label(left+2,top," Run program ",0x0f,left+width-2);
+    hint=message[0]?message:tabs[current].floating?"Open in a new desktop window":"Open in a new mux tab";
+    label(left+2,top+1,hint,message[0]?0x0e:0x08,left+width-2);
+    remaining=ru_columns((const unsigned char *)prompt,prompt_len);
+    while(remaining>width-6){at=ru_next_grapheme((const unsigned char *)prompt,prompt_len,at,&removed);remaining-=removed;}
+    label(left+2,top+3,prompt+at,0x0f,left+width-3);
+    x=left+2+remaining;put(x,top+3,'_',0x0f);
+    label(left+2,top+5,"[ Run ]  [ Cancel ]",0x0f,left+width-2);
+    if(width>=44)label(left+width-11,top+5,"Esc cancel",0x08,left+width-1);
 }
 static void compose(void){
     unsigned x,y,i,line,low,high;struct pane *p;
@@ -91,14 +131,15 @@ static void compose(void){
         memset(damaged,1,rows);style=65535;graphics_charset=2;
         for(i=0;i<PANES;i++)if(panes[i].used&&panes[i].shown)vt_dirty(&panes[i].vt);
         /* Each split leaves a one-cell gutter; focus is indicated at its edge. */
-        for(i=0;i<NODES;i++)if(nodes[i].used&&nodes[i].pane<0&&!tabs[current].zoom&&min_width(tabs[current].root)<=cols&&min_height(tabs[current].root)<=rows-2){
+        for(i=0;i<NODES;i++)if(nodes[i].used&&nodes[i].pane<0&&!tabs[current].floating&&!tabs[current].zoom&&min_width(tabs[current].root)<=cols&&min_height(tabs[current].root)<=rows-2){
             int ancestor=i;while(nodes[ancestor].parent>=0)ancestor=nodes[ancestor].parent;
             if(ancestor!=tabs[current].root)continue;
             if(nodes[i].vertical){x=nodes[nodes[i].b].x-1;for(y=nodes[i].y;y<nodes[i].y+nodes[i].h;y++)put(x,y,'|',0x08);}
             else{y=nodes[nodes[i].b].y-1;for(x=nodes[i].x;x<nodes[i].x+nodes[i].w;x++)put(x,y,'-',0x08);}
         }
     }
-    for(i=0;i<PANES;i++)if(panes[i].used&&panes[i].shown){
+    if(tabs[current].floating)compose_desktop();
+    else for(i=0;i<PANES;i++)if(panes[i].used&&panes[i].shown){
         p=&panes[i];
         /* Preserve the last composed pane until its application completes a
          * synchronized frame. Forwarding an intermediate erase as a complete
@@ -124,6 +165,7 @@ static void compose(void){
             if(y-1<h)label(cols>76?2:0,y,help_lines[y-1],y==1?0x0e:0x07,cols);
         }
     }
+    if(mode==9)draw_run();
     full=dirty=0;scan=0;rendering=1;
 }
 static unsigned output_free(void){return OUTPUT-out_count;}
@@ -185,7 +227,7 @@ static void render(void){
     }
     if(scan>=cols*rows&&output_free()>100){
         p=focused();x=p->x+p->vt.x;y=p->y+p->vt.y;
-        n=snprintf(text,sizeof(text),"\033[%u;%uH\033[%u q\033[?25%c",y+1,x+1,p->vt.cursor_shape,(!help&&!mode&&p->vt.visible)?'h':'l');emit(text,n);
+        n=snprintf(text,sizeof(text),"\033[%u;%uH\033[%u q\033[?25%c",y+1,x+1,p->vt.cursor_shape,(!help&&!mode&&p->shown&&p->vt.visible&&x<cols&&y<rows-1)?'h':'l');emit(text,n);
         emit("\033[?2026l",8);synchronized_output=0;
         memset(damaged,0,rows);rendering=0;
     }

@@ -35,16 +35,43 @@ Network applications install normally and use the shared hosted socket adapter.
 See [application coverage](APPLICATIONS.md).
 
 The SDK caches native IR from portable libc and its hosted syscall bridge.
+For experimental private read acceleration, build with
+`RCC_NATIVE_MEMORY=read-v1`; unset or `checked` retains existing scalar helpers.
+Use a separate build directory and rebuild the compiler and hosted runtime
+first. Kernel, SDK, application, graphics and shared-library cache identities
+track the mode.
+Opt-in packages require a runtime exporting `rcc_native_memview_v1`; installed
+checked packages remain usable. The first implementation reuses a private page
+within straight-line groups of reads. It preserves checked writes, scheduling
+and polling, and falls back for shared/device/volatile/crossing accesses. This
+is an experimental code-generation setting, independent of the heap profile;
+whole-application performance and default enablement remain separate decisions.
+
 File operations, stdio, directory access, environment, formatting, allocation,
 and process operations enter the same Riplix kernel as the bootstrap programs.
-New SDK allocators opt into banks 48–239 on first growth: 12,288,000 C16 cells
-(24,000 KiB) of heap per process, disjoint from frames, argument storage,
-application globals and the shared kernel arena. Large individual requests can
-span this region, including full-HD RGB565 canvases. Growth remains bounded and
-allocations can fail; this is address-space capacity, not reserved resident RAM.
-Old packages retain their original banks 8–30 and allocator limits. The arena
-switch does not clear or merge storage in the intervening argument/global
-banks, and needs no package or C ABI change.
+New hosted SDK allocators opt into sparse private banks 256–32767 on first
+growth: 2,080,768,000 C16 cells, about **3.88 GiB** of addressable heap per
+process. Physical pages are allocated only when written and shared copy-on-write
+across fork. Exec drops the previous sparse heap. This is an address-space
+ceiling, not reserved RAM or a guarantee that a request can be supplied.
+
+Existing binaries retain the banks 8–30 or 48–239 heaps they were compiled for.
+An explicit arena switch preserves earlier direct `sbrk` storage and does not
+clear the intervening argument/global/kernel banks. Kernel globals stay at 240;
+shared kernel storage uses 240–255 and 32768–65535 (about 3.91 GiB). User-copy
+validation rejects a span crossing from private heap into either shared arena.
+No package or C scalar/pointer ABI change is required.
+
+The current freestanding x86_64 Context still needs its bounded 48–239 heap.
+Select `--heap-profile bounded` in `cc.py` (or inherited
+`FUSE_X_HEAP_PROFILE=bounded`) and use `FUSE_X_HEAP_PROFILE=bounded` in its Make
+kernel-IR build. The option reaches SDK libraries, application/startup IR and
+cache fingerprints; it is not a source-only `-D`. Use a separate build directory
+for each profile, including its matching versioned libc. Hosted remains the
+default. Selecting a source-only `-DFUSE_X_BOUNDED_HEAP` is rejected by `cc.py`.
+The kernel profile stamp invalidates IR when the selected profile changes.
+Freestanding physical-memory expansion remains separate work.
+
 Custom signal handlers
 run after completed system calls, following Riplix's
 one-shot signal semantics. Continuation-aware `setjmp`/`longjmp` preserve live
@@ -240,6 +267,7 @@ older packages can still load but have no loop scheduling checkpoints.
 
 ```sh
 make -C fuse-x test
+python3 ports/fuzix/tools/test_native_heap.py
 ```
 
 The executable checks compile a new program after the kernel already exists,

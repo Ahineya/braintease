@@ -16,6 +16,8 @@ static int path_size;
 static uint root_dev;
 static uint root_ino;
 static struct stat st;
+/* Match the allocation-free contract: sh owns its brk/stak arena. */
+static DIR stream;
 
 static char *search_dir(uint this_dev, uint this_ino) 
 {
@@ -40,11 +42,12 @@ static char *search_dir(uint this_dev, uint this_ino)
 		++slen;
 	}
 	++slen;
-	if ((dp = opendir(path_buf)) == 0)
+	if ((dp = opendir_r(&stream, path_buf)) == 0)
 		return NULL;
 	while ((d = readdir(dp)) != 0) {
 		if (slow_search || this_ino == d->d_ino) {
 			if (slen + strlen(d->d_name) > path_size) {
+				closedir_r(dp);
 				errno = ERANGE;
 				return NULL;
 			}
@@ -52,13 +55,13 @@ static char *search_dir(uint this_dev, uint this_ino)
 			if (stat(path_buf, &st) < 0)
 				continue;
 			if (st.st_ino == this_ino && st.st_dev == this_dev) {
-				closedir(dp);
+				closedir_r(dp);
 				return path_buf;
 			}
 		}
 		    /* else ??? */ 
 	}
-	closedir(dp);
+	closedir_r(dp);
 	errno = ENOENT;
 	return NULL;
 }

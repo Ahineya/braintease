@@ -62,6 +62,10 @@ def adapt_server(dest):
     replace(dest, 'nanox/srvnet.c', '#include "nxproto.h"', '#include "nxproto.h"\n#include "server.h"')
     replace(dest, 'nanox/srvfunc.c', 'regionp->rgn = GdAllocBitmapRegion(bitmap, width, height);',
             'regionp->rgn = GdAllocBitmapRegion(bitmap, width, height);\n\tif(!regionp->rgn) { free(regionp); SERVER_UNLOCK(); return 0; }')
+    # Line dashes use the core drawing engine, even with optional shapes off.
+    replace(dest, 'nanox/srvutil.c', '#if MW_FEATURE_SHAPES\n\t\tGdSetDash(&mask, &count);',
+            '\t\tGdSetDash(&mask, &count);\n#if MW_FEATURE_SHAPES')
+    replace(dest, 'nanox/srvfunc.c', '(1 << dcount)', '(1UL << dcount)')
     # Match the sibling clipping path for shaped children too. Upstream first
     # subtracted the entire rectangle, then tested the parent's region and
     # could dereference a NULL child region.

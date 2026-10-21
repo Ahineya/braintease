@@ -1,6 +1,6 @@
 .TH MUX 1
 .SH NAME
-mux \- tabs, tiled terminal panes and detachable sessions
+mux \- tiled and desktop terminal tabs with detachable sessions
 .SH SYNOPSIS
 .B mux
 [COMMAND [ARG...]]
@@ -26,7 +26,9 @@ NAME
 .SH DESCRIPTION
 Run several terminal applications in one terminal. Each pane has a separate
 shell, controlling terminal, job control and terminal screen. Tabs remember
-their own split layout. Without arguments, mux creates or attaches session main.
+their own tiled or floating layout. Without arguments, mux attaches live main,
+otherwise restores the default saved workspace as main, or starts a fresh shell
+if no default exists. mux new main explicitly starts fresh.
 A command replaces the first pane's shell; later panes start the configured shell.
 .PP
 A detached session continues while the operating system runs. Close a GUI
@@ -40,13 +42,59 @@ the session is idle. It is hidden in terminals narrower than 20 columns to
 leave room for tabs. Timezone rules come from the mux server's TZ environment,
 or from /etc/TZ when TZ is unset. Changes to /etc/TZ appear on the next minute;
 exporting TZ in a pane does not change its already-running parent mux server.
+.SH DESKTOP TABS
+Ctrl-B f creates a desktop tab, marked [D]. Drag title bars to move windows;
+drag borders/corners to resize. Click a window or its bottom task-bar title to
+focus and raise it. [_] minimizes, [+]/[-] maximizes/restores; [x] closes immediately.
+The keyboard close command Ctrl-B x still asks for confirmation.
+Minimized windows keep running and appear as dimmed task-bar buttons with stable
+widths. Click a button or cycle with Ctrl-B Tab/o to restore it. When all windows
+are minimized, ordinary input is not forwarded to hidden applications.
+Side and bottom borders use the normal terminal background. Mux top/bottom bars
+are dark gray; window headers are lighter gray with blue text for the active
+window.
+Mouse input in content belongs to the application. Shift-drag selects terminal
+text for copying. Small terminals temporarily show only the focused pane;
+preferred rectangles return when the terminal grows. Tiled tabs coexist in the
+same session and share the pane limit. Ctrl-B w opens another desktop window.
+.PP
+Version 4 saves include rectangles, titles, stacking order, minimized state and
+manual title/restart overrides. Versions 1 through 3 remain readable; old binaries
+cannot read version 4 saves. Titles in older desktop saves remain manual names
+until cleared.
 .SH KEYS
 Press Ctrl-B, release it, then the command key. Ordinary Tab, function keys,
 Ctrl-C and Ctrl-Z are sent to the focused pane. Press Ctrl-B twice to send it
 to the application. The status line shows the current pane number.
 .TP
 c
-Create a tab.
+Create a tiled tab.
+.TP
+f
+Create a floating desktop tab.
+.TP
+e
+Open Run. Enter a program and arguments; Enter launches, Escape cancels, Ctrl-U
+clears. Mouse buttons Run and Cancel are also available. Desktop tabs create a
+new floating window; tiled tabs create a new tab. Commands inherit the selected
+pane directory, run through the configured shell, and return to a shell on exit.
+Unicode input and bracketed paste are supported; pasted newlines do not launch.
+.TP
+M
+Minimize the focused desktop window, keeping its application running. Restore
+through the task bar or Ctrl-B Tab/o. Minimized state survives workspace saves.
+.TP
+w
+Open a new window in the desktop tab.
+.TP
+m, v
+Move or resize the desktop window with arrows or h/j/k/l. Enter, Escape or
+Ctrl-C finishes the mode.
+.TP
+t
+Set a manual desktop window title. Normally titles follow foreground programs
+launched by the system shell and return to shell at the next idle prompt.
+Ctrl-U and Enter clear the manual name and resume automatic naming.
 .TP
 n, p, 1 through 8
 Next, previous, or numbered tab.
@@ -67,7 +115,7 @@ h, j, k, l, arrow keys
 Focus left, down, up, or right.
 .TP
 +, -
-Grow or shrink the focused pane at its nearest split.
+Grow or shrink the focused split, or both dimensions of a desktop window.
 .TP
 z
 Zoom the focused pane to fill the tab, or restore the split layout.
@@ -84,6 +132,10 @@ C
 Edit the focused pane's restart command. Empty means an interactive shell.
 This changes what restore launches; it does not affect the currently running
 application. Ctrl-U clears the field, Enter accepts, Escape cancels.
+.TP
+A
+Clear both restart overrides and use automatic foreground command/directory
+capture for the focused pane again.
 .TP
 D
 Edit the focused pane's restart directory. It must be an existing absolute
@@ -109,29 +161,35 @@ Detach; applications continue running.
 ?, r
 Show keyboard help, or redraw the terminal.
 .SH SAVING AND RESTORING
-Ctrl-B then S saves the current session. Alternatively, run mux save NAME
-from a pane, another terminal or a script; it works while a session is attached
-or detached. NAME defaults to main. mux saved lists saved sessions.
+Ctrl-B then S saves the current session and updates $HOME/.mux/default.
+Alternatively, run mux save NAME from a pane, another terminal or a script;
+it works while attached or detached. NAME defaults to main. mux saved lists
+saved sessions. The default is an independent atomic copy of the last save.
 .PP
-After restarting the operating system, run mux restore NAME. Restore recreates
-tab names, split directions and proportions, selected tab, focused panes and
-zoom state. It starts new processes using each pane's restart command and
-directory. The saved prefix, shell and scrollback capacity are restored too.
-An already running session with that name is refused; use mux attach NAME.
+After restarting the operating system, plain mux restores this default as main.
+A live main session is attached first. mux new NAME and mux COMMAND bypass
+implicit restore. mux restore NAME restores an explicitly named save. Restore
+recreates tiled/desktop layouts, titles, stacking, focus, zoom and configuration
+using new processes. An invalid default is reported; mux new main starts fresh.
 .PP
-Pane startup commands are explicit. A command supplied to mux new NAME COMMAND
-is recorded automatically with its arguments. Ordinary commands typed later
-into a pane's shell are not inferred. Use prefix C to configure chat, an editor,
-or another application before saving. For example, chat starts the chat app;
-chat; exec /bin/sh returns to a shell after chat exits. Prefix D sets the
-directory. Initially it is the mux launch directory; new splits inherit the
-focused pane's configured startup directory. A shell's later cd commands do
-not automatically update it.
+The interactive system shell reports foreground external commands and their
+arguments and launch directories to mux. Idle shells report their current
+directory. At save, the reported group must still own the foreground terminal.
+Arguments are safely quoted; automatically restored apps return to a shell on
+exit. Completed commands and background launches are not replayed. Pipelines,
+redirected output, custom shells and jobs resumed with fg may need an explicit
+recipe. Without a valid report mux retains the pane's startup recipe.
+.PP
+Prefix C and D override automatic command/directory capture. Empty C means an
+interactive shell. Prefix A clears both overrides. Overrides survive restore;
+old version-1/2 snapshots retain their original recipes as explicit overrides.
+A command supplied to mux new NAME COMMAND is recorded with its arguments.
 .PP
 Saving does not checkpoint process memory, shell variables, background jobs,
 unsaved editor buffers, terminal contents or scrollback text. Applications
 recover their own saved data. Saving is explicit; shutdown does not replace a
-previous snapshot automatically. mux kill stops a live session and keeps its
+previous snapshot automatically. Remove $HOME/.mux/default to disable automatic
+restore. mux kill stops a live session and keeps its
 saved layout. Remove $HOME/.mux/NAME to delete that saved layout.
 .PP
 Snapshots are versioned text files in a mode-0700 $HOME/.mux directory, written
@@ -163,12 +221,12 @@ only the focused pane is displayed until the terminal becomes large enough.
 Scrollback has a bounded internal text clipboard (8191 characters), ASCII search
 and line selection. Screen resize preserves top-left content without text
 reflow. Terminal colours use a sixteen-colour palette; extended colours are
-approximated. Full Unicode, mouse interaction and shared simultaneous attachment
-are not implemented. History and copied text remain in guest memory.
+approximated. Unicode cells and mouse interaction are supported; shared simultaneous
+attachment is not implemented. History and copied text remain in guest memory.
 .SH FILES
 $HOME/.muxrc
 .br
-$HOME/.mux/NAME
+$HOME/.mux/NAME (named recipes), $HOME/.mux/default (last saved workspace)
 .br
 /tmp/mux-UID/NAME
 .SH SEE ALSO

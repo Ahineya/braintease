@@ -5,6 +5,8 @@ Current OS builds, shared files, source files, guest disks and the main Cargo
 artifact cache are preserved. Old Rust incremental sessions and separate Cargo
 experiment targets can be rebuilt and are eligible when idle. Active compiler
 and guest command lines/open files protect their build directories.
+--deep also prunes NetSurf's portable backend caches; --dev-cache explicitly
+discards the idle main Cargo debug profile. Disk images remain protected.
 """
 import argparse
 import collections
@@ -23,8 +25,20 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = set('.asm .ir .pobj .par .bin .bf .bfm .bfa .map .ll .bc .o .obj .a .rlib .rmeta .dylib .so .d .native .out .rxe .fxe .wasm .exe .gcda .gcno'.split())
 IMAGE = re.compile(r'\.(?:img|dsk|iso|qcow2?|vhdx?)(?:\.|$)', re.I)
-BACKUP = re.compile(r'^(.*\.(?:img|dsk|iso|qcow2?|vhdx?)(?:\.[^.]+)?)\.bak(?:\..+)?$', re.I)
+BACKUP = re.compile(r'^(.*\.(?:img|dsk|iso|qcow2?|vhdx?))(?:\.[^.]+)?\.bak(?:\..+)?$', re.I)
 TOOLS = {'cargo', 'rustc', 'rcc', 'rcpp', 'rfl', 'rasm', 'rlink', 'make', 'gmake', 'rvm', 'rbf', 'fuse-x', 'python', 'python3', 'Python', 'node'}
+TOOLS |= {'cc', 'gcc', 'clang', 'clang++', 'ld', 'ld.lld', 'lld', 'ninja', 'cmake', 'meson'}
+NETSURF_CURRENT = {'source', 'native', 'core-native', 'nanox-native', 'sdk-native-float',
+                   'sdk-worker-native', 'sdk-native-worker', 'fonts'}
+NETSURF_PORTABLE = {'ripple', 'core-ripple', 'nanox-ripple', 'sdk-ripple-float', 'sdk-worker-ripple'}
+# Long tests may close their inputs between phases and omit --build when using
+# defaults. Keep their whole project output family until that job exits.
+ACTIVE_BUILD_FAMILIES = {
+    'rcc-portable/': ('rcc-portable/build', 'build/portable-*', 'build/guest-native-*'),
+    'ports/netsurf/': ('build/netsurf',),
+    'tools/x86_64/': ('build/x86_64*',),
+    'ports/nethack/': ('ports/nethack/build',),
+}
 
 
 def under(path, parent):
@@ -42,9 +56,13 @@ def active_paths():
             continue
         command = Path(parts[1].split(None, 1)[0]).name
         executable = Path(parts[1].split(None, 1)[0])
-        if command not in TOOLS and not command.startswith('python3.') and not under(executable, ROOT):
+        if command not in TOOLS and not command.startswith(('python3.', 'qemu-', 'clang-')) and not under(executable, ROOT):
             continue
         pids.append(parts[0])
+        for project, patterns in ACTIVE_BUILD_FAMILIES.items():
+            if project in parts[1]:
+                for pattern in patterns:
+                    paths.update(ROOT.glob(pattern))
         for word in re.findall(r'(?:/[^\s\'\"]+|(?:build|target|fuse-x/build|rcc-portable/build|ports/doom/build)/[^\s\'\"]+)', parts[1]):
             p = Path(word.rstrip(',;'))
             p = p if p.is_absolute() else ROOT / p
@@ -65,20 +83,28 @@ def active_paths():
 
 def is_active(directory, references):
     return any(under(p, directory)
-               or (p.name in {'.cargo-lock', 'incremental'} and under(directory, p.parent if p.name == '.cargo-lock' else p))
+               or (p != ROOT and p.is_dir() and under(directory, p))
+               or (p.name in {'.cargo-lock', '.build.lock', 'native.lock', 'ripple.lock', 'incremental'}
+                   and under(directory, p if p.name == 'incremental' else p.parent))
                for p in references)
 
 
 def lock_cache(directory):
     """Hold Cargo's profile lock while deleting cache entries, including on races."""
-    if directory.parent.name == 'incremental':
+    if directory.parent.name == 'rfl-macros':
+        paths = [directory / 'lock']
+    elif directory == ROOT / 'target/debug':
+        paths = [directory / '.cargo-lock']
+    elif directory.parent.name == 'incremental':
         profiles = [directory.parent.parent]
+        paths = [p / '.cargo-lock' for p in profiles]
     else:
         profiles = [p for p in (directory / 'debug', directory / 'release') if p.is_dir()]
+        paths = [p / '.cargo-lock' for p in profiles]
     held = []
     try:
-        for profile in profiles:
-            lock = (profile / '.cargo-lock').open('a')
+        for path in paths:
+            lock = path.open('a')
             held.append(lock)
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return held
@@ -101,7 +127,18 @@ def files_in(directory):
                 yield p, info
 
 
-def candidates(root):
+def allocated_bytes(entries):
+    # Cargo hard-links incremental objects into deps. Count each inode once,
+    # and only when every hard link is selected for removal.
+    inodes = {}
+    for _, info in entries:
+        key = (info.st_dev, info.st_ino)
+        count, _ = inodes.get(key, (0, info))
+        inodes[key] = count + 1, info
+    return sum(info.st_blocks * 512 for count, info in inodes.values() if count >= info.st_nlink)
+
+
+def candidates(root, deep=False, dev_cache=False):
     protected = {'fuzix', 'rust-rcc', 'ros', 'doom', 'netsurf', 'tls', 'telegram-private'}
     for directory in (root / 'build', root / 'rcc-portable/build', root / 'ports/doom/build', root / 'c-test/build'):
         if not directory.is_dir():
@@ -116,6 +153,20 @@ def candidates(root):
             if directory == root / 'ports/doom/build' and p.name in {'ripple', 'native', 'run', 'run-bf', 'assets', 'generated', 'rcc-native'}:
                 continue
             yield p
+    # Keep the canonical native SDK/IR cache. Past browser investigations used
+    # nested --build trees and silently accumulated copies of the entire port.
+    directory = root / 'build/netsurf'
+    if directory.is_dir():
+        for p in directory.iterdir():
+            if (p.is_file() and not p.is_symlink()
+                    and p.suffix in {'.fxe', '.rxe'}
+                    and (p.stem.endswith('check') or p.stem == 'guinavigation')):
+                yield p
+            if p.is_dir() and not p.is_symlink() and p.name not in NETSURF_CURRENT:
+                if deep or p.name not in NETSURF_PORTABLE:
+                    yield p
+    if dev_cache and (root / 'target/debug').is_dir():
+        yield root / 'target/debug'
     # Isolated temporary toolchains from prior native-host experiments.
     for name in ('hostfs-runtime',):
         p = root / 'fuse-x/build' / name
@@ -123,8 +174,13 @@ def candidates(root):
             yield p
     # Keep compiled dependencies and binaries. Only idle incremental sessions expire.
     for directory in (root / 'target/debug/incremental', root / 'target/release/incremental'):
+        if dev_cache and directory == root / 'target/debug/incremental':
+            continue
         if directory.is_dir():
             yield from (p for p in directory.iterdir() if p.is_dir() and not p.is_symlink())
+    directory = root / 'target/rfl-macros'
+    if directory.is_dir():
+        yield from (p for p in directory.iterdir() if p.is_dir() and not p.is_symlink())
 
 
 def clean(args):
@@ -133,41 +189,48 @@ def clean(args):
     tracked = set(subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0'))
     tracked_parents = {parent for name in tracked if name for parent in (ROOT / name).parents}
     active = active_paths()
-    planned, summaries, skipped, held_locks = {}, [], 0, []
+    planned, summaries, skipped, cache_owners = {}, [], 0, set()
+    directories = list(candidates(ROOT, args.deep, args.dev_cache))
+    # Hundreds of macro sessions used to launch one Git process each.
+    ignored_check = subprocess.run(['git', 'check-ignore', '--stdin', '-z'],
+        input='\0'.join(str(p.relative_to(ROOT)) for p in directories)+'\0' if directories else '',
+        capture_output=True, text=True, timeout=30)
+    if ignored_check.returncode not in (0, 1):
+        raise RuntimeError('Cannot verify ignored artifact paths; no cleanup performed')
+    ignored_paths = set(ignored_check.stdout.split('\0'))
 
-    for directory in candidates(ROOT):
+    for directory in directories:
+        incremental = directory.parent.name == 'incremental'
+        macro = directory.parent == ROOT / 'target/rfl-macros'
+        if args.caches_only and not (incremental or macro):
+            continue
         if is_active(directory, active):
             skipped += 1
             continue
         relative = str(directory.relative_to(ROOT))
-        ignored = subprocess.run(['git', 'check-ignore', '-q', '--', relative]).returncode == 0
-        if not ignored or directory in tracked_parents:
+        if relative not in ignored_paths or relative in tracked or directory in tracked_parents:
             continue
         if not args.quiet:
             print('Checking ' + relative, flush=True)
-        entries = list(files_in(directory))
+        entries = [(directory, directory.stat())] if directory.is_file() else list(files_in(directory))
         if not entries or max(s.st_mtime for _, s in entries) > cutoff:
             continue
-        cargo = (directory / 'CACHEDIR.TAG').exists() or (directory / '.rustc_info.json').exists()
-        incremental = directory.parent.name == 'incremental'
-        if args.apply and (cargo or incremental):
-            locks = lock_cache(directory)
-            if locks is None:
-                skipped += 1
-                continue
-            held_locks.extend(locks)
+        cargo = (directory / 'CACHEDIR.TAG').exists() or (directory / '.rustc_info.json').exists() or directory == ROOT / 'target/debug'
+        if cargo or incremental or macro:
+            cache_owners.add(directory)
         chosen = [(p, s) for p, s in entries if not IMAGE.search(p.name)
                   and not p.name.endswith('.lock') and p.name != '.cargo-lock'
-                  and (cargo or incremental or p.suffix in EXTENSIONS)]
+                  and ((macro and p.name == 'macro')
+                       or (not macro and (cargo or incremental or p.suffix in EXTENSIONS)))]
         for p, info in chosen:
             planned[p] = (info, directory)
         if chosen:
-            summaries.append((relative, len(chosen), sum(s.st_blocks * 512 for _, s in chosen)))
+            summaries.append((relative, len(chosen), allocated_bytes(chosen)))
 
     # Include image backup families in ignored build trees, never source-file .bak.
     families = collections.defaultdict(list)
     for directory in (ROOT / 'build', ROOT / 'fuse-x/build', ROOT / 'ports/fuzix/build', ROOT / 'rcc-portable/build'):
-        if directory.is_dir():
+        if not args.caches_only and directory.is_dir():
             for p, info in files_in(directory):
                 match = BACKUP.match(p.name)
                 if match:
@@ -175,17 +238,17 @@ def clean(args):
     for disk, entries in families.items():
         entries.sort(key=lambda v: v[1].st_mtime_ns, reverse=True)
         removed = entries[args.keep_backups:]
-        if is_active(disk.parent, active):
-            # Normal OS builders may be writing a backup in this directory now.
-            skipped += 1
-            continue
+        selected = []
         for p, info in removed:
-            if str(p.relative_to(ROOT)) not in tracked and p not in active:
-                planned[p] = (info, disk.parent)
-        if removed:
-            summaries.append((str(disk.relative_to(ROOT)) + ' backups', len(removed), sum(s.st_blocks * 512 for _, s in removed)))
+            # A running guest writes the main disk, not these recovery copies.
+            # Actual open backups and a builder's directory/lock remain protected.
+            if str(p.relative_to(ROOT)) not in tracked and not is_active(p, active):
+                planned[p] = (info, p)
+                selected.append((p, info))
+        if selected:
+            summaries.append((str(disk.relative_to(ROOT)) + ' backups', len(selected), allocated_bytes(selected)))
 
-    allocated = sum(info.st_blocks * 512 for info, _ in planned.values())
+    allocated = allocated_bytes([(p, info) for p, (info, _) in planned.items()])
     if not args.quiet:
         for name, count, size in summaries:
             print(f'{size / 1024**3:7.2f} GiB  {count:6} files  {name}', flush=True)
@@ -194,20 +257,31 @@ def clean(args):
         removed = removed_bytes = 0
         active = active_paths()
         active_owners = {owner for owner in {owner for _, owner in planned.values()} if is_active(owner, active)}
+        owners = collections.defaultdict(list)
         for p, (before, owner) in planned.items():
+            owners[owner].append((p, before))
+        for owner, entries in owners.items():
             if owner in active_owners:
                 continue
-            try:
-                now = p.lstat()
-            except FileNotFoundError:
+            locks = lock_cache(owner) if owner in cache_owners else []
+            if locks is None:
+                skipped += 1
                 continue
-            if (not p.is_symlink() and (now.st_dev, now.st_ino, now.st_mtime_ns, now.st_size)
-                    == (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)):
-                p.unlink()
-                removed += 1
-                removed_bytes += now.st_blocks * 512
-        for lock in held_locks:
-            lock.close()
+            try:
+                for p, before in entries:
+                    try:
+                        now = p.lstat()
+                    except FileNotFoundError:
+                        continue
+                    if (not p.is_symlink() and (now.st_dev, now.st_ino, now.st_mtime_ns, now.st_size)
+                            == (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size)):
+                        p.unlink()
+                        removed += 1
+                        if now.st_nlink == 1:
+                            removed_bytes += now.st_blocks * 512
+            finally:
+                for lock in locks:
+                    lock.close()
         if removed or not args.quiet:
             print(f'Cleanup: removed {removed} generated files ({removed_bytes / 1024**3:.2f} GiB allocated); '
                   f'{shutil.disk_usage(ROOT).free / 1024**3:.2f} GiB free; {skipped} active directories preserved', flush=True)
@@ -223,9 +297,15 @@ def main():
     parser.add_argument('--keep-backups', type=int, default=1, help='recovery copies per image (default 1)')
     parser.add_argument('--daily', action='store_true', help='with --apply, run at most once per day')
     parser.add_argument('--quiet', action='store_true')
+    parser.add_argument('--caches-only', action='store_true',
+                        help='only prune idle main-target incremental and RFL macro caches; preserve backups and experiment builds')
+    parser.add_argument('--deep', action='store_true', help='also discard idle NetSurf Ripple/RVM compilation caches')
+    parser.add_argument('--dev-cache', action='store_true', help='also discard the idle main Cargo debug profile (rebuilt on next debug build)')
     args = parser.parse_args()
     if not math.isfinite(args.min_age_hours) or args.min_age_hours < 0 or args.keep_backups < 0:
         parser.error('age and backup count must not be negative')
+    if args.caches_only and (args.deep or args.dev_cache):
+        parser.error('--caches-only cannot be combined with --deep or --dev-cache')
     if not args.apply:
         clean(args)
         return
@@ -238,7 +318,7 @@ def main():
             if not args.quiet:
                 print('Another artifact cleanup is running; skipped')
             return
-        stamp = build / '.artifact-cleanup.json'
+        stamp = build / ('.artifact-cleanup-caches.json' if args.caches_only else '.artifact-cleanup.json')
         if args.daily and stamp.exists() and time.time() - stamp.stat().st_mtime < 86400:
             return
         clean(args)

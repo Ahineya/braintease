@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import {scheduleFiles} from '../ports/fuzix/tools/schedule.mjs';
+import {bootFiles} from '../ports/services/files.mjs';
 import {ptyDevices} from '../ports/fuzix/tools/pty.mjs';
 import {kernelCredits} from '../ports/fuzix/tools/credits.mjs';
 // Reuse the canonical C16 image builder; never update a running Ripple disk.
@@ -19,6 +21,8 @@ import {tlsFiles} from '../ports/tls/files.mjs';
 import {fuseDEFiles} from '../ports/fusede/files.mjs';
 import {kolfFiles} from '../ports/kolf/files.mjs';
 import {klotskiFiles} from '../ports/klotski/files.mjs';
+import {shikakuFiles} from '../ports/shikaku/files.mjs';
+import {retireInstalledPuzzles} from '../ports/puzzles/files.mjs';
 import {compilerFiles} from '../rcc-portable/files.mjs';
 import {unicodeFiles} from '../libraries/unicode/files.mjs';
 import {basicFiles} from '../ports/basic/files.mjs';
@@ -40,6 +44,14 @@ try {
     if(!args[option+1]) throw Error('--apps requires a directory');
     appDirectory=args[option+1];args.splice(option,2);
   }
+  let bootProfile;
+  const bootOption=args.indexOf('--boot-profile');
+  if(bootOption!==-1){
+    bootProfile=args[bootOption+1];
+    if(bootProfile!=='fuse-x')throw Error('--boot-profile requires fuse-x');
+    args.splice(bootOption,2);
+    if(!appDirectory||useBootstrap)throw Error('--boot-profile requires native --apps and a real shell');
+  }
   const [command, source, destination, extra, ...rest] = args;
   const compiler = appDirectory ? compilerFiles(path.join(appDirectory, '../compiler')) : [];
   if (appDirectory) {
@@ -48,15 +60,25 @@ try {
     const names=fs.existsSync(report)
       ? ['native-hello',...JSON.parse(fs.readFileSync(report,'utf8')).filter(a=>a.status==='built').map(a=>a.name)]
       : ['native-hello','cat','ls','cp','sh'];
-    for(const name of ['rfl-demo','rfl-fm','rift','qr-demo','telegram','music','wavplay','chat']) {
+    for(const name of ['rfl-demo','rfl-fm','rift','qr-demo','telegram','music','wavplay','chat','svcd','svc','console-session']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
-    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxmsg','nxselect','nxcalc','nxtetris','nxview','kolf','klotski','nxcheck','nxhostcheck','startx','nxdraw','fdeshowcase','fdectl']) {
+    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxmsg','nxselect','nxcalc','nxtetris','nxview','kolf','klotski','shikaku','nxcheck','nxhostcheck','startx','nxdraw','fdeshowcase','fdectl']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
-    const aliases = {vi:'rift',mc:'rfl-fm',mv:'cp',ln:'cp',tcl:'picol',
+    const aliases = {crond:'cron',vi:'rift',mc:'rfl-fm',mv:'cp',ln:'cp',tcl:'picol',
                      tclsh:'picol',sokoban:'sok',nslookup:'host'};
+    if(bootProfile)for(const name of ['svcd','svc','console-session','mux'])
+      if(fs.existsSync(path.join(appDirectory,name+'.fxe')))names.push(name);
     const selected = new Set(names);
+    if(selected.has('cron'))applications.push(...scheduleFiles());
+    if(selected.has('test'))applications.push({name:'/bin/[',symlink:'test'});
+    if(bootProfile){
+      for(const name of ['svcd','svc','console-session','mux'])
+        if(!selected.has(name)||!fs.existsSync(path.join(appDirectory,name+'.fxe')))
+          throw Error('boot profile requires built application: '+name);
+      applications.push(...bootFiles(bootProfile));
+    }
     // Staged application sets often use symlinks into the original build.
     // Carry their SDK libraries too, even when the stage has no sibling lib/.
     const libraryDirectories=new Set([path.join(appDirectory,'../lib')]);
@@ -94,6 +116,7 @@ try {
       if(name==='basic') applications.push(...basicFiles());
       if(name==='kolf') applications.push(...kolfFiles());
       if(name==='klotski') applications.push(...klotskiFiles());
+      if(name==='shikaku') applications.push(...shikakuFiles());
       if((name==='htget'||name==='lynx'||name==='chat'||name==='netsurf')&&!applications.some(f=>f.name==='/etc/ssl/cert.pem')) applications.push(...tlsFiles());
       if(name==='fdeshowcase') {
         // Integration fixtures stage executable symlinks separately from data.
@@ -104,6 +127,7 @@ try {
       }
       if(name==='rfl-fm') applications.push({name:'/bin/mc',symlink:'rfl-fm'});
     }
+    applications.push(...retireInstalledPuzzles(appDirectory));
   }
   if(['create','install'].includes(command)) {
     applications.push(...kernelCredits());
@@ -111,8 +135,9 @@ try {
     applications.push(...commanderFiles(), ...riftFiles(), ...unicodeFiles());
     applications.push({name:'/mnt/host',directory:true,mode:0o40755});
     if(appDirectory && fs.existsSync(path.join(appDirectory,'nano-X.fxe')))
-      applications.push({name:'/etc/nxlaunch.cnf',mode:0o100644,preserve:true,
-        data:Buffer.from('Terminal - /bin/nxterm\nMac-term - /bin/gterm\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nDraw - /bin/nxdraw\nCalculator - /bin/nxcalc\nTetris - /bin/nxtetris\nImages - /bin/nxview\nKlotski - /bin/klotski\n')});
+      applications.push({name:'/etc/nxlaunch.cnf',mode:0o100644,
+        update:old=>Buffer.from(String.fromCharCode(...old).replace(/^Puzzles - \/bin\/puzzles\r?\n/gm,'')),
+        data:Buffer.from('Terminal - /bin/nxterm\nMac-term - /bin/gterm\nEyes - /bin/nxeyes\nClock - /bin/nxclock\nDraw - /bin/nxdraw\nCalculator - /bin/nxcalc\nTetris - /bin/nxtetris\nImages - /bin/nxview\nKlotski - /bin/klotski\nShikaku - /bin/shikaku\n')});
     applications.push({name:'/dev/tty',mode:0o20666,device:0x200,data:Buffer.alloc(0)});
     applications.push({name:'/dev/gfx',mode:0o20666,device:0x400,data:Buffer.alloc(0)});
     applications.push(...ptyDevices());
@@ -139,7 +164,7 @@ try {
   if (rest.length || !source || !['create','install','put','extract'].includes(command) ||
       (command==='put' ? (!destination || !extra || !destination.startsWith('/')) :
        command === 'extract' ? (!destination || extra) : (destination !== undefined))) {
-    throw Error('usage: image.mjs create ROOT [--apps DIR] | install ROOT [--apps DIR] | put ROOT /guest/path HOSTFILE | extract RIPPLE-DISK ROOT');
+    throw Error('usage: image.mjs create ROOT [--apps DIR] [--boot-profile fuse-x] | install ROOT [--apps DIR] [--boot-profile fuse-x] | put ROOT /guest/path HOSTFILE | extract RIPPLE-DISK ROOT');
   }
   if(command==='put') applications.splice(0,applications.length,{name:destination,mode:0o100755,data:fs.readFileSync(extra)});
   if (command === 'install' || command==='put') {

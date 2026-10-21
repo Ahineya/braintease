@@ -87,7 +87,7 @@ def run(target):
             assert 'main' in guest.shell('mux saved')
             assert 'ACTIVE:1' in guest.shell('mux restore main; echo ACTIVE:$?')
             assert 'DETACHED_SAVE:0' in guest.shell('mux save main; echo DETACHED_SAVE:$?')
-            guest.shell('cp /bad-snapshot /.mux/bad; chmod 600 /.mux/bad')
+            guest.shell('cp /bad-snapshot $HOME/.mux/bad; chmod 600 $HOME/.mux/bad')
             result = guest.shell('mux restore bad; echo INVALID:$?')
             assert 'INVALID:1' in result and 'invalid' in result, result
             assert 'EFFECT:1' in guest.shell('cat /work/UNEXPECTED; echo EFFECT:$?')

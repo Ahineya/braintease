@@ -129,3 +129,9 @@ int rfl_curses_cells(void *window, int row, int col, const unsigned long *cells,
     return ripple_curses_cells(target(window), row, col, cells, count);
 }
 int rfl_curses_shape(int shape) { return ripple_curses_cursor_shape(shape); }
+void rfl_curses_mouse(int mode) { ripple_curses_mouse_mode(mode>=0&&mode<=3?mode:0); }
+int rfl_curses_getmouse(uint32_t *data) {
+    MEVENT event;
+    if(getmouse(&event)==ERR)return -1;
+    data[0]=event.x;data[1]=event.y;data[2]=event.bstate;return 0;
+}

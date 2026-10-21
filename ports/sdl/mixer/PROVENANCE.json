@@ -1,0 +1,10 @@
+{
+  "name": "SDL_mixer-compatible PCM effects profile",
+  "implementation": "Original repository implementation; not an upstream SDL_mixer release",
+  "source_api": "Bounded subset of SDL_mixer 1.2 effect-channel APIs",
+  "api_reference": "https://www.libsdl.org/projects/old/SDL_mixer/docs/SDL_mixer.html",
+  "license": "LGPL-2.1-or-later",
+  "files": ["SDL_mixer.h", "mixer.c"],
+  "dependency": "Pinned SDL 1.2.15 PCM WAV and AudioCVT implementation; see ../PROVENANCE.json",
+  "limits": "Signed 16-bit channel/count ABI (32767); checked dynamic allocation; uncompressed PCM WAV and raw PCM; no music/compressed codecs; cooperative SDL callbacks"
+}

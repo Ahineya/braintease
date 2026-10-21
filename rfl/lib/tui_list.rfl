@@ -1,4 +1,5 @@
-import { UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN } from "std/curses";
+import { Rect } from "lib/tui";
+import { UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN, MouseEvent } from "std/curses";
 
 /// Selection and viewport, independent of item type, drawing and filesystem I/O.
 /// Empty lists use selected=top=0; callers must check their item count before indexing.
@@ -13,6 +14,27 @@ export fn selection() -> Selection {
 }
 
 impl Selection {
+    /// Selects a clicked row or moves three entries with the wheel inside `area`.
+    /// Returns whether this event belongs to the list; empty rows never select.
+    export fn mouse(&mut self, area: Rect, event: MouseEvent, count: usize) -> bool {
+        if (!area.contains(event.row, event.column)) {
+            return false;
+        }
+        let rows = area.rows as usize;
+        if (event.wheel() != 0) {
+            self.step(event.wheel(), count, rows);
+            return true;
+        }
+        if (event.pressed()) {
+            let index = self.top + (event.row - area.row) as usize;
+            if (index < count) {
+                self.select(index, count, rows);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Clamps stale indices after list replacement or resize and reveals selection.
     export fn reveal(&mut self, count: usize, rows: usize) {
         if (count == 0) {

@@ -304,10 +304,17 @@ cmdtype movemap[128]={
     /*^K*/ GO_UP,		/* also uparrow    */
     /*^L*/ GO_RIGHT,		/* also rightarrow */
     /*^M*/ CR_FWD,
+#if RIPPLE
+    /*^N*/ GO_UP,			/* KEY_UP */
+    /*^O*/ GO_DOWN,		/* KEY_DOWN */
+    /*^P*/ GO_LEFT,		/* KEY_LEFT */
+    /*^Q*/ GO_RIGHT,		/* KEY_RIGHT */
+#else
     /*^N*/ BAD_COMMAND,
     /*^O*/ BAD_COMMAND,
     /*^P*/ BAD_COMMAND,
     /*^Q*/ BAD_COMMAND,
+#endif
     /*^R*/ BAD_COMMAND,
     /*^S*/ BAD_COMMAND,
     /*^T*/ BAD_COMMAND,

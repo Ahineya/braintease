@@ -1,0 +1,138 @@
+HP RESCUE FOLLOW-UP — PHYSICAL PROVISIONING COMPLETE, 2026-10-19
+==============================================================
+The user recovered the black graphical session with a text VT/nmtui and joined
+Wi-Fi at 192.168.100.107. Rescue SSH works on port 22 with the maintenance key.
+Port 2222 was a child of autorun and died when that job ended: the earlier VM
+check verified only early login. The refreshed data-volume autorun now uses the
+real sshd.service, prohibits password/keyboard-interactive authentication and
+starts a text console instead of X. Its job completed successfully and fresh
+key-authenticated SSH connections survived completion on the physical HP.
+No new rescue cold boot is claimed; the corrected script/service lifecycle was
+tested in the already running rescue system. The graphics failure's cause is
+still unconfirmed. ACPI warnings preceded a successful ready banner.
+
+The approved offline 30GiB allocation, C16 seed/read-back and production USB
+refresh are complete. See hp-nvme-persistence.txt for exact identities, hashes,
+checks and the pending two-boot physical native acceptance. Both USB volumes
+passed offline FAT checks and are now unmounted; NVMe is guarded read-only in
+rescue. Main USB now boots the dedicated NVMe root, BOOTOLD the accepted
+read-only probe, BOOTRAM the earlier fast RAM root. Rescue EFI is unchanged.
+
+Current SSH command (private key remains on the Mac):
+  ssh -i build/x86_64-rescue/private/id_ed25519 -p 22 \
+    -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile=build/x86_64-rescue/private/hp-rescue-known-hosts \
+    root@192.168.100.107
+
+HISTORICAL RESCUE PREPARATION — the port-2222/GUI descriptions below are old
+==========================================================================
+HP OFFLINE RESIZE / RESCUE USB — 2026-10-19
+==========================================
+Status: PREPARED, VM/SSH VERIFIED, READ BACK AND SAFELY EJECTED.
+Physical partition allocation is NOT yet performed: HP rescue boot is needed.
+The user authorized a roughly 30GB reservation. Use 30GiB; this approval is
+recorded in the coordination note and hp-nvme-persistence.txt. No further
+allocation approval is needed. The remaining prerequisite is an offline boot:
+the currently mounted Ubuntu root cannot be shrunk from its normal SSH session.
+
+Media layout
+-------------
+Keep the original two USB partitions and both accepted Riplix BOOTX64.EFI /
+BOOTOLD.EFI pairs. Add a separate EFI/RESCUE/BOOTX64.EFI on both volumes.
+It searches the FAT data volume labelled RIPLIXBOOT and starts SystemRescue
+from /sysresccd. Configuration lives in /sysrescue.d. This adds no internal
+EFI entry, changes no Ubuntu bootloader and does not replace the working
+Riplix removable-media entry.
+
+Source: official SystemRescue 13.02 amd64, released 2026-08-01.
+ISO bytes: 1381629952
+ISO SHA256: ad4d670b72859d887c7960142a9a9d36a3e50446694a035e254442f65d6e7572
+Downloaded ISO was verified against the official published SHA256.
+Boot shim: standalone GRUB built with the HP's installed grub-mkstandalone
+in a private /tmp directory; installed Ubuntu boot configuration was untouched.
+
+The live system copies itself into RAM, verifies its squashfs checksum, starts
+the graphical desktop and a dedicated SSH listener on port 2222. Only a fresh
+maintenance public key is on the USB; its private key remains on the Mac under
+build/x86_64-rescue/private/id_ed25519 (directory 0700, key 0600).
+Password and keyboard-interactive SSH authentication are disabled. Wi-Fi
+credentials are not copied from Ubuntu: connect using the desktop network icon.
+The autorun script marks NVMe namespaces read-only and disables live-session
+desktop automounting. It NEVER runs resize2fs, partitioning or installation.
+Those operations will be performed deliberately over SSH after checking the
+offline state and fresh disk identities. The guard can then be explicitly
+cleared on the verified target for the already authorized operation.
+
+Validation and evidence
+------------------------
+build/x86_64-rescue/vm-check/result.json: UEFI + xHCI/USB boot, squashfs checksum,
+RAM overlay root, public-key SSH login on 2222 and required disk/network tools.
+build/x86_64-rescue/usb-written.json: original main/fallback Riplix hashes still
+match on BOTH USB partitions, rescue loader matches on BOTH, all rescue-system
+files match their source hashes after remount, offline FAT checks pass on BOTH,
+read-back mounts were read-only, and the drive was safely ejected.
+macOS metadata sidecars were excluded from the YAML folder. Spotlight held the
+data volume open during initial verification; indexing was disabled ONLY on
+this USB and a .metadata_never_index marker added. Clean unmount then succeeded;
+final filesystem checks were performed unmounted, not on the busy volume.
+
+build/hardware/hp-nvme-persistence-2026-10-19/resize-rehearsal-result.json:
+A disposable loopback ext4 filesystem was shrunk, its GPT end changed and a
+dedicated partition created. Exact data, filesystem UUID and partition GUID
+survived; every original GPT entry byte except p2's end LBA was verified equal.
+Both GPT copies and offline ext4 checks pass. The real NVMe was not opened for
+these writes. The initial parted --script attempt refused its confirmation
+prompt; that failed rehearsal is retained. The successful procedure uses an
+explicit sgdisk update preserving the original entry identity/type/name/flags.
+
+Booting the prepared rescue entry
+----------------------------------
+1. Insert the safely ejected USB into the HP. Reboot, Esc, F9.
+2. Choose Boot From EFI File, then either USB filesystem, then
+   EFI -> RESCUE -> BOOTX64.EFI.
+   The normal USB entries still boot the accepted Riplix RAM-root probe.
+3. Choose the maintenance/SystemRescue entry, or wait for its default timeout.
+   Allow the checksum and copy-to-RAM steps to finish. The HP has ample RAM.
+4. Connect to Wi-Fi using the desktop network icon. Do NOT open/mount the
+   internal Ubuntu drive in the file manager. No manual partition commands
+   are needed. If the IP differs from 192.168.100.107, report the new address
+   (hostname -I in the live terminal will show it).
+5. Tell this chat when the rescue desktop/network is ready. The existing
+   approval covers the 30GiB allocation; this is a physical boot handoff.
+
+Agent SSH command after that boot (separate known-hosts file avoids changing
+the saved Ubuntu host identity):
+  ssh -i build/x86_64-rescue/private/id_ed25519 -p 2222 \
+    -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile=build/x86_64-rescue/private/hp-rescue-known-hosts \
+    root@192.168.100.107
+
+Offline operation sequence
+--------------------------
+Recheck model, serial, disk/partition GUIDs, original LBAs and filesystem UUID
+against build/hardware/hp-nvme-persistence-2026-10-19/approved-plan.json.
+Require p1 and p2 unmounted and no swap/LVM/other holder on the target. Save
+fresh GPT and boot metadata. Clear only this verified namespace's read-only
+guard. Check ext4 offline, shrink its filesystem FIRST to fit the planned p2
+end, verify its resulting geometry, then change p2's end and create dedicated
+p3. Preserve p1, p2's start/GUID and Ubuntu's filesystem UUID. Verify both GPT
+copies and ext4 again. Seed ONLY p3 with the checked small C16 filesystem.
+
+Compile Riplix against the actual fresh p3 GUID/geometry and disk GUID. Upload
+the tested production EFI over SSH onto the USB while still in the live OS,
+preserving the read-only RAM-root probe as fallback. The USB can stay in the HP
+for this work. First persistent boot still loads the kernel from USB; its root
+is the new dedicated NVMe partition. Require exact files/copied executable to
+survive two boots, then confirm the original Ubuntu boot/filesystem.
+
+After persistence: expand the Unix tools and filesystem size as a separately
+tested step. Guest toolchain integration waits for its current owner's linker/
+self-hosting verification. Networking/remote shell follows the userspace work.
+
+References
+-----------
+https://www.system-rescue.org/Download/
+https://www.system-rescue.org/manual/Booting_SystemRescue/
+https://www.system-rescue.org/manual/Configuring_SystemRescue/
+https://www.system-rescue.org/manual/Run_your_own_scripts_with_autorun/
+https://www.system-rescue.org/manual/Network_configuration_and_programs/

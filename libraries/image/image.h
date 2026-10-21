@@ -9,6 +9,7 @@ typedef struct RiImage {
     unsigned width, height;
     RiByte *rgba; /* Straight (not premultiplied) RGBA, four octet cells/pixel. */
     unsigned opaque;
+    unsigned source_width, source_height;
 } RiImage;
 typedef struct RiLimits {
     unsigned width, height;
@@ -22,9 +23,14 @@ typedef struct RiLimits {
 #define RI_UNSUPPORTED (-5)
 /* Default: dimensions <=512, <=65536 pixels, <=256 Ki octets input,
  * <=768 Ki temporary cells. Every failure leaves *out NULL. No I/O/globals.
- * GIF returns its first displayed frame; JPEG is baseline only.
+ * GIF returns its first displayed frame; JPEG supports baseline and progressive.
  * Returned RGBA and RiImage are owned together; release with ri_image_free. */
 int ri_image_decode(const RiByte *, size_t, const RiLimits *, RiImage **out);
+/* JPEG may reduce while decoding to fit output dimensions/pixels. Other codecs
+ * retain strict output limits. Source and output budgets are independent;
+ * source_width/source_height retain intrinsic layout dimensions. */
+int ri_image_decode_fit(const RiByte *, size_t, const RiLimits *source,
+    const RiLimits *output, RiImage **out);
 void ri_image_free(RiImage *);
 const char *ri_image_error(int);
 /* Owned zeroed canvas, for image consumers such as browser bitmap bridges. */

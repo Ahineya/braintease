@@ -35,6 +35,38 @@ export fn painting() -> Paint {
     Paint { valid: false, width: 0, rows: 0, top: 0, left: 0, generation: 0, lines: 0, cursor: 0, row: 0, from: 0, to: 0, mode: 0, modified: false, status: "", operator: 0, pending: 0, count: 0, wrap: true }
 }
 
+export fn tab_width(count: usize) -> i16 {
+    if (count <= 3) {
+        24
+    } else {
+        16
+    }
+}
+
+export fn first_tab(width: i16, count: usize, selected: usize) -> usize {
+    let capacity = (width / tab_width(count)) as usize;
+    if (capacity > 0 && selected >= capacity) {
+        selected - capacity + 1
+    } else {
+        0 as usize
+    }
+}
+
+/// Resolves a cell through the same wrapped/tab/Unicode layout used by paint.
+export fn position(screen: &Screen, b: &Buffer, v: View, settings: &Settings, row: i16, column: i16) -> usize {
+    let line = v.top + (row - 2) as usize;
+    let x = if (column > gutter(settings)) {
+        (column - gutter(settings)) as usize
+    } else {
+        0 as usize
+    };
+    if (settings.wrap) {
+        b.wrap_column(line, x, v.columns, settings.tabstop).unwrap_or(b.len())
+    } else {
+        b.column(line, v.left + x, settings.tabstop)
+    }
+}
+
 export fn height(screen: &Screen) -> usize {
     if (screen.rows() > 6) {
         (screen.rows() - 5) as usize
@@ -130,17 +162,8 @@ export fn render(screen: &Screen, theme: &Theme, documents: &Vec<Document>, sele
     if (full || (modified && !old.modified || !modified && old.modified)) {
         screen.fill(1, 0, width, ' ', colors[0]);
         let mut x: i16 = 0;
-        let tab_width: i16 = if (documents.len() <= 3) {
-            24
-        } else {
-            16
-        };
-        let capacity = (width / tab_width) as usize;
-        let first = if (selected >= capacity) {
-            selected - capacity + 1
-        } else {
-            0 as usize
-        };
+        let tab_width = tab_width(documents.len());
+        let first = first_tab(width, documents.len(), selected);
         for (i in first..documents.len()) {
             if (x + 4 >= width) {
                 break;

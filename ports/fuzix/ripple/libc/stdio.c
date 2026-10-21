@@ -5,7 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-static FILE streams[16];
+/* Keep FILE's public layout stable for already compiled clients. Only the
+ * three standard streams are static; extra streams own a private list node. */
+static FILE streams[3];
+struct extra_stream { FILE file; struct extra_stream *next; };
+static struct extra_stream *extra_streams;
 FILE *stdin = streams, *stdout = streams + 1, *stderr = streams + 2;
 #define READING 1
 #define WRITING 2
@@ -24,11 +28,15 @@ int fflush(FILE *f) {
     size_t off = 0;
     ssize_t n;
     int i, r = 0;
+    struct extra_stream *extra;
     if (!f) {
-        for (i = 0; i < 16; i++)
+        for (i = 0; i < 3; i++)
             if (streams[i].used && (streams[i].flags & ACTIVE_WRITE))
                 if (fflush(streams + i) < 0)
                     r = EOF;
+        for (extra = extra_streams; extra; extra = extra->next)
+            if (extra->file.used && (extra->file.flags & ACTIVE_WRITE))
+                if (fflush(&extra->file) < 0) r = EOF;
         return r;
     }
     if (!f->used) {
@@ -60,7 +68,7 @@ int fflush(FILE *f) {
     f->flags &= ~ACTIVE_WRITE;
     return 0;
 }
-int fclose(FILE *f) {
+static int stream_close(FILE *f) {
     int r;
     if (!f->used) {
         errno = EBADF;
@@ -71,6 +79,23 @@ int fclose(FILE *f) {
     if (close(f->fd) < 0)
         r = EOF;
     f->used = 0;
+    return r;
+}
+static void stream_release(FILE *f) {
+    struct extra_stream **link = &extra_streams, *extra;
+    while ((extra = *link) != NULL) {
+        if (&extra->file == f) {
+            *link = extra->next;
+            free(extra);
+            return;
+        }
+        link = &extra->next;
+    }
+}
+int fclose(FILE *f) {
+    int r = stream_close(f), saved = errno;
+    stream_release(f);
+    errno = saved;
     return r;
 }
 static int mode_flags(const char *m) {
@@ -102,13 +127,18 @@ static FILE *stream_init(FILE *f, int fd, int mode) {
 }
 FILE *fdopen(int fd, const char *m) {
     int i, mode = mode_flags(m);
+    struct extra_stream *extra;
     if (mode < 0)
         return NULL;
-    for (i = 0; i < 16; i++)
+    if (fd < 0) { errno = EBADF; return NULL; }
+    for (i = 0; i < 3; i++)
         if (!streams[i].used)
             return stream_init(streams + i, fd, mode);
-    errno = EMFILE;
-    return NULL;
+    extra = malloc(sizeof(*extra));
+    if (!extra) { errno = ENOMEM; return NULL; }
+    extra->next = extra_streams;
+    extra_streams = extra;
+    return stream_init(&extra->file, fd, mode);
 }
 FILE *fopen(const char *p, const char *m) {
     int mode = mode_flags(m), fd;
@@ -119,18 +149,26 @@ FILE *fopen(const char *p, const char *m) {
     if (fd < 0)
         return NULL;
     f = fdopen(fd, m);
-    if (!f)
+    if (!f) {
+        int saved = errno;
         close(fd);
+        errno = saved;
+    }
     return f;
 }
 FILE *freopen(const char *p, const char *m, FILE *f) {
     int mode = mode_flags(m), fd;
     if (mode < 0)
         return NULL;
-    fclose(f);
+    /* Retain the node and FILE address while replacing its descriptor. */
+    stream_close(f);
     fd = open(p, mode, 0666);
-    if (fd < 0)
+    if (fd < 0) {
+        int saved = errno;
+        stream_release(f);
+        errno = saved;
         return NULL;
+    }
     return stream_init(f, fd, mode);
 }
 FILE *tmpfile(void) {

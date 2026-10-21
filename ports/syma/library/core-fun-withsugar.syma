@@ -1,0 +1,48 @@
+{Module
+  Core/Fun/WithSugar
+  {Export Def Call}
+  {RuleRules
+    ; Def ->  R("fun/name/#", {Call name <pat...>}, body)
+
+    R(
+      "Def->R:fn",
+      {Fn {SYMAFNNAME_ pats...} {SYMAFNBODY_}},
+      {Splat
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...)} {Call SYMAFNNAME_ pats...} SYMAFNBODY_}
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...) "/Sugar"} {SYMAFNNAME_ pats...} {Call SYMAFNNAME_ pats...}}
+      },
+      100
+    )
+
+    R(
+      "Def->R:fn-guarded",
+      {Fn {SYMAFNNAME_ pats...} {SYMAFNBODY_} :guard SYMARULEGUARD_},
+      {Splat
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...)} {Call SYMAFNNAME_ pats...} SYMAFNBODY_  SYMARULEGUARD_}
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...) "/Sugar"} {SYMAFNNAME_ pats...} {Call SYMAFNNAME_ pats...} SYMARULEGUARD_}
+      },
+      100
+    )
+
+    R(
+      "Def->R'",
+      {Def SYMAFNNAME_ {Args pats...} SYMAFNBODY_},
+      {Splat
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...)} {Call SYMAFNNAME_ pats...} SYMAFNBODY_}
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...) "/Sugar"} {SYMAFNNAME_ pats...} {Call SYMAFNNAME_ pats...}}
+      },
+      100
+    )
+    R(
+      "Def->R'-guarded",
+      {Def SYMAFNNAME_ {Args pats...} SYMAFNBODY_ :guard SYMARULEGUARD_},
+      {Splat
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...)} {Call SYMAFNNAME_ pats...} SYMAFNBODY_  SYMARULEGUARD_}
+        {R {Concat "fun/" {ToString SYMAFNNAME_} "/" Arity(pats...) "/Sugar"} {SYMAFNNAME_ pats...} {Call SYMAFNNAME_ pats...} SYMARULEGUARD_}
+      },
+      100
+    )
+    R("Arity/Empty",  Arity(), 0)
+    R("Arity/Step",   Arity(_, xs...), Add(1, Arity(xs...)))
+  }
+}

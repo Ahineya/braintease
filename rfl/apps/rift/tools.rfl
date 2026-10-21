@@ -52,13 +52,18 @@ fn tool(language: Language) -> String {
     if (language.variable == "") {
         ""
     } else {
-        env(language.variable, language.tool)
+        let configured = env(language.variable, language.tool);
+        if (language.name == "syma" && env("SYMA", "") == "" && resolve(configured) == "" && resolve("/mnt/host/syma.fxe") != "") {
+            "/mnt/host/syma.fxe"
+        } else {
+            configured
+        }
     }
 }
 
 export fn available() -> Vec<String> {
     let mut out: Vec<String> = [];
-    for (file in ["app.bas", "app.bf", "app.tcl", "app.awk", "app.sh", "Makefile", "app.m4", "app.dc", "app.c", "app.rfl", "app.py", "app.pas", "app.rs", "app.js", "app.lua"]) {
+    for (file in ["app.syma", "app.bas", "app.bf", "app.tcl", "app.awk", "app.sh", "Makefile", "app.m4", "app.dc", "app.c", "app.rfl", "app.py", "app.pas", "app.rs", "app.js", "app.lua"]) {
         let language = detect(file);
         let command = tool(language);
         let path = resolve(command);

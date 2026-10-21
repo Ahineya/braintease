@@ -48,7 +48,7 @@ class Services(HttpServices):
         elif path=='/huge':length=19243485;mime=b'image/gif'
         elif path=='/too-wide.png':
             mime=b'image/png'
-            body=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',1248,768,8,6,0,0,0))+b'x'*512
+            body=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',4097,768,8,6,0,0,0))+b'x'*512
         elif path=='/unsupported.png':mime=b'image/png';body=b'RIFF\xff\xff\0\0WEBP'+b'x'*512
         elif path=='/delayed.png':
             mime=b'image/png';length=len(PNG)
@@ -70,10 +70,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target',choices=['native','ripple'],default='native')
     parser.add_argument('--build',type=Path,default=ROOT/'build/netsurf')
+    parser.add_argument('--native-build',type=Path,default=ROOT/'fuse-x/build')
     args=parser.parse_args();build=args.build.resolve();native=args.target=='native';suffix='.fxe' if native else '.rxe'
     output=build/('streaming-'+args.target+'.log')
     with tempfile.TemporaryDirectory(prefix='netsurf-stream-',dir='/tmp') as folder:
-        work=Path(folder);peer=Services(work/'nic');guest_build=ROOT/('fuse-x/build' if native else 'build/fuzix')
+        work=Path(folder);peer=Services(work/'nic');guest_build=args.native_build.resolve() if native else ROOT/'build/fuzix'
         apps={n:build/(n+suffix) for n in ['htget','streamcheck','scrollcheck']}
         apps.update({n:guest_build/('apps/'+n+suffix if native else n+suffix) for n in ['nano-X','kill']})
         files=[dict(name='/dev/gfx',mode=0o20600,device=0x400),
@@ -82,7 +83,7 @@ def main():
         os.environ['NANOX_KEEP_TTY']='1'
         # Guest's fixture uses eight-sector FAT16 clusters. Keep the outer
         # container below that cluster ceiling while fitting both large probes.
-        try:g=Guest(work,args.target,apps,files,peer,blocks=114688,disk_sectors=500000)
+        try:g=Guest(work,args.target,apps,files,peer,blocks=114688,disk_sectors=500000,build_override=guest_build)
         finally:os.environ.clear();os.environ.update(old)
         try:
             text=g.shell('streamcheck 120; echo STREAM_STATUS:$?',180)

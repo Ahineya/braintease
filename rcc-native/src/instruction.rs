@@ -31,13 +31,13 @@ impl Cg<'_, '_> {
                 let value = self.mask(value, width(result_type));
                 self.define(*result, value)?;
             }
-            I::Load { result, ptr, result_type, .. } => {
+            I::Load { result, ptr, result_type, volatile } => {
                 if matches!(result_type, IrType::Array { .. } | IrType::Struct { .. }) {
                     return Err("native aggregate load requires scalarization".into());
                 }
                 let ptr = self.value(ptr)?;
-                let words = self.k(Target::Native.layout().size_in_cells(result_type)? as i64);
-                let value = self.runtime("rcc_native_load", &[ptr, words])?;
+                let words = Target::Native.layout().size_in_cells(result_type)?;
+                let value = self.scalar_load(ptr, words, *volatile)?;
                 let value = self.mask(value, width(result_type));
                 self.define(*result, value)?;
             }
@@ -71,12 +71,12 @@ impl Cg<'_, '_> {
                     Target::Native.layout().size_in_cells(source_element_type)?
                 };
                 let offset = self.b.ins().imul_imm_s(index, i64::try_from(size).map_err(|_| "GEP size overflow")?);
-                let value = self.runtime("rcc_native_gep", &[pointer, offset])?;
+                let value = self.logical_gep(pointer, offset)?;
                 self.define(*result, value)?;
             }
             I::Alloca { result, .. } => {
                 let offset = self.k(self.allocas[result] as i64);
-                let value = self.runtime("rcc_native_gep", &[self.frame, offset])?;
+                let value = self.logical_gep(self.frame, offset)?;
                 self.define(*result, value)?;
             }
             I::Call { result, function, args, result_type, stack_args_from } => {
@@ -84,13 +84,13 @@ impl Cg<'_, '_> {
                 for arg in args { values.push(self.value(arg)?); }
                 if let Some(fixed) = stack_args_from {
                     let offset = self.k(self.var_area as i64);
-                    let base = self.runtime("rcc_native_gep", &[self.frame,offset])?;
+                    let base = self.logical_gep(self.frame, offset)?;
                     let mut cursor = base;
                     for (i,arg) in args.iter().enumerate().skip(*fixed) {
                         let words = super::emit::argument_words(arg,&self.types);
                         let count = self.k(words as i64);
                         self.runtime("rcc_native_store", &[cursor,values[i+1],count])?;
-                        cursor = self.runtime("rcc_native_gep", &[cursor,count])?;
+                        cursor = self.logical_gep(cursor, count)?;
                     }
                     values.truncate(fixed+1);
                     values.push(base);
@@ -161,7 +161,7 @@ impl Cg<'_, '_> {
                 let pointer = self.runtime("rcc_native_load", &[ap,pointer_words])?;
                 let words = self.k(Target::Native.layout().size_in_cells(result_type)? as i64);
                 let value = self.runtime("rcc_native_load", &[pointer,words])?;
-                let next = self.runtime("rcc_native_gep", &[pointer,words])?;
+                let next = self.logical_gep(pointer, words)?;
                 self.runtime("rcc_native_store", &[ap,next,pointer_words])?;
                 self.define(result.ok_or("va_arg requires a result")?,value)?;
             }

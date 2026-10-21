@@ -1,0 +1,124 @@
+{Module
+  Demo/FileJSONRoundtrip
+
+  {Import Core/Main as C open}
+  {Import Core/Plumb as CP open macro}
+  {Import Core/Effect as CE open}
+  {Import Core/KV as KV}
+  {Import Core/JSON as CJ}
+
+  {Program
+    App(
+      State(
+        Vars(
+          {KV Scratch  Empty},
+          {KV FileName Empty},
+          {KV Content  Empty}
+        )
+      )
+    )
+    {Flow
+      Idle
+      {SetFileName}
+      {Print "Filename: "}
+      {PrintState FileName}
+      {ReadFile}
+      {PrintAndPrepareContent}
+      {ParseContent}
+      {StringifyContent}
+      {PrintState Scratch}
+    }
+    {EffQueue}
+    {Effects
+      {Pending}
+      {Inbox}
+    }
+    {Args}
+  }
+  {Rules
+    R(
+      "Flow/PrintSomething",
+      {Plumb {App{State vars_}} {Flow Idle {PrintState n_} flow...}},
+      {PlumbEnd {App{State vars_}} {Flow Idle {Print Concat(KV/Get(Vars, n_, vars_), "\n")} flow...}}
+    )
+    R(
+      "Flow/Print",
+      {Plumb {Flow Idle {Print msg_} flow...} {EffQueue}},
+      {PlumbEnd {Flow Idle flow...} {EffQueue {Print msg_}}}
+    )
+    R(
+      "Flow/SetFileName",
+      {Plumb {App{State vars_}} {Flow Idle {SetFileName} flow...} {EffQueue} rest... {Args before... {KV "input" fn_} after...}},
+      {PlumbEnd {App{State KV/Set(Vars, FileName, fn_, vars_)}} {Flow Idle flow...} {EffQueue} rest... {Args before... {KV "input" fn_} after...}}
+    )
+    R(
+      "Flow/ReadFile",
+      {Plumb {App{State vars_}} {Flow Idle {ReadFile} flow...} {EffQueue}},
+      {PlumbEnd {App{State vars_}} {Flow Busy flow...} {EffQueue {FileRead KV/Get(Vars, FileName, vars_)}}}
+    )
+    R("Flow/PrintAndPrepareContent",
+      {Plumb {App{State vars_}} {Flow Idle {PrintAndPrepareContent} flow...}},
+      {PlumbEnd {App{State KV/Copy(Vars, Content, Scratch, vars_)}} {Flow Idle flow...}}
+    )
+    R("Extract", {Extract {Content s_}}, s_)
+
+    R(
+      "Flow/ParseContent",
+      {Plumb {App {State {Vars b... {KV Scratch {Content s_}} a...}}} {Flow Idle {ParseContent} flow...} {EffQueue}},
+      {PlumbEnd {App {State {Vars b... {KV Scratch {CJ/FromJSON s_}} a...}}} {Flow Busy flow...} {EffQueue}}
+    )
+
+    R(
+      "Flow/WaitForParsedContent",
+      {Plumb {App {State {Vars b... {KV Scratch Ok(json_)} a...}}} {Flow Busy flow...} {EffQueue}},
+      {PlumbEnd {App {State {Vars b... {KV Scratch json_} a...}}} {Flow Idle flow...} {EffQueue}}
+    )
+
+    R(
+      "Flow/StringifyContent",
+      {Plumb {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Idle {StringifyContent} flow...} {EffQueue}},
+      {PlumbEnd {App {State {Vars b... {KV Scratch {CJ/ToJSON v_}} a...}}} {Flow Busy flow...} {EffQueue}}
+    )
+
+    R(
+      "Flow/WaitForStringifyContent",
+      {Plumb {App {State {Vars b... {KV Scratch Ok(v_)} a...}}} {Flow Busy flow...} {EffQueue}},
+      {PlumbEnd {App {State {Vars b... {KV Scratch v_} a...}}} {Flow Idle flow...} {EffQueue}},
+        :guard, IsStr({Inert v_})
+    )
+
+    R(
+      "ProcessFileRead/Success",
+      {Plumb
+        {App{State vars_ st...}}
+        {Flow idle_ flow...}
+        omit...
+        {Effects pending_ {Inbox {FileReadComplete id_ {Content input_}} rest...}}
+      },
+      {PlumbEnd
+        {App{State KV/Put(Vars, Content, {Content input_}, vars_) st...}}
+        {Flow Idle flow...}
+        omit...
+        {Effects pending_ {Inbox rest...}}
+      }
+    )
+    R(
+      "ProcessFileRead/Error",
+      {Plumb
+        {Flow idle_ flow...}
+        omit...
+        {Effects pending_ {Inbox {FileReadComplete id_ {Error e_}} rest...}}
+      },
+      {PlumbEnd
+        {Flow Idle {Error e_} flow...}
+        omit...
+        {Effects pending_ {Inbox rest...}}
+      }
+    )
+
+    R("Flow/Error", 
+      {Plumb {Flow Idle {Error msg_} flow...} {EffQueue}},
+      {PlumbEnd {Flow Idle flow...} {EffQueue {Print Concat(msg_, "\n")} {Emit {Exit 1}}}}
+    )
+  }
+}

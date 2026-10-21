@@ -79,7 +79,11 @@ def main():
                 files += [build / (n+'.rxe') for n in json.loads((build / 'apps.json').read_text())]
                 files += list((build / 'lib').glob('*.rsl.[0-9]'))
             else:
-                files += [build / 'fuse-x', build / 'application-report.json', build / 'apps/telegram.fxe', build / 'apps/music.fxe', build / 'apps/wavplay.fxe', *(build / 'apps').glob('*.fxe')]
+                # Ignore collection binaries left by the former default build;
+                # these optional shared-folder apps are not OS artifacts.
+                optional = {'puzzles', *[g['id'] for g in json.loads((ROOT / 'ports/puzzles/catalog.json').read_text())]}
+                files += [build / 'fuse-x', build / 'application-report.json', build / 'apps/telegram.fxe', build / 'apps/music.fxe', build / 'apps/wavplay.fxe']
+                files += [p for p in (build / 'apps').glob('*.fxe') if p.stem not in optional]
                 files += list((build / 'lib').glob('*.fxl.[0-9]'))
                 if os.uname().sysname == 'Darwin':files += [build / 'Fuse-X.app/Contents/MacOS/fuse-x', build / 'Fuse-X.app/Contents/Info.plist']
             return files
@@ -98,8 +102,14 @@ def main():
             command += ['images' if args.os == 'fuzix' else 'all']
             run(command)
             print('Build: Verifying built outputs and saving the build cache', flush=True)
+        os_settings = dict(settings)
+        if args.os == 'fuse-x':
+            # These change native kernel/SDK/package code, not the host Rust
+            # tools. The outer cache must reach Make's mode/profile stamps.
+            os_settings['RCC_NATIVE_MEMORY'] = os.environ.get('RCC_NATIVE_MEMORY', 'checked')
+            os_settings['FUSE_X_HEAP_PROFILE'] = os.environ.get('FUSE_X_HEAP_PROFILE', 'hosted')
         changed = cached_step(build / '.incremental-os.json', dependencies,
-                              [args.os, str(build), settings], operating_system, artifacts,
+                              [args.os, str(build), os_settings], operating_system, artifacts,
                               force=args.rebuild)
         print(system+': '+('updated' if changed else 'current (no compilation needed)'), flush=True)
 

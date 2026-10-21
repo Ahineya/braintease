@@ -1,0 +1,5 @@
+{
+  "expected": "YYYYYYYY\n",
+  "use_runtime": true,
+  "description": "C16 native runtime behavior used by freestanding x86_64 boot"
+}

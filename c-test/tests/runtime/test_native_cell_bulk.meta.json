@@ -1,0 +1,5 @@
+{
+  "description": "Hosted bulk cell copy/fill preserve complete C16 values across banks",
+  "use_runtime": true,
+  "expected": "YYYYYYYY\n"
+}

@@ -37,12 +37,19 @@ lists/output. Ripple exec argument buffers use private kernel stack storage
 with a shared 4,096-character argument/environment budget instead of temporary
 disk-block buffers; other upstream platforms retain their original limit.
 
-`Library/libs/qsort.c` selects its specialized element paths using C `sizeof`
-instead of physical-octet constants. Utility changes add bounded recursive
+`Library/libs/qsort.c` uses size_t-based constant-space heapsort, supporting
+large arrays/records and reentrant comparators without signed 16-bit indexing. Utility changes add bounded recursive
 `mkdir`/`rm`, standard `cut` option parsing, error statuses, trailing-word counts,
 `head -n`, missing-operand guards, C16 dump/usage calculations, and matching
 format widths. Original copyright and license notices remain with imported
 sources; newly rewritten adaptations are marked as such.
+
+The interactive V7 shell reports foreground argv and launch directories to mux
+through a bounded private OSC, clearing the recipe at each idle prompt. This
+allows default workspace saves without inferring commands from screen text.
+`getcwd` uses a static `opendir_r` stream to honor its allocation-free contract;
+allocating directory streams can corrupt the V7 shell's independently managed
+brk/stak arena. Early path-length failures also close the directory descriptor.
 
 The socket header includes `sys/types.h` through the include search path so
 Ripple's 32-bit size and syscall types apply even when sockets are included
@@ -490,3 +497,37 @@ writes. PTY/TTY hooks use wrap-aware raw queue transfers, preserving canonical
 processing and octet conversion. Original notices remain, and modified kernel
 units carry a dated Ripple adaptation notice. See [KERNEL-IO.md](KERNEL-IO.md)
 for storage bounds, host-folder durability, compatibility and validation.
+
+The 2026-10-19 descriptor expansion gives the maintained RVM/native profiles
+128 handles per process and 1,024 open-file records, with wide table indices
+and word-based close-on-exec helpers. Open-file and select-registration tables
+allocate supervisor memory at boot, preserving the single kernel-global bank.
+The small physical BF profile retains its original layout and limits.
+Port-local libc allocates extra FILE/popen records dynamically without changing
+FILE layout, and keeps the legacy two-word select symbol/syscall alongside
+the expanded entry. The sysconf stream report follows the process file limit.
+The shared qsort now uses size_t-based constant-space heapsort, including large
+arrays/records and reentrant comparators; its original notices are preserved.
+The updated owned upstream patch sections replay against the pinned archive.
+
+
+The Unix scheduling batch imports `Applications/util/tree.c`, `getopt.c`,
+`cal.c` and `Applications/V7/cmd/{cron,at,atrun}.c` from the pinned archive.
+Calendar rendering retains the BSD notices and 1752 reform behavior; its
+private error helper is renamed to avoid the libc errx signature when linked
+statically for x64. Tree is
+adapted to a sorted, allocation-checked physical traversal instead of importing
+upstream nftw's obsolete symlink assumptions. Getopt retains Henry Spencer's
+public-domain notice and adds complete shell quoting and checked arguments.
+
+The V7 schedulers retain their provenance headers, with their unsafe temporary
+file, daemon-account and subprocess code rewritten for this port. Shared
+queue validation, cron field parsing and local calendar conversion live in
+`ripple/schedule.c`. There is no hardcoded daemon UID or setuid installation.
+The foreground cron/crond service is explicitly enabled through svcd; at jobs
+publish and claim via atomic hard links in a private same-filesystem spool.
+The V7 shell's option handling also accepts `--` without changing option flags,
+and `set --` can clear positional arguments for getopt-based scripts. Quoted
+`"$@"` retains empty arguments, and quote-only markers are removed without
+truncating concatenated arguments. Append redirection uses O_APPEND rather
+than a one-time seek so concurrent scheduler jobs can share an output file.

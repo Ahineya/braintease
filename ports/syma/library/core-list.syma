@@ -1,0 +1,63 @@
+{Module
+  Core/List
+  {Export IsEmpty Alt Head Tail Len Append Map Filter Foldl Flatten Take Drop}
+  {Rules
+    {R "List/ToList"    {ToList {_ xs..}} {List xs..}}
+    {R "List/Head"      Head({List x_ rest..}) x_}
+    {R "List/Tail"      Tail({List _ rest..})  {List rest..}}
+    {R "List/Len/Empty" Len({List}) 0}
+    {R "List/Len/Step"  Len({List i_ rest..}) {+ Len({List rest..}) 1}}
+    {R "List/Append" Append({List a..}, {List b..}) {List a.. b..}}
+    {R "List/Map/Empty" Map(f_, {List}) {List}}
+    {R
+      "List/Map/Step"
+      Map(f_, {List x_ xs..})
+      Append({List {f_ x_}}, Map(f_, {List xs..}))
+    }
+    {R "List/Filter/Empty" Filter(p_, {List}) {List}}
+    {R
+      "List/Filter/Keep"
+      Filter(p_, {List x_ xs..})
+      Append({List x_}, Filter(p_, {List xs..}))
+      :guard
+      {p_ x_}
+    }
+    {R "List/Filter/Skip" Filter(p_, {List _ xs..}) Filter(p_, {List xs..})}
+    {R "List/Foldl/Empty" Foldl(f_, acc_, {List}) acc_}
+    {R
+      "List/Foldl/Step"
+      Foldl(f_, acc_, {List x_ xs..})
+      Foldl(f_, {f_ acc_ x_}, {List xs..})
+    }
+    ;; 1) Bubble any nested {List …} appearing anywhere in the args
+    {R
+      "List/Flatten/Bubble"
+      Flatten({List xs.. {List ys..} zs..})
+      Flatten({List xs.. ys.. zs..})
+    }
+    ;; 2) Drop empty nested lists
+    {R
+      "List/Flatten/DropEmpty"
+      Flatten({List xs.. {List} zs..})
+      Flatten({List xs.. zs..})
+    }
+    ;; 3) When no nested lists remain, we’re done
+    {R "List/Flatten/Done" Flatten({List xs..}) {List xs..}}
+    {R "List/Take/Zero" Take(0, {List xs..}) {List}}
+    {R
+      "List/Take/Step"
+      Take(n_, {List x_ xs..})
+      Append({List x_}, Take({Sub n_ 1}, {List xs..}))
+      :guard
+      {Gt n_ 0}
+    }
+    {R "List/Drop/Zero" Drop(0, {List xs..}) {List xs..}}
+    {R
+      "List/Drop/Step"
+      Drop(n_, {List _ xs..})
+      Drop({Sub n_ 1}, {List xs..})
+      :guard
+      {Gt n_ 0}
+    }
+  }
+}

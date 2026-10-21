@@ -171,3 +171,13 @@ Telegram app appeared live without reopening or refreshing the guest chat.
 This exposed and fixed an overly strict incoming-salt check; the synthetic
 chat server now deliberately uses a different incoming salt to retain that
 regression coverage.
+
+## Terminal mouse controls
+
+Click a chat to open it, or click in the search/message field to focus it and
+position its Unicode caret. Wheel over the chat list navigates selection; wheel
+over history scrolls three lines and can load older messages at the top.
+Footer actions are clickable; sending still requires Enter or the Send action.
+Shift-drag retains terminal text selection. Keyboard navigation and login stay
+available without a mouse. The isolated UI fixture covers mouse search, chat
+opening and message input without contacting Telegram.

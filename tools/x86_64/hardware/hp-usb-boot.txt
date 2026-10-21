@@ -1,0 +1,307 @@
+OFFLINE CLI USB REFRESH — 2026-10-19
+====================================
+105 selected CLI commands plus diagnostics are installed on the grown 128MiB
+NVMe filesystem. Both USB main copies now use the tested offline kernel;
+BOOTOLD preserves the physically accepted minimal persistent-root kernel,
+BOOTRO the read-only NVMe probe, BOOTRAM the fast RAM root, and rescue is intact.
+Full readbacks/FAT checks passed; USB safely ejected on the Mac. Physical
+acceptance of the NEW app payload remains pending. Current hashes, evidence
+and commands: hp-offline-userspace.txt. Dated records below are historical.
+
+PERSISTENT NVMe USB REFRESH — 2026-10-19
+======================================
+PHYSICAL PERSISTENCE PASSED: user reports success; second-boot photograph shows
+the exact saved marker, copied executable running, diskcheck --verify passing
+and orderly filesystem sync/session stop. Ubuntu reboot confirmation remains
+separate. Current acceptance details are in hp-nvme-persistence.txt.
+
+The approved offline 30GiB allocation and 16MiB C16 seed are now complete.
+Both USB BOOTX64.EFI copies now contain the tested production partition-root
+payload, SHA256 94912ca636400bcb12a686010b24197c2e72a8610d7f4b55f20f562b43fbab4c.
+Both BOOTOLD.EFI copies preserve the physically accepted read-only NVMe probe
+(756f33a5...85529); BOOTRAM.EFI preserves the fast RAM-root build (36d7157e...
+502748). Rescue EFI is retained. Fresh read-back and both offline FAT checks
+passed; USB is unmounted in the HP. The HP remains in the rescue session.
+Two production VM boots with exact HP GPT geometry passed persistence; the
+user's physical two-boot test subsequently passed as recorded above. Current
+details/commands are in hp-nvme-persistence.txt; rescue SSH now uses port 22.
+The dated records below describe previous payloads and are historical.
+
+READ-ONLY NVMe/GPT USB PROBE — 2026-10-19
+========================================
+Status: PHYSICAL READ-ONLY NVMe/GPT BOOT CONFIRMED (user photograph).
+User confirms that the previous fast-console USB passed physical shell scripts
+and checks and that scrolling is now super fast. The HP was returned to Ubuntu.
+
+The latest user photograph confirms WD PC SN560 SDDPNQE-1T00-2006 Identify,
+976762 MiB capacity, 512-byte LBAs, BOTH GPT headers/arrays verified, two
+partitions with exactly the reference LBAs below, and /init + the shell prompt.
+The fixed header explicitly retains RAM root / disk writes disabled. This
+accepts physical read-only NVMe operation, not physical filesystem writes.
+HP is back in Ubuntu with SSH available; USB is reconnected to the Mac.
+Next: tested partition bounds and the reviewed allocation plan in
+tools/x86_64/hardware/hp-nvme-persistence.txt. No USB payload change was needed
+to record this acceptance; the known-working probe remains the current image.
+
+The reconnected SanDisk was identified again by USB bus, model, exact size and
+both GPT partition UUIDs. Both EFI/BOOT/BOOTX64.EFI copies now contain a normal
+production build with the compile-time read-only NVMe/GPT probe plus RAM root.
+Both EFI/BOOT/BOOTOLD.EFI copies contain the physically verified fast-console
+build (the fallback slot was refreshed from the previous main payload).
+Both copies were hashed after unmount/remount; read-only FAT checks returned
+zero on both partitions. The USB was safely ejected.
+
+Current BOOTX64.EFI SHA-256:
+756f33a5ada94dfcc8b54da4dfd6bf5f24d2d2b294855ade6458618d82685529
+Current regular USB image SHA-256:
+78a11c7c4c5a9f726bd580d3b79f7eb2e77e1ee476b49202e01c2037c9778f32
+Current BOOTOLD.EFI SHA-256 (physical fast-console acceptance):
+36d7157e93cabd00aaed7cd03cc4da6e2b1ff16c4d8ee29f2d15f8aeda502748
+
+What this build does
+--------------------
+- After firmware handoff, check DMAR/MCFG and PCIe DMA capabilities BEFORE
+  enabling this controller's bus mastering. Require VT-d translation/protected
+  memory off on every DRHD; never change firmware IOMMU mappings. Reject
+  unsupported IOMMU/ATS/PRI/PASID states and reserved-RMRR overlap.
+- Initialize NVMe with coherent, ordered native buffers, masked interrupts and
+  polling. Namespace Write/Flush/Format and other unsafe admin commands are
+  refused at the final command-submission boundary. Storage selfcheck writes
+  are not compiled into this build. It is not a persistent filesystem build.
+- Read Identify, protective MBR, both GPT headers and both entry arrays. Check
+  CRCs, reciprocal headers, matching arrays, unique partition GUIDs and ranges.
+  No partition is selected, mounted, resized or repaired. No ext4 payload is read.
+- Print model/capacity/partition LBAs. Disable the controller and bus mastering
+  after reads; then run Riplix's shell from the embedded RAM root. Session file
+  changes still reset at reboot. The fixed status header retains the result.
+
+What to capture on the HP
+-------------------------
+Boot the UEFI USB and photograph the NVMe/GPT result and partition lines before
+running lots of commands. The header should say NVMe/GPT verified: WD PC SN560...
+If firmware DMA protection remains enabled, the probe will instead say skipped
+and give its reason while retaining the RAM-root shell. Do not change firmware
+DMA settings to get around a skipped result; report the exact message first.
+A controller-initialization failure stops explicitly with framebuffer diagnostics.
+The expected existing GPT entries are:
+  p1: LBA 2048 .. 2203647       (Ubuntu EFI partition)
+  p2: LBA 2203648 .. 2000406527 (Ubuntu Linux filesystem partition)
+The drive has 2,000,409,264 sectors of 512 bytes. These are discovery references,
+NOT target partitions for Riplix writes. Neither is a new Riplix partition.
+Use shutdown for the RAM-root session, then power-cycle/select Ubuntu. If the
+probe cannot boot, select Boot From EFI File -> USB -> EFI/BOOT/BOOTOLD.EFI.
+
+Validation and evidence
+-------------------------
+- Host GPT parser: 512/4096-byte sectors, >32-bit LBAs, both CRC copies,
+  malformed headers/arrays, overlap/duplicate GUIDs, protective MBR and I/O
+  failures; exact read-only HP GPT metadata fixture passes.
+- Production DMA parser/decision logic under UBSan: actual HP DRHD/SATC/SIDP
+  and MCFG, malformed records, translation-on/PMR-on refusal, reserved buffer
+  overlap, ECAM identity/duplicates/cycles and ATS/PRI/PASID refusal.
+- Native QEMU runtime probes: 4 KiB sectors, sparse 4 TiB namespace with LBAs
+  above 32 bits + VT-d, missing controller and damaged primary GPT. Successful
+  and damaged-GPT paths quiesce DMA; all continue to their expected runtime
+  result without disk writes. Direct Write/Flush/Format refusal is exercised.
+- Final BYTE-IDENTICAL production USB image: complete PS/2 shell/scripts,
+  app/process/pipe/timer, failure recovery, reclamation and shutdown acceptance
+  locally under TCG and on the HP under KVM/x2APIC. Both use virtual NVMe/VT-d
+  and a sparse regular image holding ONLY the captured HP GPT metadata.
+  KVM needs kernel-irqchip=split with virtual interrupt remapping; its first
+  startup rejection is preserved. The corrected test passes. This is a VM
+  test, not validation of our driver on the physical HP SSD.
+- HP GPT metadata recaptured through O_RDONLY after the work: matches before.
+  No physical controller reset/raw write, internal repartitioning/install,
+  Ubuntu firmware/Secure Boot/boot-entry change or host reboot was performed.
+
+Evidence roots:
+build/x86_64-nvme-probe/{production-check,hp-kvm,usb-written.json}
+build/x86_64-nvme-probe-{runtime,large,4k,missing,corrupt}/result.json
+build/hardware/hp-nvme-probe-2026-10-19/gpt-unchanged.json
+Existing writable virtual-NVMe persistence/error suite remains under
+build/x86_64-nvme/; it uses a dedicated disposable raw image, not the HP SSD.
+
+Next after the now-confirmed physical read-only result: explicit bounded root-partition
+selection and a concrete plan for a dedicated Riplix storage area. Existing
+Ubuntu partitions are not candidates for automatic formatting. Guest apps and
+compiler/linker integration follow, then networking/remote-shell bring-up.
+
+The dated sections below are preserved as historical build provenance. Their
+payload hashes and fallback descriptions describe those earlier stages.
+
+FAST-CONSOLE USB REFRESH — 2026-10-19
+====================================
+The same user-authorized external SanDisk was freshly identified by model,
+USB bus, size and both GPT partition UUIDs before the update. Both boot copies
+now contain the production RAM-root build with a native RAM backbuffer,
+batched presentation and page-granular framebuffer WC policy. Device registers
+remain UC; MTRRs stay unchanged. The known physical-boot image is preserved on
+BOTH volumes at EFI/BOOT/BOOTOLD.EFI (select with Boot From EFI File if needed).
+
+Current BOOTX64.EFI SHA-256:
+36d7157e93cabd00aaed7cd03cc4da6e2b1ff16c4d8ee29f2d15f8aeda502748
+Current regular USB test-image SHA-256:
+1191f73aaf1a7a2860e677532f5e64c115f224fcb6c1ac5d694bee6b659c44df
+Fallback BOOTOLD.EFI SHA-256:
+0c59b98bba02cbaf9cda4c13128614b7f63b66c82dc2a94a801c92ed6343da53
+
+Both files matched after full unmount/remount on both partitions. Both
+read-only filesystem checks returned zero. The USB was safely ejected.
+Evidence: build/x86_64-usb-fast/usb-written.json and production-check/result.json.
+The exact production image passed full PS/2 shell/script/process/timer/shutdown
+acceptance locally in TCG and remotely on the HP in KVM/x2APIC, with all images
+and context pages reclaimed. Remote evidence is under
+build/x86_64-usb-fast/hp-kvm/production-result/.
+An eight-scroll native benchmark with pixel verification passed the high-BAR
+console profile: about 2.5x faster in TCG and 4.1x in HP KVM. Both benchmark
+paths used the SAME WC policy, and no serial output was in the timed intervals.
+These are VM results. Physical refresh/scroll feedback remains pending.
+
+The HP stays in Ubuntu; the SSH work only used read-only hardware queries and
+VMs with regular files under /tmp. Its internal disk/partitions/firmware were
+not modified. Separately, the new NVMe driver passes QEMU 512/4096-byte-LBA
+persistence/error suites. This USB still uses RAM root and has NO NVMe driver.
+Files still reset at reboot. Next physical test: ls /bin repeatedly, sh /demo.sh,
+appcheck, timercheck and shutdown; compare scrolling to the first image.
+
+The original first-boot record below describes the fallback build and is kept
+as provenance. Its uncached-mapping descriptions apply to that earlier build.
+
+HP FIRST USB RAM-ROOT BOOT — 2026-10-19
+======================================
+Status: FIRST PHYSICAL BOOT CONFIRMED; shell/app/process/pipe/timer checks passed.
+
+Physical result — user photographs, 2026-10-19
+---------------------------------------------
+The user selected the USB on the actual HP after confirming the Secure Boot
+setting change. The first photograph shows the Riplix framebuffer console,
+RAM-root status, root mount, /init as PID 1 and a Bourne-shell prompt.
+The second photograph shows keyboard-driven commands and these results:
+- ls in /bin lists independently loaded applications.
+- abicheck prints YYYY.
+- appcheck passes callbacks, setjmp, fork, exec, wait and rollback checks.
+- diskcheck passes wide-cell/partial-write/block/EOF checks on the RAM root.
+- check passes fork/COW, wait, shared files, timers, exec and slot reuse.
+- pipecheck passes 20,000 cells, blocking, wrap, EOF and wait.
+- timercheck passes the busy loop, sleeping child, signal and wait checks.
+Each returns to the shell prompt. This establishes real firmware handoff,
+working display/input and timer-driven process execution beyond the VM tests.
+The exact physical GOP address/controller diagnostic log was not captured.
+The screen also shows pwd: not found; that utility is absent from this image.
+The photos do not yet establish sh /demo.sh, shutdown/page reclamation, repeated
+cold boots or returning to Ubuntu. Those remain follow-up acceptance checks.
+No NVMe persistence or physical USB storage-driver support is established:
+diskcheck used the explicitly displayed RAM root. No new code was changed to
+obtain this result; it is the prepared production USB image reported below.
+
+What is ready
+-------------
+The external SanDisk 3.2Gen1 formerly labelled UBUNTU 26_0 was reformatted with
+the user's authorization. Exact size: 30,752,636,928 bytes. It was disk4 on the
+development Mac during preparation; NEVER reuse that device name without a
+fresh identity check. The agent did not modify the HP's internal NVMe, Ubuntu
+partition, firmware settings, Secure Boot keys or boot entries. The user later
+disabled Secure Boot manually to perform the physical test recorded above.
+
+The USB has GPT, a 200 MiB FAT32 EFI System partition and the remaining FAT32
+volume labelled RIPLIXBOOT. Both contain EFI/BOOT/BOOTX64.EFI and RIPLIX-BOOT.txt.
+The payload is the production build, with an embedded RAM root, independently
+loaded RXE1 applications and the V7 Bourne shell. It has no QEMU exit-port
+operation, physical USB storage driver or NVMe driver. Firmware loads the
+self-contained application before handoff. Session file changes reset at reboot.
+
+Final BOOTX64.EFI SHA-256:
+0c59b98bba02cbaf9cda4c13128614b7f63b66c82dc2a94a801c92ed6343da53
+Corresponding regular GPT/FAT32 test-image SHA-256:
+6b8659b3d5961207c993594c32039d3898d03fa3879cb6525b38953ffd36eeea
+
+Both physical copies matched after a full unmount/remount. Read-only filesystem
+checks passed on both USB partitions. Preparation/read-back evidence is under
+build/x86_64-usb/{usb-before.json,usb-written.json}. The regular image is under
+build/x86_64-usb/normal/usb-boot.img; it is not a full clone of the 30.8 GB USB.
+
+Implemented platform prerequisites
+----------------------------------
+- Native 64-bit GOP mapping through the checked device mapper. Visible span,
+  stride, dimensions, format, physical address width and canonical bounds are
+  checked. Only RGB/BGR 32-bit formats are supported; mapping is conservatively
+  uncached. Physical RAM allocation remains bounded to 64 GiB, independently
+  of device addresses. C16 cells, pointers, banks and heap ABI are unchanged.
+- UEFI RSDP handoff; checksummed, bounded XSDT/RSDT and MADT/FADT discovery.
+  ACPI tables must remain in firmware-reserved ACPI memory below 64 GiB.
+  MADT type-0 and type-9 enabled CPUs, I/O APICs, address override and ISA
+  overrides are parsed. Other bounded records, including NMI records, are
+  skipped. The actual HP MADT passes the production parser harness.
+- Boot-CPU local APIC initialization: x2APIC when supported, otherwise xAPIC.
+  I/O APIC lines, LINT/NMI inputs and unused LVT sources are masked. Periodic
+  local timer calibrated against TSC, about 100 Hz; no HPET dependency.
+  Counter-only ISR, IST2, GPR/x87/SSE preservation and safe C16 checkpoints
+  remain. No AML/SCI, SMP, power management or external-device routing yet.
+- Loader carries and verifies an explicit PE base relocation. Early loader
+  errors use UEFI text while services remain valid; initialized-kernel errors
+  and exceptions reach the framebuffer. No text protocol is used after the
+  first ExitBootServices attempt. Absent COM1 returning 0xff is not input.
+
+Validation completed
+---------------------
+- Local Q35/TCG runtime and process tests; explicit legacy PIC/PIT regression.
+- Production console initialization/readback at a genuine physical PCI BAR
+  address of 0xc000000000 (768 GiB), then restoration of the real GOP display.
+  This synthetic backed-buffer test does not certify the Intel GPU/GOP.
+- ACPI host harness under UBSan: RSDT/XSDT, enabled/disabled/x2APIC topology,
+  malformed checksum/length/address/record/duplicate cases, exact HP MADT.
+- Full RAM-root shell suite through emulated USB/xHCI: actual PS/2 events,
+  ls, scripts, pipelines, apps, fork/COW/exec/wait, busy-loop timercheck,
+  failed-exec recovery, image/page reclamation and shutdown.
+- Persistent virtio regression: two QEMU processes, exact persisted wide-cell
+  data/executable recovery and five explicit storage error/rejection cases.
+  This uses a dedicated test disk, not the normal user's root image.
+- Final byte-identical production USB image passed local TCG and remote KVM
+  on the HP, with 512 MiB VM RAM, host CPU and x2APIC. The remote run used
+  QEMU 10.2.1 and Ubuntu OVMF 2025.11 in a temporary /tmp directory, without
+  installing packages or rebooting Ubuntu. All 46 images were reclaimed.
+- Double-fault/stack-guard test passed, including on-screen diagnostics;
+  four existing persistent-image publication/preservation tests passed.
+
+Important unresolved virtual-firmware behavior
+----------------------------------------------
+Newer Ubuntu OVMF sometimes reports Not Found before entering our loader.
+An identical final production image, unchanged firmware variables template,
+CPU and 512 MiB configuration passed on retry. Failures also occurred earlier
+at 256 MiB. The cause is NOT established; increasing RAM and adding the PE
+relocation are not proven complete fixes. Earlier bundled OVMF also passed
+the remote test suite. The successful final run and the failed first attempt
+are both retained. The later user photographs independently establish the
+physical boot/check results above; they do not resolve this virtual-firmware
+failure or establish repeated physical boot reliability.
+
+Evidence
+--------
+build/x86_64-usb/normal-check/: final local production result/log/screenshot.
+build/x86_64-usb/hp-kvm/final/retry-result/: final KVM result/log/screenshot.
+build/x86_64-usb/hp-kvm/final/result/: pre-loader failure of identical image.
+build/x86_64-usb/hp-kvm/: earlier KVM/x2APIC and firmware comparison logs.
+build/x86_64-acpi/{high,fault,process,pic}/: focused platform regressions.
+build/x86_64-boot/result.json: persistent-storage regression and error cases.
+tools/x86_64/tests/fixtures/: actual HP MADT and capture provenance.
+
+Trying it on the HP
+-------------------
+1. Move the safely ejected USB to the HP. Its last inspected Secure Boot
+   setting was enabled. This unsigned application requires a user-selected
+   temporary Secure Boot disable, or a separate signing/trust workflow.
+   Keep UEFI mode; do not clear firmware keys or enable legacy BIOS mode.
+2. Use the HP one-time boot menu (Esc, then F9) and choose the UEFI USB device.
+   If needed, Boot From EFI File should find EFI/BOOT/BOOTX64.EFI on the USB.
+3. Require the readable console, a Bourne-shell prompt, and built-in keyboard
+   input. Try ls /bin, sh /demo.sh, appcheck and timercheck. Photograph any
+   displayed failure. Shutdown should sync the RAM filesystem and halt; power
+   off/on afterward and choose Ubuntu. Firmware shutdown/reboot is later work.
+4. Initial physical results are recorded above. Complete shell-script/shutdown
+   and repeat-boot checks before adding NVMe or persistent writes.
+   Ubuntu coexistence/partition resizing remains separately planned work.
+
+HP firmware boot-menu reference:
+https://support.hp.com/sk-en/document/ish_6930187-6931079-16
+UEFI image authentication / Secure Boot:
+https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html

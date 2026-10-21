@@ -1,0 +1,14 @@
+[package]
+name = "riplix-math"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+[lib]
+crate-type = ["staticlib", "rlib"]
+[dependencies]
+libm = "=0.2.16"
+[profile.release]
+panic = "abort"
+opt-level = 2
+codegen-units = 1

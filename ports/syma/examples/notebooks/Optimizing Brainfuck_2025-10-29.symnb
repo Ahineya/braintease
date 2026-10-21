@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "name": "Optimizing Brainfuck",
+    "created": "2025-10-28T22:51:19.333Z",
+    "modified": "2025-10-29T00:25:52.184Z",
+    "kernelName": "syma",
+    "languageInfo": {
+      "name": "syma",
+      "version": "1.0.0",
+      "fileExtension": ".syma",
+      "mimeType": "text/x-syma"
+    }
+  },
+  "cells": [
+    {
+      "id": "M3U92ADCMnch0sN3oxDQ3",
+      "type": "markdown",
+      "content": "# Optimizing Brainfuck interpreter",
+      "outputs": [],
+      "metadata": {}
+    },
+    {
+      "id": "-INZQi9IKVxqn05eYrmPw",
+      "type": "code",
+      "content": ":clear\n:rule Brainfuck/Start {Brainfuck code_} -> {Validate SplitBy(\"\" code_)}\n:rule Brainfuck/Validate/Clean {Validate {Strings .. \"\\n\" ..}} -> {Validate {Strings .. ..}}\n:rule Brainfuck/Validate {Validate {Strings s..}} -> {Symbolize {Strings s..}} :guard AreIn({\"+\" \"-\" \"[\" \"]\" \">\" \"<\" \".\" \",\" \"$\"} s..) ; Classic brainfuck allows all the symbols as the comments, but I want to show the ability to use AreIn\n\n:rule Brainfuck/Symbolize/+ {Symbolize {Strings .. \"+\" ..}} -> {Symbolize {Strings .. Add(1) ..}}\n:rule Brainfuck/Symbolize/- {Symbolize {Strings .. \"-\" ..}} -> {Symbolize {Strings .. Sub(1) ..}}\n:rule Brainfuck/Symbolize/[ {Symbolize {Strings .. \"[\" ..}} -> {Symbolize {Strings .. Loop(Empty) ..}}\n:rule Brainfuck/Symbolize/] {Symbolize {Strings .. \"]\" ..}} -> {Symbolize {Strings .. End(Empty) ..}}\n:rule Brainfuck/Symbolize/> {Symbolize {Strings .. \">\" ..}} -> {Symbolize {Strings .. Right(1) ..}}\n:rule Brainfuck/Symbolize/< {Symbolize {Strings .. \"<\" ..}} -> {Symbolize {Strings .. Left(1) ..}}\n:rule Brainfuck/Symbolize/. {Symbolize {Strings .. \".\" ..}} -> {Symbolize {Strings .. Print ..}}\n:rule Brainfuck/Symbolize/. {Symbolize {Strings .. \"$\" ..}} -> {Symbolize {Strings .. Debug ..}}\n\n:rule Brainfuck/Symbolized {Symbolize {Strings ..}} -> {Optimize {Ops ..}}\n:rule Brainfuck/FoldMath {Optimize {Ops .. {/| c_ Add Sub}(a_) {/| c_ Add Sub}(b_) ..}} -> {Optimize {Ops .. c_(Add(a_ b_)) ..}}\n:rule Brainfuck/FoldMove {Optimize {Ops .. {/| c_ Left Right}(a_) {/| c_ Left Right}(b_) ..}} -> {Optimize {Ops .. c_(Add(a_ b_)) ..}}\n\n:rule Brainfuck/Peep/Clear  {Optimize {Ops .. {Loop _} Sub(1) {End _} .. }} -> {Optimize {Ops .. Set(0) .. }}\n:rule Brainfuck/Peep/Set  {Optimize {Ops .. Set(0) Add(n_) .. }} -> {Optimize {Ops .. Set(n_) .. }}\n:rule Brainfuck/Peep/MoveR  {Optimize {Ops .. {Loop Empty} {Right n_} Add(1) {Left n_} Sub(1) {End Empty} .. }} -> {Optimize {Ops .. MoveR(n_) .. }}\n:rule Brainfuck/Peep/MoveL  {Optimize {Ops .. {Loop Empty} {Right n_} Add(1) {Left n_} Sub(1) {End Empty} .. }} -> {Optimize {Ops .. MoveR(n_) .. }}\n\n:rule Brainfuck/Optimized {Optimize {Ops ..}} -> {EnumerateLoops 0 {} {Ops} {Enum ..}}\n\n:rule Brainfuck/EnumerateLoops/Pick {EnumerateLoops curr_ {..} {Ops ..} {Enum {Loop Empty} .. }} -> {EnumerateLoops Add(curr_ 1) {.. curr_} {Ops .. {Loop curr_}} {Enum .. }}\n:rule Brainfuck/EnumerateLoops/Pick {EnumerateLoops curr_ {.. last_} {Ops ..} {Enum {End Empty} .. }} -> {EnumerateLoops curr_ {..} {Ops .. {End last_}} {Enum .. }}\n:rule Brainfuck/EnumerateLoops/Pick/Any {EnumerateLoops curr_ {..} {Ops ..} {Enum c_ .. }} -> {EnumerateLoops curr_ {..} {Ops .. c_} {Enum .. }}\n\n:rule Brainfuck/EnumerateLoops/Err/Unmatched/] {EnumerateLoops _ {} {Ops .. {End Empty} ..} {Enum}} -> {EnumerateLoops Err(\"Unmatched ]\")}\n:rule Brainfuck/EnumerateLoops/Err/Unmatched/[ {EnumerateLoops _ {{/+ ..}} {Ops ..} {Enum}} -> {EnumerateLoops Err(\"Unmatched [\")}\n\n:rule Brainfuck/EnumerateLoops/End {EnumerateLoops _ {} {Ops ..} {Enum}} -> {Enumerate {Ops ..}}\n\n:rule Brainfuck/EnumerateOps {Enumerate {Ops ..}} -> {Enumerating 0 {Ops} {Ops ..}}\n:rule Brainfuck/Enumerating {Enumerating index_ {Ops ..} {Ops op_ ..}} -> {Enumerating Add(index_ 1) {Ops .. {Op index_ op_}} {Ops ..}}\n:rule Brainfuck/Enumerating/End {Enumerating _ {Ops ..} {Ops}} -> {Run {Ops ..}}\n\n:rule Brainfuck/Run {Run ops_} -> {Running {Output} {Curr} {PP 0} {TP 0} ops_ {Tape {0 0}}}\n\n:rule Brainfuck/Running/Pick {Running .. {Curr drop..} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Executing .. {Curr op_} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}}\n\n:rule Brainfuck/Running/Execute/Right {Executing .. {Curr {Right n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Executing .. {Curr Materialize 0} {PP Add(pp_ 1)} {TP Add(tp_ n_)} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}}\n\n:rule Brainfuck/Running/Execute/Left {Executing .. {Curr {Left n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Executing .. {Curr Materialize 0} {PP Add(pp_ 1)} {TP Sub(tp_ n_)} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}}\n\n:rule Brainfuck/Running/Execute/Add {Executing .. {Curr {Add n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP Add(pp_ 1)} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ Mod(Add(v_ n_) 256)} ..}}\n\n:rule Brainfuck/Running/Execute/Sub {Executing .. {Curr {Sub n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP Add(pp_ 1)} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ {Mod {Add {Sub v_ n_} 256} 256}} ..}}\n\n:rule Brainfuck/Running/Execute/Set {Executing .. {Curr {Set n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP Add(pp_ 1)} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ n_} ..}}\n\n:rule Brainfuck/Running/Execute/MoveR {Executing .. {Curr {MoveR n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Executing .. {Curr Materialize v_} {PP Add(pp_ 1)} {TP Add(tp_ n_)} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ 0} ..}}\n\n:rule Brainfuck/Running/Execute/MoveL {Executing .. {Curr {MoveL n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Executing .. {Curr Materialize v_} {PP Add(pp_ 1)} {TP Sub(tp_ n_)} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ 0} ..}}\n\n:rule Brainfuck/Running/Execute/Loop/Enter {Executing .. {Curr {Loop n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP Add(pp_ 1)} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} :guard Neq(v_ 0)\n\n:rule Brainfuck/Running/Execute/Loop/Skip {Executing .. {Curr {Loop n_}} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} .. {Op jump_ {End n_}} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP Add(jump_ 1)} {TP tp_} {Ops .. {Op pp_ op_} .. {Op jump_ {End n_}} ..} {Tape .. {tp_ v_} ..}} :guard Eq(v_ 0)\n\n:rule Brainfuck/Running/Execute/Loop/End {Executing .. {Curr {End n_}} {PP pp_} {TP tp_} {Ops .. {Op jump_ {Loop n_}} .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP jump_} {TP tp_} {Ops .. {Op jump_ {Loop n_}} .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}}\n\n:rule Brainfuck/Running/Execute/Print {Executing {Output ..} {Curr Print} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running {Output Concat(.. CharFromCode(v_))} {Curr} {PP Add(pp_ 1)} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}}\n\n:rule Brainfuck/Running/Execute/MaterializeCell {Executing .. {Curr Materialize n_} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ v_} ..}} -> {Running .. {Curr} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ Add(v_ n_)} ..}}\n\n:rule Brainfuck/Running/Execute/MaterializeCell {Executing .. {Curr Materialize n_} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape ..}} -> {Running .. {Curr} {PP pp_} {TP tp_} {Ops .. {Op pp_ op_} ..} {Tape .. {tp_ n_}}}\n\n:rule Brainfuck/Running/End {Running out_ {Curr} ..} -> {End out_}",
+      "outputs": [
+        {
+          "type": "text",
+          "content": "Universe cleared\n"
+        },
+        {
+          "type": "text",
+          "content": "Added 44 rules\n"
+        }
+      ],
+      "metadata": {}
+    },
+    {
+      "id": "wqCHDS7Q6BtCDPyUrct-l",
+      "type": "code",
+      "content": "{Brainfuck \">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<++.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-]<+.\"}",
+      "outputs": [
+        {
+          "type": "result",
+          "content": "{End {Output \"Hello, World!\"}}"
+        }
+      ],
+      "metadata": {}
+    }
+  ]
+}

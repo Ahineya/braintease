@@ -1,0 +1,42 @@
+[
+  {
+    "file": "wifi-sha1.c",
+    "upstream": {
+      "file": "openbsd-sha1.c",
+      "url": "https://raw.githubusercontent.com/openbsd/src/master/lib/libc/hash/sha1.c",
+      "sha256": "8544e1a738b9af3c52eca88134491d0d1ba59cda2a498121db31e6624e49f25b"
+    },
+    "adaptation": "Only platform includes/types, portable SHA1 selection/unused declaration; notices retained",
+    "adapted_sha256": "fec29592d41341961aecc4fe607284f794d3f1eb17a11c732725edaff5efebf4"
+  },
+  {
+    "file": "wifi-aes.c",
+    "upstream": {
+      "file": "openbsd-rijndael.c",
+      "url": "https://raw.githubusercontent.com/openbsd/src/master/sys/crypto/rijndael.c",
+      "sha256": "291cb8aa1f73d06112812f4493fa14a328db7329a6412cc4aa84fb86e59017cb"
+    },
+    "adaptation": "Only platform includes/types, portable SHA1 selection/unused declaration; notices retained; cast uint8 Td4 final-round terms to u32 before left shifts to remove signed-promotion UB caught by UBSan",
+    "adapted_sha256": "0f1acc3e2639632371317b34a4b1cb8eec430680931edc35f12a27334b50e3d8"
+  },
+  {
+    "file": "wifi-rijndael.h",
+    "upstream": {
+      "file": "openbsd-rijndael.h",
+      "url": "https://raw.githubusercontent.com/openbsd/src/master/sys/crypto/rijndael.h",
+      "sha256": "fbd05c5fe8db3a666ee9215ed67ad575753490fd5323137997b7ce5c397e9028"
+    },
+    "adaptation": "Only platform includes/types, portable SHA1 selection/unused declaration; notices retained",
+    "adapted_sha256": "fbd05c5fe8db3a666ee9215ed67ad575753490fd5323137997b7ce5c397e9028"
+  },
+  {
+    "file": "wifi-michael.c",
+    "upstream": {
+      "file": "openbsd-michael.c",
+      "url": "https://raw.githubusercontent.com/openbsd/src/master/sys/crypto/michael.c",
+      "sha256": "30e4618382f747b4187c282a385ef41f072111a6178121608d2b8903051aebc1"
+    },
+    "adaptation": "Native bounded one-shot Michael with explicit unsigned octet loads, DA/SA/priority pseudoheader, same block/padding operations; ISC notice retained. 68 vectors from independent pinned OpenBSD implementation plus raw KAT.",
+    "adapted_sha256": "19ca8504f06172025ec2573916b9707470af686b28974747cb86c664df78780c"
+  }
+]

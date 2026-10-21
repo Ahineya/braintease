@@ -19,6 +19,8 @@ def client(output, compiler, target, jobs):
     includes = [generated / 'include', generated / 'drivers', generated / 'nanox',
                 ROOT / 'ports/nanox/ripple', ROOT / 'ports/fusede/include', ROOT / 'fuse-x/nanox']
     defines = ['-DMWCONFIG_FILE="nxr_config.h"', '-DMWPIXEL_FORMAT=MWPF_TRUECOLOR565', '-DNXR_DESKTOP=1']
+    if target == 'native':
+        defines += ['-DRIPPLE_NETSURF_HOSTED=1']
     sdk = [ROOT / 'ports/fuzix/ripple/include', ROOT / 'ports/fuzix/upstream/Library/include',
            ROOT / 'runtime/include', ROOT / 'ports/fuzix/ripple', ROOT / 'ports/graphics/include']
     flags = ['--target', target, '-DRIPPLE_MMU=1', '-DNO_64BIT', *defines]

@@ -34,8 +34,8 @@ long sysconf(int name)
       /* FIXME: read the regexp code */
       return 4;
     case _SC_STREAM_MAX:
-      /* In theory down to RAM */
-      return 256;
+      /* Dynamic FILE objects support every kernel descriptor, subject to RAM. */
+      return info.max_open;
     case _SC_SYMLOOP_MAX:
       return 40; /* Shared guest pathname expansion limit. */
     case _SC_TTY_NAME_MAX:

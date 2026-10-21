@@ -1,0 +1,32 @@
+{Module
+  Demo/Todo
+  {Import Core/Main as C open}
+  {Import Todo/State as TS from "./state.syma" open}
+  {Import Todo/Filters as TF from "./filters.syma" open}
+  {Import Todo/TodoList as TL from "./todolist.syma" open}
+  {Import Todo/AddTodo as AT from "./add-todo.syma" open}
+  {Export}
+  {Program
+    App(
+      {TS/InitialState},
+      {UI
+        {Div
+          :class "bg-zinc-300 flex flex-col items-center p-4 font-sans"
+          {H1 :class "text-2xl font-bold mb-4" "Todo List"}
+          {Div :class "flex flex-col gap-2 w-md"
+            {Project FiltersView}
+            {Project AddTodoView}
+            {Project TodoListView}
+          }
+        }
+      }
+    )
+  }
+
+  {Rules
+    {R "LiftApplyThroughProgramAndApp"
+      Apply(act_, {Program App(st_, ui_) eff_})
+      {Program App(Apply(act_, st_), ui_) eff_}
+    }
+  }
+}

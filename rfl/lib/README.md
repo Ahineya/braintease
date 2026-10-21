@@ -135,8 +135,16 @@ not accepted by this first picker. Listings retain the existing 4096-entry
 POSIX bound, input is limited to 255 ASCII characters, and directory order is
 bytewise with directories first. This is a bundled application library under
 `lib/`, with `///` hover documentation, not a new standard-library or packaging
-mechanism. Save As browsing, multi-selection, mouse input and tree views can be
+mechanism. Save As browsing, multi-selection and tree views can be
 added above the same state/drawing contracts.
+
+The shared directory panel already exposes `FilePanel.mouse(area, event)` for
+click selection and wheel navigation, using the same rectangle as `draw` or
+`draw_cached`. Enable a mode such as `screen.mouse(MOUSE_DRAG)` and read
+`screen.event().mouse`. `Rect.contains` hit tests zero-based terminal cells.
+Commander also demonstrates divider dragging and function-button clicks.
+Keyboard controls remain available; Shift-drag selects terminal text instead of
+sending application mouse events. See the [mouse architecture](../../docs/graphics/architecture.md#terminal-mouse-interaction).
 
 ## Retained panels and reusable I/O
 
@@ -161,3 +169,12 @@ propagation, before painting a frame. It has one rendering consumer per buffer;
 newlines invalidate the suffix, and untouched uncached syntax stays lazy.
 `lib/text_curses.paint_line` returns -1 on error, 0 for a fitting line or 1 for
 right overflow. The boolean `paint` wrapper remains available.
+
+Mouse-aware lists and fields use `Selection.mouse(Rect, MouseEvent, count)` and
+`LineEdit.mouse(Rect, MouseEvent)`. Supply rectangles in the same coordinate
+space as the event. `Popup.mouse(event)` converts screen-relative reports to
+local coordinates. Shared choice, prompt, message and file-picker dialogs now
+support mouse interaction when their application enables reporting. A list click
+selects; the caller decides activation. Choice menus activate on click, while
+the file picker opens a selected entry when clicked again. Field clicks account
+for horizontal scrolling, combining clusters and wide glyphs.

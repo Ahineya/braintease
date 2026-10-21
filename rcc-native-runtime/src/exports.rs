@@ -95,6 +95,13 @@ service!(rcc_native_ext_memset(rt, dest, value, count) {
 });
 service!(rcc_native_ext_memcpy(rt, dest, src, count) { copy(rt, dest, src, count) });
 service!(rcc_native_ext_memmove(rt, dest, src, count) { copy(rt, dest, src, count) });
+service!(rcc_native_ext___rcc_cell_copy(rt, dest, src, count) { copy(rt, dest, src, count) });
+service!(rcc_native_ext___rcc_cell_fill(rt, dest, value, count) {
+    let range = span(dest, count);
+    if range.start >= BANK { rt.memory.fill(range, value as u16); }
+    else { for at in range { rt.write(at, value as u16); } }
+    dest
+});
 service!(rcc_native_ext_mmio_read(rt, address) {
     if address >= BANK as u64 { fatal("native MMIO address out of bounds"); }
     u64::from(rt.read(address as usize))
@@ -120,3 +127,40 @@ service!(rcc_native_ext___rcc_host_math(_rt, op, a, b) {
     let op = u16::try_from(op).unwrap_or_else(|_| fatal("invalid host math operation"));
     rvm::float::evaluate(op, a, b).unwrap_or_else(|_| fatal("invalid host math operands"))
 });
+
+#[cfg(test)]
+mod bulk_tests {
+    use super::*;
+    use crate::memory::pointer;
+    #[test]
+    fn cell_bulk_preserves_wide_cells_cow_overlap_and_shared_memory() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let parent = rt.memory.clone();
+        let start = 6 * BANK - 7;
+        let dest = 8 * BANK - 3;
+        unsafe {
+            assert_eq!(rcc_native_ext___rcc_cell_fill(&mut rt, pointer(start), 0xabcd, 4096), pointer(start));
+            rcc_native_ext___rcc_cell_copy(&mut rt, pointer(dest), pointer(start), 4096);
+            rcc_native_ext___rcc_cell_copy(&mut rt, pointer(dest + 1), pointer(dest), 4095);
+        }
+        assert!(rt.memory.cells(dest..dest + 4096).all(|v| v == 0xabcd));
+        assert!(parent.cells(start..start + 4096).all(|v| v == 0));
+        assert!(parent.cells(dest..dest + 4096).all(|v| v == 0));
+        let shared = crate::address_space::KERNEL_START + 509;
+        unsafe { rcc_native_ext___rcc_cell_copy(&mut rt, pointer(shared), pointer(start), 1026); }
+        assert!(parent.cells(shared..shared + 1026).all(|v| v == 0xabcd));
+        assert_eq!(parent.read(shared - 1), 0);
+        assert_eq!(parent.read(shared + 1026), 0);
+    }
+    #[test]
+    fn cell_bulk_keeps_mmio_writes_and_transfer_order() {
+        let mut rt = Runtime::new();
+        let src = 6 * BANK;
+        rt.memory.write_from(src, &[0x1234, 0x5678]);
+        unsafe { rcc_native_ext___rcc_cell_copy(&mut rt, 4, pointer(src), 2); }
+        // RNG_SEED at cell 5 is a device write, not a raw RAM store.
+        assert_eq!(rt.rng & 65535, 0x5678);
+        assert_eq!(rt.memory.read(5), 0);
+    }
+}

@@ -17,7 +17,7 @@ int16_t mode;
 arg_t _open(void)
 {
 	int_fast8_t uindex;
-	int_fast8_t oftindex;
+	oft_result_t oftindex;
 	register inoptr ino;
 	int16_t perm;
 	staticfast inoptr parent;
@@ -141,7 +141,7 @@ arg_t _open(void)
 	/* O_CLOEXEC updates the mask of file handles to close on execve()
 	   so that you can handle this atomically */
 	if (flag & O_CLOEXEC)
-		udata.u_cloexec |= (1UL << uindex);
+		uf_cloexec_set(&udata, uindex);
 
 	/* Update the number of readers and writers as we need this for
 	   pipe behaviour */
@@ -289,12 +289,12 @@ arg_t _fcntl(void)
 	case F_GETFL:
 		return *acc;
 	case F_GETFD:
-		return udata.u_cloexec & (1UL << fd) ? O_CLOEXEC : 0;
+		return uf_cloexec_test(&udata, fd) ? O_CLOEXEC : 0;
 	case F_SETFD:
 		if (data & O_CLOEXEC)
-			udata.u_cloexec |= (1UL << fd);
+			uf_cloexec_set(&udata, fd);
 		else
-			udata.u_cloexec &= ~(1UL << fd);
+			uf_cloexec_clear(&udata, fd);
 		return 0;
 	case F_DUPFD:
 		return uf_alloc_copy(fd, data);

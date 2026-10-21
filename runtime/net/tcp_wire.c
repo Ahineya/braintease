@@ -17,17 +17,19 @@ void net_tcp_pending_dropped(NetContext *net) {
 void net_tcp_transmitted(NetContext *net) {
     NetTcp *tcp = net->tcp_pending;
     unsigned long end;
-    unsigned short length, flags;
+    unsigned short length, flags, repeated;
     if (!tcp) return;
     net->tcp_pending = 0; tcp->queued = 0;
     if (tcp->queued_flight) {
         length = net_read16(net->tx + 16) - 20 - (net->tx[46] / 16) * 4;
         flags = net->tx[47];
         end = tcp_read32(net->tx + 38) + length + ((flags & (TCP_SYN | TCP_FIN)) ? 1 : 0);
+        repeated = tcp_before(tcp_read32(net->tx + 38), tcp->sent_nxt);
         if (tcp_before(tcp->sent_nxt, end)) tcp->sent_nxt = end;
-        tcp->flight_sent = 1; tcp->sent_at = net->now;
-        if (tcp->retransmitted) net_count(&tcp->retransmits);
-        else { tcp->sample_at = net->now; tcp->sample_valid = 1; }
+        if (!tcp->flight_sent) tcp->sent_at = net->now;
+        tcp->flight_sent = 1;
+        if (repeated) net_count(&tcp->retransmits);
+        else if (!tcp->sample_valid) { tcp->sample_at = net->now; tcp->sample_end = end; tcp->sample_valid = 1; }
     }
 }
 int tcp_send(NetTcp *tcp, unsigned long sequence, unsigned short flags,
@@ -43,7 +45,7 @@ int tcp_send(NetTcp *tcp, unsigned long sequence, unsigned short flags,
     p = net->tx + 34; memset(p, 0, header);
     net_write16(p, tcp->local_port); net_write16(p + 2, tcp->remote_port);
     tcp_write32(p + 4, sequence); if (flags & TCP_ACK) tcp_write32(p + 8, tcp->rcv_nxt);
-    p[12] = header * 4; p[13] = flags; net_write16(p + 14, NET_TCP_RX_BUFFER - tcp->rx_used);
+    p[12] = header * 4; p[13] = flags; net_write16(p + 14, NET_TCP_RX_CAP(tcp) - tcp->rx_used);
     if (flags & TCP_SYN) { p[20] = 2; p[21] = 4; net_write16(p + 22, NET_TCP_MSS); }
     if (length) memcpy(p + header, data, length);
     net_write16(p + 16, net_l4_checksum(net->config.address, tcp->peer, 6, p, header + length));

@@ -1,0 +1,48 @@
+/*
+|---------|----------|----------------------|-----------------------|
+| R0      | R0       | Hardware zero        | Always reads 0        |
+| R1      | PC       | Program Counter      |                       |
+| R2      | PCB      | Program Counter Bank |                       |
+| R3      | RA       | Return Address       |                       |
+| R4      | RAB      | Return Address Bank  |                       |
+| R5      | RV0      | Return Value 0       | Fat ptr address       |
+| R6      | RV1      | Return Value 1       | Fat ptr bank          |
+| R7      | A0       | Argument 0           |                       |
+| R8      | A1       | Argument 1           |                       |
+| R9      | A2       | Argument 2           |                       |
+| R10     | A3       | Argument 3           |                       |
+| R11     | X0       | Reserved/Extended 0  | Future use            |
+| R12     | X1       | Reserved/Extended 1  | Future use            |
+| R13     | X2       | Reserved/Extended 2  | Future use            |
+| R14     | X3       | Reserved/Extended 3  | Future use            |
+| R15     | T0       | Temporary 0          | Caller-saved          |
+| R16     | T1       | Temporary 1          | Caller-saved          |
+| R17     | T2       | Temporary 2          | Caller-saved          |
+| R18     | T3       | Temporary 3          | Caller-saved          |
+| R19     | T4       | Temporary 4          | Caller-saved          |
+| R20     | T5       | Temporary 5          | Caller-saved          |
+| R21     | T6       | Temporary 6          | Caller-saved          |
+| R22     | T7       | Temporary 7          | Caller-saved          |
+| R23     | S0       | Saved 0              | Callee-saved          |
+| R24     | S1       | Saved 1              | Callee-saved          |
+| R25     | S2       | Saved 2              | Callee-saved          |
+| R26     | S3       | Saved 3              | Callee-saved          |
+| R27     | SC       | Allocator Scratch    | For register spilling |
+| R28     | SB       | Stack Bank           | Bank for stack        |
+| R29     | SP       | Stack Pointer        |                       |
+| R30     | FP       | Frame Pointer        |                       |
+| R31     | GP       | Global Pointer       | Bank for globals      |
+*/
+{Module RippleVM/Registers
+    {Export InitRegisters PC Registers}
+    {Defs
+      {InitRegisters
+        {Registers {0 R0 0} {1 PC 0} {2 PCB 0} {3 RA 0} {4 RAB 0} {5 RV0 0} {6 RV1 0}
+            {7 A0 0} {8 A1 0} {9 A2 0} {10 A3 0} {11 X0 0} {12 X1 0} {13 X2 0}
+            {14 X3 0} {15 T0 0} {16 T1 0} {17 T2 0} {18 T3 0} {19 T4 0} {20 T5 0}
+            {21 T6 0} {22 T7 0} {23 S0 0} {24 S1 0} {25 S2 0} {26 S3 0} {27 SC 0}
+            {28 SB 0} {29 SP 0} {30 FP 0} {31 GP 0}
+        }
+      }
+    }
+}

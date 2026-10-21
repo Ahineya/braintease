@@ -1,0 +1,5 @@
+{
+  "description": "C16 callbacks and initialized globals used by the portable native separate-module tests",
+  "use_runtime": true,
+  "expected": "YY\n"
+}

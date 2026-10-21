@@ -55,6 +55,7 @@ APPS += lynx
 APPS += diff3
 APPS += basic
 APPS += chat
+APPS += tree getopt cron at atrun cal
 
 CORE := start devio filesys inode kdata process mm syscall_exec syscall_fs syscall_fs2 syscall_fs3 syscall_other syscall_proc timer tty blk512 select
 BULK_CONFIG := $(BUILD)/.bulk-io
@@ -267,14 +268,23 @@ userspace: $(addprefix $(BUILD)/,$(addsuffix .rxe,$(APPS)))
 $(BUILD)/apps/test.asm: upstream/Applications/MWC/cmd/test.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
-$(addprefix $(BUILD)/apps/,$(addsuffix .asm,comm rev join split tsort tty nice time clear pr col)): $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
+$(addprefix $(BUILD)/apps/,$(addsuffix .asm,comm rev join split tsort tty nice time clear pr col cron at atrun)): $(BUILD)/apps/%.asm: upstream/Applications/V7/cmd/%.c $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/apps/cron.asm $(BUILD)/apps/at.asm $(BUILD)/apps/atrun.asm: ripple/schedule.h
+$(BUILD)/cron.rxe $(BUILD)/at.rxe $(BUILD)/atrun.rxe: $(BUILD)/apps/schedule.pobj
+$(BUILD)/apps/schedule.asm: ripple/schedule.c ripple/schedule.h $(USERHEADERS) $(RCC) Makefile
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/crond.rxe: $(BUILD)/cron.rxe
+	@cp $< $@
+userspace: $(BUILD)/crond.rxe
+
 $(BUILD)/mv.rxe $(BUILD)/ln.rxe: $(BUILD)/cp.rxe
 	@cp $< $@
 $(BUILD)/apps.json: Makefile
 	@mkdir -p $(@D)
-	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck rfl-demo rfl-fm mc rift telegram music wavplay $(APPS) mv ln sh vi tcl tclsh sokoban nslookup".split()))' >$@
+	@python3 -c 'import json; print(json.dumps("init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck rfl-demo rfl-fm mc rift telegram music wavplay $(APPS) crond mv ln sh vi tcl tclsh sokoban nslookup".split()))' >$@
 userspace: $(BUILD)/mv.rxe $(BUILD)/ln.rxe $(BUILD)/sh.rxe $(BUILD)/vi.rxe $(BUILD)/tcl.rxe $(BUILD)/tclsh.rxe $(BUILD)/apps.json
 userspace: $(BUILD)/sokoban.rxe
 userspace: $(BUILD)/nslookup.rxe
@@ -290,7 +300,7 @@ test-prompt-format:
 
 SHELL_DIR := upstream/Applications/V7/cmd/sh
 SHELL_OBJS := $(addprefix $(BUILD)/sh/,$(addsuffix .pobj,$(SHELL_SRC)))
-$(BUILD)/sh/main.asm $(BUILD)/sh/input.asm: ripple/shell-prompt.h
+$(BUILD)/sh/main.asm $(BUILD)/sh/input.asm $(BUILD)/sh/service.asm: ripple/shell-prompt.h
 $(BUILD)/sh/%.asm: $(SHELL_DIR)/%.c $(wildcard $(SHELL_DIR)/*.h) $(USERHEADERS) $(RCC) Makefile
 	@mkdir -p $(@D)
 	@printf "  RCC %s\n" "$<"
@@ -469,6 +479,15 @@ $(BUILD)/user/finecheck.asm: tools/finecheck.c ripple/deadline.c ripple/deadline
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/finecheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/finecheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
 
+# Descriptor capacity and legacy select compatibility, on a disposable root.
+$(BUILD)/user/fdcheck.asm: tools/fdcheck.c $(USERHEADERS) $(RCC)
+	@mkdir -p $(@D)
+	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
+$(BUILD)/fdcheck.rxe: $(BUILD)/user/entry.pobj $(BUILD)/user/fdcheck.pobj $(BUILD)/user/userlib.pobj $(LIBC_OBJS) $(RLINK)
+.PHONY: test-file-limits
+test-file-limits: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo cat fdcheck))
+	python3 tools/test_file_limits.py --target rvm --build $(BUILD) --program $(BUILD)/fdcheck.rxe --output $(BUILD)/file-limit-check
+
 $(BUILD)/user/proccheck.asm: tools/proccheck.c $(USERHEADERS) $(RCC)
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
@@ -603,5 +622,5 @@ test-pkill: kernel bios $(addprefix $(BUILD)/,$(addsuffix .rxe,init sh echo pkil
 
 # Link mode and packer changes must relink even when Make prunes intermediate
 # assembly/object chains. Aliases are refreshed from their rebuilt targets.
-SHARED_LINK_NAMES := $(APPS) $(NX_APP_NAMES) init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck sh rfl-demo rfl-fm mc rift telegram music wavplay mv ln vi tcl tclsh sokoban nslookup
+SHARED_LINK_NAMES := crond $(APPS) $(NX_APP_NAMES) init hello forkcheck preemptcheck iotest libccheck mmucheck ttycheck sh rfl-demo rfl-fm mc rift telegram music wavplay mv ln vi tcl tclsh sokoban nslookup
 $(addprefix $(BUILD)/,$(addsuffix .rxe,$(SHARED_LINK_NAMES))): $(SHARED_MODE_FILE)

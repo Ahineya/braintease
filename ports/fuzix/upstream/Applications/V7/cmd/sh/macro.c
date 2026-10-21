@@ -140,6 +140,9 @@ retry:
 			if (v) {
 				if (c != '+') {
 					for (;;) {
+						/* Keep empty positional arguments in quoted "$@". */
+						if (quote && dolg && *id == '@' && !*v)
+							pushstak(QUOTE);
 						while ( (c = *v++) )
 							pushstak(c | quote);
 

@@ -39,7 +39,7 @@ int main(int argc,char **argv) {
     } while(now-start<limit);
     check(t[0].bytes==1&&!t[0].done,"slow body stays in progress while others complete");
     check(t[1].done&&!t[1].error&&t[1].bytes==4,"fast request passes blocked resource");
-    check(t[2].done&&t[2].error&&!t[2].bytes&&strstr(t[2].reason,"256 KiB"),"oversize rejected at headers, before body");
+    check(t[2].done&&t[2].error&&!t[2].bytes&&strstr(t[2].reason,"source limit"),"oversize rejected at headers, before body");
     check(t[3].done&&!t[3].error&&t[3].bytes==5,"queued request starts when a worker is released");
     if(!t[0].done)fetch_abort(t[0].handle);
     for(i=1;i<4;i++)if(!t[i].done)fetch_abort(t[i].handle);

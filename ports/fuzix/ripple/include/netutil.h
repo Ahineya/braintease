@@ -15,8 +15,8 @@ static int nu_expired(unsigned long start,unsigned long limit) {
     if(nu_now()-start<limit)return 0;
     errno=ETIMEDOUT;return 1;
 }
-/* Data readiness, rather than a decisecond sleep, paces stream I/O. DNS's
- * older fd-independent retry helper remains available separately. */
+/* Data readiness, rather than a decisecond sleep, paces stream and DNS I/O.
+ * Keep the fd-independent helper for callers which explicitly need a delay. */
 static int nu_ready(int fd,int writing,unsigned long start,unsigned long timeout) {
     fd_set reads,writes;
     struct timeval tv;

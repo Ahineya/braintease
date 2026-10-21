@@ -16,8 +16,10 @@ session_action=""
 detach=0
 headless=0
 gui=0
+desktop=0
 telnet=0
 one_shot=0
+rescue=0
 option_count=$#
 mode=--run
 mode_set=0
@@ -33,7 +35,8 @@ usage() {
     cat <<'HELP'
 Usage: scripts/run-fuse-x.sh [options]
 
-Build Fuse-X, prepare its root image, and start the native Riplix shell.
+Build Fuse-X, prepare its root image, and start the primary mux console.
+Detach with Ctrl+B, then d, to reach the outer shell; mux starts once per boot.
 Try help, ls, native-hello, telegram, music /music, lynx http://wiby.me/, and shutdown.
 Files persist across launches.
 Use shutdown for a clean exit. The Bourne shell supports scripts, pipelines,
@@ -52,8 +55,10 @@ redirection and job control. Ripple RXE executables require native recompilation
   --stop               Orderly shutdown of the running session without building
   --headless           Start in the background without a local shell
   --gui                Also open a native graphical terminal window
+  --desktop            Open the desktop and its apps inside one graphical window
   --telnet             Start the guest Telnet service (explicit opt-in)
-  --one-shot           Exit when the first shell exits; no reconnectable session
+  --one-shot           Exit when the first console session exits; no broker
+  --rescue             Skip boot services and mux; start a plain console shell
   --from-ripple IMAGE  Extract ROOTFS.IMG from an existing Ripple FAT disk
                        into a separate default image; the source is unchanged
   --fresh              Replace the default root image, saving the old as .bak
@@ -105,7 +110,9 @@ while [[ $# -gt 0 ]]; do
         --detach) detach=1; shift ;;
         --headless) headless=1; detach=1; shift ;;
         --gui) gui=1; shift ;;
+        --desktop) desktop=1; gui=1; shift ;;
         --telnet) telnet=1; shift ;;
+        --rescue) rescue=1; shift ;;
         --one-shot) one_shot=1; shift ;;
         --attach|--stop) session_action="${1#--}"; shift ;;
         --no-share)
@@ -206,7 +213,7 @@ if [[ "$run_only" == 0 && ( ! -e "$disk" || "$fresh" == 1 ) ]]; then
     if [[ -n "$ripple_disk" ]]; then
         node "$ROOT/fuse-x/image.mjs" extract "$ripple_disk" "$temporary/ROOTFS.IMG" >/dev/null
     else
-        node "$ROOT/fuse-x/image.mjs" create "$temporary/ROOTFS.IMG" --apps "$OUT/apps" >/dev/null
+        node "$ROOT/fuse-x/image.mjs" create "$temporary/ROOTFS.IMG" --apps "$OUT/apps" --boot-profile fuse-x >/dev/null
     fi
     if [[ -e "$disk" ]]; then
         node "$ROOT/ports/fuzix/tools/image-backup.mjs" save "$disk" >&2
@@ -218,7 +225,7 @@ if [[ "$run_only" == 0 && ( ! -e "$disk" || "$fresh" == 1 ) ]]; then
     printf 'Prepared root image: %s\n' "$disk" >&2
 fi
 if [[ "$run_only" == 0 && ( "$explicit_disk" == 0 || "$install_apps" == 1 ) ]]; then
-    node "$ROOT/fuse-x/image.mjs" install "$disk" --apps "$OUT/apps" >&2
+    node "$ROOT/fuse-x/image.mjs" install "$disk" --apps "$OUT/apps" --boot-profile fuse-x >&2
 fi
 [[ -f "$disk" ]] || fail "disk not found: $disk; run without --run-only first"
 if [[ "$build_only" == 1 ]]; then
@@ -228,6 +235,7 @@ fi
 printf 'Running Fuse-X %s using %s\n' "$mode" "$disk" >&2
 export RCC_NATIVE_NET="$network"
 export RCC_NATIVE_AUDIO="$audio"
+if [[ "$desktop" == 1 ]]; then export FUSE_X_DESKTOP=1; fi
 if [[ -n "$audio_wav" ]]; then export RCC_NATIVE_AUDIO_WAV="$audio_wav"; fi
 if [[ "$gui" == 1 ]]; then unset RCC_NATIVE_HEADLESS;
 elif [[ "$headless" == 1 || "$mode" != --run ]]; then export RCC_NATIVE_HEADLESS=1; fi
@@ -246,6 +254,7 @@ if [[ "$mode" == --run ]]; then
     if [[ "$headless" == 1 ]]; then arguments+=(--headless); fi
     if [[ "$gui" == 1 ]]; then arguments+=(--gui); fi
     if [[ "$telnet" == 1 ]]; then arguments+=(--telnet); fi
+    if [[ "$rescue" == 1 ]]; then arguments+=(--rescue); fi
     if [[ "$one_shot" == 1 ]]; then
         exec python3 "$ROOT/fuse-x/console.py" "${arguments[@]}" --one-shot
     fi

@@ -280,9 +280,9 @@ arg_t _execve(void) {
     ripple_gfx_exit(udata.u_ptab);
     ripple_pcm_exit(udata.u_ptab);
     for (i = 0; i < UFTSIZE; i++)
-        if (udata.u_cloexec & (1UL << i))
+        if (uf_cloexec_test(&udata, i))
             doclose(i);
-    udata.u_cloexec = 0;
+    uf_cloexec_reset(&udata);
     memset(udata.u_sigvec, 0, sizeof(udata.u_sigvec));
     udata.u_sigtramp = 0;
     udata.u_cursig = 0;

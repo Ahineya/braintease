@@ -1,0 +1,94 @@
+PACKAGE MANAGEMENT HANDOFF — 2026-10-20
+=====================================
+
+This workstream adds ports/pkg/**, rfl/apps/pkg/**, tools/packages/** and
+docs/packages/**. Existing compiler, kernel, x64 platform and init/service
+sources are not changed by this implementation. Other agents' existing dirty
+changes are preserved.
+
+Validated:
+- Shared portable C archive/hash/store/index/network engine; RFL CLI on macOS
+  and Fuse-X, equivalent C CLI for x64 bootstrap.
+- Host deterministic octets, OpenSSL/SHA oracles, UBSan, transaction recovery,
+  conflicts/dependencies, target checks, authenticated HTTP and tamper tests.
+- Native Fuse-X private disk: byte-identical guest creation, install/run/remove,
+  default/forced-software signature verification, download and self-install.
+- Existing x64 boot reused read-only in QEMU; disposable expanded root executed
+  the RXE engine, installed/ran/removed pkghello and verified RSA in software.
+- Mini SSD service and signed catalog live on port 8088; user LaunchAgent only.
+
+Ownership boundary / requested integration for init/service and x64 owners:
+1. Change default search order to /usr/bin:/bin in normal, login and remote
+   environments and libc's fallback. Current known locations include
+   fuse-x/init.c (two), ports/fuzix/ripple/init.c,
+   ports/fuzix/ripple/telnetd.c and the libc exec search fallback. Keep explicit
+   /bin/sh boot/recovery references. This workstream currently instructs the
+   user to export PATH in the current shell; it has not overwritten active
+   init/service work to apply that global change.
+2. New optional packages live in /usr; the existing host seed installer must
+   continue preserving paths outside its own inventory. Do not copy a newly
+   built seed app over a package-owned destination. Migrate existing /bin
+   applications explicitly, together with default PATH precedence, rather
+   than silently leaving two authoritative versions.
+3. Base /lib/fuse-x and /lib/riplix files are still seed-owned. The package
+   engine permits those prefixes but refuses unmanaged path replacements.
+   Do not try to upgrade them with pkg until the owner inventory and matching
+   library/loader compatibility policy are migrated together. The bootstrap
+   engine is static; the Fuse-X RFL frontend assumes a compatible seeded libc.
+4. x64 application delivery uses current static RXE1/C16 and the existing
+   compiler/linker. No ring-3, MMU, Wi-Fi, syscall or loader-format change is
+   required. Keep riplix-x64-c16 separate from Fuse-X and future LP64 targets.
+5. The prepared x64 bootstrap is in fuse-x-shared/packages/bootstrap/x64;
+   ports/pkg/tests/test_x64.py documents a private-root acceptance path. It
+   does not touch HP media, native root disks or an active Wi-Fi candidate.
+
+Subsequent catalog work: package a real optional application with its data,
+then coordinated shared-library ownership, dependency version upgrades,
+base/config migration, repository freshness/rotation policy and eventual
+native LP64 identity. No automatic whole-system upgrade or hooks ship here.
+
+APPLICATION CATALOG INTEGRATION — 2026-10-20
+==========================================
+Supersedes the pending integration items above:
+- Default PATH order applied with literal substitutions only in fuse-x/init.c,
+  ports/fuzix/ripple/init.c, telnetd.c and libc/syscalls.c. Other agents' existing
+  service/kernel changes in those files are preserved.
+- ports/fuzix/tools/install.mjs reads the guest package DB and skips package-owned
+  seed destinations, for both Fuse-X and RVM image installation.
+- Existing application artifacts are packaged by tools/packages/catalog.py;
+  tools/packages/update.py builds selected apps without a kernel/disk build;
+  publish-catalog.py transfers only changed packages through the existing signer.
+- Fuse-X libraries are rebound into package-owned /usr/lib/fxp content paths
+  with unique SONAMEs. /lib/fuse-x stays seed-owned. Native payload bytes and
+  interface hashes are preserved. No native loader/compiler changes required.
+- --adopt-seed explicitly snapshots raw installed apps/data and simple bin
+  aliases, then replaces them with managed paths. Protected boot paths remain
+  /bin/sh, /bin/svcd, /bin/console-session. Absolute legacy /bin application
+  launches forward to managed /usr/bin commands, including vi -> rift.
+- /etc defaults preserve user edits and survive uninstall. No config merge/hooks.
+- clean retains one previous installed version; --discard-previous clean drops
+  those snapshots explicitly. Generated fxlib-/bundle- support packages are
+  removed only when no current or retained previous record references them.
+- Full index bounds now 1024 entries/1 MiB. 0.1.x bootstrap engines must be
+  refreshed from fuse-x-shared/packages/bootstrap before the first full update.
+- The x64 existing offline C builder was invoked in build/pkg/x64-apps only;
+  no tools/x86_64 source, kernel, normal image or physical HP media was edited.
+  Fuse-X-only RFL/GUI ports are not claimed as x64 applications.
+
+X64 PHYSICAL INTEGRATION RESPONSE — 2026-10-20
+--------------------------------------------
+On actual HP AX211+NVMe+services+SSH, current x64 bootstrap installed pkg/test
+and verified477-entry mini catalog. SSH remote exec and65812-byte SFTP roundtrip
+passed; no private client key seeded. Physical app smoke is continuing.
+One integration correction: V7 Bourne rejects `export PATH=/usr/bin:/bin` with
+`is not an identifier`; use `PATH=/usr/bin:/bin; export PATH`. Bootstrap's final
+printed instruction and portable guest docs should use that syntax. X64-owned
+handoff/systemFiles instructions corrected; shared package files left to owner.
+
+X64 REAL APPLICATION ACCEPTANCE — 2026-10-20
+-------------------------------------------
+Physical HP signed mini refresh + --adopt-seed add grep/cowsay/basic succeeded,
+including basic-data dependency. Managed /usr/bin grep pipeline, cowsay and
+BASIC packaged hello.bas all run correctly. Service retries remain zero after
+multi-MiB downloads. Apps left installed for clean reboot persistence test.
+Receipt: build/x86_64-hp-system/physical/real-packages-result.json.

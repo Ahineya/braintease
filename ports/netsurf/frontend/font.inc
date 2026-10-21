@@ -5,6 +5,7 @@
 static unsigned char *nf_data;
 static unsigned nf_count;
 static unsigned long nf_records;
+static unsigned char *nf_checked;
 static unsigned nf_u16(const unsigned char *p) { return p[0]+p[1]*256U; }
 static unsigned long nf_u32(const unsigned char *p) { return nf_u16(p)+(unsigned long)nf_u16(p+2)*65536UL; }
 static int nf_signed(unsigned v) { return v<128?(int)v:(int)v-256; }
@@ -15,23 +16,41 @@ static bool nf_load(const char *path)
     if(fseek(file,0,SEEK_END)|| (bytes=ftell(file))<20 || bytes>4194304L || fseek(file,0,SEEK_SET)) { fclose(file);return false; }
     data=malloc(bytes);if(!data){fclose(file);return false;}
     if(fread(data,1,bytes,file)!=(size_t)bytes){free(data);fclose(file);return false;}fclose(file);
-    for(i=0;i<(unsigned long)bytes;i++)if(data[i]>255) { free(data);return false; }
+    for(i=0;i<20;i++)if(data[i]>255) { free(data);return false; }
     if(memcmp(data,"RBFONT01",8)||nf_u16(data+8)!=12||nf_u16(data+10)!=2||nf_u16(data+14)||nf_u32(data+16)!=(unsigned long)bytes)goto bad;
     nf_count=nf_u16(data+12);nf_records=20UL+nf_count*2UL;
     if(!nf_count||nf_count>2048||nf_records+nf_count*288UL>(unsigned long)bytes)goto bad;
+    for(i=20;i<nf_records;i++)if(data[i]>255)goto bad;
     for(i=1;i<nf_count;i++)if(nf_u16(data+20+i*2)<=nf_u16(data+18+i*2))goto bad;
     for(i=0;i<nf_count*24UL;i++) {
-        const unsigned char *r=data+nf_records+i*12;unsigned long pixels=0,j;
+        const unsigned char *r=data+nf_records+i*12;unsigned j;
+        for(j=0;j<12;j++)if(r[j]>255)goto bad;
         at=nf_u32(r);length=nf_u16(r+4);
         if(r[11])goto bad;
         if(at==0xffffffffUL)continue;
         if(at<nf_records+nf_count*288UL||at>(unsigned long)bytes||length>(unsigned long)bytes-at||r[8]>64||r[9]>64||r[10]>64)goto bad;
-        for(j=0;j<length;j++)pixels+=(data[at+j]>>4)+1;
-        if(pixels!=(unsigned long)r[8]*r[9])goto bad;
+        /* RLE contents are checked once when this glyph is first used. The
+         * entire directory is still validated before any record is accessed. */
     }
+    free(nf_checked);nf_checked=calloc((nf_count*24UL+7)/8,1);
+    if(!nf_checked)goto bad;
     nf_data=data;return true;
 bad:
     free(data);nf_count=0;return false;
+}
+static bool nf_validate(const unsigned char *r) {
+    unsigned long record=(r-(nf_data+nf_records))/12,at,length,pixels=0,i;
+    unsigned bit=1U<<(record&7);
+    if(nf_checked[record/8]&bit)return true;
+    at=nf_u32(r);length=nf_u16(r+4);
+    for(i=0;i<length;i++) {
+        unsigned value=nf_data[at+i];
+        if(value>255)return false;
+        pixels+=(value>>4)+1;
+        if(pixels>(unsigned long)r[8]*r[9])return false;
+    }
+    if(pixels!=(unsigned long)r[8]*r[9])return false;
+    nf_checked[record/8]|=bit;return true;
 }
 struct nf_style { unsigned face, size; };
 static struct nf_style nf_style(const plot_font_style_t *style)
@@ -84,7 +103,7 @@ static struct nf_glyph nf_glyph(struct nf_style f,uint32_t cp,unsigned cells)
     memset(&g,0,sizeof(g));
     if(index>=0) {
         const unsigned char *r=nf_data+nf_records+((f.face*2UL+strike)*nf_count+index)*12;
-        if(nf_u32(r)!=0xffffffffUL) {
+        if(nf_u32(r)!=0xffffffffUL&&nf_validate(r)) {
             g.record=r;g.left=nf_scale(nf_signed(r[6]),f.size,base);g.top=nf_scale(nf_signed(r[7]),f.size,base);
             g.width=nf_scale(r[8],f.size,base);g.height=nf_scale(r[9],f.size,base);g.advance=nf_scale(r[10],f.size,base);
             return g;

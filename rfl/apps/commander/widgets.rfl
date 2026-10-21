@@ -1,6 +1,7 @@
-import { prompt as input_prompt, Palette } from "lib/tui_dialog";
+import { prompt as input_prompt, choose as choice_dialog, message as message_dialog, Palette } from "lib/tui_dialog";
 import { Screen, Window, TerminalError, InvalidWindow, BOLD, BACKSPACE, CLOSED, RESIZE, NO_KEY, UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN, LEFT, RIGHT } from "std/curses";
 import { open_read, IoError, read_bytes as read, write_text, STDIN, STDOUT, run_command, run_program, change_directory, metadata, read_dir, REGULAR, UnsupportedFileType, Errno } from "std/posix";
+import { Rect } from "lib/tui";
 import { buffer } from "lib/text";
 import { ends_with } from "std/string";
 import { Theme } from "./theme";
@@ -8,7 +9,8 @@ import { fitted, number } from "./format";
 
 struct Popup {
     window: Window,
-    shadow: Window
+    shadow: Window,
+    area: Rect
 }
 
 fn popup(screen: &Screen, theme: &Theme, title: String, height: i16) -> Result<Popup, TerminalError> {
@@ -38,7 +40,7 @@ fn popup(screen: &Screen, theme: &Theme, title: String, height: i16) -> Result<P
     window.background(theme.dialog);
     window.border(theme.dialog);
     window.text(0, 2, fitted(" " + title + " ", width - 4), theme.dialog | BOLD);
-    Ok(Popup { window: move(window), shadow: move(shadow) })
+    Ok(Popup { window: move(window), shadow: move(shadow), area: Rect { row: row, column: column, rows: height, columns: width } })
 }
 
 fn present(screen: &Screen, panel: &Popup) {
@@ -50,6 +52,10 @@ fn present(screen: &Screen, panel: &Popup) {
 
 export fn prompt(screen: &Screen, theme: &Theme, title: String, initial: String) -> Option<String> {
     input_prompt(screen, Palette { body: theme.dialog, title: theme.dialog | BOLD, input: theme.input, selected: theme.selected, shadow: theme.shadow }, title, initial)
+}
+
+fn palette(theme: &Theme) -> Palette {
+    Palette { body: theme.dialog, title: theme.dialog | BOLD, input: theme.input, selected: theme.selected, shadow: theme.shadow }
 }
 
 export fn confirm(screen: &Screen, theme: &Theme, question: String) -> bool {
@@ -65,7 +71,20 @@ export fn confirm(screen: &Screen, theme: &Theme, question: String) -> bool {
         panel.window.cursor(0, 0, false);
         present(screen, &panel);
         while (true) {
-            let key = panel.window.key();
+            let event = panel.window.event();
+            let mut key = event.key();
+            match event.mouse {
+                Some(pointer) => {
+                    if (pointer.pressed() && panel.area.contains(pointer.row, pointer.column) && pointer.row == panel.area.row + 4) {
+                        key = if (pointer.column - panel.area.column < 14) {
+                            121
+                        } else {
+                            110
+                        };
+                    }
+                },
+                None => {}
+            }
             if (key == 121 || key == 89) {
                 return true;
             }
@@ -93,69 +112,10 @@ export fn choose(screen: &Screen, theme: &Theme) -> Option<String> {
         },
         Err(_) => {},
     }
-    let mut selected: usize = 0;
-    let mut top: usize = 0;
-    while (true) {
-        let height = if (names.len() < 10) {
-            names.len() as i16 + 5
-        } else {
-            15
-        };
-        let panel = match popup(screen, theme, "Choose theme (session only)", height) {
-            Ok(panel) => move(panel),
-            Err(_) => {
-                return None;
-            }
-        };
-        let rows = (panel.window.rows() - 4) as usize;
-        while (true) {
-            if (selected < top) {
-                top = selected;
-            }
-            if (selected >= top + rows) {
-                top = selected - rows + 1;
-            }
-            for (row in 0..rows) {
-                let i = top + row;
-                let style = if (i == selected) {
-                    theme.selected
-                } else {
-                    theme.dialog
-                };
-                panel.window.fill(row as i16 + 2, 2, panel.window.columns() - 4, ' ', style);
-                if (i < names.len()) {
-                    panel.window.text(row as i16 + 2, 2, names[i], style);
-                }
-            }
-            panel.window.cursor(0, 0, false);
-            present(screen, &panel);
-            let key = panel.window.key();
-            if (key == RESIZE) {
-                break;
-            }
-            if (key == 27 || key == 3 || key == CLOSED) {
-                return None;
-            }
-            if (key == 10 || key == 13) {
-                return Some(names[selected]);
-            }
-            if (key == UP && selected > 0) {
-                selected -= 1;
-            }
-            if (key == DOWN && selected + 1 < names.len()) {
-                selected += 1;
-            }
-            if (key >= 32 && key < 127) {
-                for (i in 0..names.len()) {
-                    if (names[i].len() > 0 && names[i][0] as i16 == key) {
-                        selected = i;
-                        break;
-                    }
-                }
-            }
-        }
+    match choice_dialog(screen, palette(theme), "Choose theme (session only)", names, 0) {
+        Some(index) => Some(names[index]),
+        None => None
     }
-    None
 }
 
 export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoError> {
@@ -253,9 +213,24 @@ export fn view(screen: &Screen, theme: &Theme, path: String) -> Result<unit, IoE
             panel.window.cursor(0, 0, false);
             present(screen, &panel);
             changed = false;
-            let mut key = panel.window.key();
-            while (key == NO_KEY) {
-                key = panel.window.key();
+            let event = panel.window.event();
+            let mut key = event.key();
+            match event.mouse {
+                Some(pointer) => {
+                    if (panel.area.contains(pointer.row, pointer.column)) {
+                        if (pointer.wheel() < 0) {
+                            key = UP;
+                        } else if (pointer.wheel() > 0) {
+                            key = DOWN;
+                        } else if (pointer.pressed() && pointer.row == panel.area.row + panel.area.rows - 2) {
+                            key = 27;
+                        }
+                    }
+                },
+                None => {}
+            }
+            if (key == NO_KEY) {
+                continue;
             }
             if (key == 113 || key == 27 || key == 3 || key == CLOSED) {
                 return Ok({});
@@ -341,33 +316,8 @@ export fn console(screen: &Screen, path: String) -> Result<unit, IoError> {
 }
 
 export fn about(screen: &Screen, theme: &Theme) {
-    let lines = ["RFL Commander", "A two-panel file manager written in RFL.", "For Riplix and Fuse-X; shared C16 curses.", "", "Enter: open directory / run program / view", "F3 View  F4 Edit  F5 Copy  F6 Move  r Rename", "F7 Mkdir  F8 Delete  F9 Theme  F10 Quit", "Tab: panel  Ctrl-O: shell  Ctrl-P: layout"];
-    while (true) {
-        let panel = match popup(screen, theme, "About RFL Commander", 14) {
-            Ok(panel) => move(panel),
-            Err(_) => {
-                return;
-            }
-        };
-        let rows = (panel.window.rows() - 4) as usize;
-        for (i in 0..lines.len()) {
-            if (i < rows) {
-                panel.window.text(i as i16 + 2, 2, fitted(lines[i], panel.window.columns() - 4), theme.dialog);
-            }
-        }
-        panel.window.text(panel.window.rows() - 2, 2, fitted("Enter / Esc: close", panel.window.columns() - 4), theme.dialog | BOLD);
-        panel.window.cursor(0, 0, false);
-        present(screen, &panel);
-        while (true) {
-            let key = panel.window.key();
-            if (key == RESIZE) {
-                break;
-            }
-            if (key == 10 || key == 13 || key == 27 || key == 3 || key == CLOSED || key == 1) {
-                return;
-            }
-        }
-    }
+    let lines = ["RFL Commander", "A two-panel file manager written in RFL.", "For Riplix and Fuse-X; shared C16 curses.", "", "Enter: open directory / run program / view", "F3 View  F4 Edit  F5 Copy  F6 Move  r Rename", "F7 Mkdir  F8 Delete  F9 Theme  F10 Quit", "Tab: panel  Ctrl-O: shell  Ctrl-P: layout", "s: SFTP connections (uses ~/.ssh/config profiles)"];
+    message_dialog(screen, palette(theme), "About RFL Commander", lines);
 }
 
 // Returns with curses suspended; the controller resumes even on command/error.
@@ -384,4 +334,8 @@ export fn external(screen: &Screen, directory: String, command: String, pause: b
         read(STDIN, 1024)?;
     }
     result
+}
+
+export fn connection_choice(screen: &Screen, theme: &Theme, title: String, choices: Vec<String>) -> Option<usize> {
+    choice_dialog(screen, palette(theme), title, choices, 0)
 }

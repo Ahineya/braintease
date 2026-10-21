@@ -1,0 +1,45 @@
+Station,Day,Temperature,Humidity,Notes
+Lviv,2026-10-01,17.1,56,Clear
+Odesa,2026-10-02,11.2,67,Clear
+Київ,2026-10-03,18.3,78,Clear
+Kyiv,2026-10-04,12.4,49,Clear
+Lviv,2026-10-05,19.5,60,Clear
+Odesa,2026-10-06,13.6,71,Clear
+Київ,2026-10-07,20.7,82,"Rain, clearing later"
+Kyiv,2026-10-08,14.8,53,Clear
+Lviv,2026-10-09,21.9,64,"Two observations
+Morning and evening"
+Odesa,2026-10-10,15.0,75,Clear
+Київ,2026-10-11,22.1,46,Clear
+Kyiv,2026-10-12,16.2,57,Clear
+Lviv,2026-10-13,10.3,68,Clear
+Odesa,2026-10-14,17.4,79,"Rain, clearing later"
+Київ,2026-10-15,11.5,50,Clear
+Kyiv,2026-10-16,18.6,61,Clear
+Lviv,2026-10-17,12.7,72,Clear
+Odesa,2026-10-18,19.8,83,"Two observations
+Morning and evening"
+Київ,2026-10-19,13.9,54,Clear
+Kyiv,2026-10-20,20.0,65,Clear
+Lviv,2026-10-21,14.1,76,"Rain, clearing later"
+Odesa,2026-10-01,21.2,47,Clear
+Київ,2026-10-02,15.3,58,Clear
+Kyiv,2026-10-03,22.4,69,Clear
+Lviv,2026-10-04,16.5,80,Clear
+Odesa,2026-10-05,10.6,51,Clear
+Київ,2026-10-06,17.7,62,"Two observations
+Morning and evening"
+Kyiv,2026-10-07,11.8,73,"Rain, clearing later"
+Lviv,2026-10-08,18.9,84,Clear
+Odesa,2026-10-09,12.0,55,Clear
+Київ,2026-10-10,19.1,66,Clear
+Kyiv,2026-10-11,13.2,77,Clear
+Lviv,2026-10-12,20.3,48,Clear
+Odesa,2026-10-13,14.4,59,Clear
+Київ,2026-10-14,21.5,70,"Rain, clearing later"
+Kyiv,2026-10-15,15.6,81,"Two observations
+Morning and evening"
+Lviv,2026-10-16,22.7,52,Clear
+Odesa,2026-10-17,16.8,63,Clear
+Київ,2026-10-18,10.9,74,Clear
+Kyiv,2026-10-19,17.0,45,Clear

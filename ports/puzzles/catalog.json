@@ -1,0 +1,243 @@
+[
+  {
+    "id": "blackbox",
+    "name": "Black Box",
+    "objective": "Find the hidden balls in the box by bouncing laser beams off them.",
+    "controls": "Click outside the box to fire a laser; click inside to mark a ball. Right-click marks an empty square."
+  },
+  {
+    "id": "bridges",
+    "name": "Bridges",
+    "objective": "Connect all the islands with a network of bridges.",
+    "controls": "Drag between islands to add bridges; repeat to make a double bridge. Right-drag marks no bridge."
+  },
+  {
+    "id": "cube",
+    "name": "Cube",
+    "objective": "Pick up all the blue squares by rolling the cube over them.",
+    "controls": "Click beside the cube or use arrow keys to roll. Pick up every blue square."
+  },
+  {
+    "id": "dominosa",
+    "name": "Dominosa",
+    "objective": "Tile the rectangle with a full set of dominoes.",
+    "controls": "Click between two numbers to join them. Right-click marks a boundary."
+  },
+  {
+    "id": "fifteen",
+    "name": "Fifteen",
+    "objective": "Slide the tiles around to arrange them into order.",
+    "controls": "Click a tile in the empty square's row or column to slide it; arrow keys also move tiles."
+  },
+  {
+    "id": "filling",
+    "name": "Filling",
+    "objective": "Mark every square with the area of its containing region.",
+    "controls": "Click a square and type its region size. Drag to copy a number; Backspace clears it."
+  },
+  {
+    "id": "flip",
+    "name": "Flip",
+    "objective": "Flip groups of squares to light them all up at once.",
+    "controls": "Click a square to flip it and the squares linked to it. Make every square light."
+  },
+  {
+    "id": "flood",
+    "name": "Flood",
+    "objective": "Turn the grid the same colour in as few flood fills as possible.",
+    "controls": "Click a colour to flood the top-left region with it. Number keys also select colours."
+  },
+  {
+    "id": "galaxies",
+    "name": "Galaxies",
+    "objective": "Divide the grid into rotationally symmetric regions each centred on a dot.",
+    "controls": "Drag borders to outline symmetric regions around dots. Right-click marks cells as belonging to a dot."
+  },
+  {
+    "id": "guess",
+    "name": "Guess",
+    "objective": "Guess the hidden combination of colours.",
+    "controls": "Click pegs to choose colours, then click the feedback area to submit. Right-click cycles backwards."
+  },
+  {
+    "id": "inertia",
+    "name": "Inertia",
+    "objective": "Collect all the gems without running into any of the mines.",
+    "controls": "Click in any of eight directions to slide; arrows or numeric keypad also move. Space follows a hint after Solve. Undo can recover from a mine."
+  },
+  {
+    "id": "keen",
+    "name": "Keen",
+    "objective": "Complete the latin square in accordance with the arithmetic clues.",
+    "controls": "Click a square and type a number. Right-click enters pencil marks; Backspace clears."
+  },
+  {
+    "id": "lightup",
+    "name": "Light Up",
+    "objective": "Place bulbs to light up all the squares.",
+    "controls": "Left-click places a bulb. Right-click marks an empty square. Light all squares without bulbs seeing each other."
+  },
+  {
+    "id": "loopy",
+    "name": "Loopy",
+    "objective": "Draw a single closed loop, given clues about number of adjacent edges.",
+    "controls": "Left-click draws a loop edge; right-click marks an unused edge. Click again to clear."
+  },
+  {
+    "id": "magnets",
+    "name": "Magnets",
+    "objective": "Place magnets to satisfy the clues and avoid like poles touching.",
+    "controls": "Left-click cycles magnet polarity; right-click marks a blank domino."
+  },
+  {
+    "id": "map",
+    "name": "Map",
+    "objective": "Colour the map so that adjacent regions are never the same colour.",
+    "controls": "Drag a colour from a coloured region to another region. Right-drag makes pencil marks."
+  },
+  {
+    "id": "mines",
+    "name": "Mines",
+    "objective": "Find all the mines without treading on any of them.",
+    "controls": "Left-click opens or chords; right-click flags. Arrows move; Enter opens; Space flags."
+  },
+  {
+    "id": "mosaic",
+    "name": "Mosaic",
+    "objective": "Fill in the grid given clues about number of nearby black squares.",
+    "controls": "Left-click fills a square; right-click empties it. Drag to paint a run; middle-click clears."
+  },
+  {
+    "id": "net",
+    "name": "Net",
+    "objective": "Rotate each tile to reassemble the network.",
+    "controls": "Left/right click rotate; middle or Shift-left locks. Arrows move; A/S rotate; D or Space locks."
+  },
+  {
+    "id": "netslide",
+    "name": "Netslide",
+    "objective": "Slide a row at a time to reassemble the network.",
+    "controls": "Click arrows outside the grid to slide a row or column. Reassemble the powered network."
+  },
+  {
+    "id": "palisade",
+    "name": "Palisade",
+    "objective": "Divide the grid into equal-sized areas in accordance with the clues.",
+    "controls": "Left-click draws a border; right-click marks no border. Drag to extend a line."
+  },
+  {
+    "id": "pattern",
+    "name": "Pattern",
+    "objective": "Fill in the pattern in the grid, given only the lengths of runs of black squares.",
+    "controls": "Left-click paints black; right-click paints white; middle-click clears. Drag to fill a run."
+  },
+  {
+    "id": "pearl",
+    "name": "Pearl",
+    "objective": "Draw a single closed loop, given clues about corner and straight squares.",
+    "controls": "Left-click draws a loop edge; right-click marks an unused edge. Drag to continue."
+  },
+  {
+    "id": "pegs",
+    "name": "Pegs",
+    "objective": "Jump pegs over each other to remove all but one.",
+    "controls": "Drag a peg over an adjacent peg into an empty hole to remove the jumped peg."
+  },
+  {
+    "id": "range",
+    "name": "Range",
+    "objective": "Place black squares to limit the visible distance from each numbered cell.",
+    "controls": "Left-click marks black; right-click marks white. Repeat a click to clear a square."
+  },
+  {
+    "id": "rect",
+    "name": "Rectangles",
+    "objective": "Divide the grid into rectangles with areas equal to the numbers.",
+    "controls": "Drag between opposite corners to draw a rectangle. Right-drag removes borders."
+  },
+  {
+    "id": "samegame",
+    "name": "Same Game",
+    "objective": "Clear the grid by removing touching groups of the same colour squares.",
+    "controls": "Click a connected group to select it; click again to remove it. Larger groups score more."
+  },
+  {
+    "id": "signpost",
+    "name": "Signpost",
+    "objective": "Connect the squares into a path following the arrows.",
+    "controls": "Drag from one square to its successor in the arrow direction. Right-drag disconnects a link."
+  },
+  {
+    "id": "singles",
+    "name": "Singles",
+    "objective": "Black out the right set of duplicate numbers.",
+    "controls": "Left-click blackens a square; right-click circles it to keep it white."
+  },
+  {
+    "id": "sixteen",
+    "name": "Sixteen",
+    "objective": "Slide a row at a time to arrange the tiles into order.",
+    "controls": "Click arrows outside the grid to slide a whole row or column into order."
+  },
+  {
+    "id": "slant",
+    "name": "Slant",
+    "objective": "Draw a maze of slanting lines that matches the clues.",
+    "controls": "Left/right click choose a diagonal; repeated clicking cycles the square. Avoid closed loops."
+  },
+  {
+    "id": "solo",
+    "name": "Solo",
+    "objective": "Fill in the grid so that each row, column and square block contains one of every digit.",
+    "controls": "Click and type digits. Right-click enters pencil marks; Backspace clears. Letters follow 9 on larger grids."
+  },
+  {
+    "id": "tents",
+    "name": "Tents",
+    "objective": "Place a tent next to each tree.",
+    "controls": "Left-click places a tent; right-click marks grass. Drag to paint several squares."
+  },
+  {
+    "id": "towers",
+    "name": "Towers",
+    "objective": "Complete the latin square of towers in accordance with the clues.",
+    "controls": "Click and type a tower height. Right-click enters pencil marks; Backspace clears."
+  },
+  {
+    "id": "tracks",
+    "name": "Tracks",
+    "objective": "Fill in the railway track according to the clues.",
+    "controls": "Left-drag lays track; right-drag marks no track. Click an edge to toggle a connection.",
+    "window_name": "Train Tracks"
+  },
+  {
+    "id": "twiddle",
+    "name": "Twiddle",
+    "objective": "Rotate the tiles around themselves to arrange them into order.",
+    "controls": "Click a group to rotate it anticlockwise; right-click rotates clockwise. Arrow keys move the cursor."
+  },
+  {
+    "id": "undead",
+    "name": "Undead",
+    "objective": "Place ghosts, vampires and zombies so that the right numbers of them can be seen in mirrors.",
+    "controls": "Click a square and type G, V or Z for a ghost, vampire or zombie. Right-click uses pencil marks."
+  },
+  {
+    "id": "unequal",
+    "name": "Unequal",
+    "objective": "Complete the latin square in accordance with the > signs.",
+    "controls": "Click and type a number. Right-click enters pencil marks; Backspace clears."
+  },
+  {
+    "id": "unruly",
+    "name": "Unruly",
+    "objective": "Fill in the black and white grid to avoid runs of three.",
+    "controls": "Left-click chooses black; right-click chooses white. Repeat to clear; avoid three in a row."
+  },
+  {
+    "id": "untangle",
+    "name": "Untangle",
+    "objective": "Reposition the points so that the lines do not cross.",
+    "controls": "Drag the points until no lines cross. The window can be resized to give more room."
+  }
+]

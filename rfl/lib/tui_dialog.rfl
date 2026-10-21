@@ -1,6 +1,7 @@
+import { Rect } from "lib/tui";
 import { prefix } from "lib/unicode";
 import { line_edit } from "lib/tui_input";
-import { Screen, Window, TerminalError, InvalidWindow, BOLD, REVERSE, NO_KEY, CLOSED, RESIZE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
+import { Screen, Window, MouseEvent, TerminalError, InvalidWindow, BOLD, REVERSE, NO_KEY, CLOSED, RESIZE, UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, BACKSPACE } from "std/curses";
 /// Styles for independent reusable dialogs, without application-specific roles.
 export struct Palette {
     /// Dialog body and border.
@@ -18,7 +19,8 @@ export struct Palette {
 /// Owned front/shadow layers. Drop closes both; caller redraws lower layers.
 export struct Popup {
     front: Window,
-    shadow: Window
+    shadow: Window,
+    area: Rect
 }
 
 /// Creates a centered framed modal; callers retain interaction and presentation policy.
@@ -46,12 +48,26 @@ export fn popup(screen: &Screen, colors: Palette, title: String, rows: i16) -> R
     front.background(colors.body);
     front.border(colors.body);
     front.text(0, 2, fitted(" " + title + " ", width - 4), colors.title | BOLD);
-    Ok(Popup { front: move(front), shadow: move(shadow) })
+    Ok(Popup { front: move(front), shadow: move(shadow), area: Rect { row: y, column: x, rows: height, columns: width } })
+}
+
+impl Popup {
+    /// Converts screen-relative mouse coordinates into this popup's local space.
+    export fn mouse(&self, event: MouseEvent) -> Option<MouseEvent> {
+        if (!self.area.contains(event.row, event.column)) {
+            return None;
+        }
+        Some(MouseEvent { row: event.row - self.area.row, column: event.column - self.area.column, flags: event.flags })
+    }
 }
 
 /// Clips UTF-8 text to complete graphemes measured in terminal cells.
 export fn fitted(text: String, width: i16) -> String {
-    if (width <= 0) { "" } else { text[0..prefix(text, width as usize)] }
+    if (width <= 0) {
+        ""
+    } else {
+        text[0..prefix(text, width as usize)]
+    }
 }
 
 /// Stages the screen, shadow and front layer, then presents one composed frame.
@@ -80,7 +96,27 @@ export fn prompt(screen: &Screen, colors: Palette, title: String, initial: Strin
             panel.front.cursor(2, 2 + input.column(width) as i16, true);
             present(screen, &panel);
             let event = panel.front.event();
-            let key = event.key();
+            let mut key = event.key();
+            match event.mouse {
+                Some(mouse) => {
+                    match panel.mouse(mouse) {
+                        Some(local) => {
+                            input.mouse(Rect { row: 2, column: 2, rows: 1, columns: width as i16 }, local);
+                            if (local.pressed() && local.row == 4) {
+                                if (local.column >= 2 && local.column < 14) {
+                                    key = 13;
+                                } else if (local.column >= 16 && local.column < 26) {
+                                    key = 27;
+                                } else if (local.column >= 28 && local.column < 40) {
+                                    input.key(21);
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                },
+                None => {}
+            }
             if (event.kind == NO_KEY) {
                 continue;
             }
@@ -147,6 +183,45 @@ export fn choose(screen: &Screen, colors: Palette, title: String, choices: Vec<S
             present(screen, &panel);
             let event = panel.front.event();
             let key = event.key();
+            match event.mouse {
+                Some(mouse) => {
+                    match panel.mouse(mouse) {
+                        Some(local) => {
+                            if (local.pressed() && local.row >= 2 && local.row < panel.front.rows() - 2 && local.column >= 2 && local.column < panel.front.columns() - 2) {
+                                let index = top + (local.row - 2) as usize;
+                                if (index < choices.len()) {
+                                    return Some(index);
+                                }
+                            }
+                            if (local.wheel() < 0) {
+                                selected = if (selected > 3) {
+                                    selected - 3
+                                } else {
+                                    0 as usize
+                                };
+                            }
+                            if (local.wheel() > 0) {
+                                selected = if (selected + 3 < choices.len()) {
+                                    selected + 3
+                                } else {
+                                    choices.len() - 1
+                                };
+                            }
+                            if (local.pressed() && local.row == panel.front.rows() - 2) {
+                                if (local.column >= 15 && local.column < 25) {
+                                    return None;
+                                }
+                                if (local.column >= 2 && local.column < 14) {
+                                    return Some(selected);
+                                }
+                            }
+                        },
+                        None => {}
+                    }
+                    continue;
+                },
+                None => {}
+            }
             if (key == RESIZE) {
                 break;
             }
@@ -217,6 +292,39 @@ export fn message(screen: &Screen, colors: Palette, title: String, lines: Vec<St
             present(screen, &panel);
             let event = panel.front.event();
             let key = event.key();
+            match event.mouse {
+                Some(mouse) => {
+                    match panel.mouse(mouse) {
+                        Some(local) => {
+                            if (local.pressed() && local.row == panel.front.rows() - 2) {
+                                return;
+                            }
+                            let last = if (lines.len() > rows) {
+                                lines.len() - rows
+                            } else {
+                                0 as usize
+                            };
+                            if (local.wheel() < 0) {
+                                top = if (top > 3) {
+                                    top - 3
+                                } else {
+                                    0 as usize
+                                };
+                            }
+                            if (local.wheel() > 0) {
+                                top = if (top + 3 < last) {
+                                    top + 3
+                                } else {
+                                    last
+                                };
+                            }
+                        },
+                        None => {}
+                    }
+                    continue;
+                },
+                None => {}
+            }
             if (key == RESIZE) {
                 break;
             }
