@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -17,10 +18,13 @@ folder.mkdir(parents=True, exist_ok=True)
 sources = [PORT/'document-test.c', PORT/'ui-document.c', ROOT/'libraries/text/text.c', ROOT/'libraries/unicode/unicode.c']
 flags = ['-DGRAPHITE_DOCUMENT_TEST_TEMP=1','-Dmkstemp=graphite_document_mkstemp','-D_POSIX_C_SOURCE=200809L','-std=c99','-O1','-g','-Wall','-Wextra','-Werror','-fsanitize=undefined','-fno-sanitize-recover=all']
 if sys.platform == 'darwin':
-    cc = '/usr/bin/clang'
-    flags += ['-isysroot','/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk']
+    sdk = os.environ.get('SDKROOT') or subprocess.check_output(['xcrun','--show-sdk-path'],text=True).strip()
+    sdk_compiler = Path(sdk).parent.parent / 'usr/bin/clang'
+    cc = os.environ.get('CC') or (str(sdk_compiler) if sdk_compiler.is_file() else
+                                subprocess.check_output(['xcrun','--find','clang'],text=True).strip())
+    flags += ['-isysroot',sdk]
 else:
-    cc = 'cc'
+    cc = os.environ.get('CC','cc')
 program = folder/'document-test'
 subprocess.run([cc,*flags,*map(str,sources),'-o',str(program)],check=True)
 with tempfile.TemporaryDirectory(prefix='graphite-documents-') as temporary:

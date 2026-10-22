@@ -19,6 +19,7 @@ import {commanderFiles, riftFiles} from '../rfl/os/files.mjs';
 import {lynxFiles} from '../ports/lynx/files.mjs';
 import {tlsFiles} from '../ports/tls/files.mjs';
 import {fuseDEFiles} from '../ports/fusede/files.mjs';
+import {graphiteCatalogFiles} from '../ports/fusede/catalog/files.mjs';
 import {kolfFiles} from '../ports/kolf/files.mjs';
 import {klotskiFiles} from '../ports/klotski/files.mjs';
 import {shikakuFiles} from '../ports/shikaku/files.mjs';
@@ -63,7 +64,7 @@ try {
     for(const name of ['rfl-demo','rfl-fm','rift','qr-demo','telegram','music','wavplay','chat','svcd','svc','console-session']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
-    for(const name of ['gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxmsg','nxselect','nxcalc','nxtetris','nxview','kolf','klotski','shikaku','nxcheck','nxhostcheck','startx','nxdraw','fdeshowcase','fdectl']) {
+    for(const name of ['fusedeshell','lvcalc','lvselect','lvgallery','lvdata','lvedit','gterm','gxcheck','nano-X','nanowm','nxlaunch','nxterm','nxclock','nxeyes','nxmsg','nxselect','nxcalc','nxtetris','nxview','kolf','klotski','shikaku','nxcheck','nxhostcheck','startx','nxdraw','fdeshowcase','fdectl']) {
       if(fs.existsSync(path.join(appDirectory,`${name}.fxe`))) names.push(name);
     }
     const aliases = {crond:'cron',vi:'rift',mc:'rfl-fm',mv:'cp',ln:'cp',tcl:'picol',
@@ -72,6 +73,7 @@ try {
       if(fs.existsSync(path.join(appDirectory,name+'.fxe')))names.push(name);
     const selected = new Set(names);
     if(selected.has('cron'))applications.push(...scheduleFiles());
+    if(selected.has('fusedeshell'))applications.push(...graphiteCatalogFiles());
     if(selected.has('test'))applications.push({name:'/bin/[',symlink:'test'});
     if(bootProfile){
       for(const name of ['svcd','svc','console-session','mux'])

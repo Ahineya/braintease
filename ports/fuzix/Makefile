@@ -432,6 +432,7 @@ $(BUILD)/apps/mux.asm: ripple/mux.c $(wildcard ripple/mux/*.inc ripple/mux/*.h) 
 	@mkdir -p $(@D)
 	@$(RCC) compile $< -o $@ $(USERFLAGS) >$@.log 2>&1 || { cat $@.log; exit 1; }
 $(BUILD)/apps/gterm.asm: $(ROOT)/ports/graphics/terminal.c $(ROOT)/ports/graphics/terminal.h $(ROOT)/ports/graphics/fonts/rom8x16.inc
+$(BUILD)/apps/gterm.asm: $(ROOT)/ports/graphics/include/gx-application.h $(ROOT)/ports/graphics/include/gx-session.h
 
 # Opt-in integration probe; not installed on normal disks.
 $(BUILD)/user/consolecheck.asm: tools/consolecheck.c $(USERHEADERS) $(RCC)

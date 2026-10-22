@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #include "user.h"
+#include <gx-panel.h>
 #define RH_OPEN(p) fx_open(p,O_RDONLY,0)
 #define RH_READ(fd,p,n) fx_read(fd,p,n)
 #define RH_CLOSE(fd) fx_close(fd)
@@ -10,9 +11,17 @@ extern unsigned fuse_headless, fuse_telnet, fuse_one_shot, fuse_stopping, fuse_c
 extern unsigned fuse_stop_tasks(unsigned);
 extern unsigned fuse_gui, fuse_rescue;
 extern unsigned fuse_new_terminals;
-static int graphics_service, services_manager, console_started;
+static int graphics_service, desktop_shell, services_manager, console_started;
 static int boot_file(const char *path){
     int fd=fx_open(path,O_RDONLY,0);if(fd<0)return 0;fx_close(fd);return 1;
+}
+static int desktop_available(void){
+    struct gx_panel panel={0};int fd,result;
+    if(fuse_rescue)return 0;
+    fd=fx_open("/dev/gfx",O_RDWR,0);if(fd<0)return 0;
+    panel.version=GXP_VERSION;
+    result=fx_call(29,fd,GX_PANEL,(unsigned long)&panel);fx_close(fd);
+    return result==0&&(panel.flags&GXP_CAP_OVERLAY);
 }
 static int start_services(void){
     int pid,fd;char *arguments[]={"svcd","--boot",NULL};
@@ -32,7 +41,7 @@ static int start_program(unsigned console) {
     int first=console==1&&!console_started&&!fuse_rescue&&boot_file("/etc/boot/console.ini");
     int pid=fx_fork(), group;
     char *arguments[4];
-    char *environment[9];
+    char *environment[10];
     if(pid){if(pid>0&&console==1)console_started=1;return pid;}
     fx_call(35,SIGINT,0,0); fx_call(35,SIGQUIT,0,0);
     fx_call(35,SIGTTOU,1,0);
@@ -49,7 +58,20 @@ static int start_program(unsigned console) {
     environment[3]="SHELL=/bin/sh";
     environment[4]="PS1=fuse-x# ";
     environment[5]="EDITOR=/bin/vi"; environment[6]="USER=root";
-    environment[7]="LOGNAME=root"; environment[8]=NULL;
+    environment[7]="LOGNAME=root"; environment[8]=environment[9]=NULL;
+    if(console==4){
+        arguments[0]="fusedeshell";
+        environment[8]=boot_file("/usr/share/applications") ?
+            "FUSEDE_APPLICATIONS=/usr/share/applications" : "FUSEDE_APPLICATIONS=/mnt/host/fusede/applications";
+        if(boot_file("/bin/fusedeshell"))
+            fx_call(23,(unsigned long)"/bin/fusedeshell",(unsigned long)arguments,(unsigned long)environment);
+        else if(boot_file("/mnt/host/fusedeshell.fxe"))
+            fx_call(23,(unsigned long)"/mnt/host/fusedeshell.fxe",(unsigned long)arguments,(unsigned long)environment);
+        fx_puts("Fuse-X: Graphite shell unavailable; starting graphical terminal\n");
+        arguments[0]="gterm";
+        fx_call(23,(unsigned long)"/bin/gterm",(unsigned long)arguments,(unsigned long)environment);
+        fx_error("init graphical fallback");fx_exit(127);
+    }
     if(first){
         arguments[0]="console-session";arguments[1]="--config";arguments[2]="/etc/boot/console.ini";
         fx_call(23,(unsigned long)"/bin/console-session",(unsigned long)arguments,(unsigned long)environment);
@@ -68,6 +90,10 @@ static int reap(int console) {
         if(pid==services_manager){
             services_manager=0;
             if(!fuse_stopping){fx_puts("Fuse-X: service supervisor stopped; console remains available (status ");fx_number(status);fx_puts(")\n");}
+        }
+        if(pid==desktop_shell){
+            desktop_shell=0;
+            if(!fuse_stopping&&status){fx_puts("Fuse-X: Graphite shell stopped; fallback controls remain available\n");start_program(2);}
         }
         if(pid==graphics_service && !fuse_stopping) {
             fx_puts("Fuse-X: Nano-X service stopped (status ");fx_number(status);fx_puts(")\n");
@@ -95,7 +121,10 @@ void fuse_init_entry(unsigned long argument) {
     if(fuse_rescue)fx_puts("Fuse-X: rescue mode; boot services and console policy skipped\n");
     if(fuse_telnet && start_program(0)<0) fx_error("init telnetd fork");
     if(fuse_gui && (graphics_service=start_program(3))<0) fx_error("init graphics service fork");
-    if(fuse_gui && start_program(2)<0) fx_error("init graphical terminal fork");
+    if(fuse_gui){
+        if(desktop_available()) {if((desktop_shell=start_program(4))<0)fx_error("init Graphite shell fork");}
+        else if(start_program(2)<0)fx_error("init graphical terminal fork");
+    }
     if(!fuse_headless) {
         console=start_program(1);
         if(console<0) {fx_error("init shell fork");console=0;}

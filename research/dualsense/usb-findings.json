@@ -1,0 +1,106 @@
+{
+  "date_utc": "2026-10-21",
+  "scope": "Connected USB 054c:0ce6; known information queries, bounded framing and brief ordinary output controls; no loader entry or update operations",
+  "logs": [
+    {
+      "path": "analysis/usb-after-short-read-20261021T204127Z.jsonl",
+      "sha256": "f97d4bebe7363934648cd0aa2f6a049b8aed3df9b4b5fb550fd38af124e5e5a2",
+      "events": 115,
+      "completed_ok": true,
+      "input_reports": 435
+    },
+    {
+      "path": "analysis/usb-baseline-20261021T203900Z.jsonl",
+      "sha256": "a823817138042ddccbcf4de8c9c8d5e0279180146299ab4c8ed82a4b42a49524",
+      "events": 19,
+      "completed_ok": true,
+      "input_reports": 126
+    },
+    {
+      "path": "analysis/usb-lengths-controls-20261021T203928Z.jsonl",
+      "sha256": "9675239e84abd7de4008a345ba819bf8773a4c531cf5f9579cdaa7589d913a45",
+      "events": 81,
+      "completed_ok": true,
+      "input_reports": 231
+    },
+    {
+      "path": "analysis/usb-queries-20261021T203911Z.jsonl",
+      "sha256": "9e78a9e56de715f8e26c5ed25bdb08a9610bcb3aa9ea67701b719c5a0d51a1ef",
+      "events": 115,
+      "completed_ok": true,
+      "input_reports": 435
+    },
+    {
+      "path": "analysis/usb-query-shapes-20261021T204106Z.jsonl",
+      "sha256": "bfcc862f3901c9a18c842cb480f61657eef0320cae5c32edb93f564cfbd8b1f4",
+      "events": 26,
+      "completed_ok": false,
+      "input_reports": 177
+    },
+    {
+      "path": "analysis/usb-query-shapes-mailbox-20261021T204205Z.jsonl",
+      "sha256": "310ced024f6b0826d79f0c0a0130124ca65444f04f2161434761f676ece12238",
+      "events": 699,
+      "completed_ok": true,
+      "input_reports": 1669
+    },
+    {
+      "path": "analysis/usb-run-20261021T204344824345Z.jsonl",
+      "sha256": "53d31a068ec476004276659974e07abb4544f01f6bd30f7b6631b2c677582016",
+      "events": 19,
+      "completed_ok": true,
+      "input_reports": 126
+    }
+  ],
+  "tool_sources_sha256": {
+    "usb_probe.c": "6bd3fbc2ed3b7bf6ac1dd27f638e521033039eaa887127a7f16757095247d2e4",
+    "usb_policy.h": "b55f79cb0b4f3278b9acbd22c8f460c20a87acd07de19db9f4f0afb522456a4e",
+    "usb_probe.py": "d4823392daccbd2b1f0eae0685a27069b8046d8f90d0eb3b92bbdaa00c83b757",
+    "test_usb_policy.py": "b8952803f472a9584c053f526f108c63d41459c4146747640781ee6177da9c7b"
+  },
+  "query_source": {
+    "url": "https://github.com/dualshock-tools/dualshock-tools.github.io/blob/eb9af384c3372dac966bf26660ff90a20b9cf5d5/js/controllers/ds5-controller.js",
+    "sha256": "2ea8ae40cc96fcfc162cf9e8be5e6fd4c357cdfaa4f48e0b65287bcd82302884"
+  },
+  "descriptor": {
+    "bytes": 289,
+    "sha256": "4f48767516627510521512af13c20a064877465122b7bcc7cac1f3b608d37994",
+    "additional_feature_reports_compared_to_pinned_nondebug_capture": {
+      "0x0b": {
+        "payload_bytes": 41
+      },
+      "0x0c": {
+        "payload_bytes": 41
+      }
+    },
+    "additional_reports_accessed": false
+  },
+  "measurements": {
+    "get_calls": 265,
+    "set_calls": 90,
+    "set_feature_queries": 86,
+    "set_output_controls": 4,
+    "input_reports": 3199,
+    "invalid_input_reports": 0,
+    "median_get_call_ms": 0.184,
+    "framing_cases_after_mailbox_discovery": 55,
+    "idle_mailbox_checks": 55
+  },
+  "observations": {
+    "firmware_report_unchanged": true,
+    "imu_calibration_report_unchanged": true,
+    "stick_calibration_values_unchanged": true,
+    "all_nvs_status_replies_locked": true,
+    "known_reply_unused_tails_zero": true,
+    "factory_reply_consumed_by_full_and_partial_get": true,
+    "all_requests_completed_without_IOKit_errors": true,
+    "initial_framing_run_stopped_on_unexpected_idle_reply": true
+  },
+  "limits": [
+    "Host IOKit buffer/request sizes are not an independently captured USB bus trace",
+    "Accepted output packets do not prove physical LED or vibration was observed",
+    "No arbitrary memory read/write or code execution primitive established",
+    "No inference that NVS lock prevents all flash writes",
+    "Early transcripts came from workbench revisions during this pass; final source hashes are not retroactive hashes of those revisions"
+  ]
+}

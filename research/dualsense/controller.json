@@ -1,0 +1,10 @@
+{
+  "observed_date": "2026-10-21",
+  "model_label": "CFI-ZCT1W B",
+  "fcc_id": "AK8CFIZCT1B",
+  "usb_vendor_id": 1356,
+  "usb_product_id": 3302,
+  "transport": "USB",
+  "kind": "Read-only firmware feature report, not a firmware dump",
+  "feature_report_20_hex": "20 4a 75 6c 20 20 34 20 32 30 32 35 31 30 3a 31 30 3a 33 32 03 00 04 00 16 06 00 00 2a 00 10 01 01 c8 00 00 00 00 00 00 00 00 00 00 30 06 00 00 3c 00 01 00 0a 00 02 00 06 00 00 00 00 00 00 00"
+}

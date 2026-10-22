@@ -19,6 +19,7 @@ struct ui_document {
     char untitled[32];
     struct stamp stamp;
     unsigned long cursor, anchor;
+    unsigned language;
 };
 struct ui_documents {
     ui_document *tabs[UI_DOCUMENT_TABS];
@@ -128,26 +129,74 @@ static int read_file(ui_documents *s, const char *path, struct stamp *stamp,
     stamp->exists = 1; stamp->st = after; stamp->length = total; stamp->hash = hash;
     return 0;
 }
-static unsigned language(const char *path) {
+static const struct ui_document_language languages[] = {
+    {UI_LANGUAGE_AUTOMATIC, 0, "Automatic"},
+    {UI_LANGUAGE_TEXT, 0, "Plain text"},
+    {UI_LANGUAGE_C, 1, "C"},
+    {UI_LANGUAGE_CPP, 1, "C++"},
+    {UI_LANGUAGE_RFL, 1, "RFL"},
+    {UI_LANGUAGE_RUST, 1, "Rust"},
+    {UI_LANGUAGE_JAVA, 1, "Java"},
+    {UI_LANGUAGE_SHELL, 2, "Shell"},
+    {UI_LANGUAGE_TCL, 2, "Tcl"},
+    {UI_LANGUAGE_AWK, 2, "Awk"},
+    {UI_LANGUAGE_PYTHON, 3, "Python"},
+    {UI_LANGUAGE_PASCAL, 4, "Pascal"},
+    {UI_LANGUAGE_JSON, 5, "JSON"},
+    {UI_LANGUAGE_INI, 6, "INI"},
+    {UI_LANGUAGE_MARKDOWN, 7, "Markdown"},
+    {UI_LANGUAGE_BRAINFUCK, 8, "Brainfuck"},
+    {UI_LANGUAGE_MAKEFILE, 9, "Makefile"},
+    {UI_LANGUAGE_HTML, 10, "HTML"},
+    {UI_LANGUAGE_CSS, 10, "CSS"},
+    {UI_LANGUAGE_LISP, 11, "Lisp"},
+    {UI_LANGUAGE_SCHEME, 11, "Scheme"},
+    {UI_LANGUAGE_ASSEMBLY, 12, "Assembly"},
+    {UI_LANGUAGE_BASIC, 13, "BASIC"},
+    {UI_LANGUAGE_JAVASCRIPT, 14, "JavaScript"},
+    {UI_LANGUAGE_SYMA, 15, "Syma"}
+};
+unsigned ui_document_language_count(void) { return sizeof(languages)/sizeof(languages[0]); }
+const struct ui_document_language *ui_document_language_at(unsigned index) {
+    return index < ui_document_language_count() ? &languages[index] : NULL;
+}
+static unsigned language_for_path(const char *path) {
     const char *p = strrchr(path, '.');
-    if (!strcmp(path + (strrchr(path, '/') ? strrchr(path, '/') - path + 1 : 0), "Makefile")) return 9;
-    if (!p) return 0;
-    if (!strcmp(p, ".syma") || !strcmp(p, ".sym")) return 15;
-    if (!strcmp(p, ".js") || !strcmp(p, ".mjs")) return 14;
-    if (!strcmp(p, ".c") || !strcmp(p, ".h") || !strcmp(p, ".cpp") ||
-        !strcmp(p, ".rfl") || !strcmp(p, ".rs") || !strcmp(p, ".java")) return 1;
-    if (!strcmp(p, ".sh") || !strcmp(p, ".tcl") || !strcmp(p, ".awk")) return 2;
-    if (!strcmp(p, ".py")) return 3;
-    if (!strcmp(p, ".pas")) return 4;
-    if (!strcmp(p, ".json")) return 5;
-    if (!strcmp(p, ".ini") || !strcmp(p, ".conf")) return 6;
-    if (!strcmp(p, ".md")) return 7;
-    if (!strcmp(p, ".bf")) return 8;
-    if (!strcmp(p, ".html") || !strcmp(p, ".css")) return 10;
-    if (!strcmp(p, ".lisp") || !strcmp(p, ".scm")) return 11;
-    if (!strcmp(p, ".s") || !strcmp(p, ".asm")) return 12;
-    if (!strcmp(p, ".bas")) return 13;
-    return 0;
+    if (!strcmp(path + (strrchr(path, '/') ? strrchr(path, '/') - path + 1 : 0), "Makefile")) return UI_LANGUAGE_MAKEFILE;
+    if (!p) return UI_LANGUAGE_TEXT;
+    if (!strcmp(p, ".syma") || !strcmp(p, ".sym")) return UI_LANGUAGE_SYMA;
+    if (!strcmp(p, ".js") || !strcmp(p, ".mjs") || !strcmp(p, ".cjs")) return UI_LANGUAGE_JAVASCRIPT;
+    if (!strcmp(p, ".c") || !strcmp(p, ".h")) return UI_LANGUAGE_C;
+    if (!strcmp(p, ".cpp") || !strcmp(p, ".cc") || !strcmp(p, ".cxx") || !strcmp(p, ".hpp")) return UI_LANGUAGE_CPP;
+    if (!strcmp(p, ".rfl")) return UI_LANGUAGE_RFL;
+    if (!strcmp(p, ".rs")) return UI_LANGUAGE_RUST;
+    if (!strcmp(p, ".java")) return UI_LANGUAGE_JAVA;
+    if (!strcmp(p, ".sh")) return UI_LANGUAGE_SHELL;
+    if (!strcmp(p, ".tcl")) return UI_LANGUAGE_TCL;
+    if (!strcmp(p, ".awk")) return UI_LANGUAGE_AWK;
+    if (!strcmp(p, ".py")) return UI_LANGUAGE_PYTHON;
+    if (!strcmp(p, ".pas")) return UI_LANGUAGE_PASCAL;
+    if (!strcmp(p, ".json")) return UI_LANGUAGE_JSON;
+    if (!strcmp(p, ".ini") || !strcmp(p, ".conf")) return UI_LANGUAGE_INI;
+    if (!strcmp(p, ".md")) return UI_LANGUAGE_MARKDOWN;
+    if (!strcmp(p, ".bf")) return UI_LANGUAGE_BRAINFUCK;
+    if (!strcmp(p, ".html") || !strcmp(p, ".htm")) return UI_LANGUAGE_HTML;
+    if (!strcmp(p, ".css")) return UI_LANGUAGE_CSS;
+    if (!strcmp(p, ".lisp")) return UI_LANGUAGE_LISP;
+    if (!strcmp(p, ".scm")) return UI_LANGUAGE_SCHEME;
+    if (!strcmp(p, ".s") || !strcmp(p, ".asm")) return UI_LANGUAGE_ASSEMBLY;
+    if (!strcmp(p, ".bas")) return UI_LANGUAGE_BASIC;
+    return UI_LANGUAGE_TEXT;
+}
+unsigned ui_document_get_language(ui_document *d) { return d ? d->language : UI_LANGUAGE_AUTOMATIC; }
+unsigned ui_document_effective_language(ui_document *d) {
+    return d && d->language ? d->language : language_for_path(d && d->path ? d->path : "");
+}
+const char *ui_document_language_name(ui_document *d) { return languages[ui_document_effective_language(d)].name; }
+static void apply_language(ui_document *d) { text_language(d->text,languages[ui_document_effective_language(d)].lexer); }
+int ui_document_set_language(ui_document *d, unsigned language) {
+    if (!d || language >= ui_document_language_count()) return -1;
+    d->language = language; apply_language(d); return 0;
 }
 static void recent_add(ui_documents *s, const char *path) {
     unsigned i, j;
@@ -273,7 +322,7 @@ ui_document *ui_documents_open(ui_documents *s, const char *path) {
     d = calloc(1, sizeof(*d));
     if (!d) { free(p); text_free(b); fail(s, "Not enough memory."); return NULL; }
     d->text = b; d->path = p; d->stamp = stamp;
-    text_language(b, language(p)); text_saved(b);
+    apply_language(d); text_saved(b);
     s->active = s->count; s->tabs[s->count++] = d; recent_add(s, p);
     return d;
 }
@@ -367,7 +416,7 @@ int ui_document_save(ui_documents *s, ui_document *d, const char *path, unsigned
     if (bad) { free(p); return -1; }
     saved.exists = 1; saved.length = length; saved.hash = hash;
     free(d->path); d->path = p; d->stamp = saved;
-    text_language(d->text, language(p)); text_saved(d->text); recent_add(s, p);
+    apply_language(d); text_saved(d->text); recent_add(s, p);
     return 0;
 }
 int ui_document_reload(ui_documents *s, ui_document *d, int discard) {
@@ -378,7 +427,7 @@ int ui_document_reload(ui_documents *s, ui_document *d, int discard) {
     b = text_new();
     if (!b) return fail(s, "Not enough memory.");
     if (read_file(s, d->path, &stamp, b, 0)) { text_free(b); return -1; }
-    text_language(b, language(d->path)); text_saved(b);
+    text_language(b,languages[ui_document_effective_language(d)].lexer); text_saved(b);
     text_free(d->text); d->text = b; d->stamp = stamp;
     if (d->cursor > text_length(b)) d->cursor = text_length(b);
     if (d->anchor > text_length(b)) d->anchor = text_length(b);

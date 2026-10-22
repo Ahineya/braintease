@@ -1,0 +1,41 @@
+{
+  "revision": "1ef60af944de207e0d5176905a0759ba12e6ee8d",
+  "source": "../../../ports/fusede/icons/lucide/UPSTREAM.json",
+  "logical_size": 32,
+  "sizes": [
+    32,
+    64
+  ],
+  "names": [
+    "arrow-left",
+    "arrow-right",
+    "calculator",
+    "file-code",
+    "file",
+    "folder",
+    "grid-2x2",
+    "house",
+    "info",
+    "maximize",
+    "minus",
+    "play",
+    "power",
+    "refresh-cw",
+    "save",
+    "search",
+    "settings",
+    "terminal",
+    "trash",
+    "x"
+  ],
+  "rasterizer": {
+    "sharp": "0.35.5",
+    "vips": "8.18.7",
+    "rsvg": "2.63.2",
+    "supersampling": 4
+  },
+  "sha256": {
+    "lucide-32.bin": "e2418557719244ed709f9af687e48f0b7fb7db1274f7dfd818de7f4111c32474",
+    "lucide-64.bin": "926960d826fbe69087280ac1e48fc04e1195be505a07dd6990f4f9aa98c48a38"
+  }
+}

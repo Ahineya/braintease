@@ -485,6 +485,8 @@ int main(int argc, char **argv) {
         perror("lvselect");
         return 1;
     }
+    /* Standalone utility. Embedded file dialogs remain in their app's window. */
+    gx_lv_application("org.riplix.FilePicker", "File Picker", "folder");
     gx_lv_minimum(480, 340);
     if (gx_lv_open("Select File", width, height) < 0) {
         browser_free(&browser);

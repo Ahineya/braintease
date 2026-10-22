@@ -11,6 +11,9 @@ static Uint8 *stream;
 static Sint16 *samples;
 static Uint32 pending, offset, target, queued_at, sampled_at, lock_depth;
 static int initialized, opened, paused, servicing, closing, failed;
+void (*SDL_C16AudioAuxPump)(void);
+void (*SDL_C16AudioAuxQuit)(void);
+Uint32 (*SDL_C16AudioAuxWait)(Uint32);
 
 static void finish_close(void) {
     SDL_PCMClose();
@@ -45,6 +48,7 @@ int SDL_AudioInit(const char *driver) {
 }
 
 void SDL_AudioQuit(void) {
+    if (SDL_C16AudioAuxQuit) SDL_C16AudioAuxQuit();
     SDL_CloseAudio();
     initialized = 0;
 }
@@ -160,6 +164,7 @@ void SDL_C16AudioPump(void) {
     unsigned callbacks = 0;
     Sint32 accepted, value;
     unsigned bytes;
+    if (!lock_depth && SDL_C16AudioAuxPump) SDL_C16AudioAuxPump();
     if (!opened || paused || failed || servicing || lock_depth || closing)
         return;
     servicing = 1;
@@ -223,6 +228,7 @@ done:
 
 Uint32 SDL_C16AudioWait(Uint32 maximum) {
     Uint32 elapsed, frames, low, delay;
+    if (SDL_C16AudioAuxWait) maximum = SDL_C16AudioAuxWait(maximum);
     if (!opened || paused || failed || closing || servicing || lock_depth)
         return maximum;
     elapsed = SDL_GX_GetTicks() - sampled_at;
@@ -252,7 +258,7 @@ void SDL_PauseAudio(int pause_on) {
 }
 
 void SDL_LockAudio(void) {
-    if (opened && lock_depth != 0xffffffffUL) lock_depth++;
+    if ((opened || SDL_C16AudioAuxPump) && lock_depth != 0xffffffffUL) lock_depth++;
 }
 
 void SDL_UnlockAudio(void) {

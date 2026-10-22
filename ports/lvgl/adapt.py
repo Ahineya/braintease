@@ -48,7 +48,7 @@ def prepare(build, fetch=False):
     for name in ('MALLOC', 'STRING', 'SPRINTF'):
         text = re.sub(r'(#define\s+LV_USE_STDLIB_' + name + r'\s+)LV_STDLIB_BUILTIN',
                       r'\g<1>LV_STDLIB_CLIB', text)
-    text = re.sub(r'(#define\s+LV_DRAW_SW_SUPPORT_(?!RGB888\s|A8\s)\w+\s+)1\b', r'\g<1>0', text)
+    text = re.sub(r'(#define\s+LV_DRAW_SW_SUPPORT_(?!RGB888\s|ARGB8888\s|A8\s)\w+\s+)1\b', r'\g<1>0', text)
     for name, value in {'LV_FONT_MONTSERRAT_14':'1', 'LV_FONT_MONTSERRAT_20':'0', 'LV_FONT_MONTSERRAT_28':'1',
                         'LV_FONT_DEFAULT':'LV_FONT_DEFAULT_MONTSERRAT_14',
                         'LV_USE_LOG':'1', 'LV_LOG_PRINTF':'1',
@@ -83,6 +83,46 @@ extern int gx_lv_render_blend(lv_draw_task_t *, const lv_draw_sw_blend_dsc_t *);
 #endif
     LV_PROFILER_DRAW_BEGIN;
     lv_layer_t * layer = t->target_layer;''')
+    path.write_text(text)
+    # Desktop panels retain straight alpha. A C16 lv_color32_t has four
+    # logical channel cells, whereas uint32_t occupies two: upstream's packed
+    # fill and four-octet mask loads cannot alias this representation. Use the
+    # same scalar structure/channel path as other byte-addressed targets.
+    path = source / 'src/draw/sw/blend/lv_draw_sw_blend_to_argb8888.c'
+    text = replace(path.read_text(),
+                   'uint32_t color32 = lv_color_to_u32(dsc->color);\n            uint32_t * dest_buf = dsc->dest_buf;',
+                   'lv_color32_t color32 = lv_color_to_32(dsc->color, 255);\n            lv_color32_t * dest_buf = dsc->dest_buf;')
+    start = text.index('            lv_color32_t color32 = lv_color_to_32(dsc->color, 255);')
+    end = text.index('\n        }\n    }\n    /*Opacity only*/', start)
+    scalar = text[start:end]
+    # Opaque panel fills use the same bank-aware bulk-copy strategy as RGB.
+    # Keep upstream's byte-addressed reference and all alpha mixing unchanged.
+    text = text[:start] + '''#if CHAR_BIT == 16
+            if(w > 0 && h > 0) {
+                lv_color32_t color = lv_color_to_32(dsc->color, 255);
+                uint8_t * first = dsc->dest_buf;
+                uint32_t row_cells = (uint32_t)w * 4UL, filled = 4;
+                lv_memcpy(first, &color, sizeof(color));
+                while(filled < row_cells) {
+                    uint32_t n = LV_MIN(filled, row_cells - filled);
+                    lv_memcpy(first + filled, first, n);
+                    filled += n;
+                }
+                for(y = 1; y < h; y++)
+                    lv_memcpy(first + (uint32_t)y * dest_stride, first, row_cells);
+            }
+#else
+''' + scalar + '\n#endif' + text[end:]
+    text = replace(text, 'if(w < 32) {', 'if(w < 32 || CHAR_BIT != 8) {')
+    text = replace(text, 'color_argb.alpha = (opa * mask_buf[dest_x]) >> 8;',
+                   'color_argb.alpha = ((uint32_t)opa * mask_buf[dest_x]) >> 8;')
+    # Non-normal blends are uncommon here, but retain correct intermediate
+    # widths instead of relying on the host's 32-bit int promotions.
+    for channel in ('red', 'green', 'blue'):
+        text = text.replace('(dest->' + channel + ' * src.' + channel + ')',
+                            '((uint32_t)dest->' + channel + ' * src.' + channel + ')')
+        text = text.replace('dest->' + channel + ' - src.' + channel,
+                            '(int32_t)dest->' + channel + ' - src.' + channel)
     path.write_text(text)
     path = source / 'src/draw/sw/blend/lv_draw_sw_blend_to_rgb888.c'
     text = path.read_text()
@@ -195,7 +235,7 @@ extern int gx_lv_blend(void *,long,long,long,const void *,long,unsigned,unsigned
         before=(pristine/relative).read_bytes();after=path.read_bytes()
         if before!=after:
             changes[str(relative)]={'before':hashlib.sha256(before).hexdigest(),'after':hashlib.sha256(after).hexdigest()}
-    manifest = {'upstream': probe.SHA256, 'profile': 'RGB888/A8 logical octets; no packed 8-bit word stores',
+    manifest = {'upstream': probe.SHA256, 'profile': 'RGB888/ARGB8888/A8 logical octets; no packed 8-bit word stores',
                 'wide_literal_shifts': shifts, 'changes': changes}
     (build / 'adaptation.json').write_text(json.dumps(manifest, indent=2) + '\n')
     licenses = build / 'licenses'

@@ -13,7 +13,7 @@ import subprocess
 import sys
 from prepare import prepare,PORT,ROOT,UNITS,UTIL
 sys.path.insert(0,str(ROOT))
-from ports.sdl.build import library, mixer_profile
+from ports.sdl.build import library, mixer_profile, build as build_sdl
 
 
 def build(args):
@@ -22,7 +22,12 @@ def build(args):
     source,origins=prepare(folder,args.fetch,c16)
     from assets import prepare_assets
     report=prepare_assets(origins['engine'],origins['data'],folder/'data')
-    lib=library(args.target,folder/'sdl',args.compiler.resolve(),args.fetch,args.jobs,mixer=True)
+    lib=library(args.target,folder/'sdl',args.compiler.resolve(),args.fetch,args.jobs,
+                mixer='process' if c16 else True)
+    helper=None
+    if c16:
+        helper=build_sdl(args.target,folder/'mixer-helper',lib['compiler'],args.fetch,'mixer-helper',args.jobs)
+        shutil.copy2(helper,folder/'sdl-mixerd.fxe');helper=folder/'sdl-mixerd.fxe'
     units=[source/'src'/(n+'.c') for n in UNITS]+[source/'util'/(n+'.c') for n in UTIL]
     includes=[source,source/'src',source/'util',*lib['includes']]
     flags=['-DHAVE_CONFIG_H=1','-DNDEBUG=1','-DWITH_SOUND=1']
@@ -75,6 +80,8 @@ def build(args):
     info=dict(upstream=json.loads((PORT/'PROVENANCE.json').read_text()),target=args.target,
               sdl=json.loads((ROOT/'ports/sdl/PROVENANCE.json').read_text()),
               mixer=mixer_profile(),
+              mixer_backend='process' if c16 else 'local',
+              mixer_helper_sha256=hashlib.sha256(helper.read_bytes()).hexdigest() if helper else None,
               compiler_sha256=hashlib.sha256(lib['compiler'].read_bytes()).hexdigest() if c16 else None,
               abi='C16 logical octets; 32-bit game integers' if c16 else 'host octets; 32-bit game integers',
               executable_sha256=hashlib.sha256(output.read_bytes()).hexdigest(),executable_octets=output.stat().st_size,
@@ -84,6 +91,8 @@ def build(args):
         stage=args.stage.resolve();stage.mkdir(parents=True,exist_ok=True)
         temporary=stage/'.lgeneral.fxe.new'
         shutil.copy2(output,temporary);temporary.replace(stage/'lgeneral.fxe')
+        temporary=stage/'.sdl-mixerd.fxe.new'
+        shutil.copy2(helper,temporary);temporary.replace(stage/'sdl-mixerd.fxe')
         shutil.copytree(folder/'data',stage/'lgeneral',dirs_exist_ok=True)
         for name in ('README.md','PROVENANCE.json'):shutil.copy2(PORT/name,stage/'lgeneral'/name)
         shutil.copy2(folder/(output.name+'.json'),stage/'lgeneral/build.json')

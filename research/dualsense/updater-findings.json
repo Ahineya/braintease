@@ -1,0 +1,642 @@
+{
+  "observed_date": "2026-10-21",
+  "scope": "Static file analysis only; no device I/O or vendor code execution",
+  "tools": [
+    {
+      "path": "extract_updater.py",
+      "size_bytes": 6220,
+      "sha256": "f2e556434b001f47df51d0090d3de0e1817baf9554b0935a2772ead9e63320a4"
+    },
+    {
+      "path": "test_updater.py",
+      "size_bytes": 4178,
+      "sha256": "1d7528cf15ea02a36058d8cb954164b7af555c32480eb8418218b64dcd7fbce8"
+    }
+  ],
+  "files": [
+    {
+      "path": "analysis/followup/PlayStationAccessoriesInstaller.exe",
+      "size_bytes": 76977440,
+      "sha256": "37d2d7337e83558486fb4a811368ec76f2d5cedb329207040e9b5a55a9029e43",
+      "url": "https://fwupdater.dl.playstation.net/fwupdater/PlayStationAccessoriesInstaller.exe"
+    },
+    {
+      "path": "analysis/followup/updater/PlayStation\u00ae Accessories.msi",
+      "size_bytes": 75914752,
+      "sha256": "15d8f3f380ad689f3df76c45baffa8c527949368e24dedfaa6d1469285ee2b4b"
+    },
+    {
+      "path": "analysis/followup/msi/PlayStation\u00ae Accessories/Data1.cab",
+      "size_bytes": 72769757,
+      "sha256": "4b162f9e2f4cbcf51abf267ec0ebcd4895d938a5a652a772a4dcf1ea402e22c4"
+    },
+    {
+      "path": "analysis/followup/payload/Data1/libfwupdater.dll",
+      "size_bytes": 226768,
+      "sha256": "3bc6de1116a7ea29d0997f632613edfe7c3100b62efbf5bca6f32f9fb4bc4569"
+    },
+    {
+      "path": "analysis/followup/payload/Data1/playstationaccessories.dll",
+      "size_bytes": 1390544,
+      "sha256": "a5ccc41e04e960c867d479d3434e23d92044a731627f71646edb7b2b8dd4e409"
+    }
+  ],
+  "embedded_firmware": [
+    {
+      "path": "analysis/followup/payload/Data1/fwupdate0004.bin",
+      "size_bytes": 950272,
+      "sha256": "861ad95a99b16805ff20f5690372988662c4f69c6ad0b266e793d7fc2292315a",
+      "identical_corpus_image": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin"
+    },
+    {
+      "path": "analysis/followup/payload/Data1/fwupdate000b.bin",
+      "size_bytes": 950272,
+      "sha256": "b66528795683d214ca06fe4672d298de75bf019bd5046442cbec63fc02974f86",
+      "identical_corpus_image": "firmware/dualsense/type-000B/0x0630/FWUPDATE000B.bin"
+    },
+    {
+      "path": "analysis/followup/payload/Data1/fwupdate0044.bin",
+      "size_bytes": 950272,
+      "sha256": "a91bf4ce5e17f5aa87fea51bb7a910b5d7c42d5e122933d7f1f88d1402027a46",
+      "identical_corpus_image": "firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin"
+    }
+  ],
+  "extraction": {
+    "format": "ISSetupStream v4",
+    "members": 66,
+    "manifest": {
+      "installer_sha256": "37d2d7337e83558486fb4a811368ec76f2d5cedb329207040e9b5a55a9029e43",
+      "format": "ISSetupStream v4",
+      "operation": "static archive decoding; no vendor code execution",
+      "members": [
+        {
+          "name": "0x0401.ini",
+          "size_bytes": 20226,
+          "sha256": "4643eb50aac6a2403978d29db6374a2adf75a0eb6348fcc2b5ddcb02a0cfb1b5",
+          "payload_offset": 1450098,
+          "compressed_bytes": 4795
+        },
+        {
+          "name": "0x0804.ini",
+          "size_bytes": 10902,
+          "sha256": "df5b127369bfdf09264a69a38c0d999340f50948bed1624c429ddf17b49e97cb",
+          "payload_offset": 1454961,
+          "compressed_bytes": 4311
+        },
+        {
+          "name": "0x0404.ini",
+          "size_bytes": 10812,
+          "sha256": "5d31e009a36325032ab1521d2b1ca1a5be89bb969d1948d4fe99c387b1055db1",
+          "payload_offset": 1459340,
+          "compressed_bytes": 4362
+        },
+        {
+          "name": "0x0405.ini",
+          "size_bytes": 23750,
+          "sha256": "e3a0aaf26e309fabcd308473387855f2e4b673358588439c4503b2965e5a8a0e",
+          "payload_offset": 1463770,
+          "compressed_bytes": 5443
+        },
+        {
+          "name": "0x0406.ini",
+          "size_bytes": 24340,
+          "sha256": "8cd689ea619d6c331304e26098d4cf6c20ff4cc28fd9cad1548bfe5abc545350",
+          "payload_offset": 1469281,
+          "compressed_bytes": 5065
+        },
+        {
+          "name": "0x0413.ini",
+          "size_bytes": 25486,
+          "sha256": "e2fa233ae46457d27061f7f2c6b06a7972b65070035fcbff783b77f815f32a21",
+          "payload_offset": 1474414,
+          "compressed_bytes": 5085
+        },
+        {
+          "name": "0x0809.ini",
+          "size_bytes": 22326,
+          "sha256": "2e750b733fa18b018dde29f2e3f866de53a60c99e785264a961b61b12a3c2259",
+          "payload_offset": 1479567,
+          "compressed_bytes": 4716
+        },
+        {
+          "name": "0x0409.ini",
+          "size_bytes": 22914,
+          "sha256": "cdb316d7f9aa2d854eb28f7a333426a55cc65fa7d31b0bdf8ae108e611583d29",
+          "payload_offset": 1484351,
+          "compressed_bytes": 4690
+        },
+        {
+          "name": "0x040b.ini",
+          "size_bytes": 23164,
+          "sha256": "a26c1a4f9b457940d94d2deac6550c01740964051405e2999c1d884f6d46d5c7",
+          "payload_offset": 1489109,
+          "compressed_bytes": 5000
+        },
+        {
+          "name": "0x0c0c.ini",
+          "size_bytes": 26820,
+          "sha256": "a2d09f95526954ea9833f6f03f319256f9e9d498e09e975b59add725127856b1",
+          "payload_offset": 1494177,
+          "compressed_bytes": 5393
+        },
+        {
+          "name": "0x040c.ini",
+          "size_bytes": 26768,
+          "sha256": "d31b120f79c2fb8cd6f3fd7ede220a30ca3bb84e4d3c8b05c1bcc833734d13cf",
+          "payload_offset": 1499638,
+          "compressed_bytes": 5228
+        },
+        {
+          "name": "0x0407.ini",
+          "size_bytes": 26388,
+          "sha256": "b4d2bf8ddeee1e2acc5dfaa14ac602a69f52195c38eab4660408fd879ad41a56",
+          "payload_offset": 1504934,
+          "compressed_bytes": 5390
+        },
+        {
+          "name": "0x0408.ini",
+          "size_bytes": 27940,
+          "sha256": "6596a4ff344bcd6b09e57f9f9bb7ac62e7ba7fd462fd798e45b1bb1917a2bc37",
+          "payload_offset": 1510392,
+          "compressed_bytes": 6164
+        },
+        {
+          "name": "0x040e.ini",
+          "size_bytes": 23792,
+          "sha256": "2a00e14ad397f8c903e0d6c3cf1d1c98ba0560d577f31189b6a42f1d490bafc2",
+          "payload_offset": 1516624,
+          "compressed_bytes": 5524
+        },
+        {
+          "name": "0x0421.ini",
+          "size_bytes": 25218,
+          "sha256": "af34e34cb979dae26a2ed08673e0ea20fcdb5d1f7ee9acf42f93afe16a64521c",
+          "payload_offset": 1522216,
+          "compressed_bytes": 5151
+        },
+        {
+          "name": "0x0410.ini",
+          "size_bytes": 25618,
+          "sha256": "4b13428baab7405a1125efd93f3569875cd19477b38608d4dd2fe2ccd3861e0f",
+          "payload_offset": 1527435,
+          "compressed_bytes": 4961
+        },
+        {
+          "name": "0x0411.ini",
+          "size_bytes": 15204,
+          "sha256": "3f0778538202a35483c084fb0b109f693a9853f64d6452daa5c92ac75620aadc",
+          "payload_offset": 1532464,
+          "compressed_bytes": 4663
+        },
+        {
+          "name": "0x0412.ini",
+          "size_bytes": 14354,
+          "sha256": "9416c7b55d1fd9dc06f20e1e3ebbac1357217113833553d49586e339360529c7",
+          "payload_offset": 1537195,
+          "compressed_bytes": 4484
+        },
+        {
+          "name": "0x0414.ini",
+          "size_bytes": 24446,
+          "sha256": "8b4d38acca7edeed68d2fb9df91a501c272fdd42b06e0d142725f146fac64b98",
+          "payload_offset": 1541747,
+          "compressed_bytes": 5027
+        },
+        {
+          "name": "0x0415.ini",
+          "size_bytes": 24710,
+          "sha256": "86a5ebfa31cc4904ef85060f92a8ffbed7305e00ecbb3c5ebccda630a7ec58e9",
+          "payload_offset": 1546842,
+          "compressed_bytes": 5556
+        },
+        {
+          "name": "0x0416.ini",
+          "size_bytes": 24394,
+          "sha256": "af54db26c9464b7a610d7eb73f06f36b43ac51e879ac4d21a1c70eb4524a2b24",
+          "payload_offset": 1552466,
+          "compressed_bytes": 4968
+        },
+        {
+          "name": "0x0816.ini",
+          "size_bytes": 25188,
+          "sha256": "dbeccbec31fdde0e7f74bd8dd9e7d090d7b7821fa885e648f16488d89721d661",
+          "payload_offset": 1557502,
+          "compressed_bytes": 5211
+        },
+        {
+          "name": "0x0418.ini",
+          "size_bytes": 25282,
+          "sha256": "f5d32c808c85b3a7c3229527903f0876d82c8fb7750f35e198a6e5d94242cbcf",
+          "payload_offset": 1562781,
+          "compressed_bytes": 5435
+        },
+        {
+          "name": "0x0419.ini",
+          "size_bytes": 23834,
+          "sha256": "4ed551e39f90746b2eefbf1c64d1efd1a491258f0a954b87c75785b9f2a426ae",
+          "payload_offset": 1568284,
+          "compressed_bytes": 5215
+        },
+        {
+          "name": "0x080a.ini",
+          "size_bytes": 25018,
+          "sha256": "e015058cc30ca04ad4eeaa486c5d8836a4ea86e879aab2f64b5bd5b6b7f152db",
+          "payload_offset": 1573567,
+          "compressed_bytes": 5096
+        },
+        {
+          "name": "0x040a.ini",
+          "size_bytes": 25628,
+          "sha256": "4e42d96cf24224d3ed43e7e14227b96fde3b43235636480f8861db0b048ffddf",
+          "payload_offset": 1578731,
+          "compressed_bytes": 5092
+        },
+        {
+          "name": "0x041d.ini",
+          "size_bytes": 23772,
+          "sha256": "7577c0e2eda2d32f71dbfc870d280d796ad271d9dcbf37d33cbf7f77bdaa7a0d",
+          "payload_offset": 1583891,
+          "compressed_bytes": 4962
+        },
+        {
+          "name": "0x041e.ini",
+          "size_bytes": 22866,
+          "sha256": "372dc097b80442810781d777cdd23296a0558be58b3418f4ea088cbcd7f661b2",
+          "payload_offset": 1588921,
+          "compressed_bytes": 5211
+        },
+        {
+          "name": "0x041f.ini",
+          "size_bytes": 23454,
+          "sha256": "2a2a678ce20afa2fd91d55f61825073debe489cc62ec16cd6edfe7b084348fee",
+          "payload_offset": 1594200,
+          "compressed_bytes": 5252
+        },
+        {
+          "name": "0x0422.ini",
+          "size_bytes": 22326,
+          "sha256": "559b29fba28083f81d81decba06418c11b5bc6afb1be4cb674176d764f745cd0",
+          "payload_offset": 1599520,
+          "compressed_bytes": 4715
+        },
+        {
+          "name": "0x042a.ini",
+          "size_bytes": 22326,
+          "sha256": "1eaead46db789c35cf31cf7ad133d0335ed5125edc5f18de1c20e756836744d1",
+          "payload_offset": 1604303,
+          "compressed_bytes": 4716
+        },
+        {
+          "name": "Microsoft .NET 8.0 Desktop Runtime 8.0.19 (x64).prq",
+          "size_bytes": 16432,
+          "sha256": "fbe69817bb249d7819f24ddd6a930fddddd9fa81fdae0f1012dba7f8eee3ab92",
+          "payload_offset": 1609169,
+          "compressed_bytes": 790
+        },
+        {
+          "name": "1025.mst",
+          "size_bytes": 274432,
+          "sha256": "2ee3b673c6991ff937b712464bb3f0f593c8cab2a823a4967c8392090bc569ae",
+          "payload_offset": 1610023,
+          "compressed_bytes": 59333
+        },
+        {
+          "name": "2052.mst",
+          "size_bytes": 270336,
+          "sha256": "2e88cb721bce877181a0924f9cfb5dfda377b871c032c9193bf43c8e4fb245b7",
+          "payload_offset": 1669420,
+          "compressed_bytes": 58548
+        },
+        {
+          "name": "1028.mst",
+          "size_bytes": 294912,
+          "sha256": "6ee01da376c650557fc412567866c3030e6eb2df95a69cab045e608e20266ffb",
+          "payload_offset": 1728032,
+          "compressed_bytes": 60679
+        },
+        {
+          "name": "1029.mst",
+          "size_bytes": 233472,
+          "sha256": "82b5af77c5f506c3cdada27bf7ab3606fb821ec2b0e4ae3a2a79c4d9b849d861",
+          "payload_offset": 1788775,
+          "compressed_bytes": 60028
+        },
+        {
+          "name": "1030.mst",
+          "size_bytes": 229376,
+          "sha256": "3e689e07caca53a165f9c25332d27c0682dc064545ccbbb47325de147324a6ff",
+          "payload_offset": 1848867,
+          "compressed_bytes": 58022
+        },
+        {
+          "name": "1043.mst",
+          "size_bytes": 225280,
+          "sha256": "00f1c4dda50005bdd9ff5f4c0a5782fc7302658c7169937fe61df30d71fb77ff",
+          "payload_offset": 1906953,
+          "compressed_bytes": 58392
+        },
+        {
+          "name": "2057.mst",
+          "size_bytes": 139264,
+          "sha256": "cecfc6c8a349611f92b3bfbc9402d59759bf6bfd63fb17e48d611661ed5988bb",
+          "payload_offset": 1965409,
+          "compressed_bytes": 31356
+        },
+        {
+          "name": "1035.mst",
+          "size_bytes": 245760,
+          "sha256": "9c6d59fba3fbe78f3f54413dd69a0d0689a60a6505fb1d448e1394e55db6f50d",
+          "payload_offset": 1996829,
+          "compressed_bytes": 59615
+        },
+        {
+          "name": "3084.mst",
+          "size_bytes": 253952,
+          "sha256": "368848faf779714fa634a7fc95dcc46f9ad48859c1ff254bf2534eae223c94e3",
+          "payload_offset": 2056508,
+          "compressed_bytes": 61218
+        },
+        {
+          "name": "1036.mst",
+          "size_bytes": 253952,
+          "sha256": "3ce76139f6062fc96dee68d50b43eda06bb4fddfd2ff73d25bb44f50575889f1",
+          "payload_offset": 2117790,
+          "compressed_bytes": 60796
+        },
+        {
+          "name": "1031.mst",
+          "size_bytes": 245760,
+          "sha256": "42b381da71970b3b5c2beb19e8727c46fce4e2e73d41ece2b0ef444d81f4b9a3",
+          "payload_offset": 2178650,
+          "compressed_bytes": 61854
+        },
+        {
+          "name": "1032.mst",
+          "size_bytes": 442368,
+          "sha256": "2b06b041adf924f8c7ccb4f2d9c05f7162e13523248191f7c8e8652a98cdfb2e",
+          "payload_offset": 2240568,
+          "compressed_bytes": 74719
+        },
+        {
+          "name": "1038.mst",
+          "size_bytes": 303104,
+          "sha256": "849c8610d8737bce5507fa466f99180ffe45da7cae193c281abd77c863b71cdd",
+          "payload_offset": 2315351,
+          "compressed_bytes": 65966
+        },
+        {
+          "name": "1057.mst",
+          "size_bytes": 221184,
+          "sha256": "2d25076692cfd1418eac335cb946c071f67fc1a9cb7040ce2a3fe07fc9d25a9f",
+          "payload_offset": 2381381,
+          "compressed_bytes": 56038
+        },
+        {
+          "name": "1040.mst",
+          "size_bytes": 233472,
+          "sha256": "765fbc78522ae8e4dc8d4d1c497d17c7721f9c7aea00d78ec9d088925a565681",
+          "payload_offset": 2437483,
+          "compressed_bytes": 58535
+        },
+        {
+          "name": "1041.mst",
+          "size_bytes": 327680,
+          "sha256": "694dd12686e6d78165a78d0ee42ec0ec1676a5f72f172a389b0f36d28290eba6",
+          "payload_offset": 2496082,
+          "compressed_bytes": 62339
+        },
+        {
+          "name": "1042.mst",
+          "size_bytes": 1175552,
+          "sha256": "8fbaad22b4fac3f5fa758f221f05f11f1a9c641db8713fb0ed6607e915f9e494",
+          "payload_offset": 2558485,
+          "compressed_bytes": 118093
+        },
+        {
+          "name": "1044.mst",
+          "size_bytes": 225280,
+          "sha256": "aee6c6d0e20ed6c00f3207e53483ca6af22d894f010fc310c48c5d6a72a3a81c",
+          "payload_offset": 2676642,
+          "compressed_bytes": 57469
+        },
+        {
+          "name": "1045.mst",
+          "size_bytes": 262144,
+          "sha256": "9be6830d2abcd1303f18ab0d936f470003bf8cab2381ec40574aa94382aef72f",
+          "payload_offset": 2734175,
+          "compressed_bytes": 63235
+        },
+        {
+          "name": "1046.mst",
+          "size_bytes": 241664,
+          "sha256": "c65fc11932fd72d62d6150d390040846712da0ff6ee1d65dd0f58d73bcdd187c",
+          "payload_offset": 2797474,
+          "compressed_bytes": 58953
+        },
+        {
+          "name": "2070.mst",
+          "size_bytes": 245760,
+          "sha256": "c526e9eba6027fd29e1c19ede7c037b91acd53e2f1f2493eda0f7d1132534ba3",
+          "payload_offset": 2856491,
+          "compressed_bytes": 59738
+        },
+        {
+          "name": "1048.mst",
+          "size_bytes": 262144,
+          "sha256": "361e97764aea6ab88647c63fa574502fbbfaa2cbd3d2e20cad052b4e4eca5936",
+          "payload_offset": 2916293,
+          "compressed_bytes": 62085
+        },
+        {
+          "name": "1049.mst",
+          "size_bytes": 405504,
+          "sha256": "9cada786eca6f966460619d8b38adce71889b9d7d91b2114218f9af8e47c0ae1",
+          "payload_offset": 2978442,
+          "compressed_bytes": 71377
+        },
+        {
+          "name": "2058.mst",
+          "size_bytes": 241664,
+          "sha256": "4c053fa6d55b3b298933a3be416376a34bf51d016daa7f2192e0c7c993b84cd3",
+          "payload_offset": 3049883,
+          "compressed_bytes": 59489
+        },
+        {
+          "name": "1034.mst",
+          "size_bytes": 241664,
+          "sha256": "8f2407cd05cc3702fd836998ddd373e437c000dd1d1cf1534f640f701eff1e37",
+          "payload_offset": 3109436,
+          "compressed_bytes": 59438
+        },
+        {
+          "name": "1053.mst",
+          "size_bytes": 237568,
+          "sha256": "82c6348e3e70a7e665555c335700f8d7e3720f42936f6243287a4109b367ce13",
+          "payload_offset": 3168938,
+          "compressed_bytes": 58557
+        },
+        {
+          "name": "1054.mst",
+          "size_bytes": 372736,
+          "sha256": "957a0bb3a81f9f40c34f1b98c8824a9f8165f95e191dd56a614abe7a390a2b1a",
+          "payload_offset": 3227559,
+          "compressed_bytes": 66120
+        },
+        {
+          "name": "1055.mst",
+          "size_bytes": 286720,
+          "sha256": "13e7d2bd94f6a0c2f66ba57aef9ecc8f4c25971be0af5f9140af33789d7a7ca9",
+          "payload_offset": 3293743,
+          "compressed_bytes": 62609
+        },
+        {
+          "name": "1058.mst",
+          "size_bytes": 274432,
+          "sha256": "24ebc8f1c5abc8e108e556ee19308af1bc86f40d87b21d8675448003a2ff5d36",
+          "payload_offset": 3356416,
+          "compressed_bytes": 41324
+        },
+        {
+          "name": "1066.mst",
+          "size_bytes": 782336,
+          "sha256": "1cc0926ac1d0b3d3fa6a094634673da42d843587897b8fd90397c16a0ca1ced7",
+          "payload_offset": 3397804,
+          "compressed_bytes": 56165
+        },
+        {
+          "name": "1033.mst",
+          "size_bytes": 32768,
+          "sha256": "25d1ec48f2f631db8c39391d9814c4b0059a7e3ae6cb8fb797b5e0681799f0f3",
+          "payload_offset": 3454033,
+          "compressed_bytes": 8515
+        },
+        {
+          "name": "PlayStation\u00ae Accessories.isc",
+          "size_bytes": 2036,
+          "sha256": "7eb9962e9f19b32db9302db7febbc6e86ebde512e0228b066f0ebb26c953a00d",
+          "payload_offset": 3462652,
+          "compressed_bytes": 1695
+        },
+        {
+          "name": "PlayStation\u00ae Accessories.msi",
+          "size_bytes": 75914752,
+          "sha256": "15d8f3f380ad689f3df76c45baffa8c527949368e24dedfaa6d1469285ee2b4b",
+          "payload_offset": 3464451,
+          "compressed_bytes": 73501138
+        },
+        {
+          "name": "Setup.ini",
+          "size_bytes": 6152,
+          "sha256": "59c961c9b655d809b917e038cc46699180e1447ebd3ba780a91b7d41b06904ee",
+          "payload_offset": 76965655,
+          "compressed_bytes": 1592
+        }
+      ]
+    }
+  },
+  "references": [
+    {
+      "path": "analysis/followup/reference/calibration-ds5-controller.js",
+      "size_bytes": 33497,
+      "sha256": "2ea8ae40cc96fcfc162cf9e8be5e6fd4c357cdfaa4f48e0b65287bcd82302884"
+    },
+    {
+      "path": "analysis/followup/reference/tester-ds-util.ts",
+      "size_bytes": 22283,
+      "sha256": "d89e17733685adefe1bab2870bc5db63d8d2d8b65934dd1ea142bf7994947937"
+    },
+    {
+      "path": "analysis/followup/reference/ds5-calibration-tool.py",
+      "size_bytes": 5074,
+      "sha256": "8dbe283e5f627a0fd2e9f69926942f350297e967ee24ecc2304bbe6951b3418e"
+    },
+    {
+      "path": "analysis/followup/reference/ISx.c",
+      "size_bytes": 30198,
+      "sha256": "a5d89b8d254dfb672582b8bbbfdc2cc74877a8c519a3c6433cf1ed45482b5511"
+    },
+    {
+      "path": "analysis/followup/reference/ISx-LICENSE",
+      "size_bytes": 1068,
+      "sha256": "00e34ef4659cf9b9e37e5c714d5a4648f037351a536b31c4a7764e137a1e7dab"
+    },
+    {
+      "path": "analysis/followup/reference/rea-README.md",
+      "size_bytes": 24957,
+      "sha256": "840ed30f63738875ab8909840963e765fca6ea6e13f87fdc32c10c4bfc487cd2"
+    },
+    {
+      "path": "analysis/followup/reference/rea-docs-ghidra-provider.md",
+      "size_bytes": 24829,
+      "sha256": "0f2140b7b59aa4b71b5b910dfcbad63b1c5086940de8e1f9f5630dd68015f25c"
+    },
+    {
+      "path": "analysis/followup/reference/rea-docs-managed-code-analysis.md",
+      "size_bytes": 35081,
+      "sha256": "c7991f1638465f547253c87254488f44a537d31a2145dee8d63e8f487922867c"
+    },
+    {
+      "path": "analysis/followup/reference/rea-docs-firmware-analysis.md",
+      "size_bytes": 12626,
+      "sha256": "3fe60d714508dc2055e58e55cb84206bd8c9cb71e11c6224251c84ece0405e9c"
+    },
+    {
+      "path": "analysis/followup/reference/rea-docs-raw-binary.md",
+      "size_bytes": 8262,
+      "sha256": "3a95050c5e6a628fb263e4f00d88f90c3cc86ce501f89ab067ac629c1d847dde"
+    },
+    {
+      "path": "analysis/followup/reference/rea-package.json",
+      "size_bytes": 26076,
+      "sha256": "7ce7fdb377467e301f09d316c4e0ab1ac8d04fb773be02638d9b96dcaa128eca"
+    },
+    {
+      "path": "analysis/followup/reference/bdm040-top.jpg",
+      "size_bytes": 723864,
+      "sha256": "c7ebd010862fa06b9b7bb8a1fda7710df6543e3cac5a7f2de3e9e78184334eab",
+      "url": "https://www.acidmods.com/RDC/DS5/BDM-040/BDM-040_TOP.jpg"
+    },
+    {
+      "path": "analysis/followup/reference/bdm040-bottom.jpg",
+      "size_bytes": 723569,
+      "sha256": "0a9f165518cb0e673b167d88f292d711ff2d8bb88a0fafcb04ca339de2e24474",
+      "url": "https://www.acidmods.com/RDC/DS5/BDM-040/BDM-040_BOTTOM.jpg"
+    }
+  ],
+  "source_revisions": {
+    "calibration": "eb9af384c3372dac966bf26660ff90a20b9cf5d5",
+    "tester": "62dce1703a468a20af901db5e31e476ce5ec24b3",
+    "ds4_tools": "94e8d94d0b7d41cebca8158d565d7ce9a631a419",
+    "isx": "098e866fa5341db4424d3831d40943c01b88aefe",
+    "rea": "2947a775070863e15e802194fbb14bfd1ec18b9f"
+  },
+  "hardware": {
+    "saved_report_hardware_version": "0x00000616",
+    "community_board_mapping": "BDM-040",
+    "physical_user_pcb_inspected": false,
+    "published_bdm040_scan_main_chip_marking": "SIE CXD90071GG",
+    "confirmed_cpu_isa": null,
+    "confirmed_usable_ram_bytes": null
+  },
+  "native_dll": {
+    "image_base": "0x180000000",
+    "export_count": 54,
+    "rvas": {
+      "StartUpdate": "0x1b90",
+      "WriteUpdateImage": "0x1ea0",
+      "VerifyUpdateImage": "0x21b0",
+      "FinalizeUpdate": "0x23b0",
+      "send_wrapper": "0x4e40",
+      "lower_sender": "0x9f10",
+      "HidD_SetFeature_thunk": "0x12780",
+      "HidD_GetFeature_thunk": "0x1277a"
+    },
+    "pdb_reference": "D:\\PSDEV\\fwupdater\\Application\\2.0\\x64\\Release\\libFWupdater.pdb",
+    "pdb_in_payload": false
+  },
+  "fcc_pdf": {
+    "document_id": 6414748,
+    "downloaded": false,
+    "reason": "HTTP 403 from attempted public PDF endpoints; board observation uses directly inspected RDC scans"
+  }
+}

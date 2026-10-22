@@ -25,8 +25,13 @@ config=folder/'config';config.mkdir(exist_ok=True)
 (config/'lv_conf.h').write_bytes((build/'config/lv_conf.h').read_bytes())
 flags=['-std=c99','-O1','-g','-fsanitize=undefined','-fno-sanitize-recover=all','-DLV_CONF_INCLUDE_SIMPLE=1',
        '-I'+str(build/'src'),'-I'+str(config),'-I'+str(PORT),'-I'+str(ROOT/'ports/graphics/include')]
-if sys.platform=='darwin':flags+=['-isysroot','/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk']
-compiler='/usr/bin/clang' if sys.platform=='darwin' else 'cc'
+compiler=os.environ.get('CC','cc')
+if sys.platform=='darwin':
+    sdk=os.environ.get('SDKROOT') or subprocess.check_output(['xcrun','--show-sdk-path'],text=True).strip()
+    sdk_compiler=Path(sdk).parent.parent/'usr/bin/clang'
+    compiler=os.environ.get('CC') or (str(sdk_compiler) if sdk_compiler.is_file() else
+                                     subprocess.check_output(['xcrun','--find','clang'],text=True).strip())
+    flags+=['-isysroot',sdk]
 hasher=hashlib.sha256(repr(flags).encode()+(config/'lv_conf.h').read_bytes())
 for path in sorted((build/'src').rglob('*.h')):hasher.update(path.read_bytes())
 for path in sorted(PORT.glob('*.h')):hasher.update(path.read_bytes())

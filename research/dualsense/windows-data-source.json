@@ -1,0 +1,26 @@
+{
+  "file": "analysis/remoteplay-win/windows-data/ntdll-19041.207.dll",
+  "url": "https://msdl.microsoft.com/download/symbols/ntdll.dll/CAD89AB41f4000/ntdll.dll",
+  "metadata_url": "https://winbindex.m417z.com/data/by_filename_compressed/ntdll.dll.json.gz",
+  "metadata_sha256": "0e548cda7398c3248604494e472af1313e59f8e836e52860121f18ba53448fc1",
+  "sha256": "96edaf03c5c54e5e0f8892a4944020dc1d4ca8edeb8de3fa1dabf02c61812dda",
+  "size": 2020080,
+  "metadata": {
+    "description": "NT Layer DLL",
+    "machineType": 34404,
+    "md5": "56cc5f7b4e5e23380d73fdd5f87dcdf6",
+    "sha1": "cd29d7bd86ab8f71e55791bb76d549a0315f94f6",
+    "sha256": "96edaf03c5c54e5e0f8892a4944020dc1d4ca8edeb8de3fa1dabf02c61812dda",
+    "signatureType": "Overlay",
+    "signingDate": [
+      "2020-04-09T03:47:37.405000"
+    ],
+    "signingStatus": "Signed",
+    "size": 2020080,
+    "timestamp": 3403193012,
+    "version": "10.0.19041.207 (WinBuild.160101.0800)",
+    "virtualSize": 2048000
+  },
+  "use": "Read-only non-executable data in an explicitly synthetic Windows profile; not native execution. Authenticode chain not validated.",
+  "notes": "Explicit Windows 10 data fixture. No claim that this file was present in a running Sony process. Downloaded from Microsoft; matching Winbindex SHA256 checked, Authenticode chain not validated."
+}

@@ -56,6 +56,9 @@ class Game:
         files = [dict(name="/dev/gfx", mode=0o20600, device=0x400),
                  dict(name="/dev/pcm", mode=0o20600, device=0x500),
                  dict(name="/data/home", directory=True, mode=0o40700)]
+        helper = binary.parent / "sdl-mixerd.fxe"
+        if helper.exists():
+            files.append(dict(name="/bin/sdl-mixerd", path=str(helper), mode=0o100755))
         files += [dict(name="/usr/share/lgeneral/" + path.relative_to(data).as_posix(),
                        path=str(path.resolve()), mode=0o100644)
                   for path in sorted(data.rglob("*")) if path.is_file()]
@@ -169,6 +172,9 @@ def run(binary: Path, data: Path, directory: Path) -> dict:
         raise FileNotFoundError(f"Prepare the complete runtime assets first: {data}")
     directory.mkdir(parents=True, exist_ok=True)
     report = dict(executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), checks=[], screenshots=[])
+    helper = binary.parent / 'sdl-mixerd.fxe'
+    if helper.exists():
+        report['mixer_helper_sha256'] = hashlib.sha256(helper.read_bytes()).hexdigest()
     with tempfile.TemporaryDirectory(prefix="lgeneral-gui-", dir=directory) as temporary:
         game = Game(binary, data, Path(temporary))
         try:

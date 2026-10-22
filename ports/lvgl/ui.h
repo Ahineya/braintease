@@ -16,6 +16,11 @@ void ui_theme_close(void);
 /* Desktop pointer policy: blank surfaces release keyboard focus. */
 void ui_attach_pointer(lv_indev_t *pointer);
 int ui_focus_clear(lv_group_t *group);
+/* Window deactivation changes decoration, not the logical control/selection.
+ * Repeated suspend calls are inert unless background code changes focus.
+ * Resume restores only a live, enabled, visible target in the same group. */
+void ui_focus_suspend(lv_group_t *group);
+void ui_focus_resume(lv_group_t *group);
 void ui_screen(void);
 lv_obj_t *ui_stack(lv_obj_t *parent, lv_flex_flow_t flow, unsigned gap);
 lv_obj_t *ui_panel(lv_obj_t *parent);

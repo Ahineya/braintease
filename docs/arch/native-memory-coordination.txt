@@ -3395,6 +3395,45 @@ GTK rotation or every local full-screen application's display behavior.
 Master plan updated in docs/x64-master-plan.md. No production process-memory,
 PTE/scheduler, shared ABI/compiler or user LVGL edits are authorized by this note.
 
+
+X64 GRAPHICS / INACTIVE PROCESS FIXTURE / PCI RESOURCES — 2026-10-22
+
+Root owns the combined platform integration. Native GX and screenshots are
+implemented without shared C16 kernel/compiler or user-owned LVGL/FuseDE edits.
+The 6.61s GUI KVM trial passed keyboard calculation, normal Alt+F4, framebuffer
+parity and cleanup. User confirmed calculator display/input/close on physical
+HP. Three x64 packages are additive in the existing signed repository.
+
+The inactive real-allocator process-memory fixture passed on HP/KVM in 3.121s,
+including 19 allocation-failure rollbacks and balanced 190 allocations/frees.
+It never installs CR3 and does not claim ring-3/preemption acceptance.
+
+Touchpad movement/click acceptance passed: native BAR0 was unassigned both before and
+after D0 (low=4/high=0), unlike Ubuntu after Linux PCI resource assignment.
+The original BAR-alignment message conflated zero address and misalignment.
+New isolated modules capture firmware PCI resources before ExitBootServices,
+select a collision-free root-window span and program only the target BAR with
+readback/rollback. Focused parser/allocator/assignment tests pass. Early native
+BAR refinement now replaces overlarge GPU/audio fallback bounds and wrong-index
+firmware aliases with measured extents before interrupts or native drivers start.
+Physical controller/HID initialization now passes: Touchpad ready, zero I2C aborts
+and malformed reports. The user confirmed physical movement and calculator clicks.
+Loader and native kernel are rebuilt together for the appended BootInfo snapshot.
+Existing C16 kernel/apps and Wi-Fi objects are retained. No USB refresh needed.
+
+Full upstream audit batch is frozen: optional UEFI metadata/ownership, conservative
+PCI reservations and cached fallback, D0/BAR restore, LPSS reset/remap, dynamic
+optional GPIO, DesignWare abort/completion and HID reset/features/report recovery.
+Module, glue, allocation and early-refinement UBSan fixtures pass; UEFI has 39
+focused passing groups. Native combined build
+4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c passes exact
+source-receipt validation and boots on HP with SSH/Wi-Fi/services healthy.
+The user's physical calculator movement/click check passed on that candidate.
+
+Receipts: build/x86_64-{graphics,graphics-wave,process-memory-fixture,pci-uefi,touchpad}/.
+Current architecture and acceptance boundaries: docs/x64-master-plan.md and
+tools/x86_64/{graphics,input}/README.md.
+
 NATIVE-MEMORY RESPONSE / AGREED DECISIONS
 ----------------------------------------
 2026-10-19 — Native-memory acknowledgement after reading both replies and code.

@@ -1,0 +1,322 @@
+{
+  "investigated_on": "2026-10-21",
+  "scope": "Files and public sources only; no USB/HID access, mode changes or flashing",
+  "hardware_constraint": "Spare controller available; no electronics tools available in the foreseeable future",
+  "conclusion": "No demonstrated recoverable USB-only RAM execution route for inferred BDM-040 established in the reviewed sources",
+  "input_hashes": {
+    "analysis/followup/payload/Data1/playstationaccessories.dll": {
+      "size": 1390544,
+      "sha256": "a5ccc41e04e960c867d479d3434e23d92044a731627f71646edb7b2b8dd4e409"
+    },
+    "analysis/followup/payload/Data1/libfwupdater.dll": {
+      "size": 226768,
+      "sha256": "3bc6de1116a7ea29d0997f632613edfe7c3100b62efbf5bca6f32f9fb4bc4569"
+    },
+    "analysis/followup/crypto-audit/strings.bin": {
+      "size": 187002,
+      "sha256": "a4ba231afa857121c452a4cc9830bf1f887cb09691bd9933b64fa58ff1bda94f"
+    },
+    "analysis/followup/crypto-audit/constants.bin": {
+      "size": 1912,
+      "sha256": "d85979383fc233974b0e5d2368ce15bb0d04148ef586037a2358aa4260191527"
+    },
+    "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin": {
+      "size": 950272,
+      "sha256": "861ad95a99b16805ff20f5690372988662c4f69c6ad0b266e793d7fc2292315a"
+    }
+  },
+  "tools_sha256": {
+    "unpack_resources.py": "f400e47dcfb7f556d92f84b2ed8a23cfe510cde79cc3610f4151573558adbddd",
+    "probe_resource_keys.py": "d65dac2e3afdc287cce95cb6803ac740ed00890c19d16e41a9731ff577bce971",
+    "test_resources.py": "39b16eb2b5bd949e5378689f18601fca333b13b60abfc3682c3a21526e56c169",
+    "test_key_probes.py": "b75e58b0fe3be6e77d815827ce3c8d29bf5c2451dafb9fc3e14cd9a91229581f"
+  },
+  "numeric_table_counts": {
+    "int32": 349,
+    "int64": 0,
+    "float32": 7,
+    "float64": 59
+  },
+  "numeric_resource_consumed_bytes": 1912,
+  "string_count": 2560,
+  "whole_string_hex_aes_key_candidates": 0,
+  "syntactic_base64_candidates": [
+    {
+      "string_key": "0xdd95",
+      "value": "huntLeftPointNumStickSensitivity",
+      "decoded_bytes": 24,
+      "interpretation": "UI/settings identifier; not an identified crypto key"
+    },
+    {
+      "string_key": "0xa106",
+      "value": "huntLeftStickSensitivityPresetId",
+      "decoded_bytes": 24,
+      "interpretation": "UI/settings identifier; not an identified crypto key"
+    },
+    {
+      "string_key": "0x2babe",
+      "value": "OpacityCheckRearRightTouchButton",
+      "decoded_bytes": 24,
+      "interpretation": "UI/settings identifier; not an identified crypto key"
+    }
+  ],
+  "crypto_call_edges": [
+    {
+      "caller": "0x06000aa2",
+      "target": "0x0a0000d0",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm..ctor"
+    },
+    {
+      "caller": "0x06000aa2",
+      "target": "0x0a0000d4",
+      "label": "System.Security.Cryptography.KeySizes..ctor"
+    },
+    {
+      "caller": "0x06000aa2",
+      "target": "0x0a0000d4",
+      "label": "System.Security.Cryptography.KeySizes..ctor"
+    },
+    {
+      "caller": "0x06000aa2",
+      "target": "0x0a0000d7",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_BlockSize"
+    },
+    {
+      "caller": "0x06000aa2",
+      "target": "0x0a0000d8",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_KeySize"
+    },
+    {
+      "caller": "0x06000aa3",
+      "target": "0x0a0000d9",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_Key"
+    },
+    {
+      "caller": "0x06000aa3",
+      "target": "0x0a0000db",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_IV"
+    },
+    {
+      "caller": "0x06000aa4",
+      "target": "0x0a0000d9",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_Key"
+    },
+    {
+      "caller": "0x06000aa4",
+      "target": "0x0a0000db",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_IV"
+    },
+    {
+      "caller": "0x06000aa5",
+      "target": "0x0a0000dc",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_IV"
+    },
+    {
+      "caller": "0x06000aa6",
+      "target": "0x0a0000de",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_Key"
+    },
+    {
+      "caller": "0x06000aa7",
+      "target": "0x0a0000d9",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_Key"
+    },
+    {
+      "caller": "0x06000aa7",
+      "target": "0x0a0000db",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_IV"
+    },
+    {
+      "caller": "0x06000aa7",
+      "target": "0x0a0000d9",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_Key"
+    },
+    {
+      "caller": "0x06000aa7",
+      "target": "0x0a0000db",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.get_IV"
+    },
+    {
+      "caller": "0x06000aae",
+      "target": "0x0a0000de",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_Key"
+    },
+    {
+      "caller": "0x06000aae",
+      "target": "0x0a0000dc",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.set_IV"
+    },
+    {
+      "caller": "0x06000aae",
+      "target": "0x0a0000e5",
+      "label": "System.Security.Cryptography.SymmetricAlgorithm.CreateDecryptor"
+    },
+    {
+      "caller": "0x06000aae",
+      "target": "0x0a0000e6",
+      "label": "System.Security.Cryptography.CryptoStream..ctor"
+    },
+    {
+      "caller": "0x06000aaf",
+      "target": "0x0a0000e8",
+      "label": "System.Security.Cryptography.DES.Create"
+    },
+    {
+      "caller": "0x06000aaf",
+      "target": "0x0a0000e9",
+      "label": "System.Security.Cryptography.Aes.Create"
+    },
+    {
+      "caller": "0x06000aaf",
+      "target": "0x0a0000ea",
+      "label": "System.Security.Cryptography.TripleDES.Create"
+    },
+    {
+      "caller": "0x06000aaf",
+      "target": "0x0a0000eb",
+      "label": "System.Security.Cryptography.Rijndael.Create"
+    },
+    {
+      "caller": "0x06000aaf",
+      "target": "0x0a0000ec",
+      "label": "System.Security.Cryptography.RC2.Create"
+    }
+  ],
+  "crypto_caller_cil_sha256": {
+    "0x06000aa2": "38c2cd8c1702932e595d5009a0962b9d8bdb49f10f4e0c82b0ab8e5dd28e916f",
+    "0x06000aa3": "b27ab5d144ce0af19afe8bf3b575f8489e576281a916c551f662b256791d08ca",
+    "0x06000aa4": "b27ab5d144ce0af19afe8bf3b575f8489e576281a916c551f662b256791d08ca",
+    "0x06000aa5": "0efbe093778b81b633e43bc896bc6578c423d21dbc08ef9179ed7fc011b8c86e",
+    "0x06000aa6": "c981e9380dec445d2fd413a90c729fa2d425deb495fab8a162cfc53e066cc35e",
+    "0x06000aa7": "c0f480617d9db845b804e97345892f8dc4f8779ac6b6ae7f0bf3c310e97463a8",
+    "0x06000aae": "7c3c92ff1cbfaf3a62e550f558d4de23a51364c9656a41e957c23a4331f363c1",
+    "0x06000aaf": "97b34214c66a744f6cbf7b94bf1d97fb54b088664dbde8871b2b01137a9cd808"
+  },
+  "crypto_edge_coverage_limit": "Direct metadata edges and four resolved proxy-factory families; not exhaustive runtime dispatch",
+  "key_reuse": {
+    "candidates": [
+      {
+        "name": "leyD",
+        "key_bytes": 32,
+        "key_sha256": "1f0f4eeea6a851fb1af6fcef9e2f8979be566fe9ecfe5d784ee3096808aa5907"
+      },
+      {
+        "name": "tSHbR",
+        "key_bytes": 32,
+        "key_sha256": "08ec6d40b888bf7559e8d6aa3314e3e7ce9063aae903d26127afb4cc52870062"
+      },
+      {
+        "name": "cDKfK",
+        "key_bytes": 32,
+        "key_sha256": "e77c8a86767812c31a31b848881b01ec4d4a16f9e7d751649546b6d8b73cb2e1"
+      },
+      {
+        "name": "string-base64-dd95",
+        "key_bytes": 24,
+        "key_sha256": "158c389be26aecc4ecfea14ead92ef4ba74baea1c460b7c5bdeb47f05236c716"
+      },
+      {
+        "name": "string-base64-a106",
+        "key_bytes": 24,
+        "key_sha256": "bcbdabdb26358d5a5deb3cf7207adbb731e8b4eaf28fc3448e72a4bf5ed9d2d9"
+      },
+      {
+        "name": "string-base64-2babe",
+        "key_bytes": 24,
+        "key_sha256": "7747517c4ae2994a01027665db076c382c03194c41d40fd2f6bbe52cc727ceed"
+      }
+    ],
+    "trials": 336,
+    "sample_bytes": 65536,
+    "starts": [
+      256,
+      272,
+      323680,
+      323696,
+      323776,
+      716896,
+      716912,
+      716992
+    ],
+    "modes": [
+      "ecb",
+      "cbc",
+      "ctr"
+    ],
+    "iv_hypotheses": [
+      "zero",
+      "preceding-block",
+      "resource-iv"
+    ],
+    "conventional_vector_hits": 0,
+    "validated_zlib_gzip_hits": 0,
+    "host_codec_hits": 0,
+    "cmac_hypotheses": 12,
+    "cmac_matches": 0,
+    "entropy_range": [
+      7.996458809618501,
+      7.997898219300578
+    ],
+    "limits": [
+      "Controller cipher, key derivation, authenticated ranges and payload offsets are unknown.",
+      "Only explicit key bytes were tested; no derived keys, truncated keys or expanded key search.",
+      "No vector table, compression stream or entropy metric is a universal code detector.",
+      "CBC/CTR/ECB and three IV hypotheses do not cover every firmware transformation.",
+      "Some labeled IV hypotheses coincide; not every trial is a distinct decryption."
+    ]
+  },
+  "public_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/nondebug/dualsense/02338358b6b4be2d64dbf661ae2a47842156cfcf/report-descriptor-usb.txt",
+      "commit": "02338358b6b4be2d64dbf661ae2a47842156cfcf",
+      "sha256": "90daeb195cf8c48b2cf8e211197cf3d9d6195fe0d5a1fb774ba7adaa07826df6",
+      "size": 7461
+    },
+    {
+      "url": "https://raw.githubusercontent.com/nchie/dualsense-updater-rs/c1ef2cacffa36d5c20867178af06afa3e92daa2f/src/update.rs",
+      "file": "updater-rs-src-update.rs",
+      "size": 8862,
+      "sha256": "1813ded113654d75607dfbfcbd7248ecf3a29b0bd38a6c72f8bef6540e912756"
+    },
+    {
+      "url": "https://blog.the.al/2023/01/03/ds4-reverse-engineering-part-3.html",
+      "size": 25682,
+      "sha256": "f5002bd6c3bb4796a52f3e9e172e17ae162da4bb77afe97ac0641008a4e0e1ad",
+      "scope": "DS4/JDM-055; not a BDM-040 recovery demonstration"
+    },
+    {
+      "url": "https://blog.the.al/2024/04/02/calibrating-dualsense.html",
+      "size": 19568,
+      "sha256": "d4fe8a118f6bc2574ee28c9d7fac88b33b9a8972da97b8aae653022256d253c0",
+      "scope": "Calibration and NVS persistence, not arbitrary code execution"
+    },
+    {
+      "url": "https://acidmods.com/forum/index.php?topic=44714.0",
+      "scope": "BDM-040 PCB scans; no verified debug pin assignment established"
+    },
+    {
+      "url": "https://controllers.fandom.com/wiki/Sony_DualSense/Report_Summaries",
+      "scope": "Indexed community DFU-enable label; direct page returned 402; unverified command semantics"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/index.php?title=DualSense_DFU_Modes",
+      "scope": "Indexed community note; loader entry procedures unknown; live site unavailable"
+    }
+  ],
+  "legacy_installer_endpoints": [
+    {
+      "url": "https://fwupdater.dl.playstation.net/fwupdater/FWupdaterInstaller.exe",
+      "error": "HTTP 404"
+    },
+    {
+      "url": "https://fwupdater.dl.playstation.net/fwupdater/FWUpdaterInstaller.exe",
+      "error": "HTTP 404"
+    }
+  ],
+  "tests": {
+    "count": 30,
+    "passed": 30,
+    "firmware_images_verified": 17,
+    "firmware_bytes_verified": 16154624
+  }
+}

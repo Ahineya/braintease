@@ -1,5 +1,8 @@
 #include "kernel.h"
 #include "acpi.h"
+#ifdef BOOT_TOUCHPAD
+#include "pci-refine.h"
+#endif
 
 BootInfo boot;
 extern uint8_t kernel_stack_bottom[], kernel_stack_top[], kernel_stack_guard[], kernel_readonly_end[];
@@ -353,6 +356,11 @@ _Noreturn void kernel_main(const BootInfo *information) {
     console_check();
 #endif
     acpi_init();
+#ifdef BOOT_TOUCHPAD
+    /* Size unresolved firmware BAR reservations once, with interrupts still
+     * disabled and before any native device driver acquires its hardware. */
+    (void)pci_resources_refine();
+#endif
     timer_init();
 #ifdef BOOT_NVME_PROBE
     extern void nvme_probe(void);

@@ -3,6 +3,9 @@
 #include "uefi.h"
 #include "bootinfo.h"
 #include "io.h"
+#ifdef BOOT_TOUCHPAD
+#include "pci-uefi.h"
+#endif
 
 extern const uint8_t kernel_payload_start[], kernel_payload_end[];
 static BootInfo boot;
@@ -197,6 +200,9 @@ Status efi_main(Handle image, SystemTable *system) {
         fail("TSC calibration", boot.tsc_hz);
     boot.epoch = clock_epoch(system);
     boot.tsc_start = rdtsc();
+#ifdef BOOT_TOUCHPAD
+    pci_uefi_capture(services,&boot);
+#endif
 
     size_t map_size = 0, key = 0, descriptor_size = 0;
     uint32_t version = 0;

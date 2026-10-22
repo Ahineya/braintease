@@ -11,9 +11,14 @@ typedef struct {
     unsigned modifiers, locks_down, caps, num;
     unsigned extended, pause;
     uint64_t dropped;
+    void (*event)(void *opaque, unsigned usage, unsigned down);
+    void *event_opaque;
 } X64Keyboard;
 
 void x64_keyboard_init(X64Keyboard *keyboard);
+/* Optional raw HID make/break observer; terminal encoding stays independent. */
+void x64_keyboard_events(X64Keyboard *keyboard,
+                         void (*event)(void *, unsigned, unsigned), void *opaque);
 /* Forget incomplete prefixes and held modifiers after a controller error.
  * Already queued octets and the software Caps/Num lock choices survive. */
 void x64_keyboard_resync(X64Keyboard *keyboard);

@@ -222,12 +222,14 @@ ratios. The callback then mixes the prepared chunks with no runtime resampling.
 Music streams, compressed decoders and effects/postmix hooks remain outside the
 subset. Callers must use this port's matching `SDL_mixer.h` and SDL headers.
 
-The mixer inherits the cooperative callback scheduling described above. Long
-work and blocking calls outside SDL service boundaries can still drain the
-queue; linking the mixer does not create an audio thread. The
+The default local mixer inherits the cooperative callback scheduling described
+above. An optional Fuse-X process backend uses
+`ports.sdl.build.library(..., mixer='process')`: its application frontend sends
+copied chunks and controls to `sdl-mixerd`, which independently services PCM.
+Uploaded effects continue while the application computes or blocks on I/O.
+This does not change arbitrary `SDL_OpenAudio` callbacks or add SDL threads. The
 [threading investigation](../../docs/arch/audio.md#sdl-threading-investigation)
-also considers an explicit mixer helper process as an audio-specific future
-option.
+describes the implemented helper and the requirements for general threads.
 
 Build and test the reusable mixer independently of LGeneral:
 
@@ -240,6 +242,24 @@ The runner builds byte- and wide-carrier host fixtures and an actual C16
 fixture, then tests the production PCM backend on disposable guest images.
 `--host-only` runs just the host fixtures; `--deterministic-only` includes C16
 callback checks while skipping production PCM captures.
+
+Exercise the independent producer with actual guest PCM:
+
+```sh
+python3 ports/sdl/build.py --app mixer-helper --build build/sdl-mixer-helper
+python3 ports/sdl/build.py --app mixer-ipc --build build/sdl-mixer-ipc
+python3 ports/sdl/tests/mixer_ipc.py \
+  --guest build/sdl-mixer-ipc/sdl-mixer-ipc.fxe \
+  --helper build/sdl-mixer-helper/sdl-mixerd.fxe
+```
+
+The nine-case suite verifies exact PCM while the parent blocks or computes
+without SDL, partial commands and unread/flooded replies, completion callbacks,
+reopen/exit/failed launch, helper death, descriptors, child reaping and fresh PCM
+leases. Two eleven-second intervals with a pending completion poll verify that
+application work is not treated as an IPC timeout. An isolated old-timeout
+implementation fails that regression. LGeneral's GUI and original click also
+pass through the process backend with its original 256-frame blocks.
 
 ## Deferred game targets
 

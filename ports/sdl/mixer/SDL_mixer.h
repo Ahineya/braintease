@@ -40,7 +40,9 @@ extern DECLSPEC int SDLCALL Mix_ReserveChannels(int channels);
 extern DECLSPEC Mix_Chunk * SDLCALL Mix_LoadWAV_RW(SDL_RWops *src, int freesrc);
 #define Mix_LoadWAV(file) Mix_LoadWAV_RW(SDL_RWFromFile((file), "rb"), 1)
 /* RAW storage is borrowed. It must remain valid and unchanged until freed or
- * stopped. Format, rate and channels must match Mix_QuerySpec's device. */
+ * stopped. The optional process profile uploads an immutable snapshot: create
+ * a new chunk to change sample data. Format, rate and channels must match
+ * Mix_QuerySpec's device. */
 extern DECLSPEC Mix_Chunk * SDLCALL Mix_QuickLoad_RAW(Uint8 *mem, Uint32 len);
 extern DECLSPEC void SDLCALL Mix_FreeChunk(Mix_Chunk *chunk);
 extern DECLSPEC int SDLCALL Mix_PlayChannelTimed(int channel, Mix_Chunk *chunk,
@@ -63,6 +65,8 @@ extern DECLSPEC int SDLCALL Mix_FadeOutChannel(int channel, Sint32 ms);
 extern DECLSPEC Mix_Fading SDLCALL Mix_FadingChannel(int channel);
 extern DECLSPEC void SDLCALL Mix_ChannelFinished(void (SDLCALL *callback)(int));
 extern DECLSPEC Mix_Chunk * SDLCALL Mix_GetChunk(int channel);
+/* Process profile diagnostics; zero for the in-process implementation. */
+extern DECLSPEC Sint32 SDLCALL Mix_PCMHelperPID(void);
 #define Mix_GetError SDL_GetError
 #define Mix_SetError SDL_SetError
 

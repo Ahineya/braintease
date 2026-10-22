@@ -38,7 +38,7 @@ def library(target, build, compiler, fetch=False, jobs=4, mixer=False):
               PORT / ('platform/pcm_audio.c' if c16 else 'platform/host_audio.c'),
               PORT / ('platform/gx.c' if c16 else 'platform/host.c')]
     if mixer:
-        units.append(PORT / 'mixer/mixer.c')
+        units.append(PORT / ('mixer/client.c' if mixer == 'process' else 'mixer/mixer.c'))
     includes = [source/'include',source/'src',source/'src/video',source/'src/events',
                 source/'src/timer',PORT/'platform',PORT/'c16',PORT/'mixer']
     if c16:
@@ -57,7 +57,8 @@ def library(target, build, compiler, fetch=False, jobs=4, mixer=False):
     flags += [v for d in [*includes,*sdk] for v in ('-I',str(d))]
     digest=hashlib.sha256(pinned.read_bytes()+str(flags).encode())
     for directory in [*includes,*sdk]:
-        for p in sorted(directory.rglob('*.h')):digest.update(str(p).encode());digest.update(p.read_bytes())
+        for p in sorted(directory.rglob('*')):
+            if p.suffix in ('.h','.inc'):digest.update(str(p).encode());digest.update(p.read_bytes())
     prefix=digest.digest();cache=build/'objects';cache.mkdir(exist_ok=True)
     def compile_one(path):
         key=hashlib.sha256(prefix+path.read_bytes()).hexdigest()[:24]
@@ -75,7 +76,8 @@ def library(target, build, compiler, fetch=False, jobs=4, mixer=False):
 
 
 def build(target, build, compiler, fetch=False, app='surface', jobs=4):
-    lib = library(target, build, compiler, fetch, jobs, mixer=app == 'mixer')
+    lib = library(target, build, compiler, fetch, jobs,
+                  mixer='process' if app == 'mixer-ipc' else app in ('mixer','mixer-helper'))
     source, includes, units = lib['source'], lib['includes'], lib['units']
     c16 = target == 'fuse-x'
     if app == 'objects':
@@ -83,8 +85,11 @@ def build(target, build, compiler, fetch=False, app='surface', jobs=4):
     test = PORT/'tests'/({'demo':'demo.c','bulk':'pixel-bulk.c',
                          'audio':'audio.c','audio-demo':'audio-demo.c',
                          'mixer':'mixer.c'}.get(app,'acceptance.c'))
+    if app == 'mixer-helper': test = PORT/'mixer/helper.c'
+    if app == 'mixer-ipc': test = PORT/'tests/mixer-ipc.c'
     output = build / ({'demo':'sdl-demo','bulk':'sdl-bulk','audio':'sdl-audio',
-                       'audio-demo':'sdl-audio-demo','mixer':'sdl-mixer'}.get(app,'sdlcheck') + ('.fxe' if c16 else '-host'))
+                       'audio-demo':'sdl-audio-demo','mixer':'sdl-mixer',
+                       'mixer-helper':'sdl-mixerd','mixer-ipc':'sdl-mixer-ipc'}.get(app,'sdlcheck') + ('.fxe' if c16 else '-host'))
     if not c16:
         cmd = [*shlex.split(os.environ.get('CC','cc')),'-std=c99','-O2','-fno-strict-aliasing',
                *[v for d in includes for v in ('-I',str(d))], *map(str,units),str(test),'-o',str(output)]
@@ -111,7 +116,7 @@ def build(target, build, compiler, fetch=False, app='surface', jobs=4):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--target',choices=['host','fuse-x'],default='fuse-x')
-    p.add_argument('--app',choices=['surface','demo','bulk','objects','audio','audio-demo','mixer'],default='surface')
+    p.add_argument('--app',choices=['surface','demo','bulk','objects','audio','audio-demo','mixer','mixer-helper','mixer-ipc'],default='surface')
     p.add_argument('--build',type=Path,default=ROOT/'build/sdl')
     p.add_argument('--compiler',type=Path,default=ROOT/'target/release/rcc')
     p.add_argument('--fetch',action='store_true')
@@ -131,7 +136,7 @@ def main():
                       executable_sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
                       executable_octets=output.stat().st_size,
                       abi='C16 logical octets' if args.target=='fuse-x' else 'host byte ABI')
-            if args.app == 'mixer':
+            if args.app in ('mixer','mixer-helper','mixer-ipc'):
                 info['mixer'] = mixer_profile()
             info_path=args.build/(output.name+'.json')
             info_path.write_text(json.dumps(info,indent=2)+'\n')

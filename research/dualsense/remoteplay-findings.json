@@ -1,0 +1,547 @@
+{
+  "date_utc": "2026-10-21",
+  "mode": "Static analysis only; no app installation, vendor executable execution or controller access",
+  "sources": {
+    "sony_download_page": "https://remoteplay.dl.playstation.net/remoteplay/lang/en/1100002.html",
+    "package": {
+      "url": "https://remoteplay.dl.playstation.net/remoteplay/module/mac/RemotePlayInstaller.pkg",
+      "final_url": "https://remoteplay.dl.playstation.net/remoteplay/module/mac/RemotePlayInstaller.pkg",
+      "retrieved_utc": "2026-10-21T21:14:44.772802+00:00",
+      "bytes": 12571186,
+      "sha256": "a82a7f645ff009a0c70d4b989f34249a51d800ca7aa8b4bf81772ad7d59a6a82"
+    }
+  },
+  "application": {
+    "bundle_identifier": "com.playstation.RemotePlay",
+    "version": "9.5.0",
+    "minimum_macos": "12.0",
+    "architectures": [
+      "x86_64",
+      "arm64"
+    ],
+    "main_executable": {
+      "bytes": 11860944,
+      "sha256": "98e96994d54a125aa044da62f87d197b1bcd0c4bbd3a81f5108350cda2ef9c70"
+    },
+    "analyzed_slice": {
+      "architecture": "arm64",
+      "bytes": 5880784,
+      "sha256": "02882fb5005ef08e1256a59ce28debd484d54f1413e7f97d36eb2f219019240a"
+    },
+    "derived_x86_64_slice": {
+      "bytes": 5962496,
+      "sha256": "d9c84f6cd21b09e9b398cf7018546f397fd41c23534f78b43526815c03d0eaaa"
+    },
+    "controller_transport_location": "Main executable, rather than a separate controller dylib"
+  },
+  "signature": {
+    "installer_normal_certificate_access": "Sony Developer ID Installer signature and Apple notarization trusted; exit status 0",
+    "app_normal_certificate_access": "codesign --verify --deep --strict succeeds; exit status 0",
+    "team_identifier": "8UT4NVUACP",
+    "installer_trusted_timestamp_utc": "2026-08-04T09:25:49Z",
+    "sandbox_caveat": "Both checks initially reported invalid signatures under sandbox restrictions; normal macOS certificate access resolved this. Both transcripts retained."
+  },
+  "bundled_dylibs": [
+    {
+      "file": "libUnifiedTelemetryClient.dylib",
+      "bytes": 194128,
+      "sha256": "c47dc665f937b539491a58be8a972b3ab1502c975c343b57431e9835f09189be"
+    },
+    {
+      "file": "libUnifiedTelemetryModel.dylib",
+      "bytes": 765168,
+      "sha256": "cd768a8b7c41f167a1d31f62cbf816524b272c42c180ee54ef96ad244a62a3a5"
+    },
+    {
+      "file": "libUnifiedTelemetryService.dylib",
+      "bytes": 1943680,
+      "sha256": "d8dd1067eb79b8d5afa9c85e79dc774cb65411f15744faa8a794ab08c44006b5"
+    },
+    {
+      "file": "libscenp.dylib",
+      "bytes": 11032336,
+      "sha256": "7c37bdfbd8b7d391e6a0abb48d49d416a837f33339087a55373527557b89b0c3"
+    }
+  ],
+  "static_mapping": {
+    "recovered_relative_objc_method_records": 960,
+    "decoded_objc_selector_stubs": 383,
+    "chained_pointer_format": 6,
+    "direct_hid_api_call_sites": [
+      {
+        "call": "0x1000e3b14",
+        "api": "IOHIDDeviceSetReport",
+        "kind": "Output (1)",
+        "method": "IOHIDDeviceObject output:length:"
+      },
+      {
+        "call": "0x1000e3ba8",
+        "api": "IOHIDDeviceGetReport",
+        "kind": "Feature (2)",
+        "method": "IOHIDDeviceObject getFeature:length:"
+      },
+      {
+        "call": "0x1000e3c90",
+        "api": "IOHIDDeviceSetReport",
+        "kind": "Feature (2)",
+        "method": "IOHIDDeviceObject setFeature:length:"
+      },
+      {
+        "call": "0x1000fe2e8",
+        "api": "IOHIDDeviceGetReport",
+        "kind": "Feature (2)",
+        "method": "DSDevice getBtPairing:"
+      }
+    ],
+    "identified_direct_selector_calls": {
+      "getFeature:length:": 16,
+      "setFeature:length:": 2,
+      "output:length:": 12
+    },
+    "caller_inventory": [
+      {
+        "call": "0x1000e3d40",
+        "function": "0x1000e3cd4",
+        "method": "IOHIDDeviceObject setBDAddress",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e3ec4",
+        "function": "0x1000e3cd4",
+        "method": "IOHIDDeviceObject setBDAddress",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e3f44",
+        "function": "0x1000e3cd4",
+        "method": "IOHIDDeviceObject setBDAddress",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e3fc4",
+        "function": "0x1000e3cd4",
+        "method": "IOHIDDeviceObject setBDAddress",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e4024",
+        "function": "0x1000e3cd4",
+        "method": "IOHIDDeviceObject setBDAddress",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e4108",
+        "function": "0x1000e40b0",
+        "method": "IOHIDDeviceObject getCloneFirmwareInfo",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e41bc",
+        "function": "0x1000e4164",
+        "method": "IOHIDDeviceObject cloneGetExtensionUnitInfo",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e42d0",
+        "function": "0x1000e4200",
+        "method": "IOHIDDeviceObject getFirmwareInfo:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e43c4",
+        "function": "0x1000e4364",
+        "method": "IOHIDDeviceObject getFirmwareInfoForBond:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e44ac",
+        "function": "0x1000e444c",
+        "method": "IOHIDDeviceObject getFirmwareInfoForLeonardo:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e4594",
+        "function": "0x1000e4534",
+        "method": "IOHIDDeviceObject getFirmwareInfoForAston:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e46d0",
+        "function": "0x1000e461c",
+        "method": "IOHIDDeviceObject getCalibrationDataRawReport:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e47b0",
+        "function": "0x1000e4764",
+        "method": "IOHIDDeviceObject getCalibrationDataRawReportForBond:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e48fc",
+        "function": "0x1000e4874",
+        "method": "IOHIDDeviceObject getCalibrationDataRawReportForAston:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000e4b98",
+        "function": "0x1000e4a40",
+        "method": "IOHIDDeviceObject setBtControlCommand:",
+        "selector": "setFeature:length:"
+      },
+      {
+        "call": "0x1000f286c",
+        "function": "0x1000f27b4",
+        "method": "ScePadDS4ViaClone initWithIoHidDevice:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000f28ec",
+        "function": "0x1000f27b4",
+        "method": "ScePadDS4ViaClone initWithIoHidDevice:",
+        "selector": "getFeature:length:"
+      },
+      {
+        "call": "0x1000f4bb4",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4c44",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4cd4",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4d44",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4e34",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4ef4",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f4fb8",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000f504c",
+        "function": "0x1000f4a18",
+        "method": "DSDeviceOutputReportObject sendToDevice:",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000fa298",
+        "function": "0x1000fa1c0",
+        "method": "DSDevice term",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000fa754",
+        "function": "0x1000fa1c0",
+        "method": "DSDevice term",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x1000fa798",
+        "function": "0x1000fa1c0",
+        "method": "DSDevice term",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x100102b98",
+        "function": "0x100102af8",
+        "method": "DSDevice test",
+        "selector": "output:length:"
+      },
+      {
+        "call": "0x100103478",
+        "function": "0x100103354",
+        "method": "DSDevice setAudioOutPath:",
+        "selector": "setFeature:length:"
+      }
+    ],
+    "scope_note": "Direct calls and recognized selector stubs in the arm64 text, not a proof that arbitrary Objective-C dynamic dispatch cannot reach other paths."
+  },
+  "model_tests": [
+    {
+      "selector": "isClone",
+      "pid_hex": "0x0ba0",
+      "note": "USB wireless adapter path; do not interpret Clone as a counterfeit-controller test"
+    },
+    {
+      "selector": "isBond",
+      "pid_hex": "0x0ce6",
+      "device": "DualSense standard"
+    },
+    {
+      "selector": "isHunt",
+      "pid_hex": "0x0df2",
+      "device": "DualSense Edge"
+    },
+    {
+      "selector": "isAston",
+      "pids_hex": [
+        "0x0e45",
+        "0x0e46"
+      ],
+      "note": "Separate controller family; not the connected specimen"
+    },
+    {
+      "selector": "isLeonardo",
+      "pid_hex": "0x0e5f",
+      "note": "Separate controller family; not the connected specimen"
+    }
+  ],
+  "feature_queries": [
+    {
+      "family": "Bond/Hunt",
+      "report_hex": "0x09",
+      "requested_bytes_including_id": 20,
+      "purpose": "Read Bluetooth address into host object",
+      "function": "0x1000e3cd4"
+    },
+    {
+      "family": "Bond/Hunt (Bond firmware routine reused by caller)",
+      "report_hex": "0x20",
+      "requested_bytes_including_id": 63,
+      "purpose": "Firmware component information",
+      "function": "0x1000e4364"
+    },
+    {
+      "family": "Bond/Hunt (Bond calibration routine reused by caller)",
+      "report_hex": "0x05",
+      "requested_bytes_including_id": 40,
+      "purpose": "Read calibration and repackage for host motion code",
+      "function": "0x1000e4764"
+    },
+    {
+      "family": "DS4/default",
+      "report_hex": "0xa3",
+      "requested_bytes_including_id": 49,
+      "purpose": "Firmware information",
+      "function": "0x1000e4200"
+    },
+    {
+      "family": "DS4/default",
+      "report_hex": "0x02",
+      "requested_bytes_including_id": 37,
+      "purpose": "Calibration",
+      "function": "0x1000e461c"
+    },
+    {
+      "family": "DS4/default",
+      "report_hex": "0x12",
+      "requested_bytes_including_id": 16,
+      "purpose": "Bluetooth address",
+      "function": "0x1000e3cd4"
+    },
+    {
+      "family": "Clone adapter",
+      "report_hex": "0xe1",
+      "requested_bytes_including_id": 49,
+      "purpose": "getCloneFirmwareInfo",
+      "function": "0x1000e40b0"
+    },
+    {
+      "family": "Clone adapter",
+      "report_hex": "0x15",
+      "requested_bytes_including_id": 46,
+      "purpose": "cloneGetExtensionUnitInfo",
+      "function": "0x1000e4164"
+    },
+    {
+      "family": "Clone adapter",
+      "report_hex": "0xe5",
+      "requested_bytes_including_id": 7,
+      "purpose": "Bluetooth address",
+      "function": "0x1000e3cd4"
+    },
+    {
+      "family": "Clone adapter",
+      "report_hex": "0xe3",
+      "requested_bytes_including_id": 5,
+      "purpose": "Read identifiers in ScePadDS4ViaClone initializer",
+      "function": "0x1000f27b4"
+    },
+    {
+      "family": "Leonardo",
+      "report_hex": "0x20",
+      "requested_bytes_including_id": 63,
+      "purpose": "Firmware information",
+      "function": "0x1000e444c"
+    },
+    {
+      "family": "Aston",
+      "report_hex": "0x20",
+      "requested_bytes_including_id": 63,
+      "purpose": "Firmware information",
+      "function": "0x1000e4534"
+    },
+    {
+      "family": "Aston",
+      "report_hex": "0x05",
+      "requested_bytes_including_id": 64,
+      "reads_maximum": 2,
+      "purpose": "Multipart calibration",
+      "function": "0x1000e4874"
+    }
+  ],
+  "setting_paths": [
+    {
+      "method": "IOHIDDeviceObject setBtControlCommand:",
+      "function": "0x1000e4a40",
+      "observed_report_ids_hex": [
+        "0x08",
+        "0x14",
+        "0xe2"
+      ],
+      "semantics": "Connection/control commands with model and bus gates; not memory access; not sent"
+    },
+    {
+      "method": "DSDevice setAudioOutPath:",
+      "function": "0x100103354",
+      "non_bond_feature_prefix_hex": "e0 00",
+      "feature_report_bytes": 3,
+      "semantics": "Audio path setting; Bond/Hunt uses ordinary output payload instead; not sent"
+    },
+    {
+      "method": "DSDevice test",
+      "function": "0x100102af8",
+      "output_report_id_hex": "0x05",
+      "output_bytes": 76,
+      "iterations": 100,
+      "semantics": "Fixed output loop, no identified RAM/execute semantics; not sent"
+    },
+    {
+      "method": "DSDeviceOutputReportObject sendToDevice:",
+      "function": "0x1000f4a18",
+      "bond_usb_output_report_hex": "0x02",
+      "bond_usb_requested_bytes": 63,
+      "bond_bt_output_report_hex": "0x31",
+      "bond_bt_requested_bytes": 78,
+      "semantics": "Ordinary controller output for LEDs/haptics/triggers/audio flags"
+    }
+  ],
+  "firmware_component_fields": [
+    {
+      "sony_field": "sbl_firmware_version",
+      "report_20_offset_including_id": 48,
+      "value_hex": "0x1003c"
+    },
+    {
+      "sony_field": "venom_firmware_version",
+      "report_20_offset_including_id": 52,
+      "value_hex": "0x2000a",
+      "matching_container_offset_hex": "0x4f04c",
+      "container_value_hex": "0x2000a",
+      "equal": true,
+      "container_sha256": "861ad95a99b16805ff20f5690372988662c4f69c6ad0b266e793d7fc2292315a"
+    },
+    {
+      "sony_field": "spider_dsp_firmware_version",
+      "report_20_offset_including_id": 56,
+      "value_hex": "0x6",
+      "matching_container_offset_hex": "0xaf05c",
+      "container_value_hex": "0x6",
+      "equal": true,
+      "container_sha256": "861ad95a99b16805ff20f5690372988662c4f69c6ad0b266e793d7fc2292315a"
+    }
+  ],
+  "negative_findings": {
+    "0x0b_or_0x0c_feature_caller_identified": false,
+    "0xa0_report_caller_identified": false,
+    "0x80_0x81_factory_transport_identified": false,
+    "arbitrary_address_read_write_identified": false,
+    "ram_load_or_execute_identified": false,
+    "controller_firmware_decryption_identified": false,
+    "note": "Scoped to reviewed controller transport; does not prove absent firmware handlers or a complete absence of vulnerabilities."
+  },
+  "evidence": [
+    {
+      "path": "analysis/remoteplay/package.json",
+      "bytes": 357,
+      "sha256": "4eaa80dd5b59c8dcf49cc4147bb17a373833ec49422291cd1d30bd4550f6a1d8"
+    },
+    {
+      "path": "analysis/remoteplay/objc-methods.json",
+      "bytes": 158829,
+      "sha256": "d184681a691cd62d556bdb4591906db2c1606013a98d6236e303de5905a19914"
+    },
+    {
+      "path": "analysis/remoteplay/selector-stubs.json",
+      "bytes": 16291,
+      "sha256": "b17f8d1a7c9874f4ed2902e0d4f29ca1682cf783ee51e6a0641bce6d516b2cae"
+    },
+    {
+      "path": "analysis/remoteplay/function-starts.json",
+      "bytes": 334366,
+      "sha256": "71674e7c2f56c2c37ee4f6246873b286e82c82714b27586cde5d35ecb5d539f4"
+    },
+    {
+      "path": "analysis/remoteplay/hid-callers.json",
+      "bytes": 4672,
+      "sha256": "75229f39b0f27163d681fafbc4ab84aa6674b9c80c2452f726e8efb42a16c498"
+    },
+    {
+      "path": "analysis/remoteplay/reviewed-functions.txt",
+      "bytes": 75799,
+      "sha256": "af7edfbdb2ae155fee6d282c731ce16be4338d59d8fc4dab45fb9a5f5bddbb1d"
+    },
+    {
+      "path": "analysis/remoteplay/bd-address-query.json",
+      "bytes": 12117,
+      "sha256": "9fbac292a7d1858748ad54c497b249cb016952d1d38d8aac2fe615d813908155"
+    },
+    {
+      "path": "analysis/remoteplay/app-verification-unsandboxed.txt",
+      "bytes": 2056,
+      "sha256": "626e37bd5d599f401ef1d470a9c397791b9c5de1435fd7af6a0b31920d8407c0"
+    },
+    {
+      "path": "analysis/remoteplay/package-signature-unsandboxed.txt",
+      "bytes": 1123,
+      "sha256": "1d633e774ae6c62dbf1192abc838b22f078a53eacdf6773a38ef22aca13930ad"
+    }
+  ],
+  "firmware_component_layout": {
+    "type_name": "_bond_payload_get_firmware_info",
+    "packed_payload_bytes": 63,
+    "field_names": [
+      "builddate",
+      "buildtime",
+      "firmware_type",
+      "swseries",
+      "hwver",
+      "swver",
+      "device_info",
+      "update_version",
+      "updata_capability_info",
+      "reserve",
+      "sbl_firmware_version",
+      "venom_firmware_version",
+      "spider_dsp_firmware_version",
+      "crc32"
+    ],
+    "objc_type_encoding": "{_bond_payload_get_firmware_info=[11c][8c]SSII[12C]SCCIIII}"
+  }
+}

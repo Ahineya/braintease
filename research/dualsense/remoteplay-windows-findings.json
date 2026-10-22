@@ -1,0 +1,1091 @@
+{
+  "date_utc": "2026-10-21",
+  "mode": "Static files and Ghidra analysis only. No installer, application or DLL execution; no device or USB access.",
+  "status": "Host package and protection loader examined; Windows controller transport remains unresolved.",
+  "sources": {
+    "official_download_page": "https://remoteplay.dl.playstation.net/remoteplay/lang/en/1100001.html",
+    "bootstrap": {
+      "url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller.exe",
+      "final_url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller.exe",
+      "retrieved_utc": "2026-10-21T21:25:40.927634+00:00",
+      "bytes": 3292384,
+      "sha256": "f10055d503c47a4e96fd2f578fbcba3e651c19ecbe7f30ed87c15bec798f5684"
+    },
+    "msi": {
+      "url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_9.5.0.08040_x64.msi",
+      "final_url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_9.5.0.08040_x64.msi",
+      "retrieved_utc": "2026-10-21T21:26:20.954523+00:00",
+      "bytes": 86272512,
+      "sha256": "a67d36c6fb14e67ec78858b831153fe372a0af5f7c41649ef710e3e8fc30bc25"
+    },
+    "msi_url_origin": "Recovered from the statically decoded bootstrapper Setup.ini",
+    "winget_pinned_manifest": "https://github.com/microsoft/winget-pkgs/blob/3b5ad74e8555b885a02c683af811a442e7f90e7d/manifests/p/PlayStation/PSRemotePlay/9.5.0.08040/PlayStation.PSRemotePlay.installer.yaml",
+    "both_current_downloads_match_winget_sha256": true,
+    "signature_limit": "Embedded certificate metadata names Sony Interactive Entertainment Inc.; full Windows Authenticode trust validation was not performed."
+  },
+  "archive": {
+    "bootstrap_format": "InstallShield ISSetupStream v4",
+    "decoded_bootstrap_members": 63,
+    "msi_format": "CFBF",
+    "embedded_cabinet": "Data1.cab",
+    "cabinet_payload_files": 46,
+    "operation": "Static decoder and unar; no installer custom actions executed",
+    "decoder": "extract_updater.members/decode with this new input hash asserted separately; original extract() hash guard unchanged",
+    "msi_auxiliary_streams_inspected": 26
+  },
+  "payload": [
+    {
+      "file": "libcurl.dll",
+      "bytes": 546712,
+      "sha256": "a38b5d6e0fd594669ba66e20d96e338e71ea969b28310c03707bf83cf8ac0b2c",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 190,
+      "export_count": 93
+    },
+    {
+      "file": "microsoft.web._00dab20835672",
+      "bytes": 653248,
+      "sha256": "766b87fd08331347af17bc157afecff5185d3bbd90d3dc244dd1009526b1607c",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "microsoft.web._2af8a7a430ffa",
+      "bytes": 42440,
+      "sha256": "6342b00ce53702db0a8c7533f7be40f9da59abd86c96524392bc3ac30df1821f",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "preloader.dll",
+      "bytes": 49568,
+      "sha256": "78f0f88ed59e6d8d26f3f149703d781cdf2b60edc81db59eca310f3d1c3301c7",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 54,
+      "export_count": 2
+    },
+    {
+      "file": "remoteplay.exe",
+      "bytes": 37795744,
+      "sha256": "d4e355c18bab988bdc3dc69ef4746d5064983cc7cac699ccda8d46b834291616",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.dll",
+      "bytes": 5811104,
+      "sha256": "83c3c5a682fcd286904ea9482c8c50df1fa194a2164fcb13cbe39331175c341f",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll",
+      "bytes": 62392,
+      "sha256": "e45600b5a5374fc8f1d4b3bb40cb805fc7bd4e7570ad2773ebf209765e35fb9e",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll1",
+      "bytes": 55224,
+      "sha256": "f299b3cd0cafbf06203d7cf153f230f3ff13cdbd493951eaf8a98ca644d9a95c",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll10",
+      "bytes": 55224,
+      "sha256": "993fbf33f0b8c57c178070f782aad9b81c4eb69192f4587a79fc06ca00deb590",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll11",
+      "bytes": 57272,
+      "sha256": "f4efb08ff6a32a4304cf3db8b75229494652c586b1d7c755be5c22a918e65c2e",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll12",
+      "bytes": 58296,
+      "sha256": "a30e37afd7cded88450e882e69c0f108820f6800386dd0486a3a26bd8cbccc65",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll13",
+      "bytes": 57272,
+      "sha256": "b0fed9d988cd15f1c6aa4c7e5739e69af2496b11511ecfed10e6b16c4b590d52",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll14",
+      "bytes": 52664,
+      "sha256": "50d463142ee30fdd805b4fa9fe0a210e8dd6bc0ddd04e2c0a360f958b56a18cb",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll15",
+      "bytes": 54200,
+      "sha256": "453af3ecaa9a4b7b8d045beae3e88e5ded6f5915ea469d8460208153eb49be88",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll16",
+      "bytes": 57784,
+      "sha256": "ea292e4a218abf7cc7cf8fc03942c23e0ad39edf3129ba57884b8e73ff485cd2",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll17",
+      "bytes": 55736,
+      "sha256": "f83856c390f04ae0fcdac37625579350b112d979e71ca4004160f14c406f0097",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll18",
+      "bytes": 51640,
+      "sha256": "7b2e9060c102621ad327f1bd6e21181264028f099cb23809691322fbefd13986",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll19",
+      "bytes": 53176,
+      "sha256": "0bd67044ed2c3ee7641bd5d99302898047c5c45c2d69645836b641f37531c28a",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll2",
+      "bytes": 52152,
+      "sha256": "7790eb459327bd9ee7c0b378973aba03cb8199dcfc626c101cd0c02f65ff61ed",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll20",
+      "bytes": 56248,
+      "sha256": "318e0129329a703844a2ba8bdf8cfdea3e906d6f843ee258c3fd59890d674bb8",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll21",
+      "bytes": 56760,
+      "sha256": "d692f884db2d4ea7a11940ca82c68e0810d219ce8f965107a233805982a1ab69",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll22",
+      "bytes": 54200,
+      "sha256": "c3a00c34b74d46cf90f285ccf6f35cf2bdeea406f81773142c520fb1f5131a23",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll23",
+      "bytes": 54712,
+      "sha256": "ea6bcc19c58de6036719b9da0ce0fde5471c5f2baa330d77c05d279840e13526",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll24",
+      "bytes": 72632,
+      "sha256": "a80a74d8964cc94528cf62c65bc7febd49a490cfd47bef88403f70f8f8ad3f78",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll25",
+      "bytes": 52664,
+      "sha256": "766c2fae4d539af0ef022c0d2cca647f2b2bcc8c5fdd7df08dd52c499fe1f900",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll26",
+      "bytes": 80312,
+      "sha256": "32ea574cfdc1fa088709372055081bf4d015b82a410a9e46797fdfda950023e6",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll27",
+      "bytes": 55224,
+      "sha256": "cbef4196963b6cebd51dfd2a266d181880f3d43fd1ae6d5d49dd3b0efc53aae2",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll28",
+      "bytes": 60344,
+      "sha256": "98492ae66ad8a2afd4f83c5e5e79103c3686dd11b51a08c3aa9669f5537dfbfa",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll29",
+      "bytes": 49592,
+      "sha256": "4b617040afba0efeb3c9f984bccfd20032cd2c83af1cd7652deb8dfccc765307",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll3",
+      "bytes": 55736,
+      "sha256": "5b2e765d5397dd1595a9d65496766d2205738ee0c5e690154a6570dc4f8ef516",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll30",
+      "bytes": 50104,
+      "sha256": "c73c28a869384eca839f98537edcaefd29420523e36b6549d6ff5e26d239c092",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll31",
+      "bytes": 70072,
+      "sha256": "8518958f2d67f996cc774755e4a225ac704db1352fb0e28094ffe5daff68c633",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll4",
+      "bytes": 76728,
+      "sha256": "f7413bba37c35b49495385005e814d942e1d305ec96f9c90d57e880332de4e05",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll5",
+      "bytes": 50616,
+      "sha256": "1bc003f668115b33b6ed5d820894f084903f9bef20177a146952ca808d438cd1",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll6",
+      "bytes": 50616,
+      "sha256": "cfd9366c88213685d464be9fc23ed3404d1c56a2c90e732127ae299296e9d9fe",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll7",
+      "bytes": 50616,
+      "sha256": "d4dc2a6de3dde50580a6009fd189e6a0333210633ba81d3b81c4bec2c84bbc83",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll8",
+      "bytes": 54712,
+      "sha256": "ea66c06283eef2aadeec221f33418e624119a496ae63fffa08da27425c8fd62b",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayui.resources.dll9",
+      "bytes": 54712,
+      "sha256": "a149acda3a58eca3cc0777b3ae5a29e83f3d0f76b1cabdc956348d75e826563e",
+      "machine": "0x14c",
+      "managed": true,
+      "import_count": 1,
+      "export_count": 0
+    },
+    {
+      "file": "remoteplayuiwrapper.dll",
+      "bytes": 122288,
+      "sha256": "5cee025a26b1e7590db148be0f16a0267f407bc4eea977f7aa8d8c830668f66e",
+      "machine": "0x8664",
+      "managed": true,
+      "import_count": 37,
+      "export_count": 3
+    },
+    {
+      "file": "runtime.dll",
+      "bytes": 62004632,
+      "sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 9,
+      "export_count": 0
+    },
+    {
+      "file": "scenp.dll",
+      "bytes": 4910488,
+      "sha256": "4263605fa880f4a49af938b40550d728880d70f6ef203db4e84a38062a0d18f2",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 435,
+      "export_count": 36
+    },
+    {
+      "file": "unifiedtelemetry.client.dll",
+      "bytes": 131000,
+      "sha256": "cf730004265dafbe62d177bbc147e38066f70c2521dc105443780cead3992e22",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 111,
+      "export_count": 17
+    },
+    {
+      "file": "unifiedtelemetry.model.dll",
+      "bytes": 154552,
+      "sha256": "5ea36b36c4003aa36491381001a4f3369b8fcf736a4f992e8c9d1007eac3a730",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 113,
+      "export_count": 57
+    },
+    {
+      "file": "unifiedtelemetry.service.dll",
+      "bytes": 1765816,
+      "sha256": "ff3c0c5b5ec84e5a94c5588dca7e14b4ffa95ea37ae41d3ea811a71d6dfd39fc",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 318,
+      "export_count": 131
+    },
+    {
+      "file": "webview2loader.dll",
+      "bytes": 163240,
+      "sha256": "d5159ad218d84e6077879320395b66f1df0f266956fd6ab97982d0744052cede",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 86,
+      "export_count": 5
+    },
+    {
+      "file": "zlib1.dll",
+      "bytes": 102808,
+      "sha256": "a65c15480bb3b7da361e6aacf98528f8021368586b5b9d971229c343c85cb494",
+      "machine": "0x8664",
+      "managed": false,
+      "import_count": 41,
+      "export_count": 86
+    }
+  ],
+  "current_main": {
+    "file": "payload/Data1/remoteplay.exe",
+    "bytes": 37795744,
+    "sha256": "d4e355c18bab988bdc3dc69ef4746d5064983cc7cac699ccda8d46b834291616",
+    "image_base": "0x140000000",
+    "ordinary_imports": [
+      {
+        "dll": "preloader.dll",
+        "name": "#1",
+        "iat_va": "0x1409bfcd6"
+      }
+    ],
+    "sections": [
+      {
+        "name": ".text",
+        "rva": "0x1000",
+        "virtual_bytes": 7888896,
+        "file_offset": 1536,
+        "raw_bytes": 7888896,
+        "entropy_bits_per_byte": 7.999973787557224
+      },
+      {
+        "name": ".rdata",
+        "rva": "0x787000",
+        "virtual_bytes": 2281472,
+        "file_offset": 7890432,
+        "raw_bytes": 2281472,
+        "entropy_bits_per_byte": 7.9913246687324575
+      },
+      {
+        "name": ".data",
+        "rva": "0x9b4000",
+        "virtual_bytes": 503808,
+        "file_offset": 10171904,
+        "raw_bytes": 110592,
+        "entropy_bits_per_byte": 7.93787318994505
+      },
+      {
+        "name": ".pdata",
+        "rva": "0xa2f000",
+        "virtual_bytes": 479232,
+        "file_offset": 10282496,
+        "raw_bytes": 479232,
+        "entropy_bits_per_byte": 7.999606350143448
+      },
+      {
+        "name": "_RDATA",
+        "rva": "0xaa4000",
+        "virtual_bytes": 4096,
+        "file_offset": 10761728,
+        "raw_bytes": 4096,
+        "entropy_bits_per_byte": 7.951418656732544
+      },
+      {
+        "name": ".rsrc",
+        "rva": "0xaa5000",
+        "virtual_bytes": 413696,
+        "file_offset": 10765824,
+        "raw_bytes": 412160,
+        "entropy_bits_per_byte": 4.601124072168993
+      },
+      {
+        "name": ".reloc",
+        "rva": "0xb0a000",
+        "virtual_bytes": 40960,
+        "file_offset": 11177984,
+        "raw_bytes": 512,
+        "entropy_bits_per_byte": 3.0087305439357293
+      },
+      {
+        "name": ".grfn10",
+        "rva": "0xb14000",
+        "virtual_bytes": 987136,
+        "file_offset": 11178496,
+        "raw_bytes": 987136,
+        "entropy_bits_per_byte": 7.9998197572240874
+      },
+      {
+        "name": ".grfn20",
+        "rva": "0xc05000",
+        "virtual_bytes": 626688,
+        "file_offset": 12165632,
+        "raw_bytes": 626688,
+        "entropy_bits_per_byte": 7.999676083495708
+      },
+      {
+        "name": ".grfn11",
+        "rva": "0xc9e000",
+        "virtual_bytes": 24809472,
+        "file_offset": 12792320,
+        "raw_bytes": 24809472,
+        "entropy_bits_per_byte": 7.999991864720641
+      },
+      {
+        "name": ".grfn22",
+        "rva": "0x2447000",
+        "virtual_bytes": 180224,
+        "file_offset": 37601792,
+        "raw_bytes": 180224,
+        "entropy_bits_per_byte": 7.999020491552921
+      }
+    ],
+    "observations": [
+      "No separate pad DLL identified in the extracted cabinet or inspected MSI auxiliary executable streams.",
+      "The main .text, .rdata and .pdata have high entropy; their original semantic code and data were not recovered.",
+      "The main image has .grfn10/.grfn20/.grfn11/.grfn22 sections. This pass does not attribute the protection to a specific vendor or identify a cipher."
+    ]
+  },
+  "preloader": {
+    "file": "payload/Data1/preloader.dll",
+    "bytes": 49568,
+    "sha256": "78f0f88ed59e6d8d26f3f149703d781cdf2b60edc81db59eca310f3d1c3301c7",
+    "sections": [
+      {
+        "name": ".text",
+        "rva": "0x1000",
+        "virtual_bytes": 11158,
+        "file_offset": 1024,
+        "raw_bytes": 11264,
+        "entropy_bits_per_byte": 4.926157588685751
+      },
+      {
+        "name": ".rdata",
+        "rva": "0x4000",
+        "virtual_bytes": 20944,
+        "file_offset": 12288,
+        "raw_bytes": 20992,
+        "entropy_bits_per_byte": 4.645258660774903
+      },
+      {
+        "name": ".data",
+        "rva": "0xa000",
+        "virtual_bytes": 452,
+        "file_offset": 33280,
+        "raw_bytes": 512,
+        "entropy_bits_per_byte": 0.10425396257387197
+      },
+      {
+        "name": ".entry",
+        "rva": "0xb000",
+        "virtual_bytes": 72,
+        "file_offset": 33792,
+        "raw_bytes": 512,
+        "entropy_bits_per_byte": 0.38095197243894613
+      },
+      {
+        "name": ".rsrc",
+        "rva": "0xc000",
+        "virtual_bytes": 904,
+        "file_offset": 34304,
+        "raw_bytes": 1024,
+        "entropy_bits_per_byte": 3.996840349020412
+      },
+      {
+        "name": ".reloc",
+        "rva": "0xd000",
+        "virtual_bytes": 352,
+        "file_offset": 35328,
+        "raw_bytes": 512,
+        "entropy_bits_per_byte": 3.7650008417739564
+      }
+    ],
+    "decompiled_host_loader_rva": "0x2390",
+    "decompiled_link_stub_rva": "0x37f0",
+    "host_runtime_entry_rva": "0x260410",
+    "host_runtime_preferred_base": "0x200000000",
+    "observations": [
+      "The readable function constructs the adjacent runtime.dll path, uses native Windows file/mapping APIs, and transfers control to the mapped runtime entry.",
+      "It resolves wine_get_version through LdrGetProcedureAddress and contains a manual mapping path associated with Wine. This is not proof Remote Play works under Wine.",
+      "NT memory allocation/protection in this function affects host process memory; no controller transport is identified in it.",
+      "The ordinal-2 link function at RVA 0x37f0 is an immediate return."
+    ]
+  },
+  "runtime": {
+    "file": "payload/Data1/runtime.dll",
+    "bytes": 62004632,
+    "sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+    "sections": [
+      {
+        "name": ".rdata",
+        "rva": "0x1000",
+        "virtual_bytes": 4208,
+        "file_offset": 1024,
+        "raw_bytes": 4608,
+        "entropy_bits_per_byte": 0.1569267051162031
+      },
+      {
+        "name": ".rwx",
+        "rva": "0x3000",
+        "virtual_bytes": 69632,
+        "file_offset": 5632,
+        "raw_bytes": 69632,
+        "entropy_bits_per_byte": -0.0
+      },
+      {
+        "name": "packer0",
+        "rva": "0x14000",
+        "virtual_bytes": 1335844,
+        "file_offset": 75264,
+        "raw_bytes": 1336320,
+        "entropy_bits_per_byte": 7.819191781088751
+      },
+      {
+        "name": "packer1",
+        "rva": "0x15b000",
+        "virtual_bytes": 1786438,
+        "file_offset": 1411584,
+        "raw_bytes": 1786880,
+        "entropy_bits_per_byte": 7.142273252729725
+      },
+      {
+        "name": "packer2",
+        "rva": "0x310000",
+        "virtual_bytes": 43480,
+        "file_offset": 3198464,
+        "raw_bytes": 37376,
+        "entropy_bits_per_byte": 6.9300297594994955
+      },
+      {
+        "name": ".rsrc",
+        "rva": "0x31b000",
+        "virtual_bytes": 3633456,
+        "file_offset": 3235840,
+        "raw_bytes": 3633664,
+        "entropy_bits_per_byte": 7.999904369500762
+      },
+      {
+        "name": ".reloc",
+        "rva": "0x693000",
+        "virtual_bytes": 3428,
+        "file_offset": 6869504,
+        "raw_bytes": 3584,
+        "entropy_bits_per_byte": 5.322663028058551
+      },
+      {
+        "name": "packer30",
+        "rva": "0x694000",
+        "virtual_bytes": 2572660,
+        "file_offset": 6873088,
+        "raw_bytes": 2572800,
+        "entropy_bits_per_byte": 6.477428077575845
+      },
+      {
+        "name": "packer40",
+        "rva": "0x909000",
+        "virtual_bytes": 536376,
+        "file_offset": 9445888,
+        "raw_bytes": 536576,
+        "entropy_bits_per_byte": 6.560926159498793
+      },
+      {
+        "name": "packer31",
+        "rva": "0x98c000",
+        "virtual_bytes": 51610367,
+        "file_offset": 9982464,
+        "raw_bytes": 51610624,
+        "entropy_bits_per_byte": 6.093418465565641
+      },
+      {
+        "name": "packer42",
+        "rva": "0x3ac5000",
+        "virtual_bytes": 397740,
+        "file_offset": 61593088,
+        "raw_bytes": 397824,
+        "entropy_bits_per_byte": 3.9019515170200885
+      }
+    ],
+    "role": "Host-side mapped protection/runtime module; not a controller firmware image",
+    "unpacking_or_decryption_recovered": false
+  },
+  "imports_and_ui": {
+    "ordinary_hid_imports_identified": [],
+    "delay_import_inventory": "analysis/remoteplay-win/delay-imports.json",
+    "note": "Lack of visible HidD imports in protected on-disk binaries does not establish absence of USB use.",
+    "managed_ui_native_type_inventory": "analysis/remoteplay-win/ui-native-types.json",
+    "managed_ui_parser_warning": "dnfile emitted invalid compressed int: leading byte 0xe9; no complete UI deobfuscation is claimed.",
+    "controller_update_enum": [
+      "TYPE_NONE",
+      "TYPE_BOND",
+      "TYPE_HUNT"
+    ],
+    "controller_update_message": "Readable UI messages recommend connecting the controller to a PS5 for firmware updates; native update capabilities remain unassessed."
+  },
+  "older_build_check": {
+    "package": {
+      "url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_9.0.0.02120_x64.msi",
+      "final_url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_9.0.0.02120_x64.msi",
+      "retrieved_utc": "2026-10-21T21:33:28.944065+00:00",
+      "bytes": 83003904,
+      "sha256": "b41e63a3655fdb3ae545dbf5b051624d76d25cdd086aa334ce52781a3cfb9926",
+      "cfbf_magic_valid": true,
+      "response_headers": {
+        "Accept-Ranges": "bytes",
+        "Content-Type": "text/plain",
+        "ETag": "\"e99e3fd258af3e90f2c2f8e25fb45435:1790925935.971803\"",
+        "Last-Modified": "Tue, 31 Mar 2026 10:32:47 GMT",
+        "Server": "AkamaiNetStorage",
+        "Content-Length": "83003904",
+        "Date": "Wed, 21 Oct 2026 21:33:26 GMT",
+        "Connection": "close"
+      },
+      "provenance": "Filename hypothesis confirmed by server; old installer link not recovered"
+    },
+    "discovery": "Explicit filename hypothesis against Sony server, not a URL recovered from the old bootstrapper",
+    "main": {
+      "file": "remoteplay.exe",
+      "bytes": 37056632,
+      "sha256": "11bd14c7a6b8a1505a1e3de809dec1e84ee1c449a488cd4fe4a9bd71d6f6e6e6",
+      "machine": "0x8664",
+      "imports": [
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "preloader.dll",
+          "name": "#1"
+        }
+      ],
+      "sections": [
+        {
+          "name": ".text",
+          "rva": "0x1000",
+          "raw_bytes": 7864320,
+          "entropy": 7.999977883796325
+        },
+        {
+          "name": ".rdata",
+          "rva": "0x781000",
+          "raw_bytes": 2273280,
+          "entropy": 7.98755632812019
+        },
+        {
+          "name": ".data",
+          "rva": "0x9ac000",
+          "raw_bytes": 110592,
+          "entropy": 7.937288580789602
+        },
+        {
+          "name": ".pdata",
+          "rva": "0xa27000",
+          "raw_bytes": 475136,
+          "entropy": 7.999632293294939
+        },
+        {
+          "name": "_RDATA",
+          "rva": "0xa9b000",
+          "raw_bytes": 4096,
+          "entropy": 7.952533154214595
+        },
+        {
+          "name": ".rsrc",
+          "rva": "0xa9c000",
+          "raw_bytes": 412160,
+          "entropy": 4.601131951937497
+        },
+        {
+          "name": ".reloc",
+          "rva": "0xb01000",
+          "raw_bytes": 512,
+          "entropy": 4.39841418329451
+        },
+        {
+          "name": ".grfn10",
+          "rva": "0xb0b000",
+          "raw_bytes": 978944,
+          "entropy": 7.999809595677547
+        },
+        {
+          "name": ".grfn20",
+          "rva": "0xbfa000",
+          "raw_bytes": 626688,
+          "entropy": 7.99970973011317
+        },
+        {
+          "name": ".grfn11",
+          "rva": "0xc93000",
+          "raw_bytes": 24117248,
+          "entropy": 7.999992557953977
+        },
+        {
+          "name": ".grfn22",
+          "rva": "0x2393000",
+          "raw_bytes": 180224,
+          "entropy": 7.998966707159509
+        }
+      ]
+    },
+    "runtime": {
+      "file": "runtime.dll",
+      "bytes": 57236080,
+      "sha256": "64a1b478878fdc091a2e08871a38cde3f2c09365927b5a9d88a83f1f65196d00",
+      "machine": "0x8664",
+      "imports": [
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "WTSAPI32.dll",
+          "name": "WTSEnumerateSessionsW"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "WTSAPI32.dll",
+          "name": "WTSFreeMemory"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "WTSAPI32.dll",
+          "name": "WTSSendMessageW"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "ntdll.dll",
+          "name": "RtlPcToFileHeader"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "KERNEL32.dll",
+          "name": "CloseHandle"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "USER32.dll",
+          "name": "CloseWindow"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "USER32.dll",
+          "name": "GetProcessWindowStation"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "USER32.dll",
+          "name": "GetUserObjectInformationW"
+        },
+        {
+          "kind": "DIRECTORY_ENTRY_IMPORT",
+          "dll": "GDI32.dll",
+          "name": "CloseEnhMetaFile"
+        }
+      ],
+      "sections": [
+        {
+          "name": ".rdata",
+          "rva": "0x1000",
+          "raw_bytes": 4608,
+          "entropy": 0.13564132723113154
+        },
+        {
+          "name": ".rwx",
+          "rva": "0x3000",
+          "raw_bytes": 4096,
+          "entropy": -0.0
+        },
+        {
+          "name": "packer0",
+          "rva": "0x4000",
+          "raw_bytes": 1256960,
+          "entropy": 7.877075087693072
+        },
+        {
+          "name": "packer1",
+          "rva": "0x137000",
+          "raw_bytes": 1612288,
+          "entropy": 7.09209345536228
+        },
+        {
+          "name": "packer2",
+          "rva": "0x2c1000",
+          "raw_bytes": 37376,
+          "entropy": 6.74192284602288
+        },
+        {
+          "name": ".rsrc",
+          "rva": "0x2cc000",
+          "raw_bytes": 3586560,
+          "entropy": 7.999871529840658
+        },
+        {
+          "name": ".reloc",
+          "rva": "0x638000",
+          "raw_bytes": 3584,
+          "entropy": 5.303086214830516
+        },
+        {
+          "name": "packer30",
+          "rva": "0x639000",
+          "raw_bytes": 2379776,
+          "entropy": 6.44542632015672
+        },
+        {
+          "name": "packer40",
+          "rva": "0x87e000",
+          "raw_bytes": 556544,
+          "entropy": 6.462755723161578
+        },
+        {
+          "name": "packer31",
+          "rva": "0x906000",
+          "raw_bytes": 46875648,
+          "entropy": 6.078250160488962
+        },
+        {
+          "name": "packer42",
+          "rva": "0x35bb000",
+          "raw_bytes": 905728,
+          "entropy": 5.023677707321707
+        }
+      ]
+    },
+    "conclusion": "9.0 also has the .grfn-protected main and packer runtime; no readable pad DLL was identified.",
+    "older_winget_manifest": "https://github.com/microsoft/winget-pkgs/blob/a5b12a46f70620448dc4e156fb37dc64765edb34/manifests/p/PlayStation/PSRemotePlay/9.0.0.02120/PlayStation.PSRemotePlay.installer.yaml",
+    "older_winget_url_note": "9.0 manifest points to mutable RemotePlayInstaller.exe; its expected hash differs from the current file.",
+    "failed_7_5_candidate": {
+      "url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_7.5.0.08061_Win32.msi",
+      "final_url": "https://remoteplay.dl.playstation.net/remoteplay/module/win/RemotePlayInstaller_7.5.0.08061_Win32.msi",
+      "retrieved_utc": "2026-10-21T21:33:25.929257+00:00",
+      "bytes": 1,
+      "sha256": "36a9e7f1c95b82ffb99743e0c5c4ce95d83c9a430aac59f84ef3cbfab6145068",
+      "cfbf_magic_valid": false,
+      "response_headers": {
+        "Accept-Ranges": "bytes",
+        "Content-Length": "1",
+        "Content-Type": "text/plain",
+        "ETag": "\"7215ee9c7d9dc229d2921a40e899ec5f:1774953285.212506\"",
+        "Last-Modified": "Fri, 05 Sep 2025 07:13:43 GMT",
+        "Server": "AkamaiNetStorage",
+        "Date": "Wed, 21 Oct 2026 21:33:25 GMT",
+        "Connection": "close"
+      },
+      "provenance": "Filename hypothesis confirmed by server; old installer link not recovered"
+    },
+    "failed_candidate_note": "One ASCII space (0x20), not a valid MSI. Retained as failed acquisition evidence and not extracted.",
+    "other_acquisition_failure": "Fetching the pinned 7.5 manifest from raw GitHub returned HTTP 429; no retry loop."
+  },
+  "controller_findings": {
+    "report_0b_usage": "unknown; controller code not recovered",
+    "report_0c_usage": "unknown; controller code not recovered",
+    "factory_80_81_usage": "unknown; controller code not recovered",
+    "a0_usage": "unknown; controller code not recovered",
+    "new_device_ram_primitive_established": false,
+    "new_firmware_decryption_established": false,
+    "scope_note": "No Windows report-specific negative conclusion is justified by the host packing barrier."
+  },
+  "next_steps": [
+    {
+      "priority": 1,
+      "work": "Inspect the loaded host app in an isolated Windows x64 environment with no USB passthrough; identify restored code/imports or trace API resolution.",
+      "limits": "Future vendor-code execution stage, not performed. Code may be reconstructed on demand, so a single memory dump may be incomplete."
+    },
+    {
+      "priority": 2,
+      "work": "Consider Wine only as an untested host-analysis option, based on explicit preloader handling.",
+      "limits": "No Wine installation, app launch or compatibility claim."
+    },
+    {
+      "priority": 3,
+      "work": "Return recovered host HidD_GetFeature/HidD_SetFeature/DeviceIoControl callers to the same report-ID/buffer/length/model-gate audit used for the Mac client.",
+      "limits": "Keep packet discovery separate from live execution; no blind factory or loader requests."
+    }
+  ],
+  "evidence": [
+    {
+      "path": "analysis/remoteplay-win/download.json",
+      "bytes": 356,
+      "sha256": "94652607ef56a117df78ad1c1cfe1cdccb9541a2a58229c953b05b28379d3b61"
+    },
+    {
+      "path": "analysis/remoteplay-win/msi-download.json",
+      "bytes": 389,
+      "sha256": "5be976b53f1f9aa47f3ac24c7bc8fbfc77e404892d0fd280b87e4f5999bc7a08"
+    },
+    {
+      "path": "analysis/remoteplay-win/bootstrap/extraction.json",
+      "bytes": 12800,
+      "sha256": "3bbe5c1eecbc8eafbfe718c504d658c5f6ea136849447e7a4b580ffb1ea6ac20"
+    },
+    {
+      "path": "analysis/remoteplay-win/bootstrap/Setup.ini",
+      "bytes": 6514,
+      "sha256": "ce8129d334b3eed46268606dcae65afa9d9f7a4f50ee0ade94d01ca83811312e"
+    },
+    {
+      "path": "analysis/remoteplay-win/pe-inventory.json",
+      "bytes": 237798,
+      "sha256": "29f16552f35ce42e70555b1c8dc7e6a8cad750315e24852ce51bc5e7a67ad047"
+    },
+    {
+      "path": "analysis/remoteplay-win/delay-imports.json",
+      "bytes": 1212,
+      "sha256": "e523c2730cad0dfcb93cebd061a8812f7732ac4571a12c7d367f0a4fb8c66504"
+    },
+    {
+      "path": "analysis/remoteplay-win/msi-binaries.json",
+      "bytes": 118559,
+      "sha256": "ce4ce2d3dcf744bc6a4d85cf2a6b1dc3bff2ecb0f27c2c1733c693068247dbc9"
+    },
+    {
+      "path": "analysis/remoteplay-win/ui-native-types.json",
+      "bytes": 163,
+      "sha256": "94e4bc04fc578421194d0ae8a9514bb025de854bd3eca06508ab7cea73844662"
+    },
+    {
+      "path": "analysis/remoteplay-win/preloader-export2.json",
+      "bytes": 4126,
+      "sha256": "2c0804a96ba8e8e539da407d23c12278c8d6785b70c86f2b0745f3c6e84d891f"
+    },
+    {
+      "path": "analysis/remoteplay-win/preloader-runtime.json",
+      "bytes": 52999,
+      "sha256": "bec61563d6d2e4c6e215f639e4429c0e80c94abd66939f813fb102cac5751eaf"
+    },
+    {
+      "path": "analysis/remoteplay-win/preloader-runtime.pseudo.c.txt",
+      "bytes": 23833,
+      "sha256": "fa097449552e3cb373a976ae8b8b8e79c56e12bb3925bdade6e1fea9ea49e30e"
+    },
+    {
+      "path": "analysis/remoteplay-win/certificate-tables.json",
+      "bytes": 950,
+      "sha256": "bec1ba8b6959d680c37d18fb808ad402df1ac429e66ffb9d766754af21730326"
+    },
+    {
+      "path": "analysis/remoteplay-win/winget-9.5.0.08040.yaml",
+      "bytes": 1201,
+      "sha256": "6ff270fa2ce9358832704d62d6cbf13ecd6de8d78e08b8475a5eb7abf6c4e9a3"
+    },
+    {
+      "path": "analysis/remoteplay-win/winget-9.0.0.02120.yaml",
+      "bytes": 935,
+      "sha256": "0c9648ddc6e7a3a50d7c95f37fbabbff502a4cd4f7bb01944fe6fcc986b30d6a"
+    },
+    {
+      "path": "analysis/remoteplay-win/older-endpoint-checks.json",
+      "bytes": 1236,
+      "sha256": "79d17f6799339678833b9cef1c53602f72bfbe8e35ab8b53155ae6c78e9e1541"
+    },
+    {
+      "path": "analysis/remoteplay-win/older-pe-inventory.json",
+      "bytes": 206116,
+      "sha256": "bbf0b41cf85a9b0c34dacf59b3e3863bc92e1526357a8bf4845c2d5192669d3b"
+    }
+  ]
+}

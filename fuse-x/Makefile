@@ -4,6 +4,7 @@
 ROOT := $(abspath ..)
 BUILD ?= $(CURDIR)/build
 RCC ?= $(ROOT)/target/release/rcc
+NATIVE_RUNTIME ?= $(if $(RCC_NATIVE_RUNTIME),$(RCC_NATIVE_RUNTIME),$(ROOT)/target/release/librcc_native_runtime.a)
 RFL ?= $(ROOT)/target/release/rfl
 K := $(ROOT)/ports/fuzix/upstream/Kernel
 # Select the shared wide userspace ABI. Address spaces are implemented by the
@@ -22,7 +23,8 @@ UNITS += $(BUILD)/port/hostfs.ir $(BUILD)/port/remotefs.ir $(BUILD)/port/remotef
 UNITS += $(BUILD)/port/scheduler.ir $(BUILD)/port/pipes.ir $(BUILD)/port/kernel-io.ir
 UNITS += $(BUILD)/port/console.ir
 UNITS += $(BUILD)/port/graphics.ir
-$(BUILD)/port/graphics.ir: $(ROOT)/ports/fuzix/ripple/raster-abi.h render-abi.h
+$(BUILD)/port/graphics.ir: $(ROOT)/ports/fuzix/ripple/raster-abi.h render-abi.h session-abi.h panel-abi.h $(ROOT)/ports/graphics/include/gx-session.h $(ROOT)/ports/graphics/include/gx-panel.h
+$(BUILD)/port/init.ir: $(ROOT)/ports/graphics/include/gx-panel.h
 UNITS += $(BUILD)/port/pcm.ir $(BUILD)/runtime/vm_audio.ir $(BUILD)/runtime/vm_music.ir
 HEADERS_PCM := $(ROOT)/ports/fuzix/ripple/include/sys/pcm.h
 $(BUILD)/port/pcm.ir: $(HEADERS_PCM)
@@ -89,6 +91,14 @@ SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/identity.h
 SDK_HEADERS += $(ROOT)/ports/fuzix/ripple/select-abi.h $(ROOT)/ports/fuzix/ripple/file-limits.h
 all: $(BUILD)/fuse-x $(EXECUTABLES) applications
 all: graphics
+# A desktop launch opts into the Graphite shell and catalog applications. This
+# target is hosted-only; freestanding/x64 preparation does not start or build it.
+ifeq ($(FUSE_X_GRAPHITE),1)
+.PHONY: graphite
+all: graphite
+graphite:
+	python3 graphite.py --build $(BUILD) --compiler $(RCC)
+endif
 .PHONY: bundle
 all: bundle
 bundle: $(BUILD)/fuse-x
@@ -151,9 +161,9 @@ $(BUILD)/runtime/%.ir: $(ROOT)/runtime/%.c $(HEADERS) $(wildcard $(ROOT)/runtime
 	@printf '  RCC %s\n' '$<'
 	@$(RCC) compile $< $(FLAGS) --emit-ir > $@.tmp 2>$@.log || { cat $@.log >&2; exit 1; }
 	@mv $@.tmp $@
-$(BUILD)/fuse-x: $(UNITS) $(APPS) $(ROOT)/target/release/librcc_native_runtime.a $(MEMORY_MODE)
+$(BUILD)/fuse-x: $(UNITS) $(APPS) $(NATIVE_RUNTIME) $(MEMORY_MODE)
 	@printf '  LINK %s\n' '$@'
-	@$(RCC) link-native $(addprefix --kernel ,$(UNITS)) $(APPS) -o $@ >$(BUILD)/link.log 2>&1 || { cat $(BUILD)/link.log >&2; exit 1; }
+	@RCC_NATIVE_RUNTIME='$(NATIVE_RUNTIME)' $(RCC) link-native $(addprefix --kernel ,$(UNITS)) $(APPS) -o $@ >$(BUILD)/link.log 2>&1 || { cat $(BUILD)/link.log >&2; exit 1; }
 # Boot tools are ordinary native userland; no x64/Freestanding activation.
 .PHONY: services
 services: $(addprefix $(BUILD)/apps/,$(addsuffix .fxe,svcd svc console-session))

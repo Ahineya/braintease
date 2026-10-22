@@ -1,0 +1,273 @@
+{
+  "assembly_sha256": "a5ccc41e04e960c867d479d3434e23d92044a731627f71646edb7b2b8dd4e409",
+  "operation": "Offline decoding of protected host resources; no target code execution",
+  "cil_sha256": {
+    "0x06000a4a": "ee6f99f27416d861d343c9a138b4aba4f9c7fc310ace35e574a5b7bb4a0a0cc1",
+    "0x06000a50": "d98dbe95eecf02e239fb57fd32eaca813f301e46003fd7011471fbeff847fa7a",
+    "0x06000a58": "5e5e8be3914759b2275745815851e8526b4db5cf3f4f506a26af609a22b639f3",
+    "0x06000a59": "184af8629cc03cbc9bff2740d7475d2c9012a7b477f6dcf09f6d4ba8f44f1d49",
+    "0x06000a61": "a38ef26a1643a6e460b4ad80aaee468aade0499bc46bcab2cc493a2fa2918b25",
+    "0x06000a70": "3a10006f6f16bbc08732b3d54641e19b4cc6f124b680c4e8ac63c97e9d571607",
+    "0x06000a74": "2f8a41eddf0f7beddb7eb0f6d582e9cd90b6224e45ce81b379d25a32e1c35119",
+    "0x06000a78": "297252eb82fc375cd69c0d459d8cc9a0db590ed3f2f09bb9133ceac3e39df60f",
+    "0x06000a8f": "86badcf936b7fd145863b3a8cef2b8ea332157a71b927fe9de9f8ece5815ce23",
+    "0x06000a90": "84304d549dfd8ad68c41b5327422b5b5fa308c5ec540479f564158c960381f68",
+    "0x06000a94": "1944c1639aaa8d98dcece16ae05778da7ca4bd3afdfd5a4fc287e31f482cb7b8",
+    "0x06000a95": "4f938be5b338bd7fd0f0bf9084629e819882312b6faf01648dd82af325797e93",
+    "0x06000a96": "6323f61688e519d3ba7f53fa8deaf837f2dec8beb9afdce5f62b697e9503b200",
+    "0x06000a97": "e566286b70d9b09d8e62bd0de3f1dcfbd9aba69ab21b2c4c86f6f68d2f5fa2af",
+    "0x06000a98": "cec62a1d9428eeebf6045613453441aa728f373fda5d5838d59d0eba995adb99",
+    "0x06000a9b": "09c74c90e934d733c143208a17d8ae7d5d6fed0a01a9b8a31816d20d0bf09bd5",
+    "0x06000aae": "7c3c92ff1cbfaf3a62e550f558d4de23a51364c9656a41e957c23a4331f363c1",
+    "0x06000aaf": "97b34214c66a744f6cbf7b94bf1d97fb54b088664dbde8871b2b01137a9cd808"
+  },
+  "resources": {
+    "leyD": {
+      "flags": 3,
+      "algorithm_selector": 2,
+      "key_source": 24,
+      "key_bytes": 32,
+      "iv_bytes": 16,
+      "compressed": {
+        "size": 44783,
+        "sha256": "e56cafb2ca3e4c63cd2c1cee895f32c5c79b6876e61ceb19cb4250c96f69696d"
+      },
+      "unpacked": {
+        "size": 43560,
+        "sha256": "1f8d3b5c5aeeb7b08e2b49c9cb274550e728ee82cdbc770738e30b881cb3ca24"
+      },
+      "blocks": [
+        {
+          "bit_offset": 0,
+          "last": false,
+          "type": 6,
+          "output_offset": 0
+        },
+        {
+          "bit_offset": 273441,
+          "last": false,
+          "type": 6,
+          "output_offset": 32768
+        },
+        {
+          "bit_offset": 358246,
+          "last": true,
+          "type": 6,
+          "output_offset": 43560
+        }
+      ]
+    },
+    "tSHbR": {
+      "flags": 3,
+      "algorithm_selector": 2,
+      "key_source": 28,
+      "key_bytes": 32,
+      "iv_bytes": 16,
+      "compressed": {
+        "size": 40856,
+        "sha256": "9304f48d94c5b691b7b72d4ee435ba4d316167250dcd87c9d2f71b679b7e75c8"
+      },
+      "unpacked": {
+        "size": 187002,
+        "sha256": "a4ba231afa857121c452a4cc9830bf1f887cb09691bd9933b64fa58ff1bda94f"
+      },
+      "blocks": [
+        {
+          "bit_offset": 0,
+          "last": false,
+          "type": 6,
+          "output_offset": 0
+        },
+        {
+          "bit_offset": 72576,
+          "last": false,
+          "type": 6,
+          "output_offset": 32768
+        },
+        {
+          "bit_offset": 127835,
+          "last": false,
+          "type": 6,
+          "output_offset": 65536
+        },
+        {
+          "bit_offset": 153590,
+          "last": false,
+          "type": 6,
+          "output_offset": 81920
+        },
+        {
+          "bit_offset": 209496,
+          "last": false,
+          "type": 6,
+          "output_offset": 114688
+        },
+        {
+          "bit_offset": 262982,
+          "last": false,
+          "type": 6,
+          "output_offset": 147456
+        },
+        {
+          "bit_offset": 288169,
+          "last": false,
+          "type": 6,
+          "output_offset": 163840
+        },
+        {
+          "bit_offset": 326830,
+          "last": true,
+          "type": 6,
+          "output_offset": 187002
+        }
+      ]
+    },
+    "cDKfK": {
+      "flags": 1,
+      "algorithm_selector": 2,
+      "key_source": 24,
+      "key_bytes": 32,
+      "iv_bytes": 16,
+      "compressed": {
+        "size": 960,
+        "sha256": "34ff3e62d8a9c721a64fdba75dc9e257aa07cf6199a6fb5cce68bb0685574d1d"
+      },
+      "unpacked": {
+        "size": 1912,
+        "sha256": "d85979383fc233974b0e5d2368ce15bb0d04148ef586037a2358aa4260191527"
+      },
+      "blocks": [
+        {
+          "bit_offset": 0,
+          "last": true,
+          "type": 2,
+          "output_offset": 0
+        }
+      ]
+    }
+  },
+  "resource_assembly": {
+    "size": 43520,
+    "sha256": "6c949c43476df6844e8aa251ecac14e254de0e874d398adf889716892c63ddec"
+  },
+  "string_count": 2560,
+  "integer_count": 349,
+  "integer_examples": {
+    "0": 0,
+    "1": 1,
+    "3": 3,
+    "44": 8,
+    "151": 120,
+    "152": 121
+  },
+  "resource_inputs": {
+    "leyD": {
+      "size": 44851,
+      "sha256": "4e2214ea4a92073a77fe0a64b76361e26fe039155c607083129790eb039c8029"
+    },
+    "tSHbR": {
+      "size": 40931,
+      "sha256": "3d2a849a7c41db087b134a26bd68636df526531e0e5b9d9533e7350ed172b3b5"
+    },
+    "cDKfK": {
+      "size": 1027,
+      "sha256": "5854f5ff15b62c8464e1543ea766289082757d364fac33b953e59367a5c1d786"
+    }
+  },
+  "firmware_file_strings": [
+    {
+      "offset": 12935,
+      "key": 20709,
+      "value": "FWUPDATE0044.bin"
+    },
+    {
+      "offset": 24890,
+      "key": 786,
+      "value": "FWUPDATE0004.bin"
+    },
+    {
+      "offset": 33078,
+      "key": 58134,
+      "value": "FWUPDATE000B.bin"
+    },
+    {
+      "offset": 33095,
+      "key": 58149,
+      "value": "FWUPDATE000E.bin"
+    }
+  ],
+  "limits": [
+    "Only this exact host assembly and three expected resources are supported.",
+    "Resource AES keys are host protection data, not identified controller keys.",
+    "No firmware plaintext, authentication key, or custom execution route recovered."
+  ],
+  "investigated_on": "2026-10-21",
+  "resource_assembly_metadata": {
+    "reader": "dnfile 0.17.0 partial parse",
+    "assembly_name": "yUMPVixsIcdt",
+    "type_def_rows": 1,
+    "method_def_rows": 0,
+    "resource_names": [
+      "tSHbR",
+      "cDKfK"
+    ],
+    "rea_limitation": "Strict metadata admission rejected missing #Blob stream; no CLR loading was attempted."
+  },
+  "public_source_files": [
+    {
+      "url": "https://raw.githubusercontent.com/nchie/dualsense-updater-rs/c1ef2cacffa36d5c20867178af06afa3e92daa2f/src/protocol.rs",
+      "file": "updater-rs-src-protocol.rs",
+      "size": 5767,
+      "sha256": "5531ff28b33602529e616a09b4365fe33cbfd0f59aa53713fa953d735fb18471"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/nchie/dualsense-updater-rs/c1ef2cacffa36d5c20867178af06afa3e92daa2f/src/main.rs",
+      "file": "updater-rs-src-main.rs",
+      "size": 10137,
+      "sha256": "415aa157d3f48e4649a55d7106f593b46c90ecca2a650056903e1599208e8e65"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/nchie/dualsense-updater-rs/c1ef2cacffa36d5c20867178af06afa3e92daa2f/src/hid.rs",
+      "file": "updater-rs-src-hid.rs",
+      "size": 5939,
+      "sha256": "64119806d45c60049e2743200f3d63d68742c323ee17794ec4fe48ea22d6a9dc"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/nchie/dualsense-updater-rs/c1ef2cacffa36d5c20867178af06afa3e92daa2f/README.md",
+      "file": "updater-rs-README.md",
+      "size": 2411,
+      "sha256": "e928fd3c14f07c19b8b56931e748372461bd9f29ff3074af04e2ba800cb471cf"
+    }
+  ],
+  "recovery_sources": [
+    {
+      "url": "https://github.com/nchie/dualsense-updater-rs/issues/1",
+      "observations": [
+        "Author reports automatic commit without explicit verify/finalize commands on February 15, 2026.",
+        "Author reports header version/CMAC rejection before body transfer on February 27, 2026."
+      ],
+      "hardware_limit": "Author observations, not reproduced on our controller."
+    },
+    {
+      "url": "https://controller.dl.playstation.net/controller/lang/en/2100004.html",
+      "observations": [
+        "Official Windows updater requirements and warning against disconnecting during updates.",
+        "Rear reset described as troubleshooting, not flash recovery."
+      ]
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/index.php?title=DualSense_DFU_Modes",
+      "observations": [
+        "Community note names PBL/SBL/Main modes but lists their entry procedures as unknown."
+      ],
+      "limit": "Unverified hardware lead; live page unavailable at later check."
+    }
+  ],
+  "numeric_table_counts": {
+    "int32": 349,
+    "int64": 0,
+    "float32": 7,
+    "float64": 59
+  },
+  "numeric_resource_consumed_bytes": 1912
+}

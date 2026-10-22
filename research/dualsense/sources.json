@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-21",
+  "archive_repository": "https://github.com/Paliverse/DualSense-List-of-Firmwares",
+  "archive_commit": "d520913335e797be8497c805c15a039e6a8ddc3c",
+  "catalog_url": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmwares.json",
+  "catalog_sha256": "8e636d5f9e20daf69a2c98083b12cc6dbde8fee2aac26b9029e52c01c691d88d",
+  "sony_info_url": "https://fwupdater.dl.playstation.net/fwupdater/info.json",
+  "sony_info_sha256": "ebc974238635a4b5cadae63f52cb0fb445bc61fc57dbace387ee9f0a2a32d19f",
+  "updater_repository": "https://github.com/nchie/dualsense-updater-rs",
+  "updater_commit": "c1ef2cacffa36d5c20867178af06afa3e92daa2f"
+}

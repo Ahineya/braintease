@@ -1,0 +1,389 @@
+{
+  "date_utc": "2026-10-21",
+  "mode": "Static analysis only; no new controller access",
+  "native_sha256": "3bc6de1116a7ea29d0997f632613edfe7c3100b62efbf5bca6f32f9fb4bc4569",
+  "export_count": 54,
+  "counts_by_export_name": {
+    "Edge named functions": 24,
+    "Firmware update": 4,
+    "Input access": 8,
+    "Identity and status": 7,
+    "Connection and lifecycle": 8,
+    "Standard telemetry": 1,
+    "Light bar": 2
+  },
+  "exports": [
+    {
+      "name": "DeleteDualSenseEdgeProfile",
+      "rva": "0x2be0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "FinalizeUpdate",
+      "rva": "0x23b0",
+      "category_by_export_name": "Firmware update"
+    },
+    {
+      "name": "GetAnalogButtons",
+      "rva": "0x3090",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetAnalogButtonsAdj",
+      "rva": "0x31a0",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetAnalogButtonsRaw",
+      "rva": "0x3130",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetAnalogSticks",
+      "rva": "0x3210",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetAnalogSticksAdj",
+      "rva": "0x3340",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetAnalogSticksRaw",
+      "rva": "0x32c0",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetBTAddress",
+      "rva": "0x1670",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetBatteryLevel",
+      "rva": "0x15e0",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetChargeState",
+      "rva": "0x1630",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetConnectedCount",
+      "rva": "0x12e0",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "GetContainerId",
+      "rva": "0x1700",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetDigitalButtons",
+      "rva": "0x2fc0",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetDigitalButtonsRaw",
+      "rva": "0x3040",
+      "category_by_export_name": "Input access"
+    },
+    {
+      "name": "GetDualSenseEdgeActiveSlot",
+      "rva": "0x24e0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeActiveSlotMode",
+      "rva": "0x2530",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeProfile",
+      "rva": "0x25d0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeProfileVersion",
+      "rva": "0x2580",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeSavedSettingHapticFB",
+      "rva": "0x2d40",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeSavedSettingLedBrightness",
+      "rva": "0x2d90",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeSavedSettingPlayerIndicatorFB",
+      "rva": "0x2cf0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetDualSenseEdgeTuningMode",
+      "rva": "0x2ec0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "GetFWVersion",
+      "rva": "0x1500",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetHandle",
+      "rva": "0x1240",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "GetSwSeries",
+      "rva": "0x1570",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "GetTelemetryDataDualSense",
+      "rva": "0x3640",
+      "category_by_export_name": "Standard telemetry"
+    },
+    {
+      "name": "GetTelemetryDataDualSenseEdge",
+      "rva": "0x36f0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "IsConnected",
+      "rva": "0x1270",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "IsConnectedWithBluetooth",
+      "rva": "0x1350",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "IsDualSenseEdgeWirelessController",
+      "rva": "0x1420",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "IsDualSenseWirelessController",
+      "rva": "0x13b0",
+      "category_by_export_name": "Identity and status"
+    },
+    {
+      "name": "PadClose",
+      "rva": "0x1250",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "PadInit",
+      "rva": "0x11c0",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "PadOpen",
+      "rva": "0x1230",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "PadTerminate",
+      "rva": "0x1220",
+      "category_by_export_name": "Connection and lifecycle"
+    },
+    {
+      "name": "ResetDualSenseEdgeController",
+      "rva": "0x2f10",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "ResetLightBarColor",
+      "rva": "0x14e0",
+      "category_by_export_name": "Light bar"
+    },
+    {
+      "name": "SetDualSenseEdgeActiveSlot",
+      "rva": "0x33e0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeActiveSlotMode",
+      "rva": "0x33c0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeProfile",
+      "rva": "0x28a0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeSavedSettingFeedback",
+      "rva": "0x2c80",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeSavedSettingLedBrightness",
+      "rva": "0x2cd0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningModeNormal",
+      "rva": "0x2de0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningModeStickLeft",
+      "rva": "0x2e00",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningModeStickRight",
+      "rva": "0x2e20",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningModeTrigger",
+      "rva": "0x2e40",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningParamStickLeft",
+      "rva": "0x2e80",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningParamStickRight",
+      "rva": "0x2ea0",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetDualSenseEdgeTuningParamTrigger",
+      "rva": "0x2e60",
+      "category_by_export_name": "Edge named functions"
+    },
+    {
+      "name": "SetLightBarColor",
+      "rva": "0x1490",
+      "category_by_export_name": "Light bar"
+    },
+    {
+      "name": "StartUpdate",
+      "rva": "0x1b90",
+      "category_by_export_name": "Firmware update"
+    },
+    {
+      "name": "VerifyUpdateImage",
+      "rva": "0x21b0",
+      "category_by_export_name": "Firmware update"
+    },
+    {
+      "name": "WriteUpdateImage",
+      "rva": "0x1ea0",
+      "category_by_export_name": "Firmware update"
+    }
+  ],
+  "decompilations": [
+    {
+      "path": "analysis/followup/dll-map/edge-profile-read.json",
+      "sha256": "48b225da194b3ca6a9dd0e9ca4a4bc687b6c92c98271387ab7fb3b01e8ba0f72",
+      "procedure": "GetDualSenseEdgeProfile"
+    },
+    {
+      "path": "analysis/followup/dll-map/edge-profile-write.json",
+      "sha256": "7f41fe76a6c5148ad594d2ace28b561af9c72674477206990e95df2023f52950",
+      "procedure": "SetDualSenseEdgeProfile"
+    },
+    {
+      "path": "analysis/followup/dll-map/edge-reset.json",
+      "sha256": "4ca8f759b5637c66703c7f300bc1a528e421f1088e2a8b94899bc4cea91f277a",
+      "procedure": "ResetDualSenseEdgeController"
+    },
+    {
+      "path": "analysis/followup/dll-map/edge-tuning.json",
+      "sha256": "2ba5d59129b3b867c212594c69135e218dd31762192ef9eb4010c723b4877eea",
+      "procedure": "SetDualSenseEdgeTuningModeStickLeft"
+    },
+    {
+      "path": "analysis/followup/dll-map/init.json",
+      "sha256": "297c24f38a705a4e5c8f13aa3ef9f28df3947ac038b5660c02e5f894261d5bed",
+      "procedure": "PadInit"
+    }
+  ],
+  "observations": {
+    "edge_profile_get": {
+      "rva": "0x25d0",
+      "slot_base_report_ids": [
+        "0x70",
+        "0x73",
+        "0x76",
+        "0x79"
+      ],
+      "reports_per_slot": 3,
+      "payload_bytes_per_report": 58,
+      "assembled_bytes": 174,
+      "validation": "sequence, field ranges and checksum"
+    },
+    "edge_profile_set": {
+      "rva": "0x28a0",
+      "slot_report_ids": [
+        "0x60",
+        "0x61",
+        "0x62"
+      ],
+      "status_report_ids": [
+        "0x63",
+        "0x64",
+        "0x65"
+      ],
+      "chunks": 3,
+      "chunk_bytes": 58,
+      "semantics": "configuration profiles; no identified execute operation"
+    },
+    "edge_reset": {
+      "rva": "0x2f10",
+      "initial_report_hex": "68 ff",
+      "universal_recovery_procedure": false
+    },
+    "factory_18_01_enable": {
+      "flag_rva": "0x48df6",
+      "value_rva": "0x48df4",
+      "only_identified_direct_write": "cleared during termination",
+      "enabling_path_identified": false,
+      "note": "Direct RIP-relative references alone do not prove global unreachability."
+    },
+    "raw_input_export": {
+      "rva": "0x32c0",
+      "name": "GetAnalogSticksRaw",
+      "return": "packs four input-axis bytes into a scalar; not arbitrary memory access"
+    },
+    "profile_checksum": {
+      "table_rva": "0x2e2b0",
+      "table_bytes": 1024,
+      "table_sha256": "12f3e0576d447eb37b36d82ba0c1c5481b8f0d12fdc70347ce4a076b229d4c86",
+      "polynomial_reflected_hex": "0xedb88320",
+      "all_256_entries_verified": true
+    }
+  },
+  "next_evidence_targets": [
+    {
+      "target": "Official macOS PS Remote Play controller transport",
+      "source": "https://remoteplay.dl.playstation.net/remoteplay/lang/en/ps5_mac.html",
+      "status": "Official page confirms USB DualSense/haptics support; binary not downloaded or analyzed"
+    },
+    {
+      "target": "Second same-family controller report 0x0b comparison",
+      "status": "Future known-size GET capture; requires another specimen connected"
+    },
+    {
+      "target": "Factory information selector catalog",
+      "status": "Extend only from identified source/caller semantics, not blind selector sweeping"
+    }
+  ],
+  "limits": [
+    "Export-name categorization is a surface inventory, not semantic proof of every leaf function.",
+    "Examined host code cannot establish device-side parser bounds or prove all runtime paths absent.",
+    "No loader, update, calibration persistence or Edge settings packets were sent."
+  ]
+}

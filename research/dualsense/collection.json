@@ -1,0 +1,113 @@
+[
+  {
+    "file": "firmware/dualsense/type-000E/0x0641/FWUPDATE000E.bin",
+    "origin": "https://fwupdater.dl.playstation.net/fwupdater/fwupdate000E/0x0641/FWUPDATE000E.bin",
+    "network_failures": []
+  },
+  {
+    "file": "firmware/dualsense/type-000E/0x0633/FWUPDATE000E.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-000E/0x0633/FWUPDATE000E.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate000E/0x0633/FWUPDATE000E.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin",
+    "origin": "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0630/FWUPDATE0004.bin",
+    "network_failures": []
+  },
+  {
+    "file": "firmware/dualsense/type-000B/0x0630/FWUPDATE000B.bin",
+    "origin": "https://fwupdater.dl.playstation.net/fwupdater/fwupdate000B/0x0630/FWUPDATE000B.bin",
+    "network_failures": []
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0520/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-000B/0x0520/FWUPDATE000B.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-000B/0x0520/FWUPDATE000B.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate000B/0x0520/FWUPDATE000B.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0458/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0458/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0458/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0402/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0402/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0402/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0356/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0356/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0356/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0307/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0307/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0307/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense/type-0004/0x0297/FWUPDATE0004.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense/type-0004/0x0297/FWUPDATE0004.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0004/0x0297/FWUPDATE0004.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0217/FWUPDATE0044.bin",
+    "origin": "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0217/FWUPDATE0044.bin",
+    "network_failures": []
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0213/FWUPDATE0044.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0200/FWUPDATE0044.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense-edge/type-0044/0x0200/FWUPDATE0044.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0200/FWUPDATE0044.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0180/FWUPDATE0044.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense-edge/type-0044/0x0180/FWUPDATE0044.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0180/FWUPDATE0044.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0154/FWUPDATE0044.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense-edge/type-0044/0x0154/FWUPDATE0044.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0154/FWUPDATE0044.bin: HTTP Error 404: Not Found"
+    ]
+  },
+  {
+    "file": "firmware/dualsense-edge/type-0044/0x0113/FWUPDATE0044.bin",
+    "origin": "https://raw.githubusercontent.com/Paliverse/DualSense-List-of-Firmwares/d520913335e797be8497c805c15a039e6a8ddc3c/firmware/dualsense-edge/type-0044/0x0113/FWUPDATE0044.bin",
+    "network_failures": [
+      "https://fwupdater.dl.playstation.net/fwupdater/fwupdate0044/0x0113/FWUPDATE0044.bin: HTTP Error 404: Not Found"
+    ]
+  }
+]

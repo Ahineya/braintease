@@ -190,6 +190,7 @@ if [[ -f "$disk" ]] && command -v lsof >/dev/null 2>&1 && lsof -t -- "$disk" >/d
     fail "root image is already open: $disk; stop that session first"
 fi
 
+if [[ "$desktop" == 1 ]]; then export FUSE_X_GRAPHITE=1; fi
 if [[ "$run_only" == 0 ]]; then
     if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
         export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer

@@ -183,6 +183,7 @@ int main(int argc, char **argv) {
              "Tab selects buttons.");
         return !strcmp(argv[1], "--help") ? 0 : 1;
     }
+    gx_lv_application("org.riplix.Calculator", "Calculator", "calculator");
     gx_lv_minimum(260, 320);
     if (gx_lv_open("Calculator", 300, 360) < 0)
         return 1;

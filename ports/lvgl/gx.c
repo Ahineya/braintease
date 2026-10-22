@@ -3,6 +3,8 @@
 #include "ui-data.h"
 #include "font-data.h"
 #include <gx.h>
+#include <gx-application.h>
+#include <gx-panel.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -22,8 +24,11 @@
 #define DRAW_WIDTH 1024
 #define DRAW_ROWS 256
 static int fd = -1, failed, finished;
+static struct gx_session_record application;
+static int application_set;
 static unsigned shift, control;
 static int keyboard_group_changed;
+static int keyboard_release_pending;
 static unsigned minimum_width = 280, minimum_height = 360;
 static struct gx_window window;
 static lv_display_t *display;
@@ -37,6 +42,18 @@ static void (*on_action)(unsigned);
 static void (*on_resize)(unsigned, unsigned);
 static int (*on_close_request)(void);
 static int (*on_key)(unsigned, int, unsigned);
+static void (*on_idle)(void);
+static int (*on_event)(const struct gx_event *);
+/* GX reports physical edges. Repeat belongs to the toolkit, as in gterm/SDL,
+ * and must also reach app filters which consume keys before LVGL sees them. */
+static struct gx_event repeat_event;
+static unsigned repeat_code;
+static uint32_t repeat_at;
+static int repeating;
+static lv_group_t *repeat_group;
+static lv_obj_t *repeat_focus;
+static uint32_t panel_authority;
+static int panel_open, panel_alpha;
 static lv_obj_t *wheel_target;
 static int32_t wheel_x, wheel_y;
 static int profiling, direct_upload;
@@ -76,6 +93,12 @@ static uint32_t microseconds(void) {
     if (clock_gettime(CLOCK_MONOTONIC, &t))
         return 0;
     return (uint32_t)t.tv_sec * 1000000UL + t.tv_nsec / 1000UL;
+}
+
+void gx_lv_application(const char *app_id, const char *name, const char *icon) {
+    int saved_errno = errno;
+    application_set = gx_application_describe(&application, app_id, name, icon) == 0;
+    errno = saved_errno;
 }
 
 void gx_lv_minimum(unsigned width, unsigned height) {
@@ -436,10 +459,32 @@ static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *map) {
     uint32_t at = profiling ? microseconds() : 0;
     if (a->x1 < 0 || a->y1 < 0 || a->x2 >= gx_lv_px(window.width) ||
         a->y2 >= gx_lv_px(window.height) || (uint32_t)w * height > draw_pixels ||
-        (uint32_t)(height - 1) * stride + (uint32_t)w * 3 > draw_cells) {
+        (uint32_t)(height - 1) * stride + (uint32_t)w * (panel_alpha ? 4 : 3) > draw_cells) {
         failed = 1;
         lv_display_flush_ready(d);
         return;
+    }
+    if (panel_alpha) {
+        struct gx_panel_upload p;
+        memset(&p, 0, sizeof(p));
+        p.version = GXP_VERSION;
+        p.authority = panel_authority;
+        p.window = window.window;
+        p.x = a->x1;
+        p.y = a->y1;
+        p.width = w;
+        p.height = height;
+        p.stride = stride;
+        p.pixels = map;
+        if (ioctl(fd, GX_PANEL_UPLOAD, &p) < 0)
+            failed = 1;
+        if (profiling) {
+            profile_rects++;
+            profile_pixels += (uint32_t)w * height;
+            profile_upload += microseconds() - at;
+            at = microseconds();
+        }
+        goto present;
     }
     if (target_state == 1) {
         struct gx_render r;
@@ -600,11 +645,12 @@ static unsigned backing(void) {
 static int buffers(unsigned scale) {
     /* Keep the existing strip memory budget, independent of window width. */
     uint32_t count = (uint32_t)DRAW_WIDTH * scale * scale * DRAW_ROWS;
-    uint8_t *next = malloc(count * 3UL);
+    unsigned channels = panel_alpha ? 4 : 3;
+    uint8_t *next = malloc(count * channels);
     uint16_t *converted = NULL;
-    if (!direct_upload)
+    if (!direct_upload && !panel_alpha)
         converted = malloc(count * sizeof(*converted));
-    if (!next || (!direct_upload && !converted)) {
+    if (!next || (!direct_upload && !panel_alpha && !converted)) {
         free(next);
         free(converted);
         return -1;
@@ -614,13 +660,13 @@ static int buffers(unsigned scale) {
     draw = next;
     pixels = converted;
     draw_pixels = count;
-    draw_cells = count * 3UL;
+    draw_cells = count * channels;
     if (display)
         lv_display_set_buffers(display, draw, NULL, draw_cells, LV_DISPLAY_RENDER_MODE_PARTIAL);
     return 0;
 }
 
-int gx_lv_open(const char *title, unsigned width, unsigned height) {
+static int open_window(const char *title, unsigned width, unsigned height) {
     struct gx_configure c;
     struct gx_info info;
     struct gx_formats formats;
@@ -642,6 +688,11 @@ int gx_lv_open(const char *title, unsigned width, unsigned height) {
         perror("/dev/gfx");
         return -1;
     }
+    if (application_set) {
+        int saved_errno = errno;
+        (void)gx_application_register(fd, &application);
+        errno = saved_errno;
+    }
     memset(&info, 0, sizeof(info));
     info.version = GX_VERSION;
     direct_upload = ioctl(fd, GX_INFO, &info) >= 0 && (info.flags & GX_CAP_BGR888_UPLOAD) &&
@@ -661,12 +712,16 @@ int gx_lv_open(const char *title, unsigned width, unsigned height) {
     window.format = GX_RGB565;
     memset(&formats, 0, sizeof(formats));
     formats.version = GX_VERSION;
-    if (direct_upload && !getenv("LVGL_RGB565") && ioctl(fd, GX_FORMATS, &formats) == 0 &&
+    if ((panel_alpha || (direct_upload && !getenv("LVGL_RGB565"))) && ioctl(fd, GX_FORMATS, &formats) == 0 &&
         (formats.formats & GX_FORMAT_XRGB8888))
         window.format = GX_XRGB8888;
+    if (panel_alpha && window.format != GX_XRGB8888) {
+        gx_lv_close();
+        return -1;
+    }
     /* Existing diagnostic switches keep exercising the complete original
      * transport, including RGB565 conversion and the portable blend loops. */
-    if (window.format == GX_XRGB8888 && !getenv("LVGL_SOFTWARE_TARGET") &&
+    if (!panel_alpha && window.format == GX_XRGB8888 && !getenv("LVGL_SOFTWARE_TARGET") &&
         !getenv("LVGL_SOFTWARE_UPLOAD") && !getenv("LVGL_SOFTWARE_RASTER") &&
         !getenv("LVGL_SOFTWARE_MASK")) {
         memset(&render, 0, sizeof(render));
@@ -685,10 +740,23 @@ int gx_lv_open(const char *title, unsigned width, unsigned height) {
         }
     }
     strncpy(window.title, title, sizeof(window.title) - 1);
-    if (ioctl(fd, GX_CREATE, &window) < 0) {
+    if (ioctl(fd, panel_open ? GX_CREATE_HIDDEN : GX_CREATE, &window) < 0) {
         perror("GX_CREATE");
         gx_lv_close();
         return -1;
+    }
+    if (panel_open) {
+        struct gx_panel p;
+        memset(&p, 0, sizeof(p));
+        p.version = GXP_VERSION;
+        p.operation = GXP_CONFIGURE;
+        p.authority = panel_authority;
+        p.window = window.window;
+        p.flags = panel_alpha ? GXP_ALPHA : 0;
+        if (ioctl(fd, GX_PANEL, &p) < 0) {
+            gx_lv_close();
+            return -1;
+        }
     }
     memset(&c, 0, sizeof(c));
     c.version = GX_VERSION;
@@ -718,10 +786,15 @@ int gx_lv_open(const char *title, unsigned width, unsigned height) {
             gx_lv_close();
             return -1;
         }
-        lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB888);
+        lv_display_set_color_format(display, panel_alpha ? LV_COLOR_FORMAT_ARGB8888 : LV_COLOR_FORMAT_RGB888);
         lv_display_set_buffers(display, draw, NULL, draw_cells, LV_DISPLAY_RENDER_MODE_PARTIAL);
         lv_display_set_flush_cb(display, flush);
         gx_lv_apply_density(scale);
+        /* Installing the shared theme styles LVGL's bottom layer as a canvas.
+         * A transparent active screen alone would still flatten every panel
+         * against that canvas before upload. Keep the display backing clear. */
+        if (panel_alpha)
+            lv_obj_set_style_bg_opa(lv_layer_bottom(), LV_OPA_TRANSP, 0);
     }
     group = lv_group_create();
     lv_group_set_default(group);
@@ -738,6 +811,37 @@ int gx_lv_open(const char *title, unsigned width, unsigned height) {
     return 0;
 }
 
+int gx_lv_open(const char *title, unsigned width, unsigned height) {
+    panel_open = panel_alpha = 0;
+    return open_window(title, width, height);
+}
+int gx_lv_open_panel(const char *title, uint32_t authority, unsigned *width, unsigned *height) {
+    struct gx_panel p;
+    int probe = open("/dev/gfx", O_RDWR | O_CLOEXEC);
+    if (probe < 0)
+        return -1;
+    memset(&p, 0, sizeof(p));
+    p.version = GXP_VERSION;
+    p.operation = GXP_INFO;
+    if (ioctl(probe, GX_PANEL, &p) < 0 || !(p.flags & GXP_CAP_OVERLAY)) {
+        close(probe);
+        return -1;
+    }
+    close(probe);
+    panel_open = 1;
+    panel_alpha = (p.flags & GXP_CAP_ALPHA) != 0;
+    panel_authority = authority;
+    minimum_width = minimum_height = 1;
+    *width = p.width;
+    *height = p.height;
+    return open_window(title, *width, *height);
+}
+int gx_lv_fd(void) { return fd; }
+int gx_lv_panel_alpha(void) { return panel_alpha; }
+uint32_t gx_lv_window(void) { return window.window; }
+void gx_lv_idle(void (*poll)(void)) { on_idle = poll; }
+void gx_lv_events(int (*filter)(const struct gx_event *)) { on_event = filter; }
+
 void gx_lv_handlers(void (*text)(uint32_t), void (*action)(unsigned),
                     void (*resize)(unsigned, unsigned)) {
     on_text = text;
@@ -745,7 +849,35 @@ void gx_lv_handlers(void (*text)(uint32_t), void (*action)(unsigned),
     on_resize = resize;
 }
 lv_group_t *gx_lv_group(void) { return group; }
+void gx_lv_cancel_key_repeat(void) {
+    repeat_code = 0;
+    repeat_group = NULL;
+    repeat_focus = NULL;
+    if (keyboard) {
+        keyboard_state.state = LV_INDEV_STATE_RELEASED;
+        lv_indev_reset(keyboard, NULL);
+        lv_indev_wait_release(keyboard);
+        keyboard_release_pending = 1;
+    }
+}
+static void settle_keyboard(void) {
+    /* Context replacement can happen inside an LVGL callback. Finish the
+     * silent release after that callback, without nesting input processing
+     * or turning a canceled Enter press into a button click. */
+    if (keyboard && keyboard_release_pending) {
+        keyboard_release_pending = 0;
+        keyboard_state.state = LV_INDEV_STATE_RELEASED;
+        lv_indev_read(keyboard);
+    }
+}
+static void reset_wheel(void) {
+    wheel_target = NULL;
+    wheel_x = wheel_y = 0;
+}
+
 void gx_lv_set_group(lv_group_t *next) {
+    gx_lv_cancel_key_repeat();
+    reset_wheel();
     group = next;
     lv_group_set_default(next);
     lv_indev_set_group(keyboard, next);
@@ -779,6 +911,8 @@ int gx_lv_clipboard(char *text, unsigned capacity, int write) {
 }
 
 static void release_inputs(void) {
+    gx_lv_cancel_key_repeat();
+    reset_wheel();
     lv_indev_reset(pointer, NULL);
     lv_indev_wait_release(pointer);
     lv_indev_reset(keyboard, NULL);
@@ -787,6 +921,7 @@ static void release_inputs(void) {
     lv_indev_read(pointer);
     keyboard_state.state = LV_INDEV_STATE_RELEASED;
     lv_indev_read(keyboard);
+    keyboard_release_pending = 0;
     shift = control = 0;
     keyboard_group_changed = 0;
 }
@@ -875,15 +1010,28 @@ static void wheel(struct gx_event *e) {
     lv_point_t p;
     lv_obj_t *target;
     int32_t dx = e->wheel_x, dy = e->wheel_y;
-    if (e->x < 0 || e->y < 0 || e->x >= window.width || e->y >= window.height)
+    if (e->x < 0 || e->y < 0 || e->x >= window.width || e->y >= window.height) {
+        reset_wheel();
         return;
+    }
     p.x = (int32_t)e->x * gx_lv_density();
     p.y = (int32_t)e->y * gx_lv_density();
-    target = lv_indev_search_obj(lv_screen_active(), &p);
+    /* Match LVGL's pointer hit testing: menus and dialogs live above the
+     * active screen. Stop at the first hit layer so an overlay backdrop
+     * blocks scrolling of the content underneath it. */
+    target = lv_indev_search_obj(lv_display_get_layer_sys(display), &p);
+    if (!target)
+        target = lv_indev_search_obj(lv_display_get_layer_top(display), &p);
+    if (!target)
+        target = lv_indev_search_obj(lv_display_get_screen_active(display), &p);
+    if (!target)
+        target = lv_indev_search_obj(lv_display_get_layer_bottom(display), &p);
     while (target && !lv_obj_is_scrollable(target))
         target = lv_obj_get_parent(target);
-    if (!target)
+    if (!target) {
+        reset_wheel();
         return;
+    }
     if (target != wheel_target) {
         wheel_target = target;
         wheel_x = wheel_y = 0;
@@ -910,8 +1058,11 @@ static void wheel(struct gx_event *e) {
     lv_obj_scroll_by_bounded(target, dx, dy, LV_ANIM_OFF);
 }
 
-static void event(struct gx_event *e) {
+static void dispatch_event(struct gx_event *e) {
     uint32_t k;
+    settle_keyboard();
+    if (on_event && on_event(e))
+        return;
     if (e->type == GX_MOTION || e->type == GX_BUTTON) {
         pointer_state.point.x = e->x < 0               ? 0
                                 : e->x >= window.width ? gx_lv_px(window.width) - 1
@@ -969,6 +1120,13 @@ static void event(struct gx_event *e) {
         else if ((k = special(e->code)) != 0) {
             int begin_traversal = (e->flags & GX_DOWN) && (k == LV_KEY_NEXT || k == LV_KEY_PREV) &&
                                   !lv_group_get_focused(group);
+            /* The event-mode keypad has no polling timer. Make each toolkit
+             * repeat a fresh keypad press, without inventing app-visible ups.
+             * Only navigation/edit keys can enter this path. */
+            if (repeating) {
+                keyboard_state.state = LV_INDEV_STATE_RELEASED;
+                lv_indev_read(keyboard);
+            }
             keyboard_state.key = k;
             keyboard_state.state =
                 (e->flags & GX_DOWN) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
@@ -1026,11 +1184,60 @@ static void event(struct gx_event *e) {
     }
 }
 
+static int repeatable(unsigned code) {
+    return code == 42 || (code >= 74 && code <= 82);
+}
+
+static void event(struct gx_event *e) {
+    int arm = 0;
+    if (!repeating) {
+        /* Cancel before a raw filter can consume the real release. */
+        if ((e->type == GX_KEY && !(e->flags & GX_DOWN) && e->code == repeat_code) ||
+            (e->type == GX_FOCUS && !(e->flags & GX_FOCUSED)) ||
+            e->type == GX_OVERFLOW || e->type == GX_RESIZE || e->type == GX_ACTION ||
+            e->type == GX_TEXT || (e->type == GX_BUTTON && e->buttons))
+            gx_lv_cancel_key_repeat();
+        if (e->type == GX_KEY && (e->flags & GX_DOWN) && e->code < 224) {
+            gx_lv_cancel_key_repeat();
+            if (repeatable(e->code) && !(e->flags & GX_TEXT_KEY)) {
+                repeat_event = *e;
+                repeat_code = e->code;
+                repeat_at = lv_tick_get() + 500UL;
+                arm = 1;
+            }
+        }
+    }
+    dispatch_event(e);
+    /* The first press may establish focus. An explicit cancellation by its
+     * handler (for example closing a menu) must still win. */
+    if (arm && repeat_code == e->code) {
+        repeat_group = group;
+        repeat_focus = group ? lv_group_get_focused(group) : NULL;
+    }
+}
+
+static void repeat_key(void) {
+    struct gx_event e;
+    if (!repeat_code) return;
+    if (repeat_group != group || !repeat_focus || lv_group_get_focused(group) != repeat_focus) {
+        gx_lv_cancel_key_repeat();
+        return;
+    }
+    if ((int32_t)(lv_tick_get() - repeat_at) < 0) return;
+    e = repeat_event;
+    repeat_at = lv_tick_get() + 100UL;
+    repeating = 1;
+    event(&e);
+    repeating = 0;
+}
+
 int gx_lv_run(void) {
     while (!failed && !finished) {
         struct gx_event e;
         uint32_t delay;
         unsigned count;
+        if (on_idle)
+            on_idle();
         /* Bound the batch so an input flood cannot starve painting/timers. */
         for (count = 0; count < 128; count++) {
             memset(&e, 0, sizeof(e));
@@ -1051,6 +1258,10 @@ int gx_lv_run(void) {
         }
         if (finished || failed)
             break;
+        /* Drain releases before repeating; a flooded queue must not replay a
+         * held key after its release is already waiting in the next batch. */
+        settle_keyboard();
+        if (count < 128) repeat_key();
         delay = lv_timer_handler();
         if (finished || failed)
             break;
@@ -1058,6 +1269,11 @@ int gx_lv_run(void) {
             continue;
         if (delay > 1000UL)
             delay = 1000UL;
+        if (repeat_code) {
+            int32_t remaining = (int32_t)(repeat_at - lv_tick_get());
+            if (remaining <= 0) delay = 0;
+            else if ((uint32_t)remaining < delay) delay = remaining;
+        }
         if (delay) {
             fd_set set;
             struct timeval t;
@@ -1077,13 +1293,27 @@ int gx_lv_run(void) {
 void gx_lv_close(void) {
     struct gx_handle h;
     unsigned i;
+    gx_lv_cancel_key_repeat();
+    reset_wheel();
     if (display) {
         ui_theme_close();
         lv_deinit();
         display = NULL;
+        pointer = keyboard = NULL;
+        group = NULL;
+        keyboard_release_pending = 0;
     }
     gx_font_data_close();
     if (fd >= 0) {
+        if (panel_open && window.window) {
+            struct gx_panel p;
+            memset(&p, 0, sizeof(p));
+            p.version = GXP_VERSION;
+            p.operation = GXP_RELEASE;
+            p.authority = panel_authority;
+            p.window = window.window;
+            ioctl(fd, GX_PANEL, &p);
+        }
         for (i = 0; i < RENDER_MASK_TARGETS; i++)
             target_mask_destroy(&target_mask_cache[i]);
         target_destroy();

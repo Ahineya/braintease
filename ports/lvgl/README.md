@@ -8,6 +8,12 @@ tabbed graphical text editor sharing Rift's C text engine. All five use GX
 directly; no Nano-X server or `startx` is needed. Fuse-X can present them as
 native windows or inside its optional single-window desktop.
 
+The guest `fusedeshell` adds the first FuseDE shell in nested desktop mode:
+an application menu, pinned/grouped dock and separate Riplix/clock panels.
+The normal `scripts/run-fuse-x.sh --desktop` build installs all six executables
+and the curated system catalog, then starts the shell through `/init`. Native
+host windows and x64 boot behavior remain unchanged.
+
 Build and stage for host-share testing from the repository root:
 
 ```sh
@@ -26,9 +32,118 @@ Then run in Fuse-X:
 
 The builder only writes build outputs and the explicitly selected staging
 folder. It never opens or installs into a normal OS image. Omit `--fetch`
-once the verified archive is cached. Use `--app lvcalc`, `--app lvselect`, `--app lvgallery`, `--app lvdata`, or `--app lvedit` to
+once the verified archive is cached. `--app all` builds the five ordinary apps;
+use `--app fusedeshell` separately for the desktop shell. Use `--app lvcalc`,
+`--app lvselect`, `--app lvgallery`, `--app lvdata`, or `--app lvedit` to
 build just one application. The executables are static, so they need no LVGL
 or libc library installation in the guest.
+
+Applications declare their stable desktop identity with
+`gx_lv_application(app_id, name, icon)` before `gx_lv_open()`. The adapter copies
+the strings, probes the optional `GX_SESSION` registry, and registers the caller
+before creating its window. This never changes the window title, claims manager
+authority or associates child processes. Older kernels and registration failures
+leave the interface usable. Icons reference the existing named Lucide assets.
+
+| Executable | Application ID | Icon |
+| --- | --- | --- |
+| `lvcalc` | `org.riplix.Calculator` | `calculator` |
+| `lvedit` | `org.riplix.TextEditor` | `file-code` |
+| `lvgallery` | `org.riplix.GraphiteGallery` | `grid-2x2` |
+| `lvdata` | `org.riplix.DataViewer` | `grid-2x2` |
+| `lvselect` | `org.riplix.FilePicker` | `folder` |
+
+`lvselect` is a standalone utility. The editor and data viewer's embedded file
+dialogs stay in the existing application window and create no dock entry.
+The graphical terminal similarly registers `org.riplix.Terminal` with the
+`terminal` icon; its shell and subprocesses are not implicitly desktop apps.
+The optional C registration helper also has an independent compatibility test:
+`python3 ports/graphics/tests/test_application.py`.
+
+## FuseDE guest shell
+
+`shell.c` renders the dock and menus using shared Graphite components. Its
+leftmost Applications button opens a compact category menu with word search,
+centered above the dock. With search focused, Up/Down selects an available
+result and scrolls it into view while typing continues to filter; Enter launches
+the selection. Selection wraps at both ends, and held arrows repeat.
+Query/category changes select the first available result, and
+unavailable rows are skipped. Its fixed **Run…** action opens a content-sized
+program-name/path dialog with quoted arguments and an optional **Run in terminal**
+checkbox. Status/error space appears only when needed.
+Known catalog programs retain their GUI/TUI policy; other programs resolve
+through `PATH` or an explicit path. The parser does not evaluate shell syntax.
+Run/Enter submits, Cancel/Escape dismisses, and exec errors remain in the dialog.
+The top-left Riplix pill opens Applications, About FuseDE and Exit desktop shell;
+the disconnected top-right clock uses `Wed 21 Oct 22:43` in guest local time.
+An idle pinned launcher starts the app, a single running window activates, and
+multiple windows open a chooser. Context menus add Open new, pin/unpin and
+cooperative group show/minimize/close. Apps retain independent GX surfaces and
+processes; the shell does not embed their widget trees.
+
+`shell-catalog.c` reads `/usr/share/applications/*.ini`, with
+`FUSEDE_APPLICATIONS` for an alternate directory. Entries declare stable IDs,
+names, icons, categories, GUI/terminal kinds and exact executable/argument
+vectors. The installed path is preferred, followed by one explicit host-share
+fallback. Missing programs are marked unavailable. No shell evaluation or
+implicit executable guessing is used. The
+[catalog schema and parser/launcher limits](../fusede/README.md#graphite-application-catalog)
+describe validation and the checked-in 13-entry collection.
+
+Terminal entries launch through `gterm --app-id ID --app-name NAME --app-icon ICON`.
+Commander, Rift, Music, Telegram, Chat, Multiplexer and JavaScript therefore get
+their own stable app identities and initial window titles. Multiple instances
+share one dock icon, while their child shells and windowless helpers add no
+entries. Legacy Nano-X clients such as NetSurf and `nxview` remain usable as
+earlier porting experiments; further catalog work is not a current goal.
+
+Pins merge catalog defaults with `$HOME/.config/fusede/pins.ini`. Pin/unpin saves
+an atomic user override; image installation never replaces user pins.
+`FUSEDE_PINS` can select a separate preference file. The checked-in
+`ports/fusede/pins.ini` is an empty-override example, not an installer payload.
+
+The shell claims process-bound `GX_SESSION` manager authority and uses the
+nested-only `GX_PANEL` capability. Its output-sized backing surface exposes
+only bounded dock, top-pill and menu rectangles for composition/hit testing;
+top/bottom work-area reservations remain separate. Client pixels and input pass
+through the gaps. Menus temporarily request keyboard/modal handling. Hidden,
+released or revoked panels stop reserving space or intercepting input; shell
+exit restores compositor fallback controls without closing client applications.
+Native mode and rescue startup retain graphical terminals. This is a regional
+overlay profile with optional straight-alpha uploads for rounded panel edges,
+not a general transparent-window or x64 adapter. Alpha panels use ARGB8888
+LVGL strips and `GX_PANEL_UPLOAD`; ordinary apps keep the accelerated opaque
+RGB888 path. BGRA channels remain logical octets in C16, and publication keeps
+color and coverage together. The adapter also keeps LVGL's themed bottom
+layer transparent, so it cannot flatten coverage before upload. Opaque panel
+fills use bank-aware bulk copies; the alpha strips use LVGL's software renderer.
+This avoids desktop-colored corner patches and antialiasing fringes over client
+backgrounds.
+
+For manual staging against an existing compatible kernel:
+
+```sh
+python3 ports/lvgl/build.py --app all --stage fuse-x-shared
+python3 ports/lvgl/build.py --app fusedeshell --stage fuse-x-shared
+mkdir -p fuse-x-shared/fusede/applications
+cp ports/fusede/catalog/*.ini fuse-x-shared/fusede/applications/
+scripts/run-fuse-x.sh --run-only --desktop
+```
+
+`/init` prefers `/bin/fusedeshell`, otherwise `/mnt/host/fusedeshell.fxe`, and
+selects the installed catalog directory or `/mnt/host/fusede/applications`.
+`--run-only` does not install or refresh either. An older kernel without panel
+support retains its terminal/fallback path. Exact global keybindings,
+screenshot tools, workspaces, tiling, fullscreen spaces and Activity
+Monitor remain future work.
+
+Independent checks use temporary fixtures or disposable offline images:
+
+```sh
+python3 ports/lvgl/test_shell_catalog.py
+python3 fuse-x/test_graphite_integration.py
+python3 fuse-x/test_graphite_shell.py
+```
 
 ## Graphite shared UI
 
@@ -51,7 +166,8 @@ or manually placing every child.
 
 The palette uses neutral graphite (`#191a1c` canvas, `#212225` panels), subtle
 solid borders, bright text, readable secondary text and a restrained blue
-accent. Painted surfaces are opaque. There are no shadows, gradients or glass
+accent. Ordinary application surfaces are opaque; the shell preserves alpha
+at panel edges. There are no shadows, gradients or glass
 effects. Hover, pressed, disabled, selected, input-error and keyboard-focus
 states are shared. Focus outlines sit inside control bounds, avoiding clipping
 in dense layouts. Carets only appear in focused inputs and do not blink; idle
@@ -63,6 +179,17 @@ Shift-Tab starts at the last. Control clicks and drags retain LVGL's normal
 behaviour. The pointer policy clears group focus without changing traversal
 order and respects frozen groups. Its pinned private access to LVGL 9.6's
 group focus/editing fields is isolated in `ui.c`, alongside theme font roles.
+
+GX reports physical key transitions. The shared adapter repeats navigation and
+editing keys (arrows, Home/End, Page Up/Down, Backspace and Delete) after 500 ms,
+then every 100 ms. Raw app filters receive repeated presses; the event-driven
+LVGL keypad receives a fresh press for each repeat. Enter, Space, Escape, Tab
+and modifiers do not repeat. Releasing the key, losing focus, changing the
+focused widget/group, pointer presses, resize or input overflow cancels the
+hold. Call `gx_lv_cancel_key_repeat()` before replacing a UI context, as the
+shell does before deleting a menu. Text input keeps its existing host-layout
+path; gterm and SDL retain their own repeat handling. Repetition adds no idle
+polling when a key is not held.
 
 The direction combines classic desktop control density and keyboard conventions,
 Apple's emphasis on hierarchy, and Linear's restrained surfaces and alignment.
@@ -267,6 +394,13 @@ Dismissal restores its former control when it is still valid. Transparent
 structural backdrops consume pointer input without adding dimming or effects.
 Overlays supply their own Graphite font/ink inheritance on LVGL's separate top
 layer; dialog inputs reflow when display density changes.
+Wheel and fractional trackpad input hit-test layers in the same order as the
+pointer, so dropdowns scroll under the cursor and overlay backdrops block
+scrolling of the page behind them. Opening or closing a modal group clears
+any fractional motion left over from the previous context.
+`python3 ports/lvgl/menu-scroll-test.py --build build/lvgl --guest-build fuse-x/build`
+checks the language picker and the 65-option dropdown at both densities in
+native windows and desktop mode, using fresh offline test images.
 `ui_radio_list` provides up to sixteen exclusive choices. Mouse clicks and
 Enter select one choice; arrows move between enabled choices, and Tab/Shift-Tab
 traverse controls. Selecting an already selected choice keeps it selected.
@@ -427,9 +561,20 @@ in the status bar. The staged synthetic example is
 `lvedit [FILE ...]` opens up to sixteen documents. Its `ui-document` model owns
 the existing TextBuffer gap buffers, file identities and per-tab selections.
 `ui-editor` is a graphical viewport over a borrowed buffer, not a second LVGL
-textarea model. `ui-tabs` supplies copied labels, visible dirty markers,
-keyboard selection and application-owned close requests. The gallery's Editor
-page (F9) exercises the same components, including wrap and independent undo.
+textarea model. `ui-tabs` is the shared document-tab strip: compact integrated
+tabs, copied labels, a visible dirty indicator, keyboard selection and
+application-owned close requests. Each closable tab reserves a small slot on
+the left; its close button appears when the tab is hovered or keyboard-focused,
+without moving the title. Long labels are ellipsized, and the strip scrolls
+horizontally to keep the selected tab visible. The gallery's Editor page (F9)
+uses the same component, including wrap and independent undo.
+
+The editor keeps File/Edit/View/Help above one document area containing the
+tab strip directly against the text viewport. File paths and duplicate quick
+actions do not occupy separate rows; the existing menus and shortcuts provide
+New/Open/Save/Undo/Redo. Closing a tab still goes through the document model and
+its unsaved-work decisions, whether requested with its close button, Delete
+while the tab is focused, or Ctrl+W.
 
 Ctrl+N creates a document, Ctrl+O opens a path, Ctrl+S saves, Ctrl+Shift+S saves
 under another name, Ctrl+W closes a tab and Ctrl+Q quits. Ctrl+Tab and
@@ -437,6 +582,22 @@ Ctrl+Shift+Tab change tabs. Ctrl+A/C/X/V select/copy/cut/paste; Ctrl+Z and
 Ctrl+Shift+Z undo/redo. F5 reloads from disk and F10 focuses the menus. The View
 menu toggles visual wrapping. File contents do not acquire line endings when
 the viewport wraps.
+
+Modified documents with an existing path autosave when the text area loses
+focus, when switching away from their tab, or when the editor window loses
+focus. Untitled documents need a manual Save As first. Saves run outside focus
+callbacks and preserve the cursor, selection and undo history. Explicit Save
+As, Reload and unsaved-close decisions take precedence over queued autosaves.
+External changes and write failures leave the document dirty and show a status
+warning; an explicit Save can resolve the conflict or retry the write.
+
+View → **Syntax language…** selects highlighting for the current document,
+including unsaved tabs. **Automatic** uses its filename; an explicit choice
+overrides detection until Automatic is selected again. Choices are per tab and
+remain in effect through Save As and reload while the document is open. They
+do not change file contents, undo history or the dirty indicator, and are not
+stored in the file or restored after restarting the app. The status bar shows
+the current language. Highlighting uses Rift's existing text-engine lexers.
 
 The viewport measures actual glyph advances, retains grapheme-safe selection
 and hit testing, and draws visible syntax runs. Display-row layout proceeds in
@@ -459,14 +620,14 @@ decision. Saves refuse symbolic-link destinations. Fingerprints and a final
 recheck narrow races; they are not filesystem locks or power-loss guarantees.
 Wrap and eight recent paths are saved atomically in `$HOME/.lvedit` (0600).
 
-For desktop testing, start Fuse-X with
-`scripts/run-fuse-x.sh --run-only --desktop`, then launch these same apps from
-its terminal. The current desktop has simple prototype chrome; the full
-Graphite FuseDE shell and future x64 output adapter remain separate milestones.
+For desktop testing, `scripts/run-fuse-x.sh --desktop` rebuilds and installs
+the apps and Graphite shell. `--run-only --desktop` uses the apps already in
+the image. The same executables can be launched from the desktop's terminal;
+the future x64 output adapter remains a separate milestone.
 
 ## Retina text and Unicode
 
-All four apps follow 1×/2× display density through `GX_BACKING_SCALE`. A 640×480
+All five apps follow 1×/2× display density through `GX_BACKING_SCALE`. A 640×480
 selector retains that logical window size while rendering 1280×960 pixels at
 2×. Mouse events and resize requests stay logical; the adapter maps them into
 LVGL's physical coordinates. Moving between densities reapplies geometry and
@@ -1062,9 +1223,11 @@ font/editor limitations and the independent X11 investigation.
 
 ## Packaging direction
 
-For now `lvcalc.fxe`, `lvselect.fxe`, `lvgallery.fxe` and `lvdata.fxe` are staged
-in `fuse-x-shared`, with their shared license/readme folder.
-No launcher, disk image or package catalog is changed. Later, `lvcalc` can be
+The standalone builder stages selected applications in `fuse-x-shared`, with
+their shared license/readme folder, without opening disk images. The normal
+Fuse-X `--desktop` launcher now builds/installs the five ordinary Graphite apps,
+`fusedeshell` and its curated launch catalog. This system launch catalog is
+separate from signed package distribution. Later, `lvcalc` can be
 an optional package carrying `/usr/bin/lvcalc` and its licenses, built with this
 same builder. The existing [package tools](../pkg/README.md) should create its
 signed archive and catalog entry; the [RFL pkg frontend](../../rfl/apps/pkg/)

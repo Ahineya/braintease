@@ -1,0 +1,146 @@
+{
+  "date_utc": "2026-10-21",
+  "native_sha256": "3bc6de1116a7ea29d0997f632613edfe7c3100b62efbf5bca6f32f9fb4bc4569",
+  "managed_sha256": "a5ccc41e04e960c867d479d3434e23d92044a731627f71646edb7b2b8dd4e409",
+  "decompilations": {
+    "telemetry-standard": {
+      "path": "analysis/followup/report-trace/telemetry-standard.json",
+      "sha256": "68299933df61fab0d865f32cc8db48aef9af17bded26b5bb5c8015a2990d01e1"
+    },
+    "telemetry-edge": {
+      "path": "analysis/followup/report-trace/telemetry-edge.json",
+      "sha256": "47c9cea73cb51074891181328fba48b12f1129630852584da88646346c63205d"
+    },
+    "factory-send": {
+      "path": "analysis/followup/report-trace/factory-send.json",
+      "sha256": "f68d5fda83f4d87c327081ada404ee0c6870c1ff3be2de0eeff0963db4384d18"
+    },
+    "feature-get": {
+      "path": "analysis/followup/report-trace/feature-get.json",
+      "sha256": "65ff1d8636fff6caa2ab55ceb8a85269961babb8ca339cd30dc34fc164a35c90"
+    },
+    "telemetry-chunks": {
+      "path": "analysis/followup/report-trace/telemetry-chunks.json",
+      "sha256": "118089b20555ee3cc7dfd671d44f9440e9cd8aa59982fd7b84f1571f5b3b3f20"
+    },
+    "device-initialization": {
+      "path": "analysis/followup/report-trace/device-initialization.json",
+      "sha256": "f4a0436f6c5cf7c693ae54b82f7fb47c4c90a4832e8b5d7c59517683bf6a9beb"
+    },
+    "factory-setup": {
+      "path": "analysis/followup/report-trace/factory-setup.json",
+      "sha256": "0365a4f3975e6a13d1c0b927dd5febb265985da4feada86fe2565d03c1e983ba"
+    }
+  },
+  "live_transcripts": [
+    {
+      "path": "analysis/usb-run-20261021T205640709502Z.jsonl",
+      "sha256": "d9dde00fac378f627b97be55840da60b97ef63776108e8061571f12231990f98",
+      "flags": [
+        "--extra-reports"
+      ],
+      "input_reports": 166,
+      "source_hashes": {
+        "usb_probe.c": "0015794fb364f0b3bd98c5860fe373a380362f22bca942b770aa8c3be4d50115",
+        "usb_policy.h": "bc8fda6101ae2cfb6e7ff79db4ec3498f088b73770e84414d7b877af309edaf3",
+        "usb_probe.py": "dda3fdb7c018b617a7c19ed6e2f182820120d29b9303f6a77571200fcc6ef14f"
+      }
+    },
+    {
+      "path": "analysis/usb-run-20261021T205701550814Z.jsonl",
+      "sha256": "d0424ac3ba8180da5e3ae4e2977b4a702f6601acfa19480f55383c0fa3124ca7",
+      "flags": [
+        "--telemetry"
+      ],
+      "input_reports": 152,
+      "source_hashes": {
+        "usb_probe.c": "0015794fb364f0b3bd98c5860fe373a380362f22bca942b770aa8c3be4d50115",
+        "usb_policy.h": "bc8fda6101ae2cfb6e7ff79db4ec3498f088b73770e84414d7b877af309edaf3",
+        "usb_probe.py": "dda3fdb7c018b617a7c19ed6e2f182820120d29b9303f6a77571200fcc6ef14f"
+      }
+    },
+    {
+      "path": "analysis/usb-run-20261021T205811871103Z.jsonl",
+      "sha256": "695a6723717f102dd1077eca13d9241f15ff896d67c136d7efbf96372c9f832c",
+      "flags": [
+        "--queries",
+        "--identity"
+      ],
+      "input_reports": 484,
+      "source_hashes": {
+        "usb_probe.c": "0bbbc3724ae732d837e55f9f0370bb5fd7452da17a1bf2bb2e40e5c9642a7af3",
+        "usb_policy.h": "8385bf56f47953fcca49405aba668c1f9272d71461e0f899dd64065adedf3616",
+        "usb_probe.py": "9c4f1528bf95a3038f52e1e2134f71adf055525ea2e712fc0d70b4fea607ef9d"
+      }
+    }
+  ],
+  "final_tool_source_hashes": {
+    "usb_probe.c": "0bbbc3724ae732d837e55f9f0370bb5fd7452da17a1bf2bb2e40e5c9642a7af3",
+    "usb_policy.h": "8385bf56f47953fcca49405aba668c1f9272d71461e0f899dd64065adedf3616",
+    "usb_probe.py": "9c4f1528bf95a3038f52e1e2134f71adf055525ea2e712fc0d70b4fea607ef9d",
+    "test_usb_policy.py": "ebde0d7d4e3bb406e5077906d4bf923720bc5e8f851475fd59cc8fd8db850499",
+    "report_protocol.py": "430a35647d808cdc9aeb105425dbcfc8045e99c8422a7e063332b14ebcc44191",
+    "test_report_protocol.py": "f503530309478e914f6ff3450096f22ac543a0cbdf23882faa53d24518319860"
+  },
+  "reports": {
+    "0x0b": {
+      "get_request_bytes": 42,
+      "get_successes": 3,
+      "stable": true,
+      "reply_sha256": "efc2a7b6bb55f64b965cb90f07398ca824237fa33409389b5de60d9544429e47",
+      "semantics": "unidentified",
+      "mcu_or_pcba_identity_window_match": false
+    },
+    "0x0c": {
+      "get_request_bytes": 42,
+      "get_successes": 0,
+      "get_error_hex": "0xe0005000",
+      "descriptor_presence_did_not_guarantee_get_support": true
+    },
+    "0xa0": {
+      "accessed": false,
+      "policy": "GET and SET blocked; loader leads excluded"
+    }
+  },
+  "factory_telemetry": {
+    "request_selector_hex": "80 70 01",
+    "request_bytes": 64,
+    "reply_count": 6,
+    "reply_bytes": 64,
+    "continuation_statuses": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      2
+    ],
+    "data_bytes_per_reply": 56,
+    "assembled_data_bytes": 336,
+    "decoded_numeric_fields": 55,
+    "known_structure_bytes_after_skipped_format_byte": 190,
+    "remaining_uninterpreted_bytes": 145,
+    "serial_redacted_in_decode": true,
+    "time_units_established": false
+  },
+  "factory_configuration_not_sent": {
+    "caller_rva": "0xfd30",
+    "call_site_rva": "0xfde1",
+    "selector_hex": "80 18 01",
+    "reason": "configuration bytes supplied by initialization path; not established as an information query"
+  },
+  "limits": [
+    "No identified 0x0b/0x0c use in examined Sony DLL HID paths; firmware handlers remain unavailable behind encrypted images.",
+    "API-level HID observations do not establish an exact USB bus trace.",
+    "GET 0x0c rejection does not establish that SET 0x0c is harmless or unsupported.",
+    "No arbitrary-address read/write, debug authorization or custom execution primitive established."
+  ],
+  "validation": {
+    "offline_tests_passed": 35,
+    "input_reports": 802,
+    "invalid_input_reports": 0,
+    "firmware_and_imu_readbacks_unchanged": true,
+    "latest_nvs_status_locked": true,
+    "all_sent_factory_commands_had_zero_extra_payload": true
+  }
+}

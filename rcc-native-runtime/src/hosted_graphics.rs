@@ -98,8 +98,14 @@ mod colour;
 mod render;
 #[path="hosted_desktop.rs"]
 mod desktop;
+#[path="hosted_session.rs"]
+mod session;
+#[path="hosted_panel.rs"]
+mod panel;
 
 pub(super) struct Surface {
+    process: u32,
+    pid: u16,
     width: u32,
     height: u32,
     title: String,
@@ -216,6 +222,8 @@ pub(super) struct Shared {
     pub(super) finished: bool,
     pub(super) new_terminals: u16,
     desktop: Option<desktop::Session>,
+    registry: session::model::Registry,
+    panel: Option<panel::Panel>,
 }
 #[derive(Default)]
 pub(super) struct Graphics {
@@ -267,7 +275,7 @@ fn capture(shared: &mut Shared) -> Result<()> {
     let directory = std::path::Path::new(&directory);
     std::fs::create_dir_all(directory).map_err(|_| 5u16)?;
     let windows:Vec<_>=shared.windows.iter().map(|(&id,w)|serde_json::json!({
-        "id":id,"title":w.title,"format":w.format(),"width":w.width,"height":w.height,"scale":w.backing_scale,"pixel_width":w.raster_width(),"pixel_height":w.raster_height(),"zoom_percent":w.zoom_percent,"presentation_width":w.presentation_size().0,"presentation_height":w.presentation_size().1,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence,"configuration":w.configuration
+        "id":id,"process":w.process,"pid":w.pid,"title":w.title,"format":w.format(),"width":w.width,"height":w.height,"scale":w.backing_scale,"pixel_width":w.raster_width(),"pixel_height":w.raster_height(),"zoom_percent":w.zoom_percent,"presentation_width":w.presentation_size().0,"presentation_height":w.presentation_size().1,"visible":w.flags&2==0,"resizable":w.flags&1==0,"sequence":w.sequence,"configuration":w.configuration
     })).collect();
     let temporary = directory.join("windows.json.tmp");
     std::fs::write(&temporary, serde_json::to_vec(&windows).unwrap()).map_err(|_| 5u16)?;
@@ -316,6 +324,8 @@ fn test_event(shared: &Arc<Mutex<Shared>>) -> Result<()> {
 }
 impl Runtime {
     fn graphics_call(&mut self, op: u64, a: &mut [u32; 12]) -> Result<u32> {
+        if op==31{return session::call(self,a);}
+        if op==32{return panel::call(self,a);}
         if op==25{return raster::blend(self,a);}
         if op==29{return coverage::raster(self,a);}
         if op==30 && a.iter().all(|&n| n==0){return Ok(0);}
@@ -404,11 +414,15 @@ impl Runtime {
                 return Err(12);
             }
             let id = s.next.checked_add(1).ok_or(12u16)?;
+            let pid=u16::try_from(a[6]).map_err(|_|22u16)?;
+            if a[5]!=0{s.registry.touch_process(a[5],pid).map_err(session::error)?;}
             s.next = id;
             let pixels = if a[4]==2{Vec::new()}else{vec![0; (w * h) as usize]};
             s.windows.insert(
                 id,
                 Surface {
+                    process: a[5],
+                    pid,
                     width: w,
                     height: h,
                     title,
@@ -468,6 +482,7 @@ impl Runtime {
             }
             return Ok(0);
         }
+        let panel_alpha = s.panel.as_ref().is_some_and(|p| p.window == a[0] && p.flags & panel::ALPHA != 0);
         let window = s.windows.get_mut(&a[0]).ok_or(22u16)?;
         if op==30{return render::call(self,window,a);}
         #[cfg(target_os="macos")]
@@ -521,7 +536,11 @@ impl Runtime {
                     {window.terminal=None;}
                     window.backing_scale=scale;
                     let count=(window.raster_width()*window.raster_height()) as usize;
-                    if window.colour.is_some(){window.colour=Some(colour::TrueColour::new(count));}
+                    if window.colour.is_some(){
+                        let mut frame = colour::TrueColour::new(count);
+                        if panel_alpha { frame.back.fill(0); frame.present(); }
+                        window.colour=Some(frame);
+                    }
                     else{window.back=vec![0;count];window.front=Arc::new(window.back.clone());}
                     window.sequence=window.sequence.wrapping_add(1);
                     window.configuration=window.configuration.wrapping_add(1);
@@ -569,6 +588,7 @@ impl Runtime {
                 }
             }
             2 => {
+                panel::remove_window(&mut s, a[0]);
                 s.windows.remove(&a[0]);
             }
             23 => {
@@ -680,6 +700,15 @@ impl Runtime {
                     std::fs::write(&temporary, bytes).map_err(|_| 5u16)?;
                     std::fs::rename(temporary, directory.join(format!("{}.ppm", a[0])))
                         .map_err(|_| 5u16)?;
+                    if panel_alpha {
+                        if let Some(frame) = &window.colour {
+                            let mut alpha = format!("P5\n{} {}\n255\n",window.raster_width(),window.raster_height()).into_bytes();
+                            alpha.extend(frame.front.iter().map(|pixel|(pixel >> 24) as u8));
+                            let temporary = directory.join(format!("{}.alpha.pgm.tmp",a[0]));
+                            std::fs::write(&temporary,alpha).map_err(|_|5u16)?;
+                            std::fs::rename(temporary,directory.join(format!("{}.alpha.pgm",a[0]))).map_err(|_|5u16)?;
+                        }
+                    }
                 }
             }
             7 => {
@@ -753,7 +782,7 @@ impl Runtime {
                     let old_width=window.raster_width();
                     let old_height=window.raster_height();
                     if let Some(frame)=window.colour.as_mut(){
-                        frame.back=colour::resized(&frame.back,old_width,old_height,rw,rh,colour::rgba(0));
+                        frame.back=colour::resized(&frame.back,old_width,old_height,rw,rh,if panel_alpha {0}else{colour::rgba(0)});
                         frame.present();
                     }else{
                         window.back=colour::resized(&window.back,old_width,old_height,rw,rh,0);

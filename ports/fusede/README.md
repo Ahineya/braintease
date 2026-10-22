@@ -75,6 +75,94 @@ Results, execution/JIT statistics and transcripts are saved under
 separate runs and workload sizes. The private filesystem is checked before
 and after the run.
 
+## Graphite application catalog
+
+The guest Graphite shell reads the files in `catalog/`, installed as
+`/usr/share/applications/*.ini`. `ports/lvgl/shell-catalog.c` shares the existing
+INI reader and keeps a dynamically allocated catalog. Files sort by category,
+display name and stable ID. Search matches words against names, categories,
+keywords and IDs; Latin ASCII letters match without regard to case, and UTF-8
+text is preserved. Availability is checked on each request rather than cached.
+
+Each file describes one application:
+
+```ini
+[application]
+id=org.riplix.Commander
+name=Commander
+icon=folder
+category=Accessories
+keywords=files folders copy move rename
+kind=terminal
+exec=/bin/mc
+fallback=/mnt/host/rfl-fm.fxe
+columns=80
+rows=28
+pinned=true
+# Optional exact arguments, contiguous and numbered from one:
+arg1=/mnt/host
+```
+
+`id`, `name`, `icon`, `category`, `kind` and `exec` are required. `kind` is `gui`
+or `terminal`; only terminal entries accept `columns` and `rows`. `keywords`,
+`fallback`, arguments and `pinned` are optional. IDs use 1–63 ASCII letters,
+digits, dots, hyphens or underscores. Metadata is validated as UTF-8; names and
+categories fit 63 cells, icons 127. Each input file has a 1 Mi-cell budget and
+4096-cell line budget. These are input budgets, not a fixed application count.
+Unknown keys, duplicate keys/IDs, invalid paths and gaps in argument numbering
+reject the whole load without changing the live catalog.
+
+Executables must have absolute paths. The installed path is preferred when it
+is a regular executable file; a `fallback` names one explicit alternative for
+host-share testing. The terminal's own installed/fallback paths are configured
+separately by the shell. Missing applications and missing terminal support stay
+out of the available application list. File modes matter. Configuration never
+becomes a command string: the launcher forks and executes the exact argument
+vector without shell evaluation. INI matching outer quotes are removed; there
+are no shell escapes or environment substitutions.
+
+GUI IDs match the applications' existing GX registrations. Terminal entries
+run through `gterm --app-id ID --app-name NAME --app-icon ICON -- PROGRAM ...`.
+Gterm registers the application's identity and labels its initial window with
+the display name. The application and its shell/helpers do not become extra
+dock entries. Multiple launches share the same app ID but retain separate
+instance and window identities. Ordinary `gterm` still identifies as Terminal.
+The current catalog includes the five Graphite GUI apps, Terminal, Commander,
+Rift, Music, Telegram, Chat, Multiplexer and JavaScript. Legacy Nano-X apps such
+as NetSurf and `nxview` remain earlier porting experiments; their catalog
+integration is not a current goal, and browser choice will be revisited later.
+
+The Applications menu also offers **Run…**. `shell_catalog_run` parses a
+program name/path and optional quoted arguments, preserving catalog identity
+and GUI/TUI policy when matched. Other commands use explicit paths or `PATH`;
+terminal mode wraps them in gterm with a derived launch identity. Launches use
+the same asynchronous exec/error/reaping path as catalog entries. Quotes and
+backslash escapes group arguments; shell expansion, pipes and redirection are
+not implicit. The dialog retains its command and shows errors until corrected
+or canceled.
+
+Catalog `pinned` values supply defaults. User preferences override them by ID:
+
+```ini
+[pins]
+org.riplix.Calculator=false
+org.riplix.Commander=true
+```
+
+The checked-in `pins.ini` is an empty override template. Unknown valid IDs
+survive load/save, so a temporarily unavailable app retains its preference.
+Saving uses an exclusive mode-0600 sibling temporary file, closes it, then
+atomically renames it over the selected user configuration. Host builds also
+call `fsync`; guest crash durability awaits a linkable libc `fsync`. No system catalog
+or unrelated user preferences are modified. Child exec errors and exits are
+reported asynchronously; polling never blocks or reaps unrelated children.
+
+Run the parser, pin, dynamic-availability and actual fork/exec tests with:
+
+```sh
+python3 ports/lvgl/test_shell_catalog.py
+```
+
 ## Sources and generated assets
 
 `themes/slate.json` and `tools/build_theme.py` author the original pixels. The

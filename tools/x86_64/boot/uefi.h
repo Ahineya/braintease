@@ -38,10 +38,13 @@ typedef struct {
     void *free_pages;
     Status (*get_memory_map)(size_t *, void *, size_t *, size_t *, uint32_t *);
     Status (*allocate_pool)(uint32_t, size_t, void **);
-    void *free_pool, *create_event, *set_timer, *wait_for_event;
+    Status (*free_pool)(void *);
+    void *create_event, *set_timer, *wait_for_event;
     void *signal_event, *close_event, *check_event;
     void *install_protocol_interface, *reinstall_protocol_interface;
-    void *uninstall_protocol_interface, *handle_protocol, *reserved;
+    void *uninstall_protocol_interface;
+    Status (*handle_protocol)(Handle, const Guid *, void **);
+    void *reserved;
     void *register_protocol_notify, *locate_handle, *locate_device_path;
     void *install_configuration_table, *load_image, *start_image, *exit, *unload_image;
     Status (*exit_boot_services)(Handle, size_t);
@@ -49,7 +52,8 @@ typedef struct {
     Status (*stall)(size_t);
     Status (*set_watchdog_timer)(size_t, uint64_t, size_t, const uint16_t *);
     void *connect_controller, *disconnect_controller, *open_protocol, *close_protocol;
-    void *open_protocol_information, *protocols_per_handle, *locate_handle_buffer;
+    void *open_protocol_information, *protocols_per_handle;
+    Status (*locate_handle_buffer)(uint32_t, const Guid *, void *, size_t *, Handle **);
     Status (*locate_protocol)(const Guid *, void *, void **);
 } BootServices;
 
@@ -91,6 +95,9 @@ _Static_assert(sizeof(MemoryDescriptor) == 40, "UEFI memory descriptor layout");
 _Static_assert(offsetof(SystemTable, boot_services) == 96, "UEFI system table layout");
 _Static_assert(offsetof(BootServices, get_memory_map) == 56, "UEFI memory map slot");
 _Static_assert(offsetof(BootServices, exit_boot_services) == 232, "UEFI exit slot");
+_Static_assert(offsetof(BootServices, free_pool) == 72, "UEFI free-pool slot");
+_Static_assert(offsetof(BootServices, handle_protocol) == 152, "UEFI handle-protocol slot");
+_Static_assert(offsetof(BootServices, locate_handle_buffer) == 312, "UEFI locate-handle-buffer slot");
 _Static_assert(offsetof(BootServices, locate_protocol) == 320, "UEFI locate protocol slot");
 _Static_assert(offsetof(GraphicsMode, framebuffer) == 24, "UEFI graphics layout");
 #endif

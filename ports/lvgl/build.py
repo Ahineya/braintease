@@ -17,7 +17,7 @@ PORT = Path(__file__).resolve().parent
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--app', choices=('lvcalc','lvselect','lvgallery','lvdata','lvedit','lvbench','lvtablebench','all'), default='all')
+    p.add_argument('--app', choices=('lvcalc','lvselect','lvgallery','lvdata','lvedit','lvbench','lvtablebench','fusedeshell','all'), default='all')
     p.add_argument('--build', type=Path, default=ROOT / 'build/lvgl')
     p.add_argument('--compiler', type=Path, default=ROOT / 'target/release/rcc')
     p.add_argument('--sdk-build', type=Path, help='separate native SDK cache for isolated builds')
@@ -79,7 +79,8 @@ def main():
                        'lvbench': ('scroll-bench.c','fill-check.c','font-check.c'),
                        'lvgallery': ('gallery.c',),
                        'lvedit': ('editor.c',),
-                       'lvselect': ('selector.c',)}[app]
+                       'lvselect': ('selector.c',),
+                       'fusedeshell': ('shell.c','shell-catalog.c',str(ROOT/'libraries/ini/ini.c'))}[app]
         extra_objects = []
         if app in ('lvedit', 'lvgallery'):
             extra_objects = [compile_one(path) for path in
@@ -88,6 +89,8 @@ def main():
                    *[str(PORT / name) for name in app_sources],
                    '--compiler', str(compiler),
                    '--static', '--float-format', '-D', 'LV_CONF_INCLUDE_SIMPLE=1', '-D', '__func__="C16"', '-o', str(build / (app+'.fxe'))]
+        if app == 'fusedeshell':
+            command += ['-I', str(ROOT/'libraries/ini')]
         if args.sdk_build:
             command += ['--build', str(args.sdk_build.resolve())]
         for path in (source, config, PORT): command += ['-I', str(path)]

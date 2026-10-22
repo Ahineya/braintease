@@ -138,7 +138,7 @@ logical octets and is converted into signed-16 sample cells before writes.
 The transport keeps its existing version, exclusive ownership and monotonic
 clock; SDL does not issue `NEXT_TICK` or explicit render commands.
 
-This first profile services callbacks cooperatively at SDL event, drawing and
+The base SDL profile services callbacks cooperatively at SDL event, drawing and
 wait/delay boundaries, with refill deadlines limiting sleep duration. It
 supports ordinary SDL game loops, pause/resume and shared state protected by
 `SDL_LockAudio`, but does not create an independent guest audio thread. Work or
@@ -154,7 +154,10 @@ dynamic allocation, loops, volume, pause, expiry, fades and completion hooks.
 Format/channel conversion and arbitrary-rate nearest-neighbor resampling occur
 when WAVs are loaded. This leaves base SDL's power-of-two `SDL_AudioCVT` rate
 conversion unchanged. Music streams and compressed decoders remain outside the
-subset, and the mixer retains cooperative scheduling.
+subset. The default local mixer retains cooperative scheduling; Fuse-X can
+instead use the [independent mixer process](#audio-specific-backend-mixer-helper-over-ipc)
+for uploaded effects. That backend does not make general SDL callbacks
+asynchronous.
 
 The focused suite passed 3,481 checks on host byte/wide carriers and actual C16;
 production PCM captures matched overlap, finite-loop, volume and pause samples.
@@ -288,9 +291,11 @@ Source audit, 2026-10-21; this is a design recommendation, not an implemented
 thread facility. Shared-image green threads are feasible without host guest-code
 callbacks, SMP, ring 3 or timer-driven native stack switching. They are a runtime
 and kernel milestone, rather than a small SDL backend change. Keep the existing
-cooperative audio pump for current applications while investigating that work
-separately. More queued PCM can absorb a bounded delay; it cannot guarantee
-callback progress through an arbitrary compute loop or blocking call.
+cooperative audio pump for general callbacks while investigating that work
+separately. The finite-effects helper below supplies independent PCM production
+without threads. More queued PCM alone can absorb a bounded delay; it cannot
+guarantee arbitrary application-callback progress through a compute loop or
+blocking call.
 
 ### What is available now
 
@@ -341,7 +346,7 @@ callback progress through an arbitrary compute loop or blocking call.
 | --- | --- | --- |
 | Keep pumping; split long application work into explicit steps | Shared mixer state, correct callback pointers and refill between work chunks | Small application change; blocking libc and unbroken work can still starve audio |
 | SDL-only cooperative task/fiber layer | Explicit scheduling among adapted tasks in one image | Useful only with explicit yields and nonblocking I/O; current public APIs cannot create a separate resumable C call stack |
-| Separate mixer process with chunk/command IPC | Continue uploaded effects while the GUI process sleeps or computes | Useful audio-specific intermediate stage; requires a helper package and bounded protocol, not shared-image threads |
+| Separate mixer process with chunk/command IPC | Continue uploaded effects while the GUI process sleeps or computes | Implemented optional Fuse-X effects backend; private helper and bounded protocol, not shared-image threads |
 | Kernel-selected sibling continuations sharing one process image | Run the audio worker while main computes or another sibling waits | Recommended long-term direction; requires shared-image ownership, separate continuations/stacks, kernel wait state and synchronization |
 | Host OS thread entering guest code | No supported execution contract | Would violate exclusive runtime access and guest/kernel state assumptions; exclude |
 | Forked arbitrary SDL callback or signal-driven mixer callback | No shared-image threading guarantee | COW separates mixer objects; signal delivery does not provide independent callback scheduling or allocator safety; exclude |
@@ -359,52 +364,73 @@ application demo with explicit work chunks can exercise today's real SDL pump,
 but also cannot claim independent threading. Neither experiment needs an x64
 image, driver, compiler/runtime patch or hardware run.
 
-### Audio-specific alternative: mixer helper over IPC
+### Audio-specific backend: mixer helper over IPC
 
-A separate mixer executable is a practical, less disruptive intermediate stage
-for the finite `Mix_*` effects profile. The parent uploads chunks and sends
-play/stop/volume/fade commands; the helper owns chunk/voice state and `/dev/pcm`,
-running the existing refill loop. Uploaded effects and fades can progress while
-the GUI blocks in read/select or computes between checkpoints. This is explicit
-interprocess audio service, not a forked arbitrary callback or thread support.
+The optional Fuse-X process backend is implemented for the finite `Mix_*`
+effects profile. The parent uploads chunks and sends play/stop/volume/fade
+commands; `sdl-mixerd` owns chunk/voice state and the sole `/dev/pcm` lease,
+running the existing refill loop independently. Uploaded effects, including
+looping effects and fades, progress while the GUI blocks in read/select or
+computes between scheduler checkpoints. This is explicit interprocess audio
+service, not a forked arbitrary callback or general thread support.
 
-Fuse-X already has the required [process/descriptor
-wrappers](../../ports/fuzix/ripple/libc/syscalls.c),
-[fork/dup2/exec launch pattern](../../ports/fuzix/ripple/libc/pipe.c),
-[shared kernel pipe rings](../../ports/fuzix/ripple/pipes.c) and
-[pipe/PCM select](../../ports/fuzix/ripple/selectwait.c). Two anonymous pipes can
-carry commands/replies across exec. Close unused ends, preserve intended IPC
-descriptors, and open PCM only in the helper after exec. This fits the existing
-exclusive lease; helper exit releases it, while command EOF detects parent loss.
-The [select fixture](../../ports/fuzix/tools/selectcheck.c) already covers pipe
-backpressure, fork, EOF and broken pipes; it was inspected, not rerun here.
+Select `library(..., mixer='process')` to link the client frontend. The default
+`mixer=True` keeps the supported in-process backend. Build the matching helper
+with `ports/sdl/build.py --app mixer-helper`; its output is `sdl-mixerd.fxe`.
+The parent uses an explicit guest `SDL_MIXER_HELPER` path when set, otherwise
+tries `/usr/bin/sdl-mixerd` then `/bin/sdl-mixerd`. LGeneral stages a matching
+adjacent helper with its executable. No startup service or kernel change is
+needed. See the [mixer profile](../../ports/sdl/mixer/README.md#optional-fuse-x-mixer-process)
+for build, installation and callback semantics.
 
-Implementation stays in an optional SDL mixer frontend/protocol, helper package
-and tests; a hosted prototype needs no shared runtime/compiler/kernel/syscall
-or x64 integration edits. Costs include a process slot, private image/heap,
-process switches and chunk copies. Use checked, versioned C16-safe framing and
-request IDs, upload once then reference IDs, and stage loads incrementally:
-pipes hold 8,192 cells, large writes may be short, and readiness reserves no
-message space. Prioritize refill, use nonblocking IPC and bounded queues, and
-never stop audio waiting for a blocked GUI to drain replies. Specify startup
-acknowledgement, timeout/overflow/error handling, shutdown/drain, SIGPIPE/EOF,
-child reaping and rollback for failed fork/exec/PCM acquisition.
+The implementation reuses existing process, pipe, nonblocking I/O and select
+services. Two anonymous pipes carry versioned `MXP1` frames across exec; the
+helper opens PCM only after exec, with unused pipe ends and extra descriptors
+closed. Headers encode explicit 32-bit values, checked request/reply identities
+and at most 1,024 logical octets of payload. Serialized octets remain `Uint8`
+carriers on C16; no native structure, guest pointer or callable crosses IPC.
+Large uploads are checked begin/data/commit transactions, and later commands
+reference chunk IDs. The helper services audio before bounded IPC steps, uses
+nonblocking replies and retains only bounded pending protocol state. A partial
+request or a parent that stops reading replies does not block PCM refill.
 
-Parent chunks become proxies for helper-owned immutable samples; free requires
-ordered stop/release acknowledgement. Never send usable pointers or RWops
-callbacks: the parent reads/uploads generic RWops data. Selected-channel,
-previous-volume and live-state return values need replies or synchronized proxy
-state. Completion events can return over IPC, but parent callbacks still wait
-for a parent service boundary. Public chunk/buffer mutation, shared callback
-userdata and general `SDL_OpenAudio` callbacks are outside this restricted
-contract. It supplies no `SDL_CreateThread`, hard deadline or x64 sound-device
-support; another target needs its own helper package and acceptance.
+Generic RWops reads, WAV decoding, conversion and arbitrary-rate resampling stay
+in the parent at load time. Helper chunks are immutable sample snapshots, not
+shared memory. Mutating `Mix_Chunk.abuf`/`alen` or its sample buffer after upload
+is unsupported; volume changes use the supported mixer APIs. RAW storage stays
+caller-owned and immutable until free. Free orders helper-side stop/release
+before reclaiming the parent wrapper. Closing invalidates helper chunk IDs;
+reopen requires loading chunks again, even at the same rate/format. Command
+replies preserve selected-channel, previous-volume and live-state results.
 
-Acceptance must keep an uploaded loop playing with the GUI blocked on an empty
-pipe or computing without SDL calls; also test partial/flooded IPC, unread
-replies, either process dying, failed launch and exact chunk/descriptor/lease
-reclamation. Compare captured PCM and underruns before claiming improved
-continuity; long synchronous kernel work still delays both processes.
+Finished notifications return to the parent through nonblocking SDL-boundary
+polling. The user hook runs only in the parent after SDL service or mixer calls;
+it cannot run while that process is blocked or computing without a boundary.
+Pending events coalesce per channel, and hook registration starts a fresh
+notification interval by discarding older events. There is no unbounded
+completion history and no callback execution from the helper.
+
+EOF/error releases helper chunks, descriptors and its PCM lease. The client
+reports framing, failed launch, acquisition and transport errors. A ten-second
+deadline while synchronously waiting on IPC triggers controlled detach and
+child cleanup/reaping, with bounded grace before killing an unresponsive
+helper. Time spent on application work between SDL boundaries is not an IPC
+waiting timeout. Close explicitly stops effects and requests exit. Failed
+sessions do not restart automatically with stale chunk identities.
+
+The process backend costs a process slot, private image/heap, process switches
+and copied sample storage. It changes no shared runtime/compiler/kernel/syscall
+or x64 integration code. It supplies no `SDL_CreateThread`, shared callback
+userdata, asynchronous general `SDL_OpenAudio` callback, hard deadline or x64
+sound-device support; another target needs its own packaging and acceptance.
+Long synchronous kernel work can still delay both processes.
+
+The dedicated [guest suite](../../ports/sdl/tests/mixer_ipc.py) captures PCM with
+the parent blocked on an empty pipe or computing without SDL calls, then tests
+partial/flooded IPC, unread replies, controls, failed launch, helper death and
+abrupt parent exit. These use disposable guest images and check reclamation.
+Capture continuity and queue behavior are separate from physical speaker
+latency; a muted deterministic capture does not certify hardware deadlines.
 
 ### Contract required for actual sibling execution
 
@@ -498,5 +524,6 @@ is implied. The ownership agreement in
 [native-memory-coordination.txt](native-memory-coordination.txt) delegates only
 the isolated x64 process-memory subtree to that workstream; it does not authorize
 SDL threading changes to existing runtime, compiler, kernel or x64 integration
-files. This investigation changes only this documentation section and runs no
-builds, guest images or hardware acceptance.
+files. The shared-image-thread investigation remains documentation only; the
+implemented effects helper does not establish sibling execution or x64 hardware
+acceptance.

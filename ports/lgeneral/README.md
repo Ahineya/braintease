@@ -19,7 +19,8 @@ python3 ports/lgeneral/build.py --target fuse-x --fetch
 python3 ports/lgeneral/build.py --target fuse-x --stage fuse-x-shared
 ```
 
-The second command stages the executable, data and license notices. It does
+The second command stages the game, its `sdl-mixerd.fxe` audio helper, data and
+license notices. Keep both executables in the share. It does
 not modify any disk image. Inside Fuse-X:
 
 ```sh
@@ -33,7 +34,8 @@ is also available:
 /mnt/host/lgeneral.fxe --data-dir /mnt/host/lgeneral
 ```
 
-For a system installation, put the executable in `/bin/lgeneral` and the
+For a system installation, put the game in `/bin/lgeneral`, the helper in
+`/usr/bin/sdl-mixerd` (or `/bin/sdl-mixerd`), and the
 contents of `build/lgeneral/data/` in `/usr/share/lgeneral/`. `LGENERAL_DATA`
 overrides that default; `--data-dir` takes precedence over the environment.
 Settings and saves live under `$HOME/.lgames/`, with `/tmp` as the fallback
@@ -74,13 +76,20 @@ game playable without sound.
 WAVs are decoded and converted when loaded, including the movement effect at
 10,989 Hz. The decoder accepts legacy final data chunks whose odd trailing pad
 is missing or outside the declared RIFF length; incomplete sample payloads are
-still rejected. Audio uses 22,050 Hz stereo with 1,024-frame callback blocks to
-give dialog drawing more queued headroom. Loading a scenario now also loads
+still rejected. Audio uses 22,050 Hz stereo with the original 256-frame blocks.
+Loading a scenario also loads
 and converts its sound resources.
 
-Callbacks run at SDL event, drawing and delay boundaries. Long blocking I/O or
-work outside those boundaries can still exhaust the audio queue. This profile
-does not introduce guest threads; see the
+The Fuse-X build uploads effects to a separate producer process, which owns
+voices and `/dev/pcm`. It continues refilling audio while the game draws or
+waits for I/O. The game finds a staged helper beside its executable, or the
+installed helper at the paths above; `SDL_MIXER_HELPER` overrides that pathname.
+If the helper cannot start or acquire PCM, the game remains playable silently.
+The host reference build retains the local cooperative mixer.
+
+This uses the existing process scheduler and introduces no guest threads or
+x64 kernel changes. Long synchronous kernel/host operations can still delay
+both processes. See the
 [threading investigation](../../docs/arch/audio.md#sdl-threading-investigation).
 
 ## Port structure
@@ -126,6 +135,7 @@ python3 ports/lgeneral/build.py --engine-test --build build/lgeneral-engine
 python3 ports/lgeneral/tests/run.py --all-scenarios
 python3 ports/lgeneral/tests/gui.py
 python3 ports/lgeneral/tests/audio.py
+python3 ports/lgeneral/tests/shared.py
 python3 ports/lgeneral/tests/presentation.py
 ```
 
@@ -140,6 +150,8 @@ The audio test compares the original GUI click with an independent, exact PCM
 and volume oracle in both channels, loads scenario effects including the
 10,989 Hz resource, checks persisted mute, and closes and reopens the game.
 It captures the muted PCM sink; physical speaker latency is not measured.
+The shared-launch check runs the staged game from `/mnt/host` without an
+installed helper, proving adjacent helper/data discovery and exact click PCM.
 
 The milestone verification loaded all 22 complete scenarios in Fuse-X and
 passed 40 engine checks, including byte-identical save/load/overwrite and

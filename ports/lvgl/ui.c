@@ -40,6 +40,7 @@ enum {
     CURSOR_HIDDEN,
     DISABLED_TEXT,
     SELECTION,
+    SELECTION_INACTIVE,
     CHECK,
     CHECKED,
     SCROLLBAR,
@@ -53,6 +54,48 @@ enum {
 static lv_style_t styles[STYLE_COUNT];
 static lv_theme_t *theme;
 static unsigned ready;
+#define FOCUS_VISUAL_STATES (LV_STATE_FOCUSED | LV_STATE_FOCUS_KEY | LV_STATE_EDITED)
+struct suspended_focus {
+    lv_group_t *group;
+    lv_obj_t *object;
+    lv_state_t state;
+    struct suspended_focus *next;
+};
+static struct suspended_focus *suspended_focus;
+static void focus_deleted(lv_event_t *event);
+static void forget_focus(struct suspended_focus *record, int deleting) {
+    struct suspended_focus **at=&suspended_focus;
+    while(*at&&*at!=record)at=&(*at)->next;
+    if(!*at)return;
+    *at=record->next;
+    if(!deleting&&lv_obj_is_valid(record->object))
+        lv_obj_remove_event_cb_with_user_data(record->object,focus_deleted,record);
+    lv_free(record);
+}
+static void focus_deleted(lv_event_t *event) {
+    forget_focus(lv_event_get_user_data(event),1);
+}
+static void prune_focus(void) {
+    struct suspended_focus *record=suspended_focus,*next;
+    while(record) {
+        next=record->next;
+        /* Never dereference a remembered group: it may already be deleted. */
+        if(!lv_obj_is_valid(record->object)||lv_obj_get_group(record->object)!=record->group)
+            forget_focus(record,0);
+        record=next;
+    }
+}
+static struct suspended_focus *focus_record(lv_group_t *group) {
+    struct suspended_focus *record;
+    for(record=suspended_focus;record;record=record->next)
+        if(record->group==group)return record;
+    return NULL;
+}
+static int focus_visible(lv_obj_t *object) {
+    for(;object;object=lv_obj_get_parent(object))
+        if(lv_obj_is_hidden(object)||lv_obj_has_state(object,LV_STATE_DISABLED))return 0;
+    return 1;
+}
 static void pointer_pressed(lv_event_t *event) {
     lv_obj_t *target = lv_event_get_param(event);
     lv_group_t *group = gx_lv_group();
@@ -65,9 +108,9 @@ static void pointer_pressed(lv_event_t *event) {
         return;
     ui_focus_clear(group);
 }
-int ui_focus_clear(lv_group_t *group) {
+static int clear_focus(lv_group_t *group,int respect_freeze) {
     lv_obj_t *focused;
-    if (!group || group->frozen || !(focused = lv_group_get_focused(group)))
+    if (!group || (respect_freeze&&group->frozen) || !(focused = lv_group_get_focused(group)))
         return 0;
     group->obj_focus = NULL;
     group->editing = 0;
@@ -76,6 +119,53 @@ int ui_focus_clear(lv_group_t *group) {
     if (group->focus_cb)
         group->focus_cb(group);
     return 1;
+}
+int ui_focus_clear(lv_group_t *group) { return clear_focus(group,1); }
+void ui_focus_suspend(lv_group_t *group) {
+    struct suspended_focus *record;
+    lv_obj_t *focused;
+    lv_state_t state;
+    int changed=0;
+    prune_focus();
+    if(!group)return;
+    record=focus_record(group);focused=lv_group_get_focused(group);
+    if(record&&record->object!=focused){forget_focus(record,0);record=NULL;}
+    if(!focused)return;
+    state=lv_obj_get_state(focused)&FOCUS_VISUAL_STATES;
+    if(!record) {
+        record=lv_malloc(sizeof(*record));
+        if(!record)return;
+        record->group=group;record->object=focused;record->state=state;
+        record->next=suspended_focus;suspended_focus=record;
+        lv_obj_add_event_cb(focused,focus_deleted,LV_EVENT_DELETE,record);
+        changed=1;
+    } else if(state)record->state=state;
+    if(state) {
+        lv_obj_remove_state(focused,FOCUS_VISUAL_STATES);
+        changed=1;
+    }
+    if(changed&&lv_obj_is_valid(focused))lv_obj_invalidate(focused);
+}
+void ui_focus_resume(lv_group_t *group) {
+    struct suspended_focus *record;
+    lv_obj_t *focused;
+    lv_state_t state;
+    prune_focus();
+    if(!group)return;
+    record=focus_record(group);
+    if(!record)return;
+    focused=lv_group_get_focused(group);
+    if(focused!=record->object){forget_focus(record,0);return;}
+    if(!focus_visible(focused)) {
+        forget_focus(record,0);clear_focus(group,0);return;
+    }
+    state=record->state;
+    /* Editing can be changed programmatically while this group is inactive. */
+    if(lv_group_get_editing(group))state|=LV_STATE_EDITED;
+    else state&=~LV_STATE_EDITED;
+    forget_focus(record,0);
+    lv_obj_add_state(focused,state);
+    if(lv_obj_is_valid(focused))lv_obj_invalidate(focused);
 }
 void ui_attach_pointer(lv_indev_t *pointer) {
     lv_indev_add_event_cb(pointer, pointer_pressed, LV_EVENT_PRESSED, NULL);
@@ -128,7 +218,8 @@ static void apply(lv_theme_t *th, lv_obj_t *obj) {
         lv_obj_add_style(obj, &styles[CURSOR_HIDDEN], LV_PART_CURSOR);
         lv_obj_add_style(obj, &styles[CURSOR], LV_PART_CURSOR | LV_STATE_FOCUSED);
         lv_obj_add_style(obj, &styles[SMALL], LV_PART_TEXTAREA_PLACEHOLDER);
-        lv_obj_add_style(obj, &styles[SELECTION], LV_PART_SELECTED);
+        lv_obj_add_style(obj, &styles[SELECTION_INACTIVE], LV_PART_SELECTED);
+        lv_obj_add_style(obj, &styles[SELECTION], LV_PART_SELECTED | LV_STATE_FOCUSED);
     } else if (lv_obj_check_type(obj, &lv_checkbox_class)) {
         lv_obj_add_style(obj, &styles[STACK], 0);
         lv_obj_add_style(obj, &styles[CHECK], LV_PART_INDICATOR);
@@ -252,6 +343,8 @@ void ui_theme_density(void) {
     ink(DISABLED_TEXT, 0x777b84UL);
     bg(SELECTION, 0x394e70UL);
     ink(SELECTION, palette[UI_TEXT]);
+    bg(SELECTION_INACTIVE, 0x30343cUL);
+    ink(SELECTION_INACTIVE, palette[UI_TEXT]);
     bg(CHECK, palette[UI_CANVAS]);
     border(CHECK, 0x737984UL);
     lv_style_set_radius(&styles[CHECK], gx_lv_px(2));
@@ -294,6 +387,7 @@ void ui_theme_density(void) {
 }
 void ui_theme_close(void) {
     unsigned i;
+    while(suspended_focus)forget_focus(suspended_focus,0);
     if (!ready)
         return;
     ui_overlay_close();

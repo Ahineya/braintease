@@ -9,11 +9,32 @@
 static lv_display_t *display;
 static lv_group_t *group;
 static unsigned width, height, flushes;
+static int window_active = 1;
 static uint8_t *frame;
 static uint8_t *draw;
 static uint32_t now;
 static int (*on_key)(unsigned, int, unsigned);
 static void (*on_resize)(unsigned, unsigned);
+void gx_lv_application(const char *app_id, const char *name, const char *icon) {
+    (void)app_id;
+    (void)name;
+    (void)icon;
+}
+int gx_lv_open_panel(const char *title, uint32_t authority, unsigned *w, unsigned *h) {
+    (void)authority;
+    if (!*w) *w = 1024;
+    if (!*h) *h = 768;
+    return gx_lv_open(title, *w, *h);
+}
+int gx_lv_fd(void) { return -1; }
+int gx_lv_panel_alpha(void) { return 0; }
+uint32_t gx_lv_window(void) { return 0; }
+int gx_lv_active(void) { return window_active; }
+/* Focused native tests drive the same window-active predicate as GX_FOCUS. */
+void gx_lv_host_active(int active) { window_active = active != 0; }
+void gx_lv_idle(void (*poll)(void)) { (void)poll; }
+void gx_lv_events(int (*filter)(const struct gx_event *)) { (void)filter; }
+void gx_lv_cancel_key_repeat(void) {}
 static lv_obj_t *find_widget(lv_obj_t *obj, const lv_obj_class_t *type, const char *label) {
     unsigned i;
     if (lv_obj_check_type(obj, type) && (!label || !strcmp(lv_label_get_text(obj), label)))
@@ -61,6 +82,7 @@ static void flush(lv_display_t *d, const lv_area_t *a, uint8_t *map) {
 int gx_lv_open(const char *title, unsigned w, unsigned h) {
     unsigned scale = getenv("LVGL_SCALE") && !strcmp(getenv("LVGL_SCALE"), "2") ? 2 : 1;
     (void)title;
+    window_active = 1;
     width = w * scale;
     height = h * scale;
     lv_init();

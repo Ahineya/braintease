@@ -27,12 +27,15 @@ static struct lease *mine(unsigned long handle) {
     fail(EINVAL);return NULL;
 }
 #include "render-abi.h"
+#include "session-abi.h"
+#include "panel-abi.h"
 void ripple_gfx_wakeup(void) { if(waiting)wakeup(&waiting);selwake_dev(4,0,SELECT_IN); }
 void ripple_gfx_poll(void) {
     unsigned i;unsigned long a[12]={0};
     if(rcc_hosted_gx(11,a)>0 && fuse_new_terminals<16) {
         ++fuse_new_terminals;if(init_process)pwake(init_process);
     }
+    if(session_any_changed())ripple_gfx_wakeup();
     for(i=0;i<WINDOWS;i++)if(leases[i].handle) {
         a[0]=leases[i].handle;
         if(rcc_hosted_gx(10,a)>0){ripple_gfx_wakeup();break;}
@@ -40,6 +43,7 @@ void ripple_gfx_poll(void) {
 }
 unsigned ripple_gfx_status(void) {
     unsigned i;unsigned long a[12]={0};
+    if(session_own_changed())return SELECT_IN|SELECT_OUT;
     for(i=0;i<WINDOWS;i++)if(leases[i].owner==udata.u_ptab&&leases[i].pid==udata.u_ptab->p_pid&&leases[i].handle) {
         a[0]=leases[i].handle;
         if(rcc_hosted_gx(10,a)>0)return SELECT_IN|SELECT_OUT;
@@ -51,6 +55,7 @@ void ripple_gfx_exit(ptptr p) {
     for(i=0;i<WINDOWS;i++)if(leases[i].owner==p&&leases[i].handle) {
         a[0]=leases[i].handle;rcc_hosted_gx(2,a);memset(&leases[i],0,sizeof(leases[i]));
     }
+    session_exit(p);
 }
 int ripple_gfx_open(uint_fast8_t m,uint16_t f) {used(f);return m?fail(ENXIO):0;}
 /* An inherited descriptor is not ownership of the parent's windows. */
@@ -59,6 +64,9 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     struct gx_handle handle;struct lease *lease;
     unsigned long a[12]={0};
     if(m)return fail(ENXIO);
+    if(req==GX_SESSION)return session_ioctl(user);
+    if(req==GX_PANEL)return panel_ioctl(user);
+    if(req==GX_PANEL_UPLOAD)return panel_upload_ioctl(user);
     if(req==GX_RENDER)return render_ioctl(user);
     if(req==GX_RASTER_A8){
         struct gx_raster_a8 r;unsigned long cells,list_cells,d,s;
@@ -123,10 +131,13 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
     }
     if(req==GX_CREATE||req==GX_CREATE_HIDDEN) {
         struct gx_window w;unsigned i;
+        struct session_process *process;
         if(uget(user,&w,sizeof(w))||!valaddr_w(user,sizeof(w),sizeof(w)))return -1;
         if(w.version!=GX_VERSION||(w.format!=GX_RGB565&&w.format!=GX_XRGB8888)||!w.width||!w.height||w.width>GX_HOSTED_MAX_WIDTH||w.height>GX_HOSTED_MAX_HEIGHT)return fail(EINVAL);
         for(i=0;i<WINDOWS&&leases[i].handle;i++);if(i==WINDOWS)return fail(ENOMEM);
+        process=session_find(udata.u_ptab,1);if(!process)return -1;
         w.title[63]=0;a[0]=w.width;a[1]=w.height;a[2]=(unsigned long)w.title;a[3]=req==GX_CREATE_HIDDEN?GX_WINDOW_HIDDEN:0;a[4]=w.format;
+        a[5]=process->id;a[6]=process->pid;
         if(host(1,a)<0)return -1;
         leases[i].owner=udata.u_ptab;leases[i].pid=udata.u_ptab->p_pid;leases[i].handle=a[0];
         w.window=w.surface=a[0];return uput(&w,user,sizeof(w));

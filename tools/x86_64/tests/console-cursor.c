@@ -135,6 +135,14 @@ static void fixtures(void) {
         put(sequence); console_flush(); check_frame();
     }
     put("\033[?25l"); console_flush(); check_frame();
+    /* A GUI presentation is protected from background console output. */
+    console_graphics(1);
+    for(unsigned y=0;y<boot.height;y++)for(unsigned x=0;x<boot.width;x++)
+        video[(size_t)y*boot.stride+x]=0x12345678;
+    put("background console text\n");console_flush();
+    for(unsigned y=0;y<boot.height;y++)for(unsigned x=0;x<boot.width;x++)
+        assert(video[(size_t)y*boot.stride+x]==0x12345678);
+    console_graphics(0);check_frame();
 }
 static void geometry(unsigned width,unsigned height,unsigned format) {
     boot=(BootInfo){.width=width,.height=height,.stride=width+7,.pixel_format=format,.tsc_hz=60000};

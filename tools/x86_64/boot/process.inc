@@ -79,13 +79,21 @@ static void process_switch(Context *c, U slot, U result, unsigned discard) {
     unsigned previous = c->current;
     process_restore(c, old, next);
     c->current = slot; ++c->switches;
-    if (discard) { c->processes[previous] = NULL; process_release(old); images_collect(c); ++c->drops; }
+    if (discard) {
+#ifdef BOOT_GRAPHICS
+        gx_release((uint64_t)previous+1);
+#endif
+        c->processes[previous] = NULL; process_release(old); images_collect(c); ++c->drops;
+    }
 }
 static void process_exec(Context *c, U token, U argument) {
     rcc_native_function(c, token, 1);
     Process *p = c->processes[c->current];
     Module *owner = c->functions[token_index(token)].owner;
     if (owner && p->staged != owner) fail("exec image was not staged", token);
+#ifdef BOOT_GRAPHICS
+    gx_release((uint64_t)c->current+1);
+#endif
     if (p->module) image_clear(c, p->module);
     memcpy(c->cells + BANK, c->global_template, sizeof(c->global_template));
     dirty(c, BANK, BANK);

@@ -40,7 +40,7 @@ def main():
         print('Build: Checking host tool inputs and cached outputs', flush=True)
         rust = [p for p in ROOT.glob('rcc-*') if (p / 'Cargo.toml').exists()]
         rust += [ROOT / 'rfl', ROOT / 'rvm', ROOT / 'Cargo.toml', ROOT / 'Cargo.lock',
-                 ROOT / '.cargo', ROOT / 'src/ripple-asm']
+                 ROOT / '.cargo', ROOT / 'src/ripple-asm', ROOT / 'libraries/graphics']
         inputs = sources(*rust, ROOT / 'scripts/build-os.py', ROOT / 'scripts/build_cache.py')
         settings = {key: os.environ.get(key) for key in ['RUSTFLAGS', 'CARGO_PROFILE_RELEASE_OPT_LEVEL',
                     'CC', 'CXX', 'CFLAGS', 'LDFLAGS', 'DEVELOPER_DIR', 'SDKROOT', 'MACOSX_DEPLOYMENT_TARGET',
@@ -70,7 +70,7 @@ def main():
                  ROOT / 'ports/fusede', ROOT / 'ports/lynx', ROOT / 'ports/netsurf', ROOT / 'ports/tls', ROOT / 'ports/telegram', ROOT / 'ports/music', ROOT / 'ports/chat', ROOT / 'rfl',
                  ROOT / 'libraries', ROOT / 'rcc-portable', ROOT / 'c-test/examples/rOS',
                  ROOT / 'scripts/build-os.py', ROOT / 'scripts/build_cache.py']
-        if args.os == 'fuse-x':roots += [ROOT / 'fuse-x']
+        if args.os == 'fuse-x':roots += [ROOT / 'fuse-x', ROOT / 'ports/lvgl']
         dependencies = [*sources(*roots), *tools]
         def artifacts():
             files = [build / 'compiler/manifest.json', *[p for p in (build / 'compiler').rglob('*') if p.is_file()]]
@@ -108,6 +108,7 @@ def main():
             # tools. The outer cache must reach Make's mode/profile stamps.
             os_settings['RCC_NATIVE_MEMORY'] = os.environ.get('RCC_NATIVE_MEMORY', 'checked')
             os_settings['FUSE_X_HEAP_PROFILE'] = os.environ.get('FUSE_X_HEAP_PROFILE', 'hosted')
+            os_settings['FUSE_X_GRAPHITE'] = os.environ.get('FUSE_X_GRAPHITE', '0')
         changed = cached_step(build / '.incremental-os.json', dependencies,
                               [args.os, str(build), os_settings], operating_system, artifacts,
                               force=args.rebuild)

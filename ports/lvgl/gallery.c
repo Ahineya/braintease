@@ -866,7 +866,7 @@ static void editor_page(void) {
         "Visual wrapping follows the viewport without adding line endings to your text.\n\n"
         "Combining marks: é. Ukrainian: Україна.\n";
     ui_document *first, *second;
-    lv_obj_t *row, *button;
+    lv_obj_t *row, *button, *document_area;
     editor_documents = ui_documents_create(NULL);
     if (!editor_documents)
         return;
@@ -875,7 +875,7 @@ static void editor_page(void) {
     if (!first || !second)
         return;
     text_append(ui_document_text(first), (const unsigned char *)source, strlen(source));
-    text_language(ui_document_text(first), 1);
+    ui_document_set_language(first, UI_LANGUAGE_C);
     text_saved(ui_document_text(first));
     text_append(ui_document_text(second), (const unsigned char *)notes, strlen(notes));
     text_saved(ui_document_text(second));
@@ -890,8 +890,9 @@ static void editor_page(void) {
     editor_wrap = ui_checkbox(row, "Wrap");
     lv_obj_add_state(editor_wrap, LV_STATE_CHECKED);
     lv_obj_add_event_cb(editor_wrap, editor_wrap_changed, LV_EVENT_VALUE_CHANGED, NULL);
-    editor_tabs = ui_tabs_create(content, editor_tab_changed, NULL);
-    demo_editor = ui_editor_create(content, ui_document_text(first));
+    document_area = ui_stack(content, LV_FLEX_FLOW_COLUMN, 0);
+    editor_tabs = ui_tabs_create(document_area, editor_tab_changed, NULL);
+    demo_editor = ui_editor_create(document_area, ui_document_text(first));
     if (!editor_tabs || !demo_editor)
         return;
     gx_lv_height(ui_editor_object(demo_editor), 260);
@@ -1207,6 +1208,7 @@ int main(int argc, char **argv) {
              "closes.");
         return !strcmp(argv[1], "--help") ? 0 : 1;
     }
+    gx_lv_application("org.riplix.GraphiteGallery", "Graphite Gallery", "grid-2x2");
     gx_lv_minimum(640, 460);
     if (gx_lv_open("Graphite Gallery", 760, 560) < 0)
         return 1;

@@ -4,6 +4,9 @@
  * a process switch. Independent packages bind only explicit runtime helpers. */
 #include "kernel.h"
 #include "terminal-size.h"
+#ifdef BOOT_TOUCHPAD
+#include "touchpad.h"
+#endif
 #ifdef PERSISTENT_ROOT
 #include "block.h"
 #endif
@@ -402,6 +405,18 @@ static void pages_release(void *address, size_t bytes) {
     for (size_t i = 0; i < (bytes + 4095) / 4096; ++i)
         page_free((uintptr_t)address + i * 4096);
 }
+#ifdef BOOT_GRAPHICS
+#include "graphics.inc"
+#endif
+#ifdef X64_PROCESS_MEMORY_FIXTURE
+#include "process_fixture_platform.h"
+static uint64_t process_fixture_sentinel(void *opaque) {
+    Context *c=opaque;
+    uint64_t value=c->current ^ (c->depth<<8) ^ c->stack ^ c->syscall ^ c->checkpoint;
+    for(unsigned i=0;i<CELLS;i+=1024)value=(value^c->cells[i])*1099511628211ULL;
+    return value;
+}
+#endif
 #include "images.inc"
 #include "jumps.inc"
 #include "process.inc"
@@ -421,6 +436,9 @@ U rcc_native_process_start(Context *c, U token, U argc, U argv, U hosted) {
         memcpy(c->extended_template, c->cells + 32U * BANK, c->extended_cells * 2);
     }
     memcpy(&c->initial_heap, &c->heap, sizeof(Heap));
+#ifdef X64_PROCESS_MEMORY_FIXTURE
+    process_fixture_platform_run(process_fixture_sentinel,c);
+#endif
     rcc_native_process_call(c, token, 0, 0);
     for (;;) {
         Frame *f = frame(c);
@@ -433,8 +451,16 @@ U rcc_native_process_start(Context *c, U token, U argc, U argv, U hosted) {
         case 0: break;
         case 4: {
             U status = c->a;
+#ifdef BOOT_TOUCHPAD
+            touchpad_stop();
+#endif
             for (unsigned i = 0; i < PROCESSES; ++i)
-                if (c->processes[i]) { process_release(c->processes[i]); c->processes[i] = NULL; }
+                if (c->processes[i]) {
+#ifdef BOOT_GRAPHICS
+                    gx_release((uint64_t)i+1);
+#endif
+                    process_release(c->processes[i]); c->processes[i] = NULL;
+                }
             images_collect(c);
             if (c->extended_template) pages_release(c->extended_template, c->extended_cells * 2);
             U balance = page_available() + page_mapping_owned();
@@ -448,6 +474,9 @@ U rcc_native_process_start(Context *c, U token, U argc, U argv, U hosted) {
         case 9: case 10: process_switch(c, c->a, c->result, op == 10); break;
         case 11: process_exec(c, c->a, c->b); break;
         case 12:
+#ifdef BOOT_GRAPHICS
+            if(graphics_syscall(c,c->a,c->result))break;
+#endif
             rcc_native_process_argument(c, 0, c->a);
             rcc_native_process_call(c, c->syscall, 1, c->result); break;
         case 13: case 14: process_jump(c, op, c->a, c->b, c->result); break;
@@ -569,10 +598,22 @@ U rcc_native_ext_rcc_hosted_idle(Context *c, U ms) {
 }
 
 U rcc_native_ext_rcc_hosted_gx(Context *c, U operation, U arguments) {
+#ifdef BOOT_GRAPHICS
+    if(arguments>UINT32_MAX || operation>UINT32_MAX)return (uint32_t)-22;
+    uint16_t *words=graphics_span(c,(uint32_t)arguments,24,1);
+    if(!words)return (uint32_t)-14;
+    uint32_t a[12];for(unsigned i=0;i<12;i++)a[i]=words[i*2]|(uint32_t)words[i*2+1]<<16;
+    graphics_ensure();input_poll();
+    GxGuest guest={c,graphics_span};
+    int32_t result=gx_call((uint64_t)c->current+1,(unsigned)operation,a,&guest);
+    for(unsigned i=0;i<12;i++){words[i*2]=a[i];words[i*2+1]=a[i]>>16;}
+    return (uint32_t)result;
+#else
     (void)c; (void)arguments;
     /* No hosted window service: its shortcut queue is empty; all other
      * operations explicitly return EOPNOTSUPP. */
     return operation == 11 ? 0 : (uint32_t)-95;
+#endif
 }
 U rcc_native_ext_rcc_hosted_input(Context *c) { (void)c; return (uint16_t)console_input(); }
 #ifdef RIPLIX_BOOT

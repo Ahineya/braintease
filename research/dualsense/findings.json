@@ -1,0 +1,4710 @@
+{
+  "analysis_version": 2,
+  "archive_commit": "d520913335e797be8497c805c15a039e6a8ddc3c",
+  "input_hashes": {
+    "analyze.py": "346b8d11a880936341c15e3b37257ec3aea1c8645ab57cfbbbde70d80ae3f725",
+    "fetch.py": "cebcf18ddcbb59c4d2b19b116b06df5b10e60435dd8d223324ab1026d9fbf198",
+    "catalog.json": "8e636d5f9e20daf69a2c98083b12cc6dbde8fee2aac26b9029e52c01c691d88d",
+    "controller.json": "9167dec92be019834bd40aeff3224ba5cfd9f9a4b4f7172d62d236f82b15d6a8"
+  },
+  "controller_report_decoded": {
+    "build_date": "Jul  4 2025",
+    "build_time": "10:10:32",
+    "hardware_version": 1558,
+    "internal_firmware_version": 17825834,
+    "update_version": 1584
+  },
+  "controller_metadata_matches": [
+    "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin"
+  ],
+  "images": [
+    {
+      "file": "firmware/dualsense/type-0004/0x0297/FWUPDATE0004.bin",
+      "sha256": "e4627d5e876acadc60d52bdd8a8e48c15186d4ba50e1e0eec760495f63220459",
+      "family": "FWUPDATE0004",
+      "version": "0x0297",
+      "header": {
+        "build_date": "Dec 16 2021",
+        "build_time": "05:15:19",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 1280,
+        "internal_firmware_version": 17039372,
+        "updater_family": 4,
+        "update_version": 663,
+        "description": "Copyright (C) 2021 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20211216141537",
+        "opaque_last_16_header_bytes": "63b80ea0239f161cba668abb04ed47be"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323020536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004465632031362032303231000000000030353a31353a313900000000000000000200e60c0000100000f00400000500000c000401040000009702000000000000436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e303120202020202020202020202020202020203230323131323136313431353337000063b80ea0239f161cba668abb04ed47be",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "c770960a81fdb40ec82af93674b5aacb965de1188326014a23d7f760fcf5d20d",
+            "entropy_bits_per_byte": 7.999416121327026,
+            "entropy_4k_min": 7.94640386464647,
+            "entropy_4k_max": 7.963003070042839,
+            "entropy_4k_mean": 7.954446365615344,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999416121327026,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 72468,
+                "text": "<VTv-cvcgD1c"
+              },
+              {
+                "offset": 231860,
+                "text": "kgBsR_pR_2t0"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4200009702000000000000003504000b00010032303231313231363134313334320000",
+          "secondary_words_40_60": [
+            663,
+            0,
+            275712,
+            65547,
+            825372722,
+            909193777,
+            858862641,
+            12852
+          ],
+          "secondary_update_version": 663,
+          "secondary_timestamp_candidate": "20211216141342",
+          "secondary_length_candidate": 275712,
+          "secondary_version_word": 65547,
+          "active_end_before_uniform_tail": 599488,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "d19dd78289362b41e30ab9c845e2c84fc439bcda4d5de60c57a023ce08b3895b",
+            "entropy_bits_per_byte": 6.468880009636208,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.965436461978523,
+            "entropy_4k_mean": 5.64778735576798,
+            "zlib_compressed_ratio": 0.7030041717541717,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7331,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 275808,
+            "entropy_excluding_uniform_tail": 7.999343271369059,
+            "zlib_ratio_excluding_uniform_tail": 1.000329939668175,
+            "uniform_runs_64plus": [
+              {
+                "offset": 275808,
+                "length": 117312,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 21450,
+                "text": "H@v1;+\\L]4hH"
+              },
+              {
+                "offset": 25477,
+                "text": "6X[xX?G.POSF3"
+              },
+              {
+                "offset": 43352,
+                "text": "(ivnb1UD/ed)"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e449702000000000000323032313132313631343133343200000051030006000000",
+          "secondary_words_40_60": [
+            663,
+            0,
+            825372722,
+            909193777,
+            858862641,
+            12852,
+            217344,
+            6
+          ],
+          "secondary_update_version": 663,
+          "secondary_timestamp_candidate": "20211216141342",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "f27af691b1497db84c7766043d411c5b2c0a61bc189afc26940cf94623709ee8",
+            "entropy_bits_per_byte": 7.790533376286813,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.965294103217378,
+            "entropy_4k_mean": 7.548418782665779,
+            "zlib_compressed_ratio": 0.932520910462087,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.99903518032315,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 158372,
+                "text": "]l-6Ay~06OI(C<"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 98,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0307/FWUPDATE0004.bin",
+      "sha256": "612e15d910d670897c442e4305ad4e5481907494b6ce8d63ce8ce82b9b42c879",
+      "family": "FWUPDATE0004",
+      "version": "0x0307",
+      "header": {
+        "build_date": "May 18 2022",
+        "build_time": "09:33:22",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 1280,
+        "internal_firmware_version": 17039399,
+        "updater_family": 4,
+        "update_version": 775,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20220518173357",
+        "opaque_last_16_header_bytes": "c56fae82ad0517819a67f0101d065cff"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004d61792031382032303232000000000030393a33333a323200000000000000000200e60c0000100000f004000005000027000401040000000703000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e3031202020202020202020202020202020202032303232303531383137333335370000c56fae82ad0517819a67f0101d065cff",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "09478f9247056f97e076a0e3fc612d42d75fa3e3fb80ccf5e378aa9baba1c41c",
+            "entropy_bits_per_byte": 7.99947047135252,
+            "entropy_4k_min": 7.945081801746984,
+            "entropy_4k_max": 7.961738817489271,
+            "entropy_4k_mean": 7.954513049003453,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.99947047135252,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4200000703000000000000003504000b00010032303232303531383137323035320000",
+          "secondary_words_40_60": [
+            775,
+            0,
+            275712,
+            65547,
+            842149938,
+            942748976,
+            808597297,
+            12853
+          ],
+          "secondary_update_version": 775,
+          "secondary_timestamp_candidate": "20220518172052",
+          "secondary_length_candidate": 275712,
+          "secondary_version_word": 65547,
+          "active_end_before_uniform_tail": 599488,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "5f155dc34683fd880a531fa454ff2134aed7bd8098ec41bc8c7c9543e96d059e",
+            "entropy_bits_per_byte": 6.46914766086389,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.9646806591904,
+            "entropy_4k_mean": 5.647651027394879,
+            "zlib_compressed_ratio": 0.7030143467643467,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7331,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 275808,
+            "entropy_excluding_uniform_tail": 7.999257811240458,
+            "zlib_ratio_excluding_uniform_tail": 1.000329939668175,
+            "uniform_runs_64plus": [
+              {
+                "offset": 275808,
+                "length": 117312,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e440703000000000000323032323035313831373230353200000051030006000000",
+          "secondary_words_40_60": [
+            775,
+            0,
+            842149938,
+            942748976,
+            808597297,
+            12853,
+            217344,
+            6
+          ],
+          "secondary_update_version": 775,
+          "secondary_timestamp_candidate": "20220518172052",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "de4f668a0751ff32a0f5a892b5b52c2f3dbfadd50da446bf277a90b9168f3373",
+            "entropy_bits_per_byte": 7.791962299129693,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.961644478911666,
+            "entropy_4k_mean": 7.54758811700426,
+            "zlib_compressed_ratio": 0.9325251953928424,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999192978864101,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 112,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0356/FWUPDATE0004.bin",
+      "sha256": "c9a8eb7039b3dfcbea877962656c6c99d1fc1199ee6215322b53112f6026ac81",
+      "family": "FWUPDATE0004",
+      "version": "0x0356",
+      "header": {
+        "build_date": "Dec 16 2022",
+        "build_time": "02:44:31",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 1280,
+        "internal_firmware_version": 17235976,
+        "updater_family": 4,
+        "update_version": 854,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20221216114737",
+        "opaque_last_16_header_bytes": "74df7a29f2d542bd802567d6f647e7a6"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004465632031362032303232000000000030323a34343a333100000000000000000200e60c0000100000f004000005000008000701040000005603000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e303120202020202020202020202020202020203230323231323136313134373337000074df7a29f2d542bd802567d6f647e7a6",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "fae56d1ea8a7a8a02af6ade489035fbe97f36224e349686446f0015c8d21e9fb",
+            "entropy_bits_per_byte": 7.999504748213273,
+            "entropy_4k_min": 7.943774032832617,
+            "entropy_4k_max": 7.9650076871509565,
+            "entropy_4k_mean": 7.954001764302252,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999504748213273,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 51725,
+                "text": "Zdqw^YV47$(4,"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4200005603000000000000003504000b00010032303232313231363131333031390000",
+          "secondary_words_40_60": [
+            854,
+            0,
+            275712,
+            65547,
+            842149938,
+            909193777,
+            808661297,
+            14641
+          ],
+          "secondary_update_version": 854,
+          "secondary_timestamp_candidate": "20221216113019",
+          "secondary_length_candidate": 275712,
+          "secondary_version_word": 65547,
+          "active_end_before_uniform_tail": 599488,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "ce798df101679545579141d125beb7989618a2d5e93a22668c614ec95866c1d3",
+            "entropy_bits_per_byte": 6.469945355193555,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.96193040057851,
+            "entropy_4k_mean": 5.64747753363632,
+            "zlib_compressed_ratio": 0.7030143467643467,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7331,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 275808,
+            "entropy_excluding_uniform_tail": 7.999232110806671,
+            "zlib_ratio_excluding_uniform_tail": 1.000329939668175,
+            "uniform_runs_64plus": [
+              {
+                "offset": 275808,
+                "length": 117312,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e445603000000000000323032323132313631313330313900000051030006000000",
+          "secondary_words_40_60": [
+            854,
+            0,
+            842149938,
+            909193777,
+            808661297,
+            14641,
+            217344,
+            6
+          ],
+          "secondary_update_version": 854,
+          "secondary_timestamp_candidate": "20221216113019",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "93e251e486ea2d92d84e9af15444b72942b01c4c63e2e94f50a0fcbc5f98db67",
+            "entropy_bits_per_byte": 7.79160564890343,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.963531358864165,
+            "entropy_4k_mean": 7.547091186695593,
+            "zlib_compressed_ratio": 0.932529480323598,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999088223168463,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 136509,
+                "text": "7xypoDZ9.jfs5"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [
+            393153
+          ],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 128,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0402/FWUPDATE0004.bin",
+      "sha256": "23a0f6b3bba9c6068be279e2841799af655ea8410226c2a0fd82afd96b93c714",
+      "family": "FWUPDATE0004",
+      "version": "0x0402",
+      "header": {
+        "build_date": "Jun 16 2023",
+        "build_time": "17:08:16",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 1280,
+        "internal_firmware_version": 17367042,
+        "updater_family": 4,
+        "update_version": 1026,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20230616171053",
+        "opaque_last_16_header_bytes": "7dab112e33247c9625b98aa9afdcbbaa"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756e2031362032303233000000000031373a30383a313600000000000000000200e60c0000100000f004000005000002000901040000000204000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e30312020202020202020202020202020202020323032333036313631373130353300007dab112e33247c9625b98aa9afdcbbaa",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "1c499d5854e03fc805a47d2cf374ac64486b0b857c0db061bd5af382a6d4cc24",
+            "entropy_bits_per_byte": 7.999473545448808,
+            "entropy_4k_min": 7.939512050638515,
+            "entropy_4k_max": 7.963411057607501,
+            "entropy_4k_mean": 7.954637018243679,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999473545448808,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4200000204000000000000804904000300020032303233303631363137303030360000",
+          "secondary_words_40_60": [
+            1026,
+            0,
+            280960,
+            131075,
+            858927154,
+            909194800,
+            808466225,
+            13872
+          ],
+          "secondary_update_version": 1026,
+          "secondary_timestamp_candidate": "20230616170006",
+          "secondary_length_candidate": 280960,
+          "secondary_version_word": 131075,
+          "active_end_before_uniform_tail": 604736,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "18009fc894a31efde45063452187396a25d665ce244f078c350c008a7b4202b5",
+            "entropy_bits_per_byte": 6.558597335331075,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.9619307595965445,
+            "entropy_4k_mean": 5.75558706064507,
+            "zlib_compressed_ratio": 0.7160002035002035,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7003,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 281056,
+            "entropy_excluding_uniform_tail": 7.99927366979385,
+            "zlib_ratio_excluding_uniform_tail": 1.0003415689399977,
+            "uniform_runs_64plus": [
+              {
+                "offset": 281056,
+                "length": 112064,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 180930,
+                "text": "y9+oeNiivIhm"
+              },
+              {
+                "offset": 221885,
+                "text": "%jue$a?`L0O&"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e440204000000000000323032333036313631373030303500000051030006000000",
+          "secondary_words_40_60": [
+            1026,
+            0,
+            858927154,
+            909194800,
+            808466225,
+            13616,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1026,
+          "secondary_timestamp_candidate": "20230616170005",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "f57334b1778ece0d0dd254d305ba6b7981a9ba896d9fcb17ed1d0dbdaba6ae14",
+            "entropy_bits_per_byte": 7.79227158659308,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.9658845032418135,
+            "entropy_4k_mean": 7.546911093423474,
+            "zlib_compressed_ratio": 0.9325123406005759,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999205365599485,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 82117,
+                "text": "eyBBlC:{fu%5"
+              },
+              {
+                "offset": 140165,
+                "text": "L+NyzA ;l@$Z"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 107,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0458/FWUPDATE0004.bin",
+      "sha256": "499ed91e02d7408d0ea60d01af81b30466ea1688e5b79f0a2c63c6521260eb2d",
+      "family": "FWUPDATE0004",
+      "version": "0x0458",
+      "header": {
+        "build_date": "Jan 29 2024",
+        "build_time": "09:13:59",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 1280,
+        "internal_firmware_version": 17563658,
+        "updater_family": 4,
+        "update_version": 1112,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20240129091625",
+        "opaque_last_16_header_bytes": "3fcceb31fd78745fdd297d1658d34a09"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a616e2032392032303234000000000030393a31333a353900000000000000000200e60c0000100000f00400000500000a000c01040000005804000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e30312020202020202020202020202020202020323032343031323930393136323500003fcceb31fd78745fdd297d1658d34a09",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "5f10ab9e7639f2405dc4c7cec8c728c3cb18eb3ee168de0ddfe75a96e64d22de",
+            "entropy_bits_per_byte": 7.999477106541122,
+            "entropy_4k_min": 7.943619613679658,
+            "entropy_4k_max": 7.962445242697952,
+            "entropy_4k_mean": 7.954737200289137,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999477106541122,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 129084,
+                "text": "Qd9sb1wQ0dI?u<"
+              },
+              {
+                "offset": 140238,
+                "text": "whS3`^k.x9?l"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d420000580400000000000000f205000900020032303234303132393039303532370000",
+          "secondary_words_40_60": [
+            1112,
+            0,
+            389632,
+            131081,
+            875704370,
+            959590704,
+            892352816,
+            14130
+          ],
+          "secondary_update_version": 1112,
+          "secondary_timestamp_candidate": "20240129090527",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131081,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "b62e5fbc5b36d7dfa6ad1d5dadc3c4f455cbe7dc12a2755e1fd01bade1e5e0ed",
+            "entropy_bits_per_byte": 7.99086253496272,
+            "entropy_4k_min": 7.944656746625512,
+            "entropy_4k_max": 7.9649057797007785,
+            "entropy_4k_mean": 7.954242028204355,
+            "zlib_compressed_ratio": 0.9918370980870981,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999550083597836,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 260134,
+                "text": "ivKJe<t^jO\\N"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e445804000000000000323032343031323930393035323600000051030006000000",
+          "secondary_words_40_60": [
+            1112,
+            0,
+            875704370,
+            959590704,
+            892352816,
+            13874,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1112,
+          "secondary_timestamp_candidate": "20240129090526",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "25761a6d4e597593bd4a4bcae4925e6d2c86cd3e220bac0c2a8bb2e4f8437593",
+            "entropy_bits_per_byte": 7.793154717708915,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.963849976324516,
+            "entropy_4k_mean": 7.546909218684377,
+            "zlib_compressed_ratio": 0.9325337652543535,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.99922331454123,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 194847,
+                "text": "v0 6O$0c,-uH"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 121,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+      "sha256": "5ecb23a0c6750c2026cb136a1d284ae5998833ab12138a5f144b53a9aa76cef5",
+      "family": "FWUPDATE0004",
+      "version": "0x0520",
+      "header": {
+        "build_date": "Jun 24 2024",
+        "build_time": "11:16:21",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 2048,
+        "internal_firmware_version": 17760256,
+        "updater_family": 4,
+        "update_version": 1312,
+        "description": "Copyright (C) 2024 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20240624111853",
+        "opaque_last_16_header_bytes": "23dcf43c4e327ee9277f244a56d4be22"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756e2032342032303234000000000031313a31363a323100000000000000000200e60c0000100000f004000008000000000f01040000002005000000000000436f7079726967687420284329203230323420536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e303120202020202020202020202020202020203230323430363234313131383533000023dcf43c4e327ee9277f244a56d4be22",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "fd7227c16064546b50c7c72b3bdbb09dfa62904a81858968570dfc320c8f69a6",
+            "entropy_bits_per_byte": 7.999412915868762,
+            "entropy_4k_min": 7.9426511297770395,
+            "entropy_4k_max": 7.962386638360214,
+            "entropy_4k_mean": 7.954180403166058,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999412915868762,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 252097,
+                "text": "Zl6/*}D8N?pa"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d420000200500000000000000f205000a00020032303234303632343131333533330000",
+          "secondary_words_40_60": [
+            1312,
+            0,
+            389632,
+            131082,
+            875704370,
+            875705904,
+            892547377,
+            13107
+          ],
+          "secondary_update_version": 1312,
+          "secondary_timestamp_candidate": "20240624113533",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "f4d0e8ecb8138adc8867ccd27a94dc9f67de66b7330a2331817c3a2f60c0c6d8",
+            "entropy_bits_per_byte": 7.990994461722806,
+            "entropy_4k_min": 7.9448466190118205,
+            "entropy_4k_max": 7.964833378547997,
+            "entropy_4k_mean": 7.954100775864873,
+            "zlib_compressed_ratio": 0.9918523606023606,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999500431805651,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 353416,
+                "text": "I=LMF(d4GNd'F"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e442005000000000000323032343036323431313335333200000051030006000000",
+          "secondary_words_40_60": [
+            1312,
+            0,
+            875704370,
+            875705904,
+            892547377,
+            12851,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1312,
+          "secondary_timestamp_candidate": "20240624113532",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "441d754b6dc4c392b54232ad0e003b9d062f9dafdd17900e4f550d9e5511d102",
+            "entropy_bits_per_byte": 7.7907583757273,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.961682038178512,
+            "entropy_4k_mean": 7.547464334375989,
+            "zlib_compressed_ratio": 0.9325123406005759,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.9991795577467375,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 212690,
+                "text": "~vp6q.M1}Zgd]"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 117,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin",
+      "sha256": "861ad95a99b16805ff20f5690372988662c4f69c6ad0b266e793d7fc2292315a",
+      "family": "FWUPDATE0004",
+      "version": "0x0630",
+      "header": {
+        "build_date": "Jul  4 2025",
+        "build_time": "10:10:32",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 4864,
+        "internal_firmware_version": 17825834,
+        "updater_family": 4,
+        "update_version": 1584,
+        "description": "Copyright (C) 2025 Sony Interactive Entertainment Inc. Wireless controller 1.01",
+        "packaging_timestamp_candidate": "20250704101343",
+        "opaque_last_16_header_bytes": "7ea5060a7c0b04af377830127894934b"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756c2020342032303235000000000031303a31303a333200000000000000000200e60c0000100000f00400001300002a001001040000003006000000000000436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220312e30312020202020202020202020202020202020323032353037303431303133343300007ea5060a7c0b04af377830127894934b",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "362df2f3ed86a176186193055d58de51d4435058c5e59ff0e99176a4f4969dc0",
+            "entropy_bits_per_byte": 7.999427159923913,
+            "entropy_4k_min": 7.943854650974554,
+            "entropy_4k_max": 7.963548103242894,
+            "entropy_4k_mean": 7.954648852942844,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999427159923913,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 125371,
+                "text": "X6vL=?^Yi*~,"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d420000300600000000000000f205000a00020032303235303730343130313631390000",
+          "secondary_words_40_60": [
+            1584,
+            0,
+            389632,
+            131082,
+            892481586,
+            875575088,
+            909193265,
+            14641
+          ],
+          "secondary_update_version": 1584,
+          "secondary_timestamp_candidate": "20250704101619",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "7a8bbf3bcf0c079c2a15fadca02b1e3c5a26372d90e7433e526c6c5e4532919d",
+            "entropy_bits_per_byte": 7.990785228437204,
+            "entropy_4k_min": 7.941637011381651,
+            "entropy_4k_max": 7.965549276679048,
+            "entropy_4k_mean": 7.953579083843077,
+            "zlib_compressed_ratio": 0.991847273097273,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999420199839278,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 297171,
+                "text": "v\\l'zh9JHyit"
+              },
+              {
+                "offset": 387901,
+                "text": "f4I.80@PKy-="
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e443006000000000000323032353037303431303136313900000051030006000000",
+          "secondary_words_40_60": [
+            1584,
+            0,
+            892481586,
+            875575088,
+            909193265,
+            14641,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1584,
+          "secondary_timestamp_candidate": "20250704101619",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "e7d40dd4afc05e50b1af6dba375f81e3e2e5d8668d4a75da06af0760040704ed",
+            "entropy_bits_per_byte": 7.79139452016775,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.96164391867399,
+            "entropy_4k_mean": 7.547503907849447,
+            "zlib_compressed_ratio": 0.932529480323598,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999236627354323,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 63298,
+                "text": "*nI-]nMg7Fim%t>"
+              },
+              {
+                "offset": 162520,
+                "text": "id[rbz}Ddm~}"
+              },
+              {
+                "offset": 164570,
+                "text": "*<:&QtYlz|;i"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 136,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-000B/0x0520/FWUPDATE000B.bin",
+      "sha256": "79a20c4f58679cbf3876049e99254703014bbe8f368fd8bc601898a3f8bbb201",
+      "family": "FWUPDATE000B",
+      "version": "0x0520",
+      "header": {
+        "build_date": "Jun 24 2024",
+        "build_time": "11:55:41",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 2048,
+        "internal_firmware_version": 17760256,
+        "updater_family": 11,
+        "update_version": 1312,
+        "description": "Copyright (C) 2024 Sony Interactive Entertainment Inc. Wireless controller 2.10",
+        "packaging_timestamp_candidate": "20240624115814",
+        "opaque_last_16_header_bytes": "7afb29cf6a372951440a34b86eb28ba9"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756e2032342032303234000000000031313a35353a343100000000000000000200e60c0000100000f004000008000000000f010b0000002005000000000000436f7079726967687420284329203230323420536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e31302020202020202020202020202020202020323032343036323431313538313400007afb29cf6a372951440a34b86eb28ba9",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "2c221810ebb9f501c1893652c8c45f9372dac26bbd3ab9d89bbc721cefda2b7c",
+            "entropy_bits_per_byte": 7.999430520225302,
+            "entropy_4k_min": 7.94454740878811,
+            "entropy_4k_max": 7.965404506471052,
+            "entropy_4k_mean": 7.95466818750077,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999430520225302,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 44744,
+                "text": "`xS Cmg=Q*?W%"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "GwenB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004777656e42000000200500000000000080ca05000f10030032303234303632343132303734350000",
+          "secondary_words_40_60": [
+            1312,
+            0,
+            379520,
+            200719,
+            875704370,
+            875705904,
+            925905457,
+            13620
+          ],
+          "secondary_update_version": 1312,
+          "secondary_timestamp_candidate": "20240624120745",
+          "secondary_length_candidate": 379520,
+          "secondary_version_word": 200719,
+          "active_end_before_uniform_tail": 703296,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "7dd761d6769fb155c3ca3389514024eb25b91a251cc9ab783fc4f14c18c086c7",
+            "entropy_bits_per_byte": 7.922620402230293,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.965068644605668,
+            "entropy_4k_mean": 7.769587859551005,
+            "zlib_compressed_ratio": 0.9662494912494912,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 843,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 379616,
+            "entropy_excluding_uniform_tail": 7.99947571705509,
+            "zlib_ratio_excluding_uniform_tail": 1.0003319143555593,
+            "uniform_runs_64plus": [
+              {
+                "offset": 379616,
+                "length": 13504,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 80023,
+                "text": "Sxp`Gdya1nT4"
+              },
+              {
+                "offset": 320389,
+                "text": "1+\\O?8-$A]]o"
+              },
+              {
+                "offset": 362898,
+                "text": "K/Q'g/4vO&<%"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e442005000000000000323032343036323431323037343500000051030006000000",
+          "secondary_words_40_60": [
+            1312,
+            0,
+            875704370,
+            875705904,
+            925905457,
+            13620,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1312,
+          "secondary_timestamp_candidate": "20240624120745",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "402d0bd53ac3f632deec37e7000afdb211cebcd58bb29ac319a878535fcba400",
+            "entropy_bits_per_byte": 7.791137239355372,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.962103734436341,
+            "entropy_4k_mean": 7.5485054627644095,
+            "zlib_compressed_ratio": 0.9325423351158645,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999274250668139,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [
+            866539
+          ],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 116,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-000B/0x0630/FWUPDATE000B.bin",
+      "sha256": "b66528795683d214ca06fe4672d298de75bf019bd5046442cbec63fc02974f86",
+      "family": "FWUPDATE000B",
+      "version": "0x0630",
+      "header": {
+        "build_date": "Jul  4 2025",
+        "build_time": "10:38:40",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 4352,
+        "internal_firmware_version": 17825834,
+        "updater_family": 11,
+        "update_version": 1584,
+        "description": "Copyright (C) 2025 Sony Interactive Entertainment Inc. Wireless controller 2.10",
+        "packaging_timestamp_candidate": "20250704104151",
+        "opaque_last_16_header_bytes": "4fd17ebbed579349c77c5c5c89d46451"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756c2020342032303235000000000031303a33383a343000000000000000000200e60c0000100000f00400001100002a0010010b0000003006000000000000436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e31302020202020202020202020202020202020323032353037303431303431353100004fd17ebbed579349c77c5c5c89d46451",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "8a60c577dd25306e6197b2c765f7305e12e901e5f4e4d443d72c1a10678268bd",
+            "entropy_bits_per_byte": 7.999392386672346,
+            "entropy_4k_min": 7.944607794095635,
+            "entropy_4k_max": 7.965055037754673,
+            "entropy_4k_mean": 7.954294250488196,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999392386672346,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 170159,
+                "text": "_o_=)#xOCc9I"
+              },
+              {
+                "offset": 270517,
+                "text": "[beb6?2qcN$a"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "GwenB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004777656e42000000300600000000000080ca05001010030032303235303730343130353930300000",
+          "secondary_words_40_60": [
+            1584,
+            0,
+            379520,
+            200720,
+            892481586,
+            875575088,
+            959787057,
+            12336
+          ],
+          "secondary_update_version": 1584,
+          "secondary_timestamp_candidate": "20250704105900",
+          "secondary_length_candidate": 379520,
+          "secondary_version_word": 200720,
+          "active_end_before_uniform_tail": 703296,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "a2f54ea09a83d2909d71985b06279238cb3514f84505e7f28dc53327dbe96c22",
+            "entropy_bits_per_byte": 7.922412911197719,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.9640716467863655,
+            "entropy_4k_mean": 7.769944952925957,
+            "zlib_compressed_ratio": 0.9662342287342287,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 843,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 379616,
+            "entropy_excluding_uniform_tail": 7.999549018305065,
+            "zlib_ratio_excluding_uniform_tail": 1.0003319143555593,
+            "uniform_runs_64plus": [
+              {
+                "offset": 379616,
+                "length": 13504,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 17177,
+                "text": "gRPos&CIG7<K"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e443006000000000000323032353037303431303539303000000051030006000000",
+          "secondary_words_40_60": [
+            1584,
+            0,
+            892481586,
+            875575088,
+            959787057,
+            12336,
+            217344,
+            6
+          ],
+          "secondary_update_version": 1584,
+          "secondary_timestamp_candidate": "20250704105900",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "663852b26b58b3758205838e8ceec85dab184336786f17aacb83451b48778c9c",
+            "entropy_bits_per_byte": 7.791532249046595,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.965954574553669,
+            "entropy_4k_mean": 7.547098387590039,
+            "zlib_compressed_ratio": 0.9325123406005759,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.99914791284282,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 148116,
+                "text": "adAU**`LIZAH4"
+              },
+              {
+                "offset": 206686,
+                "text": "b/Ag\\oGA8\\=("
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 121,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-000E/0x0633/FWUPDATE000E.bin",
+      "sha256": "ec5734da8f4f658288ca45c51a19430c66da89c797c7df6c1372b6f5c5806cff",
+      "family": "FWUPDATE000E",
+      "version": "0x0633",
+      "header": {
+        "build_date": "Sep 18 2025",
+        "build_time": "13:15:28",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 2304,
+        "internal_firmware_version": 17629186,
+        "updater_family": 14,
+        "update_version": 1587,
+        "description": "Copyright (C) 2024 Sony Interactive Entertainment Inc. Rhino Main Firmware",
+        "packaging_timestamp_candidate": "20250918131537",
+        "opaque_last_16_header_bytes": "f69e3bd3d29d01e2bccbfae713d64712"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000005365702031382032303235000000000031333a31353a323800000000000000000200e60c0000100000f004000009000002000d010e0000003306000000000000436f7079726967687420284329203230323420536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e205268696e6f204d61696e204669726d776172652020202020202020202020202020202020202020202032303235303931383133313533370000f69e3bd3d29d01e2bccbfae713d64712",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "fc40023f19c0a9117c812cb95edc4c3ae1d3d6130aef6cb76dd662617167d3f1",
+            "entropy_bits_per_byte": 7.999421154897987,
+            "entropy_4k_min": 7.945019687896929,
+            "entropy_4k_max": 7.963860568504339,
+            "entropy_4k_mean": 7.954261023084264,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999421154897987,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 86478,
+                "text": ".:,*s<{]dzp`"
+              },
+              {
+                "offset": 272223,
+                "text": "C#'|<Tx(E0K6"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d420000330600000000000000f205000a00020032303235303931383133313232370000",
+          "secondary_words_40_60": [
+            1587,
+            0,
+            389632,
+            131082,
+            892481586,
+            942750000,
+            842085169,
+            14130
+          ],
+          "secondary_update_version": 1587,
+          "secondary_timestamp_candidate": "20250918131227",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "0ddfcc2d3bca3309eef4dc6f4e13d8fe8cadd63fd76a52e858294770a7cd49ba",
+            "entropy_bits_per_byte": 7.990994406040145,
+            "entropy_4k_min": 7.944578574780048,
+            "entropy_4k_max": 7.962655519278879,
+            "entropy_4k_mean": 7.954746868322125,
+            "zlib_compressed_ratio": 0.9918574481074481,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.9995746958282,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 101786,
+                "text": "w%RxH+:Jgp(#"
+              },
+              {
+                "offset": 125989,
+                "text": ")F*)pW<-.4E1FI`"
+              },
+              {
+                "offset": 136446,
+                "text": "_H'-=*]8e.B "
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e44330600000000000032303235303931383133313232370000008403000a000000",
+          "secondary_words_40_60": [
+            1587,
+            0,
+            892481586,
+            942750000,
+            842085169,
+            14130,
+            230400,
+            10
+          ],
+          "secondary_update_version": 1587,
+          "secondary_timestamp_candidate": "20250918131227",
+          "secondary_length_candidate": 230400,
+          "secondary_version_word": 10,
+          "active_end_before_uniform_tail": 947392,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "5a49d862fc933113e4e28f9b811199d77d0df80611b405a3a0ea9f891ce6cb6a",
+            "entropy_bits_per_byte": 7.983534864007039,
+            "entropy_4k_min": 7.947524072269542,
+            "entropy_4k_max": 7.964529771282261,
+            "entropy_4k_mean": 7.955063870149364,
+            "zlib_compressed_ratio": 0.9883021390374331,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 179,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 230496,
+            "entropy_excluding_uniform_tail": 7.999172363259441,
+            "zlib_ratio_excluding_uniform_tail": 1.0003514160766347,
+            "uniform_runs_64plus": [
+              {
+                "offset": 230496,
+                "length": 2880,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 104648,
+                "text": ",:HE~5S~sZCe"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 118,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense/type-000E/0x0641/FWUPDATE000E.bin",
+      "sha256": "b9c217d8ded5f09f03034e7e5037af0c174c3c77a3cbd201ee5fd219ee448fc8",
+      "family": "FWUPDATE000E",
+      "version": "0x0641",
+      "header": {
+        "build_date": "Mar 17 2026",
+        "build_time": "16:18:15",
+        "format_word_observed": 2,
+        "usb_product_id": 3302,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 2304,
+        "internal_firmware_version": 17629194,
+        "updater_family": 14,
+        "update_version": 1601,
+        "description": "Copyright (C) 2024 Sony Interactive Entertainment Inc. Rhino Main Firmware",
+        "packaging_timestamp_candidate": "20260317162024",
+        "opaque_last_16_header_bytes": "14c1791c154bde539754b70572d403a9"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004d61722031372032303236000000000031363a31383a313500000000000000000200e60c0000100000f00400000900000a000d010e0000004106000000000000436f7079726967687420284329203230323420536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e205268696e6f204d61696e204669726d77617265202020202020202020202020202020202020202020203230323630333137313632303234000014c1791c154bde539754b70572d403a9",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "a14a5cedfbb6e57387578ef3a29d24882fde7ccd48cd9a5c68b7dbcbaaeff77a",
+            "entropy_bits_per_byte": 7.999386225916153,
+            "entropy_4k_min": 7.942285189898082,
+            "entropy_4k_max": 7.964515566505457,
+            "entropy_4k_mean": 7.954527930372996,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999386225916153,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 26051,
+                "text": "qG;`Dte=ez6U"
+              },
+              {
+                "offset": 63713,
+                "text": "f[`[P[yY{tJB"
+              },
+              {
+                "offset": 174934,
+                "text": "%GwfWW2H4U0m"
+              },
+              {
+                "offset": 228660,
+                "text": "DVz4V#(Y}We_"
+              },
+              {
+                "offset": 301052,
+                "text": "1zl6UN`h)|y+M"
+              },
+              {
+                "offset": 303835,
+                "text": "6HdY-#g1L=[-]"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomB",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d420000410600000000000000f205000a00020032303236303331373136313032340000",
+          "secondary_words_40_60": [
+            1601,
+            0,
+            389632,
+            131082,
+            909258802,
+            925971248,
+            808531505,
+            13362
+          ],
+          "secondary_update_version": 1601,
+          "secondary_timestamp_candidate": "20260317161024",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "ff0664faab2987d033d5f8509a348bbe6b38d4a0c3d436194d19f21d161ebf15",
+            "entropy_bits_per_byte": 7.9906882757622535,
+            "entropy_4k_min": 7.945005839959421,
+            "entropy_4k_max": 7.966527302754606,
+            "entropy_4k_mean": 7.954810955801596,
+            "zlib_compressed_ratio": 0.9918396418396418,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.9995625984508285,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 260514,
+                "text": "lqI5EQ2T@Vn+"
+              },
+              {
+                "offset": 304617,
+                "text": "?7'>QA{>W!Z/(-"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyBND",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479424e44410600000000000032303236303331373136313032340000008403000a000000",
+          "secondary_words_40_60": [
+            1601,
+            0,
+            909258802,
+            925971248,
+            808531505,
+            13362,
+            230400,
+            10
+          ],
+          "secondary_update_version": 1601,
+          "secondary_timestamp_candidate": "20260317161024",
+          "secondary_length_candidate": 230400,
+          "secondary_version_word": 10,
+          "active_end_before_uniform_tail": 947392,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "95242751e2016a4bfb5f0bae4b0c4eac10bcba6b3ef064497b8b76a01a6112b1",
+            "entropy_bits_per_byte": 7.98393063186755,
+            "entropy_4k_min": 7.9453899258786445,
+            "entropy_4k_max": 7.964857234385454,
+            "entropy_4k_mean": 7.953945112548225,
+            "zlib_compressed_ratio": 0.9882892842451666,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 179,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 230496,
+            "entropy_excluding_uniform_tail": 7.999228678864671,
+            "zlib_ratio_excluding_uniform_tail": 1.0003514160766347,
+            "uniform_runs_64plus": [
+              {
+                "offset": 230496,
+                "length": 2880,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 12950,
+                "text": "9g);\\S[Bz!w_'"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 125,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0113/FWUPDATE0044.bin",
+      "sha256": "f936c6ec5a8af88521772da1943ffd554ea1f3b40d61e5c19f1e3a35bc037f48",
+      "family": "FWUPDATE0044",
+      "version": "0x0113",
+      "header": {
+        "build_date": "Dec 16 2022",
+        "build_time": "11:16:16",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777228,
+        "updater_family": 68,
+        "update_version": 275,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20221216111810",
+        "opaque_last_16_header_bytes": "1e3549c0d7c673085e905f8ec940d6de"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004465632031362032303232000000000031313a31363a313600000000000000000200f20d0000100000f00400000200010c000001440000001301000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e32302020202020202020202020202020202020323032323132313631313138313000001e3549c0d7c673085e905f8ec940d6de",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "f9d544fc48c078d1319c6f243dec05f51f6cc79cf74034a062fed01382d7ec0c",
+            "entropy_bits_per_byte": 7.999430128374842,
+            "entropy_4k_min": 7.945280928244209,
+            "entropy_4k_max": 7.964069742956827,
+            "entropy_4k_mean": 7.954860171418477,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999430128374842,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4800001301000000000000003504000b00010032303232313231363131303530370000",
+          "secondary_words_40_60": [
+            275,
+            0,
+            275712,
+            65547,
+            842149938,
+            909193777,
+            892350769,
+            14128
+          ],
+          "secondary_update_version": 275,
+          "secondary_timestamp_candidate": "20221216110507",
+          "secondary_length_candidate": 275712,
+          "secondary_version_word": 65547,
+          "active_end_before_uniform_tail": 599488,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "1ebcd20777ba5868986cc574c470e8bf00070b40b5bcb34ca0e6f7ba1684b4f9",
+            "entropy_bits_per_byte": 6.468884870336063,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.9631218276366,
+            "entropy_4k_mean": 5.647547272010846,
+            "zlib_compressed_ratio": 0.7030143467643467,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7331,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 275808,
+            "entropy_excluding_uniform_tail": 7.999350199515911,
+            "zlib_ratio_excluding_uniform_tail": 1.000329939668175,
+            "uniform_runs_64plus": [
+              {
+                "offset": 275808,
+                "length": 117312,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 120655,
+                "text": "\"}OJ2VV\\9>Z.c"
+              },
+              {
+                "offset": 232570,
+                "text": "k-B'F_Su6Wm&"
+              },
+              {
+                "offset": 244713,
+                "text": "(Su&ST3l6\"3O"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e541301000000000000323032323132313631313035303600000051030006000000",
+          "secondary_words_40_60": [
+            275,
+            0,
+            842149938,
+            909193777,
+            892350769,
+            13872,
+            217344,
+            6
+          ],
+          "secondary_update_version": 275,
+          "secondary_timestamp_candidate": "20221216110506",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "ace8f52b7a48837cfe30f16d5c72e0267dfe4c9aa5708ca7202b71827b764b1c",
+            "entropy_bits_per_byte": 7.791626337541955,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.963173016555389,
+            "entropy_4k_mean": 7.546346981988462,
+            "zlib_compressed_ratio": 0.9325423351158645,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.9989914507822135,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 189679,
+                "text": "5P\"eS>HBP?]sF"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 105,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0154/FWUPDATE0044.bin",
+      "sha256": "e4e3ccff981960ac41e0d65eb85ef3584f2430971c4a06c8840f319891ef3c75",
+      "family": "FWUPDATE0044",
+      "version": "0x0154",
+      "header": {
+        "build_date": "Jun 19 2023",
+        "build_time": "14:47:34",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777270,
+        "updater_family": 68,
+        "update_version": 340,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20230619145051",
+        "opaque_last_16_header_bytes": "8c19ae24a572f9b7f12cda7be1fc8205"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756e2031392032303233000000000031343a34373a333400000000000000000200f20d0000100000f004000002000136000001440000005401000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e32302020202020202020202020202020202020323032333036313931343530353100008c19ae24a572f9b7f12cda7be1fc8205",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "267b3861d4c21a8f65db15aff75db7dc39c90d580c6e60a3112688889ff4f85e",
+            "entropy_bits_per_byte": 7.9995326118193235,
+            "entropy_4k_min": 7.944957073685115,
+            "entropy_4k_max": 7.963633390185135,
+            "entropy_4k_mean": 7.954393627273506,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.9995326118193235,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d4800005401000000000000003504000b00010032303233303631393134343031370000",
+          "secondary_words_40_60": [
+            340,
+            0,
+            275712,
+            65547,
+            858927154,
+            959526448,
+            808727601,
+            14129
+          ],
+          "secondary_update_version": 340,
+          "secondary_timestamp_candidate": "20230619144017",
+          "secondary_length_candidate": 275712,
+          "secondary_version_word": 65547,
+          "active_end_before_uniform_tail": 599488,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "0a9daf848b697132816d8ceefaaa5f111c0ccfbeda7ab4a88e44ffb1e960c82e",
+            "entropy_bits_per_byte": 6.468687229579765,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.962971467677586,
+            "entropy_4k_mean": 5.647613087758361,
+            "zlib_compressed_ratio": 0.7030194342694343,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 7331,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 275808,
+            "entropy_excluding_uniform_tail": 7.999411463580561,
+            "zlib_ratio_excluding_uniform_tail": 1.000329939668175,
+            "uniform_runs_64plus": [
+              {
+                "offset": 275808,
+                "length": 117312,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 5850,
+                "text": "[Yc!wdGy5wzt"
+              },
+              {
+                "offset": 176901,
+                "text": "{*uXq v6[Cqb"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e545401000000000000323032333036313931343430313600000051030006000000",
+          "secondary_words_40_60": [
+            340,
+            0,
+            858927154,
+            959526448,
+            808727601,
+            13873,
+            217344,
+            6
+          ],
+          "secondary_update_version": 340,
+          "secondary_timestamp_candidate": "20230619144016",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "f25a4af4c127c4fb99d37f95b0bc861dd251bc8f30817883019afbfec817535a",
+            "entropy_bits_per_byte": 7.79103259170166,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.964289060763872,
+            "entropy_4k_mean": 7.54770436960204,
+            "zlib_compressed_ratio": 0.932529480323598,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999181482594729,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 78153,
+                "text": "EniRs:tbJfm@"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 112,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0180/FWUPDATE0044.bin",
+      "sha256": "9763356b6049d47e8a4840ddeedd4c201b2ca05b8a7d99abd9e7e6901ab32165",
+      "family": "FWUPDATE0044",
+      "version": "0x0180",
+      "header": {
+        "build_date": "Jan 26 2024",
+        "build_time": "16:57:39",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777298,
+        "updater_family": 68,
+        "update_version": 384,
+        "description": "Copyright (C) 2022 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20240126170006",
+        "opaque_last_16_header_bytes": "222c5e8e8387cbd2b8706e1df1d11caa"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a616e2032362032303234000000000031363a35373a333900000000000000000200f20d0000100000f004000002000152000001440000008001000000000000436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e3230202020202020202020202020202020202032303234303132363137303030360000222c5e8e8387cbd2b8706e1df1d11caa",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "6c33d7bc5c1435da4867cc4ce396d334c97308c6562aa1d46650e8540cb98feb",
+            "entropy_bits_per_byte": 7.9994720935653,
+            "entropy_4k_min": 7.9466689439580644,
+            "entropy_4k_max": 7.966172281659086,
+            "entropy_4k_mean": 7.954817176427575,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.9994720935653,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d480000800100000000000000f205000900020032303234303132363136343335320000",
+          "secondary_words_40_60": [
+            384,
+            0,
+            389632,
+            131081,
+            875704370,
+            909259056,
+            859059761,
+            12853
+          ],
+          "secondary_update_version": 384,
+          "secondary_timestamp_candidate": "20240126164352",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131081,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "29211e247be1aaacd119da30870b2d72e310f14b4361baac4a3254f123d8833b",
+            "entropy_bits_per_byte": 7.990912296348473,
+            "entropy_4k_min": 7.942521350435713,
+            "entropy_4k_max": 7.962154594777438,
+            "entropy_4k_mean": 7.954158965046334,
+            "zlib_compressed_ratio": 0.9918421855921856,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999487513348469,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 9319,
+                "text": "`Wi$aW3U&W_(|0"
+              },
+              {
+                "offset": 152854,
+                "text": ":bk(#-*~B7\"u"
+              },
+              {
+                "offset": 306486,
+                "text": "cj8=CaX<y07*n"
+              },
+              {
+                "offset": 367822,
+                "text": "@!`?@Xy MhCdG"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e548001000000000000323032343031323631363433353200000051030006000000",
+          "secondary_words_40_60": [
+            384,
+            0,
+            875704370,
+            909259056,
+            859059761,
+            12853,
+            217344,
+            6
+          ],
+          "secondary_update_version": 384,
+          "secondary_timestamp_candidate": "20240126164352",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "066de0d80a49aec76f334c4c8beb02d0a08434f43c61ccc03b2422cab66958bf",
+            "entropy_bits_per_byte": 7.7908105653153195,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.96638076705029,
+            "entropy_4k_mean": 7.547934943549824,
+            "zlib_compressed_ratio": 0.9325251953928424,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999099321755559,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 132,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0200/FWUPDATE0044.bin",
+      "sha256": "e5b20ffb4e5fa72b1100f32c175e65735eabe8da4046444b7e936573d51d64db",
+      "family": "FWUPDATE0044",
+      "version": "0x0200",
+      "header": {
+        "build_date": "Jun 21 2024",
+        "build_time": "19:09:17",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777336,
+        "updater_family": 68,
+        "update_version": 512,
+        "description": "Copyright (C) 2024 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20240621191114",
+        "opaque_last_16_header_bytes": "62e72e8a367f420a3e764259ea56667b"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756e2032312032303234000000000031393a30393a313700000000000000000200f20d0000100000f004000002000178000001440000000002000000000000436f7079726967687420284329203230323420536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e323020202020202020202020202020202020203230323430363231313931313134000062e72e8a367f420a3e764259ea56667b",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "d437614f89252497558b6c35f0d355fb2b5c2af60c1e12c591cd921260141fe8",
+            "entropy_bits_per_byte": 7.999433606065057,
+            "entropy_4k_min": 7.943373397732263,
+            "entropy_4k_max": 7.964006514834509,
+            "entropy_4k_mean": 7.95521577247016,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999433606065057,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 251390,
+                "text": ";$m8Vh%lO9-;"
+              },
+              {
+                "offset": 295471,
+                "text": "lI[<1!)jwJ0f"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d480000000200000000000000f205000900020032303234303632303231323530300000",
+          "secondary_words_40_60": [
+            512,
+            0,
+            389632,
+            131081,
+            875704370,
+            808597040,
+            892481842,
+            12336
+          ],
+          "secondary_update_version": 512,
+          "secondary_timestamp_candidate": "20240620212500",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131081,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "578821a244b9c8c2ab1b4e4e40e7e91964719bed446e2bd5152a680f800e6d4b",
+            "entropy_bits_per_byte": 7.99115844933991,
+            "entropy_4k_min": 7.946900768592274,
+            "entropy_4k_max": 7.964068252317066,
+            "entropy_4k_mean": 7.954781552354087,
+            "zlib_compressed_ratio": 0.9918447293447293,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999604268873207,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 184026,
+                "text": "swYzA=$7MCx4"
+              },
+              {
+                "offset": 239392,
+                "text": "!o:C1~)MZ)2QP"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323120536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e540002000000000000323032343036323032313234353900000051030006000000",
+          "secondary_words_40_60": [
+            512,
+            0,
+            875704370,
+            808597040,
+            875704626,
+            14645,
+            217344,
+            6
+          ],
+          "secondary_update_version": 512,
+          "secondary_timestamp_candidate": "20240620212459",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "779c212dbdea2d15697041d65e780563fcbf7201ac4778aae3e205302735f75c",
+            "entropy_bits_per_byte": 7.792316003722188,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.960001000195532,
+            "entropy_4k_mean": 7.546468856093233,
+            "zlib_compressed_ratio": 0.9325166255313314,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999212953955124,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 151,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin",
+      "sha256": "a91bf4ce5e17f5aa87fea51bb7a910b5d7c42d5e122933d7f1f88d1402027a46",
+      "family": "FWUPDATE0044",
+      "version": "0x0213",
+      "header": {
+        "build_date": "Jul  4 2025",
+        "build_time": "12:40:01",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777351,
+        "updater_family": 68,
+        "update_version": 531,
+        "description": "Copyright (C) 2025 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20250704124337",
+        "opaque_last_16_header_bytes": "62d9a3b6c2ff783728635fe7d0983e66"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000004a756c2020342032303235000000000031323a34303a303100000000000000000200f20d0000100000f004000002000187000001440000001302000000000000436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e323020202020202020202020202020202020203230323530373034313234333337000062d9a3b6c2ff783728635fe7d0983e66",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "f09adfe239f3f4c86e65652e1c5762f6bc8e81daa3f1dc8663ddf67136a0ed3b",
+            "entropy_bits_per_byte": 7.999350970986918,
+            "entropy_4k_min": 7.942395114040095,
+            "entropy_4k_max": 7.960870686431145,
+            "entropy_4k_mean": 7.954339536512114,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999350970986918,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d480000130200000000000000f205000a00020032303235303730343132343432300000",
+          "secondary_words_40_60": [
+            531,
+            0,
+            389632,
+            131082,
+            892481586,
+            875575088,
+            875835953,
+            12338
+          ],
+          "secondary_update_version": 531,
+          "secondary_timestamp_candidate": "20250704124420",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "40a3d2db269b4946de8ea8b579a1ed4780c941b32007a39e17dc3ecfd0d8a16f",
+            "entropy_bits_per_byte": 7.991096799534034,
+            "entropy_4k_min": 7.945812683310617,
+            "entropy_4k_max": 7.963362725145382,
+            "entropy_4k_mean": 7.954841162788591,
+            "zlib_compressed_ratio": 0.9918345543345544,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999590493591864,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": []
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e541302000000000000323032353037303431323434313900000051030006000000",
+          "secondary_words_40_60": [
+            531,
+            0,
+            892481586,
+            875575088,
+            875835953,
+            14641,
+            217344,
+            6
+          ],
+          "secondary_update_version": 531,
+          "secondary_timestamp_candidate": "20250704124419",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "c04fbdab9537f28f712cd7cbbcd6d726f1fb545cf6ff206a16a97b8c2bd1cf21",
+            "entropy_bits_per_byte": 7.7914788107689485,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.962490342098664,
+            "entropy_4k_mean": 7.547043640828723,
+            "zlib_compressed_ratio": 0.9324952008775538,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999090558117452,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 80752,
+                "text": "502cQ*q:M:c2"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 131,
+        "validated_zlib_gzip_streams": []
+      }
+    },
+    {
+      "file": "firmware/dualsense-edge/type-0044/0x0217/FWUPDATE0044.bin",
+      "sha256": "c157eec635f809232e06c255a0847e6b915b0032ca661b12ae35fb2e4eac49df",
+      "family": "FWUPDATE0044",
+      "version": "0x0217",
+      "header": {
+        "build_date": "Sep 19 2025",
+        "build_time": "10:14:30",
+        "format_word_observed": 2,
+        "usb_product_id": 3570,
+        "word_64_unknown": 1048576,
+        "word_68_region_size_candidate": 323584,
+        "word_6c_unknown": 16777728,
+        "internal_firmware_version": 16777355,
+        "updater_family": 68,
+        "update_version": 535,
+        "description": "Copyright (C) 2025 Sony Interactive Entertainment Inc. Wireless controller 2.20",
+        "packaging_timestamp_candidate": "20250919101748",
+        "opaque_last_16_header_bytes": "5b0b20c741a1c122610dc9269b905aa9"
+      },
+      "regions": [
+        {
+          "index": 0,
+          "offset": 0,
+          "end": 323584,
+          "size": 323584,
+          "label": "main",
+          "payload_offset_hypothesis": 256,
+          "clear_header_hex": "436f7079726967687420284329203230323220536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000000000000000000005365702031392032303235000000000031303a31343a333000000000000000000200f20d0000100000f00400000200018b000001440000001702000000000000436f7079726967687420284329203230323520536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e20576972656c65737320636f6e74726f6c6c657220322e32302020202020202020202020202020202020323032353039313931303137343800005b0b20c741a1c122610dc9269b905aa9",
+          "secondary_words_40_60": [],
+          "payload_statistics": {
+            "bytes": 323328,
+            "sha256": "d61859ecab68d2fd976f12d2d5965b714296aa9ea541cafff6a0e9dc79383cdb",
+            "entropy_bits_per_byte": 7.999367675733121,
+            "entropy_4k_min": 7.945577864444421,
+            "entropy_4k_max": 7.9641360085744415,
+            "entropy_4k_mean": 7.954840837322201,
+            "zlib_compressed_ratio": 1.000327840459224,
+            "repeated_aligned_16byte_values": 0,
+            "extra_repeated_aligned_16byte_blocks": 0,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 323328,
+            "entropy_excluding_uniform_tail": 7.999367675733121,
+            "zlib_ratio_excluding_uniform_tail": 1.000327840459224,
+            "uniform_runs_64plus": [],
+            "ascii_runs_12plus": [
+              {
+                "offset": 91328,
+                "text": "_1R;*n;ol+h%"
+              }
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "offset": 323584,
+          "end": 716800,
+          "size": 393216,
+          "label": "VenomH",
+          "payload_offset_hypothesis": 323680,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e000056656e6f6d480000170200000000000000f205000a00020032303235303931393130323531380000",
+          "secondary_words_40_60": [
+            535,
+            0,
+            389632,
+            131082,
+            892481586,
+            959527216,
+            892481585,
+            14385
+          ],
+          "secondary_update_version": 535,
+          "secondary_timestamp_candidate": "20250919102518",
+          "secondary_length_candidate": 389632,
+          "secondary_version_word": 131082,
+          "active_end_before_uniform_tail": 713408,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 393120,
+            "sha256": "81396f0f4aa53a2a22963c75dabff3e50574830909604bd0638f264c43274a70",
+            "entropy_bits_per_byte": 7.991042370647831,
+            "entropy_4k_min": 7.947193364455192,
+            "entropy_4k_max": 7.963127010693722,
+            "entropy_4k_mean": 7.954481466431934,
+            "zlib_compressed_ratio": 0.9918421855921856,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 211,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 389728,
+            "entropy_excluding_uniform_tail": 7.999526804547532,
+            "zlib_ratio_excluding_uniform_tail": 1.0003233024057805,
+            "uniform_runs_64plus": [
+              {
+                "offset": 389728,
+                "length": 3392,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 90869,
+                "text": "sXkm<cQ+fP,g\\O"
+              },
+              {
+                "offset": 312056,
+                "text": "bC$24ZQ3+ncO"
+              }
+            ]
+          }
+        },
+        {
+          "index": 2,
+          "offset": 716800,
+          "end": 950272,
+          "size": 233472,
+          "label": "BettyHNT",
+          "payload_offset_hypothesis": 716896,
+          "clear_header_hex": "436f7079726967687420284329203230323320536f6e7920496e74657261637469766520456e7465727461696e6d656e7420496e632e00004265747479484e541702000000000000323032353039313931303235313700000051030006000000",
+          "secondary_words_40_60": [
+            535,
+            0,
+            892481586,
+            959527216,
+            892481585,
+            14129,
+            217344,
+            6
+          ],
+          "secondary_update_version": 535,
+          "secondary_timestamp_candidate": "20250919102517",
+          "secondary_length_candidate": 217344,
+          "secondary_version_word": 6,
+          "active_end_before_uniform_tail": 934336,
+          "unexplained_overhead_above_length_field": 192,
+          "payload_statistics": {
+            "bytes": 233376,
+            "sha256": "b7b964c8f296b0768fa08f2792f5a94428b242202a335739360e8d991d1fbe88",
+            "entropy_bits_per_byte": 7.7917202952657405,
+            "entropy_4k_min": -0.0,
+            "entropy_4k_max": 7.964386526547596,
+            "entropy_4k_mean": 7.547057369385989,
+            "zlib_compressed_ratio": 0.932538050185109,
+            "repeated_aligned_16byte_values": 1,
+            "extra_repeated_aligned_16byte_blocks": 995,
+            "repeated_nonuniform_aligned_16byte_values": 0,
+            "bytes_excluding_uniform_tail": 217440,
+            "entropy_excluding_uniform_tail": 7.999211271869028,
+            "zlib_ratio_excluding_uniform_tail": 1.0003495217071376,
+            "uniform_runs_64plus": [
+              {
+                "offset": 217440,
+                "length": 15936,
+                "value": 255
+              }
+            ],
+            "ascii_runs_12plus": [
+              {
+                "offset": 95818,
+                "text": "L#!yNL1a.FyU_"
+              }
+            ]
+          }
+        }
+      ],
+      "conventional_cortex_m4_vector_candidates": [],
+      "compression": {
+        "signature_hits_only": {
+          "elf": [],
+          "gzip": [],
+          "xz": [],
+          "zip": [],
+          "zstd": [],
+          "lz4_frame": []
+        },
+        "zlib_gzip_candidates": 101,
+        "validated_zlib_gzip_streams": []
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "left": "firmware/dualsense-edge/type-0044/0x0113/FWUPDATE0044.bin",
+      "right": "firmware/dualsense-edge/type-0044/0x0154/FWUPDATE0044.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 136842,
+        "equal_byte_ratio": 0.14400298019935345,
+        "longest_equal_run": 117376,
+        "equal_runs_16plus": [
+          {
+            "offset": 599488,
+            "length": 117376
+          },
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 121,
+            "length": 106
+          },
+          {
+            "offset": 0,
+            "length": 64
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 323649,
+            "length": 18
+          }
+        ],
+        "equal_aligned_16byte_blocks": 8347,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1251,
+          "equal_byte_ratio": 0.0038691359857482184,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomH",
+          "right_label": "VenomH",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 118413,
+          "equal_byte_ratio": 0.30121336996336995,
+          "longest_equal_run": 117312,
+          "equal_runs_16plus": [
+            {
+              "offset": 275808,
+              "length": 117312
+            }
+          ],
+          "equal_aligned_16byte_blocks": 7332,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyHNT",
+          "right_label": "BettyHNT",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16785,
+          "equal_byte_ratio": 0.07192256273138627,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense-edge/type-0044/0x0154/FWUPDATE0044.bin",
+      "right": "firmware/dualsense-edge/type-0044/0x0180/FWUPDATE0044.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23425,
+        "equal_byte_ratio": 0.02465083681303879,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 121,
+            "length": 106
+          },
+          {
+            "offset": 0,
+            "length": 65
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1227,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1314,
+          "equal_byte_ratio": 0.004063984560570071,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomH",
+          "right_label": "VenomH",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4940,
+          "equal_byte_ratio": 0.012566137566137565,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyHNT",
+          "right_label": "BettyHNT",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16778,
+          "equal_byte_ratio": 0.07189256821609763,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense-edge/type-0044/0x0180/FWUPDATE0044.bin",
+      "right": "firmware/dualsense-edge/type-0044/0x0200/FWUPDATE0044.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23179,
+        "equal_byte_ratio": 0.024391963564116378,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 146,
+            "length": 83
+          },
+          {
+            "offset": 0,
+            "length": 65
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 122,
+            "length": 23
+          },
+          {
+            "offset": 323650,
+            "length": 19
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1226,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1184,
+          "equal_byte_ratio": 0.0036619160728424385,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomH",
+          "right_label": "VenomH",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4860,
+          "equal_byte_ratio": 0.012362637362637362,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyHNT",
+          "right_label": "BettyHNT",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16740,
+          "equal_byte_ratio": 0.07172974084738791,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense-edge/type-0044/0x0200/FWUPDATE0044.bin",
+      "right": "firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23431,
+        "equal_byte_ratio": 0.024657150794719827,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3409
+          },
+          {
+            "offset": 146,
+            "length": 81
+          },
+          {
+            "offset": 0,
+            "length": 66
+          },
+          {
+            "offset": 323602,
+            "length": 46
+          },
+          {
+            "offset": 716818,
+            "length": 46
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 121,
+            "length": 24
+          },
+          {
+            "offset": 323584,
+            "length": 17
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1224,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1308,
+          "equal_byte_ratio": 0.00404542755344418,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomH",
+          "right_label": "VenomH",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4927,
+          "equal_byte_ratio": 0.012533068783068783,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyHNT",
+          "right_label": "BettyHNT",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16806,
+          "equal_byte_ratio": 0.07201254627725216,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense-edge/type-0044/0x0213/FWUPDATE0044.bin",
+      "right": "firmware/dualsense-edge/type-0044/0x0217/FWUPDATE0044.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23421,
+        "equal_byte_ratio": 0.024646627491918104,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 121,
+            "length": 108
+          },
+          {
+            "offset": 0,
+            "length": 64
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 323649,
+            "length": 20
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1227,
+        "shared_aligned_16byte_values_at_any_block_index": 13,
+        "shared_nonuniform_aligned_16byte_values": 12,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1271,
+          "equal_byte_ratio": 0.003930992676167855,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomH",
+          "right_label": "VenomH",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4954,
+          "equal_byte_ratio": 0.012601750101750102,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyHNT",
+          "right_label": "BettyHNT",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16801,
+          "equal_byte_ratio": 0.07199112162347457,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0297/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0307/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 136868,
+        "equal_byte_ratio": 0.14403034078663793,
+        "longest_equal_run": 117376,
+        "equal_runs_16plus": [
+          {
+            "offset": 599488,
+            "length": 117376
+          },
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 146,
+            "length": 81
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 18,
+            "length": 46
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 122,
+            "length": 23
+          },
+          {
+            "offset": 0,
+            "length": 17
+          },
+          {
+            "offset": 323650,
+            "length": 17
+          }
+        ],
+        "equal_aligned_16byte_blocks": 8345,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1261,
+          "equal_byte_ratio": 0.0039000643309580365,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 118434,
+          "equal_byte_ratio": 0.30126678876678875,
+          "longest_equal_run": 117312,
+          "equal_runs_16plus": [
+            {
+              "offset": 275808,
+              "length": 117312
+            }
+          ],
+          "equal_aligned_16byte_blocks": 7332,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16784,
+          "equal_byte_ratio": 0.07191827780063074,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0307/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0356/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 136821,
+        "equal_byte_ratio": 0.14398088126346983,
+        "longest_equal_run": 117376,
+        "equal_runs_16plus": [
+          {
+            "offset": 599488,
+            "length": 117376
+          },
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 121,
+            "length": 107
+          },
+          {
+            "offset": 0,
+            "length": 64
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 323649,
+            "length": 19
+          }
+        ],
+        "equal_aligned_16byte_blocks": 8347,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1294,
+          "equal_byte_ratio": 0.0040021278701504355,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 118370,
+          "equal_byte_ratio": 0.3011039886039886,
+          "longest_equal_run": 117312,
+          "equal_runs_16plus": [
+            {
+              "offset": 275808,
+              "length": 117312
+            }
+          ],
+          "equal_aligned_16byte_blocks": 7332,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16760,
+          "equal_byte_ratio": 0.07181543946249828,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0356/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0402/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 131691,
+        "equal_byte_ratio": 0.13858242692618533,
+        "longest_equal_run": 112128,
+        "equal_runs_16plus": [
+          {
+            "offset": 604736,
+            "length": 112128
+          },
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 122,
+            "length": 105
+          },
+          {
+            "offset": 0,
+            "length": 64
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          }
+        ],
+        "equal_aligned_16byte_blocks": 8019,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1291,
+          "equal_byte_ratio": 0.00399284936658749,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 113155,
+          "equal_byte_ratio": 0.2878383190883191,
+          "longest_equal_run": 112064,
+          "equal_runs_16plus": [
+            {
+              "offset": 281056,
+              "length": 112064
+            }
+          ],
+          "equal_aligned_16byte_blocks": 7004,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16857,
+          "equal_byte_ratio": 0.07223107774578363,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0402/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0458/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23315,
+        "equal_byte_ratio": 0.024535080482219827,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3409
+          },
+          {
+            "offset": 121,
+            "length": 106
+          },
+          {
+            "offset": 0,
+            "length": 65
+          },
+          {
+            "offset": 323602,
+            "length": 46
+          },
+          {
+            "offset": 716818,
+            "length": 46
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 323584,
+            "length": 17
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1225,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1239,
+          "equal_byte_ratio": 0.0038320219714964372,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4913,
+          "equal_byte_ratio": 0.012497456247456247,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16779,
+          "equal_byte_ratio": 0.07189685314685315,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0458/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23259,
+        "equal_byte_ratio": 0.024476149986530173,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 146,
+            "length": 83
+          },
+          {
+            "offset": 0,
+            "length": 65
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 122,
+            "length": 23
+          },
+          {
+            "offset": 88,
+            "length": 21
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1225,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1256,
+          "equal_byte_ratio": 0.0038846001583531273,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4870,
+          "equal_byte_ratio": 0.012388074888074889,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16740,
+          "equal_byte_ratio": 0.07172974084738791,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23481,
+        "equal_byte_ratio": 0.02470976730872845,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 146,
+            "length": 81
+          },
+          {
+            "offset": 0,
+            "length": 66
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 122,
+            "length": 23
+          },
+          {
+            "offset": 88,
+            "length": 21
+          },
+          {
+            "offset": 323650,
+            "length": 17
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1225,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1290,
+          "equal_byte_ratio": 0.003989756532066509,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4956,
+          "equal_byte_ratio": 0.012606837606837607,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16842,
+          "equal_byte_ratio": 0.07216680378445084,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0520/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-000B/0x0520/FWUPDATE000B.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23287,
+        "equal_byte_ratio": 0.024505615234375,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3473
+          },
+          {
+            "offset": 117,
+            "length": 86
+          },
+          {
+            "offset": 0,
+            "length": 83
+          },
+          {
+            "offset": 323584,
+            "length": 56
+          },
+          {
+            "offset": 87,
+            "length": 29
+          },
+          {
+            "offset": 207,
+            "length": 27
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1227,
+        "shared_aligned_16byte_values_at_any_block_index": 13,
+        "shared_nonuniform_aligned_16byte_values": 12,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1186,
+          "equal_byte_ratio": 0.003668101741884402,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "GwenB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4892,
+          "equal_byte_ratio": 0.012444037444037444,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16808,
+          "equal_byte_ratio": 0.07202111613876319,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-000B/0x0630/FWUPDATE000B.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 23515,
+        "equal_byte_ratio": 0.02474554653825431,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 713408,
+            "length": 3474
+          },
+          {
+            "offset": 117,
+            "length": 86
+          },
+          {
+            "offset": 0,
+            "length": 83
+          },
+          {
+            "offset": 323584,
+            "length": 56
+          },
+          {
+            "offset": 207,
+            "length": 27
+          },
+          {
+            "offset": 88,
+            "length": 21
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1226,
+        "shared_aligned_16byte_values_at_any_block_index": 12,
+        "shared_nonuniform_aligned_16byte_values": 11,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1343,
+          "equal_byte_ratio": 0.004153676761678543,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "GwenB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4946,
+          "equal_byte_ratio": 0.01258140008140008,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16826,
+          "equal_byte_ratio": 0.07209824489236254,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-0004/0x0630/FWUPDATE0004.bin",
+      "right": "firmware/dualsense/type-000E/0x0641/FWUPDATE000E.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 10346,
+        "equal_byte_ratio": 0.010887409078663793,
+        "longest_equal_run": 3456,
+        "equal_runs_16plus": [
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 947392,
+            "length": 2880
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 18,
+            "length": 46
+          },
+          {
+            "offset": 146,
+            "length": 37
+          },
+          {
+            "offset": 121,
+            "length": 24
+          },
+          {
+            "offset": 88,
+            "length": 21
+          },
+          {
+            "offset": 207,
+            "length": 20
+          },
+          {
+            "offset": 323649,
+            "length": 18
+          },
+          {
+            "offset": 0,
+            "length": 17
+          }
+        ],
+        "equal_aligned_16byte_blocks": 406,
+        "shared_aligned_16byte_values_at_any_block_index": 9,
+        "shared_nonuniform_aligned_16byte_values": 8,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1319,
+          "equal_byte_ratio": 0.00407944873317498,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4879,
+          "equal_byte_ratio": 0.012410968660968661,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 3784,
+          "equal_byte_ratio": 0.016214177978883863,
+          "longest_equal_run": 2880,
+          "equal_runs_16plus": [
+            {
+              "offset": 230496,
+              "length": 2880
+            }
+          ],
+          "equal_aligned_16byte_blocks": 180,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-000B/0x0520/FWUPDATE000B.bin",
+      "right": "firmware/dualsense/type-000B/0x0630/FWUPDATE000B.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 33491,
+        "equal_byte_ratio": 0.03524359341325431,
+        "longest_equal_run": 15936,
+        "equal_runs_16plus": [
+          {
+            "offset": 934336,
+            "length": 15936
+          },
+          {
+            "offset": 703296,
+            "length": 13568
+          },
+          {
+            "offset": 146,
+            "length": 81
+          },
+          {
+            "offset": 0,
+            "length": 66
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 122,
+            "length": 23
+          },
+          {
+            "offset": 88,
+            "length": 21
+          }
+        ],
+        "equal_aligned_16byte_blocks": 1857,
+        "shared_aligned_16byte_values_at_any_block_index": 11,
+        "shared_nonuniform_aligned_16byte_values": 10,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1261,
+          "equal_byte_ratio": 0.0039000643309580365,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "GwenB",
+          "right_label": "GwenB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 15033,
+          "equal_byte_ratio": 0.03824023199023199,
+          "longest_equal_run": 13504,
+          "equal_runs_16plus": [
+            {
+              "offset": 379616,
+              "length": 13504
+            }
+          ],
+          "equal_aligned_16byte_blocks": 844,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 16807,
+          "equal_byte_ratio": 0.07201683120800768,
+          "longest_equal_run": 15936,
+          "equal_runs_16plus": [
+            {
+              "offset": 217440,
+              "length": 15936
+            }
+          ],
+          "equal_aligned_16byte_blocks": 996,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    },
+    {
+      "left": "firmware/dualsense/type-000E/0x0633/FWUPDATE000E.bin",
+      "right": "firmware/dualsense/type-000E/0x0641/FWUPDATE000E.bin",
+      "whole_file": {
+        "bytes": 950272,
+        "equal_bytes": 10222,
+        "equal_byte_ratio": 0.010756920123922414,
+        "longest_equal_run": 3456,
+        "equal_runs_16plus": [
+          {
+            "offset": 713408,
+            "length": 3456
+          },
+          {
+            "offset": 947392,
+            "length": 2880
+          },
+          {
+            "offset": 121,
+            "length": 106
+          },
+          {
+            "offset": 0,
+            "length": 64
+          },
+          {
+            "offset": 323584,
+            "length": 64
+          },
+          {
+            "offset": 88,
+            "length": 24
+          },
+          {
+            "offset": 323649,
+            "length": 18
+          }
+        ],
+        "equal_aligned_16byte_blocks": 411,
+        "shared_aligned_16byte_values_at_any_block_index": 13,
+        "shared_nonuniform_aligned_16byte_values": 12,
+        "total_16byte_blocks": 59392
+      },
+      "regions": [
+        {
+          "index": 0,
+          "left_label": "main",
+          "right_label": "main",
+          "payload_start": 256,
+          "bytes": 323328,
+          "equal_bytes": 1291,
+          "equal_byte_ratio": 0.00399284936658749,
+          "longest_equal_run": 2,
+          "equal_runs_16plus": [],
+          "equal_aligned_16byte_blocks": 0,
+          "shared_aligned_16byte_values_at_any_block_index": 0,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 20208
+        },
+        {
+          "index": 1,
+          "left_label": "VenomB",
+          "right_label": "VenomB",
+          "payload_start": 323680,
+          "bytes": 393120,
+          "equal_bytes": 4821,
+          "equal_byte_ratio": 0.012263431013431013,
+          "longest_equal_run": 3392,
+          "equal_runs_16plus": [
+            {
+              "offset": 389728,
+              "length": 3392
+            }
+          ],
+          "equal_aligned_16byte_blocks": 212,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 24570
+        },
+        {
+          "index": 2,
+          "left_label": "BettyBND",
+          "right_label": "BettyBND",
+          "payload_start": 716896,
+          "bytes": 233376,
+          "equal_bytes": 3711,
+          "equal_byte_ratio": 0.015901378033730974,
+          "longest_equal_run": 2880,
+          "equal_runs_16plus": [
+            {
+              "offset": 230496,
+              "length": 2880
+            }
+          ],
+          "equal_aligned_16byte_blocks": 180,
+          "shared_aligned_16byte_values_at_any_block_index": 1,
+          "shared_nonuniform_aligned_16byte_values": 0,
+          "total_16byte_blocks": 14586
+        }
+      ]
+    }
+  ],
+  "all_pairs_block_sharing": [
+    {
+      "region_index": 0,
+      "pairs_checked": 136,
+      "pairs_with_shared_blocks": []
+    },
+    {
+      "region_index": 1,
+      "pairs_checked": 136,
+      "pairs_with_shared_blocks": []
+    },
+    {
+      "region_index": 2,
+      "pairs_checked": 136,
+      "pairs_with_shared_blocks": []
+    }
+  ]
+}

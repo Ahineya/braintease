@@ -35,6 +35,32 @@ void x64_keyboard_resync(X64Keyboard *k) {
 void x64_keyboard_init(X64Keyboard *k) {
     *k = (X64Keyboard){0};
 }
+void x64_keyboard_events(X64Keyboard *k,
+                         void (*event)(void *, unsigned, unsigned), void *opaque) {
+    k->event = event; k->event_opaque = opaque;
+}
+static void key_event(X64Keyboard *k, unsigned key, unsigned extended, unsigned released) {
+    if (!k->event) return;
+    static const uint8_t plain[128] = {
+        [1]=41,[2]=30,[3]=31,[4]=32,[5]=33,[6]=34,[7]=35,[8]=36,[9]=37,[10]=38,[11]=39,
+        [12]=45,[13]=46,[14]=42,[15]=43,[16]=20,[17]=26,[18]=8,[19]=21,[20]=23,
+        [21]=28,[22]=24,[23]=12,[24]=18,[25]=19,[26]=47,[27]=48,[28]=40,[29]=224,
+        [30]=4,[31]=22,[32]=7,[33]=9,[34]=10,[35]=11,[36]=13,[37]=14,[38]=15,
+        [39]=51,[40]=52,[41]=53,[42]=225,[43]=49,[44]=29,[45]=27,[46]=6,[47]=25,
+        [48]=5,[49]=17,[50]=16,[51]=54,[52]=55,[53]=56,[54]=229,[55]=85,[56]=226,
+        [57]=44,[58]=57,[59]=58,[60]=59,[61]=60,[62]=61,[63]=62,[64]=63,[65]=64,
+        [66]=65,[67]=66,[68]=67,[69]=83,[70]=71,[71]=95,[72]=96,[73]=97,[74]=86,
+        [75]=92,[76]=93,[77]=94,[78]=87,[79]=89,[80]=90,[81]=91,[82]=98,[83]=99,
+        [86]=100,[87]=68,[88]=69
+    };
+    static const uint8_t extra[128] = {
+        [0x1c]=88,[0x1d]=228,[0x35]=84,[0x37]=70,[0x38]=230,[0x47]=74,[0x48]=82,
+        [0x49]=75,[0x4b]=80,[0x4d]=79,[0x4f]=77,[0x50]=81,[0x51]=78,
+        [0x52]=73,[0x53]=76,[0x5b]=227,[0x5c]=231,[0x5d]=101
+    };
+    unsigned usage = extended ? extra[key] : plain[key];
+    if (usage) k->event(k->event_opaque, usage, !released);
+}
 int x64_keyboard_get(X64Keyboard *k) {
     if (!k->count) return -1;
     int result = k->output[k->head];
@@ -129,6 +155,7 @@ void x64_keyboard_feed(X64Keyboard *k, uint8_t scan) {
     else if (!extended && key==0x36) bit=RSHIFT;
     if (bit) {
         if (released) k->modifiers&=~bit; else k->modifiers|=bit;
+        key_event(k,key,extended,released);
         return;
     }
     if (!extended && (key==0x3a || key==0x45)) {
@@ -138,8 +165,10 @@ void x64_keyboard_feed(X64Keyboard *k, uint8_t scan) {
             k->locks_down|=bit;
             if (key==0x3a) k->caps^=1; else k->num^=1;
         }
+        key_event(k,key,extended,released);
         return;
     }
+    key_event(k,key,extended,released);
     if (released) return;
     if (extended) {
         if (navigation(k,key)) return;

@@ -106,6 +106,22 @@ static void random_streams(void) {
         assert(k.pause<=5 && k.extended<=1 && k.modifiers<64 && k.locks_down<4);
     }
 }
+static unsigned events[32], event_count;
+static void raw_event(void *opaque,unsigned usage,unsigned down) {
+    assert(opaque==events && event_count<32);
+    events[event_count++]=usage*2+down;
+}
+static void graphical_edges(void) {
+    X64Keyboard k; x64_keyboard_init(&k);
+    x64_keyboard_events(&k,raw_event,events);
+    feed(&k,"\x2a\x1e\x9e\xaa\xe0\x48\xe0\xc8\x3b\xbb\xe0\x2a\xe0\xaa");
+    const unsigned expected[]={451,9,8,450,165,164,117,116};
+    assert(event_count==sizeof(expected)/sizeof(*expected));
+    for(unsigned i=0;i<event_count;i++)assert(events[i]==expected[i]);
+    EXPECT(&k,"A\033[A\033OP");
+    x64_keyboard_resync(&k);
+    assert(k.event==raw_event && k.event_opaque==events);
+}
 
 /* The production adapter is compiled here with port I/O mocked. */
 #include "../boot/bootinfo.h"
@@ -149,6 +165,6 @@ static void adapter(void) {
 }
 int main(void) {
     characters(); modifier_lifetimes(); navigation_and_functions(); keypad_and_pause();
-    overflow_and_recovery(); random_streams(); adapter();
+    overflow_and_recovery(); random_streams(); graphical_edges(); adapter();
     puts("keyboard checks passed: US text/control/Alt, independent modifiers, lock repeats, navigation/F1-F12, keypad, E0/E1/fake shift, atomic overflow/wrap, 500000-byte fuzz, i8042/UART adapter");
 }

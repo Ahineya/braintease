@@ -3,7 +3,13 @@
 use super::*;
 #[path = "../../libraries/graphics/desktop.rs"]
 pub(super) mod policy;
-use policy::{Action, Control, Desktop, Rect, TASKBAR};
+use policy::{Action, Control, Desktop, Rect};
+#[path = "../../libraries/graphics/dock.rs"]
+mod dock;
+#[path = "../../libraries/graphics/desktop_dock.rs"]
+mod dock_view;
+#[path = "../../libraries/graphics/desktop_icons.rs"]
+mod icons;
 #[path = "../../libraries/graphics/desktop_text.rs"]
 mod text;
 
@@ -27,9 +33,30 @@ struct Frame {
     rgba: Option<Arc<Vec<u32>>>,
     rgb565: Arc<Vec<u16>>,
 }
+#[derive(Clone)]
+struct Overlay {
+    panel: panel::Panel,
+    sequence: u64,
+    configuration: u64,
+    width: u32,
+    height: u32,
+    scale: u32,
+    alpha: Option<Arc<Vec<u32>>>,
+}
+impl PartialEq for Overlay {
+    fn eq(&self, other: &Self) -> bool {
+        self.panel == other.panel && self.sequence == other.sequence && self.configuration == other.configuration
+            && self.width == other.width && self.height == other.height && self.scale == other.scale
+    }
+}
+impl Eq for Overlay {}
 pub(super) struct Session {
     pub(super) wm: Desktop,
     pub(super) scale: u32,
+    dock: dock_view::View,
+    overlay: Option<Overlay>,
+    panel_buttons: u16,
+    panel_keys: [bool; 256],
     frames: BTreeMap<u32, Description>,
     pixels: Vec<u32>,
     hover: Option<u32>,
@@ -48,8 +75,16 @@ impl Default for Session {
                     .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
             })
             .unwrap_or((1280, 800));
+        let mut wm = Desktop::new(size.0, size.1);
+        wm.reserve_bottom(dock_view::HEIGHT);
+        wm.enable_taskbar_input(false);
+        let dock = dock_view::View::new(wm.width, wm.height);
         Self {
-            wm: Desktop::new(size.0, size.1),
+            wm,
+            dock,
+            overlay: None,
+            panel_buttons: 0,
+            panel_keys: [false; 256],
             scale: 1,
             frames: BTreeMap::new(),
             pixels: Vec::new(),
@@ -64,12 +99,16 @@ impl Default for Session {
 }
 impl Session {
     fn apply(&mut self, s: &mut Shared, actions: policy::Actions) {
+        let panel_keyboard = self.panel_keyboard();
         for a in actions.iter() {
             match a {
                 Action::Focus(id, focused) => {
                     if let Some(w) = s.windows.get_mut(&id) {
                         w.transition(InputTransition::Focus {
-                            focused: focused && self.host_focused,
+                            focused: focused
+                                && self.host_focused
+                                && !self.dock.modal()
+                                && panel_keyboard.is_none(),
                         });
                     }
                 }
@@ -101,12 +140,16 @@ impl Session {
             }
         }
     }
-    fn sync(&mut self, s: &mut Shared) {
+    pub(super) fn sync(&mut self, s: &mut Shared) {
+        self.sync_overlay(s);
+        let panel_window = s.panel.as_ref().map(|p| p.window);
         let removed: Vec<_> = self
             .wm
             .windows()
             .iter()
-            .filter(|w| s.windows.get(&w.id).is_none_or(|w| w.flags & 2 != 0))
+            .filter(|w| {
+                panel_window == Some(w.id) || s.windows.get(&w.id).is_none_or(|w| w.flags & 2 != 0)
+            })
             .map(|w| w.id)
             .collect();
         for id in removed {
@@ -117,7 +160,7 @@ impl Session {
         let descriptions: Vec<_> = s
             .windows
             .iter()
-            .filter(|(_, w)| w.flags & 2 == 0)
+            .filter(|(id, w)| panel_window != Some(**id) && w.flags & 2 == 0)
             .map(|(&id, w)| {
                 (
                     id,
@@ -159,9 +202,9 @@ impl Session {
                     if old.title != title {
                         self.wm.invalidate(Rect::new(
                             0,
-                            self.wm.height - TASKBAR,
+                            self.wm.height - dock_view::HEIGHT,
                             self.wm.width,
-                            TASKBAR,
+                            dock_view::HEIGHT,
                         ));
                     }
                 }
@@ -200,19 +243,148 @@ impl Session {
                 }
             }
         }
-        // A close request may be declined by an unsaved-document dialog.
-        // Once delivered, restore keyboard focus to the still-live client.
-        if self.host_focused {
-            if let Some(w) = self.wm.focused.and_then(|id| s.windows.get_mut(&id)) {
-                if !w.closed && !w.input.focused {
-                    w.transition(InputTransition::Focus { focused: true });
-                }
-            }
-        }
+        self.sync_dock(s);
         self.update_hover(s);
     }
+    fn panel_keyboard(&self) -> Option<u32> {
+        self.overlay
+            .as_ref()
+            .filter(|o| o.panel.flags & panel::KEYBOARD != 0)
+            .map(|o| o.panel.window)
+    }
+    fn panel_hit(&self, x: i32, y: i32) -> Option<u32> {
+        self.overlay
+            .as_ref()
+            .filter(|o| {
+                self.panel_buttons != 0
+                    || o.panel.flags & panel::MODAL != 0
+                    || (o.panel.regions.iter().any(|r| r.contains(x, y))
+                        && (o.panel.flags & panel::ALPHA == 0 || o.alpha.as_ref().is_some_and(|pixels|
+                            policy::alpha_hit(pixels,o.width*o.scale,o.height*o.scale,o.width,o.height,x,y))))
+            })
+            .map(|o| o.panel.window)
+    }
+    fn sync_overlay(&mut self, s: &mut Shared) {
+        let old = self.overlay.clone();
+        let next = s.panel.as_ref().and_then(|panel| {
+            let surface = s.windows.get(&panel.window)?;
+            if surface.flags & 2 != 0 || panel.regions.is_empty() {
+                return None;
+            }
+            Some(Overlay {
+                panel: panel.clone(),
+                sequence: surface.sequence,
+                configuration: surface.configuration,
+                width: surface.width,
+                height: surface.height,
+                scale: surface.pixel_scale(),
+                alpha: if panel.flags & panel::ALPHA != 0 { surface.rgba() } else { None },
+            })
+        });
+        if old != next {
+            for overlay in old.iter().chain(next.iter()) {
+                for &r in &overlay.panel.regions {
+                    self.wm.invalidate(r);
+                }
+            }
+            if old.is_some() != next.is_some() {
+                self.wm.invalidate(self.dock.bounds());
+                self.dock.lost_focus();
+            }
+        }
+        if old.as_ref().map(|o| o.panel.window) != next.as_ref().map(|o| o.panel.window) {
+            if let Some(id) = old.as_ref().map(|o| o.panel.window) {
+                if let Some(window) = s.windows.get_mut(&id) {
+                    window.transition(InputTransition::Capture { captured: false });
+                }
+            }
+            self.panel_buttons = 0;
+            self.panel_keys.fill(false);
+        }
+        let was_keyboard = self.panel_keyboard().is_some();
+        self.overlay = next;
+        if !was_keyboard && self.panel_keyboard().is_some() {
+            let actions = self.wm.lose_focus();
+            self.apply(s, actions);
+        }
+        let (top, bottom) = self.overlay.as_ref().map_or((0, dock_view::HEIGHT), |o| {
+            (o.panel.reserve_top, o.panel.reserve_bottom)
+        });
+        let actions = self.wm.reserve_edges(top, bottom);
+        self.apply(s, actions);
+        if let Some(overlay) = &self.overlay {
+            if let Some(surface) = s.windows.get_mut(&overlay.panel.window) {
+                surface.prefer_scale(self.scale);
+            }
+        }
+    }
+    fn sync_dock(&mut self, s: &mut Shared) {
+        let records: Vec<_> = self
+            .wm
+            .windows()
+            .iter()
+            .filter_map(|window| {
+                let surface = s.windows.get(&window.id)?;
+                let process = s.registry.process(surface.process);
+                let instance = process.and_then(|p| s.registry.instance(p.instance));
+                Some(dock::WindowRecord {
+                    id: window.id,
+                    process: surface.process,
+                    instance: instance.map_or(0, |i| i.id),
+                    app_id: instance.map_or("", |i| i.app_id.as_str()),
+                    name: instance.map_or("", |i| i.name.as_str()),
+                    icon: instance.map_or("", |i| i.icon.as_str()),
+                    title: &surface.title,
+                    role: 0,
+                    top_level: true,
+                    flags: if window.minimized {
+                        dock::MINIMIZED
+                    } else {
+                        dock::VISIBLE
+                    } | if self.wm.focused == Some(window.id) {
+                        dock::FOCUSED
+                    } else {
+                        0
+                    } | if surface.closed {
+                        dock::CLOSE_PENDING
+                    } else {
+                        0
+                    },
+                })
+            })
+            .collect();
+        let before = self.dock.bounds();
+        if self
+            .dock
+            .synchronize(&records, self.wm.width, self.wm.height)
+        {
+            self.wm.invalidate(before);
+            self.wm.invalidate(self.dock.bounds());
+        }
+        // Menu modality belongs to the desktop, including when windows appear
+        // or disappear without another input event. Focus transitions also
+        // release held client keys before menu navigation can consume them.
+        let target = self.panel_keyboard().or(self.wm.focused);
+        for (&id, window) in &mut s.windows {
+            let focused =
+                target == Some(id) && self.host_focused && !self.dock.modal() && !window.closed;
+            if window.input.focused != focused {
+                window.transition(InputTransition::Focus { focused });
+            }
+        }
+    }
     fn update_hover(&mut self, s: &mut Shared) {
-        let hit = self.wm.hit_client(self.wm.pointer.0, self.wm.pointer.1);
+        let hit = if self.wm.pointer_captured() {
+            self.wm.hit_client(self.wm.pointer.0, self.wm.pointer.1)
+        } else if let Some(id) = self.panel_hit(self.wm.pointer.0, self.wm.pointer.1) {
+            Some(id)
+        } else if self.overlay.is_none()
+            && (self.dock.modal() || self.dock.covers(self.wm.pointer.0, self.wm.pointer.1))
+        {
+            None
+        } else {
+            self.wm.hit_client(self.wm.pointer.0, self.wm.pointer.1)
+        };
         if hit != self.hover {
             if let Some(id) = self.hover {
                 if let Some(w) = s.windows.get_mut(&id) {
@@ -230,6 +402,38 @@ impl Session {
     pub(super) fn resize(&mut self, s: &mut Shared, w: u32, h: u32) {
         let actions = self.wm.host_resize(w, h);
         self.apply(s, actions);
+        if let Some(panel) = &s.panel {
+            if let Some(surface) = s.windows.get_mut(&panel.window) {
+                surface.request_resize(self.wm.width as u32, self.wm.height as u32);
+            }
+        }
+        self.sync_overlay(s);
+        self.sync_dock(s);
+    }
+    /// Apply validated desktop service requests through the mouse policy path.
+    pub(super) fn command(
+        &mut self,
+        s: &mut Shared,
+        id: u32,
+        command: policy::WindowCommand,
+    ) -> Result<()> {
+        let actions = self.wm.command(id, command).map_err(|error| match error {
+            policy::CommandError::NotFound => 22u16,
+            policy::CommandError::Unsupported => 44u16,
+            policy::CommandError::InvalidGeometry => 22u16,
+        })?;
+        self.apply(s, actions);
+        if matches!(
+            command,
+            policy::WindowCommand::Activate
+                | policy::WindowCommand::Restore
+                | policy::WindowCommand::Maximize
+        ) {
+            self.activate_host = true;
+        }
+        self.sync_dock(s);
+        self.update_hover(s);
+        Ok(())
     }
     pub(super) fn density(&mut self, s: &mut Shared, scale: u32) {
         if self.scale != scale.clamp(1, 2) {
@@ -244,6 +448,147 @@ impl Session {
     }
     pub(super) fn input(&mut self, s: &mut Shared, input: InputTransition) {
         if !input.valid() {
+            return;
+        }
+        // The shell is an independent client. Only its declared regions
+        // intercept the pointer, except while a shell menu is explicitly modal.
+        // An existing ordinary-client capture keeps its paired release.
+        if let InputTransition::Focus { focused: false } = input {
+            self.panel_buttons = 0;
+            self.panel_keys.fill(false);
+            if let Some(o) = &self.overlay {
+                if let Some(w) = s.windows.get_mut(&o.panel.window) {
+                    w.transition(InputTransition::Capture { captured: false });
+                }
+            }
+        }
+        // A menu owns the complete key sequence it accepted, even if its
+        // press dismissed the menu before release/text reaches the adapter.
+        let key_target = match input {
+            InputTransition::Key { key, down } | InputTransition::TextKey { key, down } => {
+                let owned = self.panel_keys[key as usize];
+                let target = if owned {
+                    self.overlay.as_ref().map(|o| o.panel.window)
+                } else {
+                    self.panel_keyboard()
+                };
+                if target.is_some() {
+                    self.panel_keys[key as usize] = down;
+                }
+                target
+            }
+            InputTransition::Text { .. } | InputTransition::Edit { .. }
+                if self.panel_keys.iter().any(|&v| v) =>
+            {
+                self.overlay.as_ref().map(|o| o.panel.window)
+            }
+            _ => None,
+        };
+        if let Some(id) = key_target {
+            if let Some(w) = s.windows.get_mut(&id) {
+                w.transition(input);
+            }
+            return;
+        }
+        if !self.wm.pointer_captured() {
+            let point = match input {
+                InputTransition::Motion { x, y } | InputTransition::Button { x, y, .. } => {
+                    Some((x, y))
+                }
+                _ => None,
+            };
+            if let Some((x, y)) = point {
+                if let Some(id) = self.panel_hit(x, y) {
+                    self.wm.point(x, y);
+                    if let Some(w) = s.windows.get_mut(&id) {
+                        w.transition(InputTransition::Motion { x, y });
+                        if let InputTransition::Button { button, down, .. } = input {
+                            let was = self.panel_buttons;
+                            if down {
+                                self.panel_buttons |= 1 << button;
+                            } else {
+                                self.panel_buttons &= !(1 << button);
+                            }
+                            if was == 0 && self.panel_buttons != 0 {
+                                w.transition(InputTransition::Capture { captured: true });
+                            }
+                            w.transition(input);
+                            if was != 0 && self.panel_buttons == 0 {
+                                w.transition(InputTransition::Capture { captured: false });
+                            }
+                        }
+                    }
+                    self.update_hover(s);
+                    self.sync_dock(s);
+                    return;
+                }
+            }
+            if let InputTransition::Wheel { .. } = input {
+                if let Some(id) = self.panel_hit(self.wm.pointer.0, self.wm.pointer.1) {
+                    if let Some(w) = s.windows.get_mut(&id) {
+                        w.transition(input);
+                    }
+                    return;
+                }
+            }
+        }
+        let before = self.dock.bounds();
+        let mut interaction = dock_view::Interaction::default();
+        let mut changed = false;
+        match input {
+            _ if self.overlay.is_some() => {}
+            InputTransition::Motion { x, y } if !self.wm.pointer_captured() => {
+                changed = self.dock.motion(x, y);
+                if self.dock.modal() || self.dock.covers(x, y) {
+                    self.wm.point(x, y);
+                    interaction.consumed = true;
+                }
+            }
+            InputTransition::Button { button, down, x, y }
+                if !self.wm.pointer_captured() || self.dock.owns_button(button) =>
+            {
+                changed = self.dock.motion(x, y);
+                interaction = self.dock.button(button, down, x, y);
+                if interaction.consumed {
+                    self.wm.point(x, y);
+                    changed = true;
+                }
+            }
+            InputTransition::Wheel { x, y } if !self.wm.pointer_captured() => {
+                interaction.consumed = self.dock.wheel(
+                    self.wm.pointer.0,
+                    self.wm.pointer.1,
+                    if y != 0 { y } else { -x },
+                );
+                changed = interaction.consumed;
+            }
+            InputTransition::Key { key, down } | InputTransition::TextKey { key, down } => {
+                interaction = self.dock.key(key, down);
+                changed = interaction.consumed;
+            }
+            InputTransition::Text { .. } | InputTransition::Edit { .. }
+                if self.dock.suppress_text() =>
+            {
+                interaction.consumed = true;
+            }
+            InputTransition::Focus { focused: false } => {
+                self.dock.lost_focus();
+                changed = true;
+            }
+            _ => {}
+        }
+        if changed {
+            self.wm.invalidate(before);
+            self.wm.invalidate(self.dock.bounds());
+        }
+        for (id, command) in interaction.requests {
+            if let Ok(actions) = self.wm.command(id, command) {
+                self.apply(s, actions);
+            }
+        }
+        if interaction.consumed {
+            self.sync_dock(s);
+            self.update_hover(s);
             return;
         }
         match input {
@@ -269,7 +614,7 @@ impl Session {
             InputTransition::Focus { focused } => {
                 self.host_focused = focused;
                 if focused {
-                    if let Some(id) = self.wm.focused {
+                    if let Some(id) = self.panel_keyboard().or(self.wm.focused) {
                         if let Some(w) = s.windows.get_mut(&id) {
                             w.transition(input);
                         }
@@ -288,21 +633,24 @@ impl Session {
             }
             InputTransition::Enter { .. } | InputTransition::Capture { .. } => {}
             _ => {
-                if let Some(id) = self.wm.focused {
+                if let Some(id) = self.panel_keyboard().or(self.wm.focused) {
                     if let Some(w) = s.windows.get_mut(&id) {
                         w.transition(input);
                     }
                 }
             }
         }
+        self.sync_dock(s);
     }
     fn snapshots(&self, s: &Shared) -> Vec<Frame> {
-        self.wm
+        let mut frames: Vec<_> = self
+            .wm
             .windows()
             .iter()
             .filter(|w| !w.minimized)
             .filter_map(|w| {
-                s.windows.get(&w.id).map(|f| Frame {
+                let f = s.windows.get(&w.id)?;
+                Some(Frame {
                     id: w.id,
                     width: f.width * f.pixel_scale(),
                     height: f.height * f.pixel_scale(),
@@ -310,7 +658,19 @@ impl Session {
                     rgb565: f.front.clone(),
                 })
             })
-            .collect()
+            .collect();
+        if let Some(overlay) = &self.overlay {
+            if let Some(f) = s.windows.get(&overlay.panel.window) {
+                frames.push(Frame {
+                    id: overlay.panel.window,
+                    width: f.width * f.pixel_scale(),
+                    height: f.height * f.pixel_scale(),
+                    rgba: f.rgba(),
+                    rgb565: f.front.clone(),
+                });
+            }
+        }
+        frames
     }
     fn compose(&mut self, frames: &[Frame]) -> bool {
         let width = self.wm.width as u32 * self.scale;
@@ -388,6 +748,9 @@ impl Session {
                         false,
                     );
                 }
+                let shell_hover = self
+                    .panel_hit(self.wm.pointer.0, self.wm.pointer.1)
+                    .is_some();
                 for (kind, r, enabled) in [
                     (Control::Close, chrome.close, true),
                     (Control::Minimize, chrome.minimize, true),
@@ -402,7 +765,9 @@ impl Session {
                         d,
                         kind,
                         enabled,
-                        self.wm.hovered_control() == Some((win.id, kind)),
+                        !self.dock.modal()
+                            && !shell_hover
+                            && self.wm.hovered_control() == Some((win.id, kind)),
                         win.maximized,
                         focused,
                     );
@@ -423,62 +788,71 @@ impl Session {
                     }
                 }
             }
-            policy::fill(
-                &mut self.pixels,
-                width,
-                height,
-                self.scale,
-                Rect::new(0, self.wm.height - TASKBAR, self.wm.width, TASKBAR),
-                d,
-                colour::rgba(0x20252b),
-            );
-            for (i, w) in self.wm.windows().iter().enumerate() {
-                let r = self.wm.task_rect(i);
-                policy::fill(
-                    &mut self.pixels,
-                    width,
-                    height,
-                    self.scale,
-                    r,
-                    d,
-                    colour::rgba(if self.wm.focused == Some(w.id) {
-                        0x394653
-                    } else {
-                        0x2b3139
-                    }),
-                );
-                if let Some(meta) = self.frames.get(&w.id) {
-                    label(
-                        &mut self.pixels,
-                        width,
-                        height,
-                        self.scale,
-                        r.x + 8,
-                        r.y + (r.h - 17) / 2,
-                        r.w - 16,
-                        &meta.title,
-                        d,
-                        colour::rgba(if w.minimized { 0x8893a1 } else { 0xd8dce3 }),
-                    );
+            if let Some(overlay) = &self.overlay {
+                if let Some(frame) = frames.iter().find(|f| f.id == overlay.panel.window) {
+                    if overlay.panel.flags & panel::ALPHA != 0 {
+                        if let Some(source) = &frame.rgba {
+                            policy::blit_alpha(&mut self.pixels,width,height,self.scale,
+                                Rect::new(0,0,overlay.width as i32,overlay.height as i32),d,
+                                source,frame.width,frame.height,&overlay.panel.regions);
+                        }
+                    } else { for &region in &overlay.panel.regions {
+                        let source = match &frame.rgba {
+                            Some(p) => policy::Pixels::Rgba(p),
+                            None => policy::Pixels::Rgb565(&frame.rgb565),
+                        };
+                        policy::blit(
+                            &mut self.pixels,
+                            width,
+                            height,
+                            self.scale,
+                            Rect::new(0, 0, overlay.width as i32, overlay.height as i32),
+                            d.intersect(region),
+                            source,
+                            frame.width,
+                            frame.height,
+                        );
+                    } }
                 }
+            } else {
+                self.dock
+                    .paint(&mut self.pixels, width, height, self.scale, d);
             }
             self.composed_pixels += d.w as u64 * d.h as u64 * self.scale as u64 * self.scale as u64;
         }
         self.presents += 1;
         true
     }
-    fn metadata(&self) -> serde_json::Value {
+    pub(super) fn metadata(&self) -> serde_json::Value {
         let rect = |r: Rect| [r.x, r.y, r.w, r.h];
         let windows:Vec<_>=self.wm.windows().iter().enumerate().map(|(z,w)|{
             let source=self.frames.get(&w.id);let c=w.chrome();
-            serde_json::json!({"id":w.id,"x":w.content.x,"y":w.content.y,"width":w.content.w,"height":w.content.h,"minimized":w.minimized,"maximized":w.maximized,"normal_bounds":rect(w.normal),"focused":self.wm.focused==Some(w.id),"z":z,"resizable":w.resizable,"title":source.map(|s|s.title.as_str()),"sequence":source.map(|s|s.sequence),"source_scale":source.map(|s|s.scale),"taskbar":rect(self.wm.task_rect(z)),"chrome":{"title":rect(c.title),"label":rect(c.label),"drag":rect(c.drag),"grip":rect(c.grip),"close":rect(c.close),"minimize":rect(c.minimize),"maximize":rect(c.maximize),"maximize_enabled":w.resizable}})
+            serde_json::json!({"id":w.id,"x":w.content.x,"y":w.content.y,"width":w.content.w,"height":w.content.h,"minimized":w.minimized,"maximized":w.maximized,"normal_bounds":rect(w.normal),"focused":self.wm.focused==Some(w.id),"z":z,"resizable":w.resizable,"title":source.map(|s|s.title.as_str()),"sequence":source.map(|s|s.sequence),"source_scale":source.map(|s|s.scale),"taskbar":rect(self.dock.window_rect(w.id)),"chrome":{"title":rect(c.title),"label":rect(c.label),"drag":rect(c.drag),"grip":rect(c.grip),"close":rect(c.close),"minimize":rect(c.minimize),"maximize":rect(c.maximize),"maximize_enabled":w.resizable}})
         }).collect();
         let damage: Vec<_> = self
             .last_damage
             .iter()
             .map(|r| [r.x, r.y, r.w, r.h])
             .collect();
-        serde_json::json!({"width":self.wm.width,"height":self.wm.height,"scale":self.scale,"pixel_width":self.wm.width as u32*self.scale,"pixel_height":self.wm.height as u32*self.scale,"focused":self.wm.focused,"maximize_bounds":rect(self.wm.maximized_bounds()),"windows":windows,"presents":self.presents,"composed_pixels":self.composed_pixels,"damage":damage,"native_windows":1})
+        let key = |key: &dock::GroupKey| match key {
+            dock::GroupKey::Application(id) => format!("app:{id}"),
+            dock::GroupKey::Process(id) => format!("process:{id}"),
+            dock::GroupKey::Window(id) => format!("window:{id}"),
+        };
+        let groups:Vec<_>=self.dock.model.groups().iter().map(|g|serde_json::json!({
+            "key":key(&g.key),"app_id":match &g.key{dock::GroupKey::Application(id)=>id.as_str(),_=>""},
+            "name":g.name,"icon":g.icon,"windows":g.windows.iter().map(|w|w.id).collect::<Vec<_>>(),
+            "rect":rect(self.dock.group_rect(&g.key)),"focused":g.focused(),"minimized":g.all_minimized(),
+        })).collect();
+        let menu=self.dock.menu.as_ref().filter(|_|self.dock.modal()).map(|group|serde_json::json!({
+            "group":key(group),"rect":rect(self.dock.menu_rect()),"scroll":self.dock.scroll,
+            "entries":self.dock.entries().iter().map(|e|serde_json::json!({
+                "window":e.window,"command":e.command,"title":e.title,"rect":rect(e.rect),"disabled":e.disabled,
+            })).collect::<Vec<_>>(),
+        }));
+        let dock = serde_json::json!({"visible":self.overlay.is_none(),"bounds":rect(self.dock.bar()),"surface":rect(self.dock.footprint()),"groups":groups,"menu":menu,"offset":self.dock.offset});
+        let panel=self.overlay.as_ref().map(|o|serde_json::json!({"window":o.panel.window,"keyboard":o.panel.flags&panel::KEYBOARD!=0,"modal":o.panel.flags&panel::MODAL!=0,"alpha":o.panel.flags&panel::ALPHA!=0,"regions":o.panel.regions.iter().map(|r|rect(*r)).collect::<Vec<_>>(),"reserve_top":o.panel.reserve_top,"reserve_bottom":o.panel.reserve_bottom,"sequence":o.sequence}));
+        serde_json::json!({"panel":panel,"dock":dock,"width":self.wm.width,"height":self.wm.height,"scale":self.scale,"pixel_width":self.wm.width as u32*self.scale,"pixel_height":self.wm.height as u32*self.scale,"focused":self.wm.focused,"maximize_bounds":rect(self.wm.maximized_bounds()),"windows":windows,"presents":self.presents,"composed_pixels":self.composed_pixels,"damage":damage,"native_windows":1})
     }
     fn write_capture(&self) -> Result<()> {
         let Some(directory) = std::env::var_os("FUSE_X_FRAMES") else {
@@ -571,34 +945,25 @@ fn control_icon(
         }
     }
 }
-fn label(
-    out: &mut [u32],
-    width: u32,
-    height: u32,
-    scale: u32,
-    x: i32,
-    y: i32,
-    max_width: i32,
-    text: &str,
-    damage: Rect,
-    c: u32,
-) {
-    text::paint(
-        out,
-        width,
-        height,
-        scale,
-        Rect::new(x, y, max_width, 17),
-        damage,
-        text,
-        c,
-        false,
-    );
+/// Panel discovery shares the exact policy/output used by the presenter.
+pub(super) fn output_dimensions(s: &mut Shared) -> (u16, u16) {
+    let session = s.desktop.get_or_insert_with(Session::default);
+    (session.wm.width as u16, session.wm.height as u16)
 }
-
+pub(super) fn panel_changed(s: &mut Shared) {
+    let mut session = s.desktop.take().unwrap_or_default();
+    session.sync(s);
+    s.desktop = Some(session);
+}
 pub(super) fn headless_capture(s: &mut Shared) -> Result<()> {
     let mut session = s.desktop.take().unwrap_or_default();
     session.sync(s);
+    s.desktop = Some(session);
+    headless_capture_synced(s)
+}
+/// Present an already synchronized policy without changing geometry twice.
+pub(super) fn headless_capture_synced(s: &mut Shared) -> Result<()> {
+    let mut session = s.desktop.take().unwrap_or_default();
     let frames = session.snapshots(s);
     let changed = session.compose(&frames);
     let result = if changed {
@@ -676,22 +1041,33 @@ pub(super) fn run(
     let mut event_loop = EventLoopBuilder::new().build();
     #[cfg(target_os = "macos")]
     super::super::hosted_graphics_macos::independent_windows();
-    let mut session = Session::default();
+    let (desktop_width, desktop_height) = {
+        let mut s = shared.lock().unwrap();
+        let session = s.desktop.get_or_insert_with(Session::default);
+        (session.wm.width, session.wm.height)
+    };
     let window = WindowBuilder::new()
         .with_title("Fuse-X Desktop")
-        .with_inner_size(LogicalSize::new(session.wm.width, session.wm.height))
+        .with_inner_size(LogicalSize::new(desktop_width, desktop_height))
         .with_min_inner_size(LogicalSize::new(320, 240))
         .with_max_inner_size(LogicalSize::new(1920, 1080))
         .build(&event_loop)?;
     window.set_ime_allowed(true);
     let size = window.inner_size();
-    session.density(
-        &mut shared.lock().unwrap(),
-        if window.scale_factor() >= 1.5 { 2 } else { 1 },
-    );
+    let (pixel_width, pixel_height) = {
+        let mut s = shared.lock().unwrap();
+        let mut session = s.desktop.take().unwrap_or_default();
+        session.density(&mut s, if window.scale_factor() >= 1.5 { 2 } else { 1 });
+        let dimensions = (
+            session.wm.width as u32 * session.scale,
+            session.wm.height as u32 * session.scale,
+        );
+        s.desktop = Some(session);
+        dimensions
+    };
     let mut pixels = Pixels::new(
-        session.wm.width as u32 * session.scale,
-        session.wm.height as u32 * session.scale,
+        pixel_width,
+        pixel_height,
         SurfaceTexture::new(size.width.max(1), size.height.max(1), &window),
     )?;
     let renderer = PresentationRenderer::new(pixels.device(), pixels.surface_texture_format());
@@ -703,18 +1079,19 @@ pub(super) fn run(
         *flow = ControlFlow::WaitUntil(
             std::time::Instant::now() + std::time::Duration::from_millis(16),
         );
-        if shared.lock().unwrap().finished {
+        let mut s = shared.lock().unwrap();
+        if s.finished {
             *flow = ControlFlow::Exit;
             return;
         }
+        let mut session = s.desktop.take().unwrap_or_default();
+        #[cfg(target_os = "macos")]
+        let mut mac_windows = None;
         let result: std::result::Result<(), Box<dyn std::error::Error>> = (|| {
             match event {
                 Event::MainEventsCleared => {
-                    let frames = {
-                        let mut s = shared.lock().unwrap();
-                        session.sync(&mut s);
-                        session.snapshots(&s)
-                    };
+                    session.sync(&mut s);
+                    let frames = session.snapshots(&s);
                     if session.activate_host {
                         session.activate_host = false;
                         window.set_minimized(false);
@@ -732,14 +1109,11 @@ pub(super) fn run(
                     #[cfg(target_os = "macos")]
                     {
                         use winit::platform::macos::WindowExtMacOS;
-                        super::super::hosted_graphics_macos::update(
-                            shared.clone(),
-                            vec![(
-                                session.wm.focused.unwrap_or(0),
-                                "Fuse-X Desktop".into(),
-                                window.ns_window(),
-                            )],
-                        );
+                        mac_windows = Some(vec![(
+                            session.wm.focused.unwrap_or(0),
+                            "Fuse-X Desktop".into(),
+                            window.ns_window(),
+                        )]);
                     }
                 }
                 Event::RedrawRequested(id) if id == window.id() => {
@@ -775,7 +1149,6 @@ pub(super) fn run(
                     }
                 }
                 Event::WindowEvent { window_id, event } if window_id == window.id() => {
-                    let mut s = shared.lock().unwrap();
                     match event {
                         WindowEvent::CloseRequested => {
                             session.input(&mut s, InputTransition::Focus { focused: false });
@@ -976,6 +1349,14 @@ pub(super) fn run(
             }
             Ok(())
         })();
+        s.desktop = Some(session);
+        drop(s);
+        // Cocoa clipboard integration locks Shared itself; publish only after
+        // restoring the one policy instance and releasing its mutex.
+        #[cfg(target_os = "macos")]
+        if let Some(windows) = mac_windows {
+            super::super::hosted_graphics_macos::update(shared.clone(), windows);
+        }
         if let Err(e) = result {
             failure = Some(e);
             *flow = ControlFlow::Exit;
@@ -1187,10 +1568,10 @@ mod tests {
         session.sync(&mut s);
         let normal = session.wm.get(id).unwrap().content;
         click_control(&mut session, &mut s, id, Control::Maximize);
-        assert_eq!(s.windows[&id].resize, Some((1276, 736)));
+        assert_eq!(s.windows[&id].resize, Some((1276, 706)));
         assert!(session.wm.get(id).unwrap().maximized);
         session.resize(&mut s, 1470, 900);
-        assert_eq!(s.windows[&id].resize, Some((1466, 836)));
+        assert_eq!(s.windows[&id].resize, Some((1466, 806)));
         assert_eq!(session.wm.get(id).unwrap().normal, normal);
         click_control(&mut session, &mut s, id, Control::Close);
         assert!(s.windows[&id].closed);
@@ -1241,4 +1622,227 @@ mod tests {
         assert_eq!(session.wm.pointer, pointer);
         assert_eq!(session.wm.get(id).unwrap().content, before);
     }
+    #[test]
+    fn dock_menu_keeps_new_and_activated_clients_unfocused_then_repairs_on_anchor_exit() {
+        let mut rt = Runtime::new();
+        let anchor = create(&mut rt, 200, 120, 2);
+        let other = create(&mut rt, 200, 120, 2);
+        let mut s = rt.graphics.shared.lock().unwrap();
+        for (id, process, app) in [(anchor, 100, "anchor"), (other, 200, "other")] {
+            s.windows.get_mut(&id).unwrap().process = process;
+            s.registry
+                .register(process, process as u16, app, app, "terminal")
+                .unwrap();
+        }
+        let mut session = Session::default();
+        session.sync(&mut s);
+        let r = session.dock.window_rect(anchor);
+        for down in [true, false] {
+            session.input(
+                &mut s,
+                InputTransition::Button {
+                    button: 1,
+                    down,
+                    x: r.x + r.w / 2,
+                    y: r.y + r.h / 2,
+                },
+            );
+        }
+        assert!(session.dock.modal());
+        assert!(s.windows.values().all(|w| !w.input.focused));
+        session
+            .command(&mut s, other, policy::WindowCommand::Activate)
+            .unwrap();
+        assert!(!s.windows[&other].input.focused);
+        drop(s);
+        let newcomer = create(&mut rt, 200, 120, 2);
+        let mut s = rt.graphics.shared.lock().unwrap();
+        session.sync(&mut s);
+        assert_eq!(session.wm.focused, Some(newcomer));
+        assert!(s.windows.values().all(|w| !w.input.focused));
+        s.windows.remove(&anchor);
+        session.sync(&mut s);
+        assert!(!session.dock.modal());
+        assert!(s.windows[&newcomer].input.focused);
+    }
+    #[test]
+    fn client_capture_owns_release_over_dock_without_opening_its_menu() {
+        let mut rt = Runtime::new();
+        let id = create(&mut rt, 200, 120, 2);
+        let mut s = rt.graphics.shared.lock().unwrap();
+        let mut session = Session::default();
+        session.sync(&mut s);
+        let r = session.wm.get(id).unwrap().content;
+        session.input(
+            &mut s,
+            InputTransition::Button {
+                button: 1,
+                down: true,
+                x: r.x + 20,
+                y: r.y + 20,
+            },
+        );
+        assert!(s.windows[&id].input.captured);
+        let dock = session.dock.window_rect(id);
+        session.input(
+            &mut s,
+            InputTransition::Motion {
+                x: dock.x + 20,
+                y: dock.y + 20,
+            },
+        );
+        session.input(
+            &mut s,
+            InputTransition::Button {
+                button: 1,
+                down: false,
+                x: dock.x + 20,
+                y: dock.y + 20,
+            },
+        );
+        assert!(!session.dock.modal());
+        assert!(!session.wm.pointer_captured());
+        assert!(!s.windows[&id].input.captured);
+        assert_eq!(s.windows[&id].input.buttons, 0);
+    }
+
+    #[test]
+    fn client_pixels_and_pointer_input_survive_beside_contained_dock() {
+        use rvm::input_events::{EVENT_BUTTON, EVENT_MOTION, EVENT_WHEEL};
+
+        for scale in [1, 2] {
+            let mut rt = Runtime::new();
+            let id = create(&mut rt, 900, 240, 2);
+            let mut s = rt.graphics.shared.lock().unwrap();
+            let client_colour = colour::rgba(0xa52d71);
+            paint(&mut s, id, client_colour);
+            let mut session = Session::default();
+            session.resize(&mut s, 640, 480);
+            session.density(&mut s, scale);
+            session.sync(&mut s);
+            session
+                .command(&mut s, id, policy::WindowCommand::Move { x: 20, y: 330 })
+                .unwrap();
+            let content = session.wm.get(id).unwrap().content;
+            let tray = session.dock.footprint();
+            let (x, y) = (40, 450);
+            assert!(content.contains(x, y));
+            assert!(session.dock.bar().contains(x, y));
+            assert!(!tray.contains(x, y));
+            assert!(session.compose(&session.snapshots(&s)));
+            let width = session.wm.width as u32 * scale;
+            for dy in 0..scale {
+                for dx in 0..scale {
+                    assert_eq!(
+                        session.pixels
+                            [((y as u32 * scale + dy) * width + x as u32 * scale + dx) as usize],
+                        client_colour,
+                        "client pixels beside dock at density {scale}"
+                    );
+                }
+            }
+            let painted = (tray.x + 3, tray.y + tray.h / 2);
+            assert!(content.contains(painted.0, painted.1));
+            assert_ne!(
+                session.pixels
+                    [(painted.1 as u32 * scale * width + painted.0 as u32 * scale) as usize],
+                client_colour
+            );
+
+            s.windows.get_mut(&id).unwrap().input.events.clear();
+            session.input(&mut s, InputTransition::Motion { x, y });
+            assert_eq!(session.hover, Some(id));
+            assert!(s.windows[&id].input.inside);
+            assert_eq!(s.windows[&id].input.x, x - content.x);
+            assert_eq!(s.windows[&id].input.y, y - content.y);
+            for down in [true, false] {
+                session.input(
+                    &mut s,
+                    InputTransition::Button {
+                        button: 0,
+                        down,
+                        x,
+                        y,
+                    },
+                );
+            }
+            assert!(!session.wm.pointer_captured());
+            assert_eq!(s.windows[&id].input.buttons, 0);
+            session.input(&mut s, InputTransition::Wheel { x: 0, y: -65536 });
+            let events = &s.windows[&id].input.events;
+            assert!(events.iter().any(|e| e.kind == EVENT_MOTION));
+            assert_eq!(events.iter().filter(|e| e.kind == EVENT_BUTTON).count(), 2);
+            assert!(events
+                .iter()
+                .any(|e| e.kind == EVENT_WHEEL && e.wheel_y == -65536));
+
+            s.windows.get_mut(&id).unwrap().input.events.clear();
+            let icon = session.dock.window_rect(id);
+            let (x, y) = (icon.x + icon.w / 2, icon.y + icon.h / 2);
+            session.input(&mut s, InputTransition::Motion { x, y });
+            assert_eq!(session.hover, None);
+            assert!(!s.windows[&id].input.inside);
+            session.input(&mut s, InputTransition::Wheel { x: 0, y: -65536 });
+            for down in [true, false] {
+                session.input(
+                    &mut s,
+                    InputTransition::Button {
+                        button: 1,
+                        down,
+                        x,
+                        y,
+                    },
+                );
+            }
+            assert!(session.dock.modal());
+            assert!(s.windows[&id]
+                .input
+                .events
+                .iter()
+                .all(|e| !matches!(e.kind, EVENT_MOTION | EVENT_BUTTON | EVENT_WHEEL)));
+        }
+    }
+    #[test]
+    fn alpha_panel_reveals_underlying_white_uses_published_mask_and_preserves_capture() {
+        let mut rt=Runtime::new();
+        let client=create(&mut rt,500,500,2);
+        let overlay=create(&mut rt,1280,800,2);
+        let mut s=rt.graphics.shared.lock().unwrap();
+        paint(&mut s,client,0xffffffff);
+        {
+            let surface=s.windows.get_mut(&overlay).unwrap();
+            let frame=surface.colour.as_mut().unwrap();
+            frame.back.fill(0);
+            frame.back[100*1280+81]=0x80000000;
+            frame.back[100*1280+82]=0xff000000;
+            frame.present();
+            surface.sequence+=1;
+        }
+        let region=Rect::new(80,100,3,1);
+        s.panel=Some(panel::Panel{window:overlay,process:0,regions:vec![region,region],reserve_top:0,reserve_bottom:0,flags:panel::ALPHA});
+        let mut session=Session::default();
+        session.sync(&mut s);
+        assert!(session.compose(&session.snapshots(&s)));
+        assert_eq!(session.pixels[100*1280+80],0xffffffff);
+        assert_eq!(session.pixels[100*1280+81],0xff7f7f7f);
+        assert_eq!(session.pixels[100*1280+82],0xff000000);
+        assert_eq!(session.panel_hit(80,100),None);
+        assert_eq!(session.panel_hit(81,100),Some(overlay));
+        s.windows.get_mut(&overlay).unwrap().colour.as_mut().unwrap().back[100*1280+80]=0xff000000;
+        session.sync(&mut s);
+        assert_eq!(session.panel_hit(80,100),None,"unpublished alpha cannot change input");
+        for down in [true,false] {
+            session.input(&mut s,InputTransition::Button{button:0,down,x:80,y:100});
+        }
+        assert!(s.windows[&client].input.events.iter().any(|e|e.kind==rvm::input_events::EVENT_BUTTON));
+        session.input(&mut s,InputTransition::Button{button:0,down:true,x:81,y:100});
+        assert!(s.windows[&overlay].input.captured);
+        session.input(&mut s,InputTransition::Button{button:0,down:false,x:500,y:300});
+        assert!(!s.windows[&overlay].input.captured);
+        assert_eq!(session.panel_buttons,0);
+        s.panel.as_mut().unwrap().flags|=panel::KEYBOARD|panel::MODAL;
+        session.sync(&mut s);
+        assert_eq!(session.panel_hit(500,300),Some(overlay),"modal dismissal owns outside clicks");
+    }
+
 }

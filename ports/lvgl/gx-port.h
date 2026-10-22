@@ -3,7 +3,28 @@
 #define LVGL_GX_PORT_H
 #include "lvgl.h"
 /* One guest process owns one LVGL context and one GX window. */
+/* Set stable application metadata before open. Strings are copied. Identity
+ * registration is optional; unsupported kernels or registration failures do
+ * not prevent the UI from opening. No child processes are associated. */
+void gx_lv_application(const char *app_id, const char *name, const char *icon);
 int gx_lv_open(const char *title, unsigned width, unsigned height);
+/* Optional full-output desktop overlay. Only a claimed desktop manager may
+ * open one. Unsupported/native modes fail before creating a visible window. */
+int gx_lv_open_panel(const char *title, uint32_t authority, unsigned *width, unsigned *height);
+/* True when this panel preserves straight alpha through publication. Ordinary
+ * app windows retain the existing opaque RGB888 path. */
+int gx_lv_panel_alpha(void);
+int gx_lv_fd(void);
+uint32_t gx_lv_window(void);
+/* Logical control focus is retained while the host window is inactive. Custom
+ * controls use this predicate to hide active carets and selection decoration. */
+int gx_lv_active(void);
+struct gx_event;
+void gx_lv_idle(void (*poll)(void));
+void gx_lv_events(int (*filter)(const struct gx_event *));
+/* Stop a held navigation/edit key when replacing its UI context. Physical
+ * release, focus loss, overflow, resize and group changes cancel automatically. */
+void gx_lv_cancel_key_repeat(void);
 int gx_lv_run(void);
 void gx_lv_close(void);
 void gx_lv_handlers(void (*text)(uint32_t), void (*action)(unsigned),

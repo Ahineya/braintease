@@ -1,0 +1,507 @@
+{
+  "date_local": "2026-10-22",
+  "scope": "Offline static inspection and bounded x86-64 CPU emulation; no native Windows program execution, device access, updater invocation or firmware execution",
+  "inputs": {
+    "runtime_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+    "main_exe_sha256": "d4e355c18bab988bdc3dc69ef4746d5064983cc7cac699ccda8d46b834291616",
+    "preloader_sha256": "78f0f88ed59e6d8d26f3f149703d781cdf2b60edc81db59eca310f3d1c3301c7"
+  },
+  "emulation_toolchain": {
+    "unicorn": "2.1.4",
+    "capstone": "5.0.6",
+    "pefile": "2024.8.26"
+  },
+  "initializer": {
+    "instruction_va": "0x2010621e1",
+    "bytes_hex": "4c8928",
+    "instruction": "mov qword ptr [rax], r13",
+    "destination_va": "0x200318e88",
+    "value_relationship": "Observed equal to original entry R9 in each of six differential runs",
+    "steps_per_run": 22854,
+    "store_executed": false,
+    "stop_reason": "Copied runtime RX protection and non-stack-write policy",
+    "input_output_pairs": [
+      {
+        "seed": 0,
+        "input_r9": "0x60000100",
+        "attempted_store": "0x60000100",
+        "random_stack_padding": false
+      },
+      {
+        "seed": 1,
+        "input_r9": "0x60001100",
+        "attempted_store": "0x60001100",
+        "random_stack_padding": true
+      },
+      {
+        "seed": 2,
+        "input_r9": "0x60002100",
+        "attempted_store": "0x60002100",
+        "random_stack_padding": true
+      },
+      {
+        "seed": 3,
+        "input_r9": "0x60003100",
+        "attempted_store": "0x60003100",
+        "random_stack_padding": true
+      },
+      {
+        "seed": 4,
+        "input_r9": "0x60004100",
+        "attempted_store": "0x60004100",
+        "random_stack_padding": true
+      },
+      {
+        "seed": 5,
+        "input_r9": "0x60005100",
+        "attempted_store": "0x60005100",
+        "random_stack_padding": true
+      }
+    ],
+    "limit": "Six concrete synthetic runs are not a proof over every possible register or memory state."
+  },
+  "bootstrap_bodies": [
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-203972b41.bin",
+      "source_va": "0x203972b41",
+      "source_file_offset": "0x396bd41",
+      "bytes": 61312,
+      "sha256": "d10bf193797a85759d81a358422c8b77e50db001c6c14d174d5332f4cd2fe804",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-203176330.bin",
+      "source_va": "0x203176330",
+      "source_file_offset": "0x316f530",
+      "bytes": 8487,
+      "sha256": "297789ef6f218115dbe647ea1a84f024e7403793d014a2fdcfaa92a06b278a3f",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-20230b931.bin",
+      "source_va": "0x20230b931",
+      "source_file_offset": "0x2304b31",
+      "bytes": 7966,
+      "sha256": "1d1ffa4a1d756ee805989b704bc38874708d0ba9d9979a3347e45300e05a161d",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-20329b333.bin",
+      "source_va": "0x20329b333",
+      "source_file_offset": "0x3294533",
+      "bytes": 7395,
+      "sha256": "7b642f817897715bec84eccbe919936ded0c8c7f96ea2319a67a4943ba3d2091",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-202f56b3d.bin",
+      "source_va": "0x202f56b3d",
+      "source_file_offset": "0x2f4fd3d",
+      "bytes": 8719,
+      "sha256": "482f56d7cff7cce21d4e1328d61875cff333210ad9a352326f598189abdaf20e",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "file": "analysis/remoteplay-win/derived/bootstrap-chain-201060d8f.bin",
+      "source_va": "0x201060d8f",
+      "source_file_offset": "0x1059f8f",
+      "bytes": 5855,
+      "sha256": "c4c8f73fe8f079dc24fbe16598fb9d0d171ee09d2d2fc581818a2fbd71bdb222",
+      "transformations": [],
+      "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    }
+  ],
+  "modeled_environment": {
+    "thread_self_pointer": "GS_BASE 0x50000000; qword[+0x30] = self",
+    "thread_process_pointer": "qword[thread+0x60] = synthetic process at 0x50001000",
+    "process_image_pointer": "qword[process+0x10] = main image preferred base 0x140000000",
+    "other_fields": "Stop at every other thread or process field read",
+    "image_permissions": "runtime RX; main EXE read-only, non-executable; only synthetic stack writes allowed",
+    "unknown_os_api_results": "Never supplied",
+    "instruction_budget": 250000,
+    "timeout_us_per_run": 5000000,
+    "additional_function_range_budget": 12
+  },
+  "preloader_table": {
+    "base_va": "0x18000a048",
+    "passed_as": "R9 / Windows x64 fourth argument to runtime entry",
+    "source_call": "runtime_entry(0, 0x25665cd7, 0, &table)",
+    "source_evidence": "analysis/remoteplay-win/preloader-runtime.pseudo.c.txt, assignments immediately before runtime entry call",
+    "fields": [
+      {
+        "offset": "0x0",
+        "value": "0xa9738c26f6daad73"
+      },
+      {
+        "offset": "0x8",
+        "value": "0x19fcad04bee73a1"
+      },
+      {
+        "offset": "0x10",
+        "source": "preloader base"
+      },
+      {
+        "offset": "0x18",
+        "source": "mapped runtime base"
+      },
+      {
+        "offset": "0x20",
+        "source": "local_498; no additional semantic name assigned"
+      },
+      {
+        "offset": "0x28",
+        "source": "runtime section handle, local_550"
+      },
+      {
+        "offset": "0x30",
+        "source": "mapped runtime entry point"
+      },
+      {
+        "offset": "0x58",
+        "value": "0x0"
+      },
+      {
+        "offset": "0x60",
+        "value": "0x0"
+      }
+    ],
+    "helper_pointers": [
+      {
+        "table_offset": "0x68",
+        "preloader_function_va": "0x1800035d0"
+      },
+      {
+        "table_offset": "0x70",
+        "preloader_function_va": "0x1800035b0"
+      },
+      {
+        "table_offset": "0x78",
+        "preloader_function_va": "0x1800020a0"
+      },
+      {
+        "table_offset": "0x118",
+        "preloader_function_va": "0x1800034f0"
+      },
+      {
+        "table_offset": "0x120",
+        "preloader_function_va": "0x180002060"
+      },
+      {
+        "table_offset": "0x128",
+        "preloader_function_va": "0x180003590"
+      },
+      {
+        "table_offset": "0x130",
+        "preloader_function_va": "0x1800037c0"
+      },
+      {
+        "table_offset": "0x138",
+        "preloader_function_va": "0x180001040"
+      }
+    ],
+    "named_import_pointers": [
+      {
+        "table_offset": "0x88",
+        "preloader_global_va": "0x18000a0d0",
+        "target_copy_va": "0x200318090",
+        "symbol": "MessageBoxW"
+      },
+      {
+        "table_offset": "0x90",
+        "preloader_global_va": "0x18000a0d8",
+        "target_copy_va": "0x200318098",
+        "symbol": "RegGetValueW"
+      },
+      {
+        "table_offset": "0x98",
+        "preloader_global_va": "0x18000a0e0",
+        "target_copy_va": "0x2003180a0",
+        "symbol": "RtlQueryEnvironmentVariable_U"
+      },
+      {
+        "table_offset": "0xa0",
+        "preloader_global_va": "0x18000a0e8",
+        "target_copy_va": "0x2003180a8",
+        "symbol": "RtlExpandEnvironmentStrings"
+      },
+      {
+        "table_offset": "0xa8",
+        "preloader_global_va": "0x18000a0f0",
+        "target_copy_va": "0x2003180b0",
+        "symbol": "RtlDosPathNameToNtPathName_U_WithStatus"
+      },
+      {
+        "table_offset": "0xb0",
+        "preloader_global_va": "0x18000a0f8",
+        "target_copy_va": "0x2003180b8",
+        "symbol": "RtlCreateProcessParametersEx"
+      },
+      {
+        "table_offset": "0xb8",
+        "preloader_global_va": "0x18000a100",
+        "target_copy_va": "0x2003180c0",
+        "symbol": "RtlCreateEnvironment"
+      },
+      {
+        "table_offset": "0xc0",
+        "preloader_global_va": "0x18000a108",
+        "target_copy_va": "0x2003180c8",
+        "symbol": "ZwQuerySystemInformation"
+      },
+      {
+        "table_offset": "0xc8",
+        "preloader_global_va": "0x18000a110",
+        "target_copy_va": "0x2003180d0",
+        "symbol": "ZwCreateUserProcess"
+      },
+      {
+        "table_offset": "0xd0",
+        "preloader_global_va": "0x18000a118",
+        "target_copy_va": "0x2003180d8",
+        "symbol": "ZwSetInformationFile"
+      },
+      {
+        "table_offset": "0xd8",
+        "preloader_global_va": "0x18000a120",
+        "target_copy_va": "0x2003180e0",
+        "symbol": "ZwCreateFile"
+      },
+      {
+        "table_offset": "0xe0",
+        "preloader_global_va": "0x18000a128",
+        "target_copy_va": "0x2003180e8",
+        "symbol": "ZwCreateThreadEx"
+      },
+      {
+        "table_offset": "0xe8",
+        "preloader_global_va": "0x18000a130",
+        "target_copy_va": "0x2003180f0",
+        "symbol": "ZwQueryInformationFile"
+      },
+      {
+        "table_offset": "0xf0",
+        "preloader_global_va": "0x18000a138",
+        "target_copy_va": "0x2003180f8",
+        "symbol": "ZwQueryInformationProcess"
+      },
+      {
+        "table_offset": "0xf8",
+        "preloader_global_va": "0x18000a140",
+        "target_copy_va": "0x200318100",
+        "symbol": "ZwClose"
+      },
+      {
+        "table_offset": "0x100",
+        "preloader_global_va": "0x18000a148",
+        "target_copy_va": "0x200318108",
+        "symbol": "ZwQueryDirectoryFile"
+      },
+      {
+        "table_offset": "0x108",
+        "preloader_global_va": "0x18000a150",
+        "target_copy_va": "0x200318110",
+        "symbol": "ZwWaitForSingleObject"
+      },
+      {
+        "table_offset": "0x110",
+        "preloader_global_va": "0x18000a158",
+        "target_copy_va": "0x200318118",
+        "symbol": "ZwDeleteFile"
+      }
+    ],
+    "bootstrap_copy": {
+      "function_va": "0x20018ad20",
+      "destination_va": "0x200318090",
+      "source": "qword[0x200318e88] + 0x88",
+      "bytes": 144,
+      "qwords": 18
+    }
+  },
+  "static_branch_join": {
+    "va": "0x203974ba5",
+    "divisor": "0x2ed",
+    "rule": "If upper halves of numerator and divisor are zero, unsigned 32-bit division zero-extends to the same quotient/remainder as the 64-bit path with zero high dividend. Otherwise the original 64-bit path applies. Both decoded paths and guard equality were checked.",
+    "lifted_instructions_after_join": 2124,
+    "next_symbolic_stop_va": "0x203974ec5",
+    "emulated_read_at_that_va": {
+      "at": "0x203974ec5",
+      "va": "0x200925608",
+      "size": 8,
+      "bytes": "0400000000000000"
+    },
+    "not_a_complete_symbolic_execution": true
+  },
+  "native_strings": {
+    "verified_loops": 7,
+    "candidate_alignments": 1587,
+    "algorithm": "UTF-16 words: plain = cipher XOR low16(state); state = ROL64(state,5) XOR cipher",
+    "strings": [
+      {
+        "loop_va": "0x20018b2d0",
+        "source_va": "0x20009bfe0",
+        "bytes": 58,
+        "seed": "0xf3f7365f9607a350",
+        "text": "bhcache.36ab6a20677cfbf4.bin\u0000"
+      },
+      {
+        "loop_va": "0x200195310",
+        "source_va": "0x20009bf10",
+        "bytes": 30,
+        "seed": "0x9bbee729a648c64d",
+        "text": "PACKER_SECTION\u0000"
+      },
+      {
+        "loop_va": "0x2001fc950",
+        "source_va": "0x20013a500",
+        "bytes": 36,
+        "seed": "0xac15dde4f45d482e",
+        "text": "\\Registry\\Machine\u0000"
+      },
+      {
+        "loop_va": "0x200219690",
+        "source_va": "0x2000f04c8",
+        "bytes": 28,
+        "seed": "0xb0e96460dd073626",
+        "text": "catcache4.bin\u0000"
+      },
+      {
+        "loop_va": "0x2002197f0",
+        "source_va": "0x20013cc92",
+        "bytes": 136,
+        "seed": "0x34618b6e61fa88b",
+        "text": "\\SYSTEMROOT\\system32\\CatRoot\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}\u0000"
+      },
+      {
+        "loop_va": "0x200229050",
+        "source_va": "0x20013fd70",
+        "bytes": 50,
+        "seed": "0xff23be2e4338d03c",
+        "text": "%ALLUSERSPROFILE%\\Packer\u0000"
+      },
+      {
+        "loop_va": "0x2002432f0",
+        "source_va": "0x20009bf10",
+        "bytes": 30,
+        "seed": "0x9bbee729a648c64d",
+        "text": "PACKER_SECTION\u0000"
+      }
+    ],
+    "coverage": "One exact loop/setup family; no exhaustive or caller-reachability claim"
+  },
+  "additional_rea_decompilations": [
+    "0x200219610",
+    "0x200229030",
+    "0x20018b1a0",
+    "0x200195230",
+    "0x200243220"
+  ],
+  "validation": {
+    "emulator_synthetic_policy_checks": 11,
+    "decoder_tests": 5,
+    "original_runtime_and_main_hashes_rechecked": true
+  },
+  "external_layout_sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winternl/ns-winternl-teb",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winternl/ns-winternl-peb",
+    "https://github.com/winsiderss/systeminformer/blob/master/phnt/include/ntpebteb.h"
+  ],
+  "still_unresolved": [
+    "Full initialization of encoded API/syscall fields",
+    "Transformation/unpacking of main application code",
+    "Windows HID callers and report-level comparison",
+    "Controller RAM code execution or firmware decryption"
+  ],
+  "next": "Model the known preloader table data without inventing unknown callback/API results; continue after the now-attributed initializer using explicit virtual-memory changes only in the emulator, preserving original binaries and separate derived outputs.",
+  "evidence": [
+    {
+      "path": "emulate_runtime.py",
+      "bytes": 10130,
+      "sha256": "637914096afd7b32f85c37798b5acf03fcc38aee9b665c28566fea7d3b6ee59b"
+    },
+    {
+      "path": "decode_runtime_strings.py",
+      "bytes": 5798,
+      "sha256": "9d98cfc278a2707f44c5ea76acf01e69b0bd0adb0a03b2689b321b7a7a1fcdcb"
+    },
+    {
+      "path": "test_runtime_emulation.py",
+      "bytes": 3405,
+      "sha256": "79bb3d86338a061fa9e0702bc51ca835d90414d1d9116853a2ff32d9e5990cd1"
+    },
+    {
+      "path": "test_runtime_strings.py",
+      "bytes": 1492,
+      "sha256": "c6ddae4f5012bcbb87c923030c2bb3c46bf0412b6c08841b9f8eb7bb604aba35"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-initializer-differential.json",
+      "bytes": 59045,
+      "sha256": "13edddadba33b29a279dd0e640c9f8583c803a089a5b52cc6a5bfabaae01ec88"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/emulator-policy-controls.json",
+      "bytes": 731,
+      "sha256": "878b61447fe8f6b41cb5232015921c49983c7a31f470be2fb5bb34ff67e09d5d"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-native-strings.json",
+      "bytes": 15292,
+      "sha256": "0eb24a06a53742a4821a6b32c077af29f93c93740fc7f71bf28f596a3939ca85"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/slice-checkpoint-203972b41.json",
+      "bytes": 2447,
+      "sha256": "94bf07fc99dc821fb6f0316944580a52919211ff2fbd27949f5e08c7e980f590"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/checkpoint-203974ec5.smt2",
+      "bytes": 443064,
+      "sha256": "db9ffdd8aea77ba6390b3bded0e659b4efb022580d10b77603aeb66fd66a4669"
+    },
+    {
+      "path": "analysis/remoteplay-win/slice_checkpoint.py",
+      "bytes": 12341,
+      "sha256": "ee1be1e0c27f27b9d09c8a4b9b21849a66690d15db3a798b81f74334fc2da796"
+    },
+    {
+      "path": "analysis/remoteplay-win/slice_divisions.py",
+      "bytes": 11683,
+      "sha256": "30b25d91bbc3e1aacc3ce2deb48b9ca35e8db21a9e927d65f4ea2c5706eb7c65"
+    },
+    {
+      "path": "analysis/remoteplay-win/context-field-candidates.json",
+      "bytes": 59787,
+      "sha256": "f1c79a43924df29ac83294f3000195156aa8fc511ac19e90c428f25835e4aad7"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/write-candidate-200229030.rea.json",
+      "bytes": 9025,
+      "sha256": "4a41cb89c5369b36c857dfd8afca970d73f1dd4f6ecce4d907310840e93ba03b"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/write-candidate-200219610.rea.json",
+      "bytes": 411608,
+      "sha256": "de016a755f4015a952204b0722941c257fb25040d2ed2db1202ce088def8675d"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/string-lead-20018b1a0.rea.json",
+      "bytes": 111456,
+      "sha256": "bab26f08253014599439cae50ba20cee6b0228bb84561d533aab16ddd598ce68"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/string-lead-200243220.rea.json",
+      "bytes": 70514,
+      "sha256": "8386a2d02ac5296a70da56291a49450626c6be0d5a73928c5bf74852fd091ad9"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/string-lead-200195230.rea.json",
+      "bytes": 70418,
+      "sha256": "4e961ded9a6dc3f5bce953923b67e80863501601097c06eab408db51ad4fafd5"
+    }
+  ]
+}

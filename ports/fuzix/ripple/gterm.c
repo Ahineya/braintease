@@ -12,6 +12,7 @@
 #include <time.h>
 #include <syscalls.h>
 #include <gx.h>
+#include <gx-application.h>
 extern long call(unsigned,long,long,long,long);
 #include "pty-limits.h"
 #include "../../graphics/terminal.h"
@@ -218,9 +219,11 @@ static void key(unsigned code) {
     queue(text);
 }
 static void usage(void) {
-    puts("usage: gterm [-g COLSxROWS] [--] [COMMAND [ARG...]]\n"
+    puts("usage: gterm [-g COLSxROWS] [--app-id ID --app-name NAME --app-icon ICON]\n"
+         "             [--] [COMMAND [ARG...]]\n"
          "Open a graphical terminal (default sh, 80x30).\n"
          "--geometry COLSxROWS also sets the size, within this display's limits.\n"
+         "Application metadata identifies this terminal's app in the desktop dock.\n"
          "Requires a graphical display. Example: gterm -g 64x20");
 }
 static int geometry(const char *s,unsigned *cols,unsigned *rows) {
@@ -260,6 +263,8 @@ static void resize_terminal(long width,long height) {
 }
 int main(int argc,char **argv) {
     char path[]="/dev/ptyp0",slave[]="/dev/ttyp0",output[512];char *sh[]={"sh",NULL};
+    const char *app_id="org.riplix.Terminal",*app_name="Terminal",*app_icon="terminal";
+    struct gx_session_record application;
     unsigned i,cols=VT_DEFAULT_COLS,rows=VT_DEFAULT_ROWS;int n,status=0,dirty,command=1;
     struct winsize size;
     struct gx_handle present;struct gx_event event;
@@ -275,14 +280,29 @@ int main(int argc,char **argv) {
             }
             command++;continue;
         }
+        if(!strcmp(option,"--app-id")||!strcmp(option,"--app-name")||!strcmp(option,"--app-icon")) {
+            if(++command>=argc){fputs("gterm: application option needs a value\n",stderr);return 2;}
+            if(!strcmp(option,"--app-id"))app_id=argv[command];
+            else if(!strcmp(option,"--app-name"))app_name=argv[command];
+            else app_icon=argv[command];
+            command++;continue;
+        }
         if(option[0]=='-'){fputs("gterm: unknown option (see --help)\n",stderr);return 2;}
         break;
+    }
+    if(gx_application_describe(&application,app_id,app_name,app_icon)){
+        fputs("gterm: invalid application identity (ID <64, name <64, icon <128 cells)\n",stderr);return 2;
     }
     if(vt_init_size(&terminal,cols,rows))return 2;
     size.ws_row=rows;size.ws_col=cols;
     trace_input=getenv("GTERM_TRACE_INPUT")!=NULL;
     gfx=open("/dev/gfx",O_RDWR|O_CLOEXEC);if(gfx<0){perror("gterm");return 1;}
     atexit(cleanup);
+    {
+        int saved_errno=errno;
+        (void)gx_application_register(gfx,&application);
+        errno=saved_errno;
+    }
     memset(&info,0,sizeof(info));info.version=GX_VERSION;
     if(request(GX_INFO,&info))return 1;
     if(info.flags&GX_CAP_TERMINAL){
@@ -297,7 +317,7 @@ int main(int argc,char **argv) {
     if(max_cols>GRAPHICS_COLS)max_cols=GRAPHICS_COLS;if(max_rows>GRAPHICS_ROWS)max_rows=GRAPHICS_ROWS;
     if(cols>max_cols||rows>max_rows){fputs("gterm: geometry exceeds this display's limits\n",stderr);return 2;}
     if(!native_text){row_pixels=malloc((unsigned long)max_cols*8*16*sizeof(*row_pixels));if(!row_pixels){perror("gterm");return 1;}}
-    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=cols*cell_width;window.height=rows*cell_height;window.format=GX_RGB565;strcpy(window.title,"Terminal");
+    memset(&window,0,sizeof(window));window.version=GX_VERSION;window.width=cols*cell_width;window.height=rows*cell_height;window.format=GX_RGB565;strcpy(window.title,app_name);
     if(request(GX_CREATE,&window)){perror("gterm");return 1;}
     for(i=0;i<RIPPLE_PTY_COUNT;i++){path[9]=slave[9]=RIPPLE_PTY_DIGIT(i);master=open(path,O_RDWR|O_NONBLOCK|O_NOCTTY);if(master>=0)break;if(errno!=EBUSY){perror("gterm");return 1;}}
     if(master<0){fputs("gterm: no free terminals\n",stderr);return 1;}

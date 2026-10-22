@@ -111,6 +111,12 @@ class DesktopGUI(GUI):
     def restore(self,wid):
         w=self.wait(lambda:self.internal(wid));r=w["taskbar"]
         self.click(0,r[0]+r[2]//2,r[1]+r[3]//2)
+        # Multiple instances share one dock icon; choose this exact window.
+        menu=self.desktop().get("dock",{}).get("menu")
+        if menu:
+            entry=next(e for e in menu["entries"] if e["window"]==wid and e["command"]=="activate")
+            r=entry["rect"]
+            self.click(0,r[0]+r[2]//2,r[1]+r[3]//2)
         self.wait(lambda:not self.internal(wid)["minimized"] and self.desktop()["focused"]==wid)
 
     def maximized_source(self,wid):
@@ -248,7 +254,7 @@ def nested_checks(args, reference):
         ui.wait(lambda: ui.internal(second)["minimized"])
         assert ui.desktop()["focused"] != second
         ui.restore(second)
-        checks += ["minimize transfers focus", "taskbar restores retained window"]
+        checks += ["minimize transfers focus", "grouped dock restores the selected retained window"]
 
         w = ui.internal(second)
         x, y = w["x"] + w["width"] - 5, w["y"] + w["height"] - 5

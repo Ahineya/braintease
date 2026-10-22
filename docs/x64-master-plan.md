@@ -1,6 +1,6 @@
 # Riplix x64 master plan
 
-Updated 2026-10-21. Direction accepted by the user; individual implementation
+Updated 2026-10-22. Direction accepted by the user; individual implementation
 slices advance through the gates below.
 
 Riplix x64 is becoming a modern graphical operating system with fast interaction,
@@ -26,7 +26,7 @@ their own prerequisites rather than delaying the first useful desktop.
 | Services and packages | Nine terminal/data packages are published, installed through HP pkg and persisted after reboot. Seven executable/alias hashes, native entry probes and SSH PTY editor/Commander checks passed. Local display acceptance remains pending. Application packages and kernel/EFI updates have different installation paths. |
 | Power and boot | The unattended Ubuntu → Riplix → Ubuntu → Riplix loop passed, including automatic Ubuntu root SSH on port 2222. HP is running Riplix; Ubuntu remains the user-authorized temporary default. Shutdown syncs and stops but does not yet power the laptop off. Ubuntu and USB recovery remain available. |
 | Execution | Native instructions retain C16 layouts, logical pointers, private calls and checkpoint scheduling at ring 0 on one CPU. The isolated process-memory model has host tests; it does not install production mappings. |
-| GUI and audio | Shared GUI/LVGL, terminal input and PCM application interfaces exist on other targets. They need HP backends and target-specific acceptance. |
+| GUI and audio | Native software GX presentation, screenshots and the LVGL calculator work on HP. User verified touchpad movement and clicks. Multi-window desktop integration and native audio remain ahead. |
 | Toolchain | Guest compilation and portable image tools have substantial staged progress. The [bootstrap inventory](../rcc-portable/native-sdk/OS_BOOTSTRAP.md) still distinguishes guest-built stages from the host platform/loader capsule and pending end-to-end acceptance. |
 
 Current device identities come from the [HP inventory](../tools/x86_64/hardware/hp-envy-16-ac0xxx.txt).
@@ -335,7 +335,7 @@ New task scopes should name files and interfaces before concurrent edits.
 
 Before new hardware milestones, inspect Linux and OpenBSD support for the exact
 device/revision. Pin the sources used for protocol structures and ordering.
-Reuse bounded driver logic where licensing and dependencies fit; supply Riplix
+Prefer porting proven driver cores where licensing and dependencies fit; supply Riplix
 DMA/IRQ/timer/synchronization adapters explicitly. Avoid an accidental general
 Linux compatibility layer or guesses about packed device structures.
 
@@ -409,11 +409,48 @@ receipts are linked above.
 Broader Unicode/font coverage and each full-screen application's real display,
 terminal restoration and input behavior retain their own acceptance gates.
 
-Next execution work is the isolated real-allocator/inactive-PTE fixture from
-the integration contract. Filesystem work starts with its disposable host-image
-experiment. Remaining physical input paths, audio, ring 3 and filesystem
-durability each need their actual target tests; host prototypes do not satisfy
-those gates.
+The isolated real-allocator/inactive-PTE fixture has now passed on the HP's KVM:
+allocation failures roll back, mappings remain inactive, and final page/image
+accounting is balanced. This does not install process page tables or enable
+ring 3/preemption. See the [fixture receipt](../build/x86_64-process-memory-fixture/hp-kvm-result.json).
+Filesystem work still starts with its disposable host-image experiment.
+
+The next graphics slice implements the existing GX interface over native GOP
+presentation, keyboard events, display ownership and normal Alt+F4 exit. The
+existing LVGL calculator reuses 230 cached units. Its focused KVM trial passed
+calculator input, console restoration, cleanup and byte-exact screenshot parity;
+the user subsequently confirmed its display, keyboard input and close action on
+the HP. `lvcalc`, `screenshot` and `touchpad` are now signed x64 packages in the
+existing local repository. See the [backend notes](../tools/x86_64/graphics/README.md)
+and [publication receipt](../build/x86_64-graphics/catalog/publication.json).
+
+Native screenshots and a reduced preview have been retrieved from the real HP.
+Captures are row-wise; they do not guarantee an atomic moving frame. This is a
+single-active-surface backend, not the complete FuseDE compositor. The user's
+LVGL/FuseDE/SDL work remains independent.
+
+Touchpad controller/HID initialization, physical movement and clicks now pass on
+the HP; the user confirmed movement and calculator button clicks. Native diagnostics found the
+I2C controller's BAR unassigned before and after D0; Linux's PCI resource setup
+had supplied the address seen during Ubuntu discovery. The original combined
+"BAR alignment" error was misleading. The new path snapshots firmware PCI
+apertures and occupied ranges before ExitBootServices and assigns only the
+unassigned target resource. Its protocol/parser, range-selection and BAR
+rollback tests pass. Early native BAR measurements corrected the GPU/audio
+fallback reservations that had consumed the whole aperture; the controller now
+reclaims its cached firmware resource and reports ready with zero I2C aborts.
+See the [input integration notes](../tools/x86_64/input/README.md).
+After repeated failures, the complete Linux/OpenBSD/UEFI comparison now covers
+the whole attachment path in one batch: optional PCI metadata, D0/BAR recovery,
+LPSS reset/remap, dynamic optional GPIO, DesignWare completion and HID reset,
+features and report recovery. Focused sanitizer tests and native compilation
+pass. Candidate `4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c`
+has booted with SSH/Wi-Fi/services healthy. The user confirmed physical pointer
+movement and calculator clicks; gestures, scrolling and additional pointer
+transports remain separate work.
+All updates use the internal EFI/SSH loop with Ubuntu as the development default;
+the USB remains recovery media. Audio, ring 3 and filesystem durability retain
+their separate target tests.
 
 ## Performance and acceptance records
 

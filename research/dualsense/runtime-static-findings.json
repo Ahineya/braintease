@@ -1,0 +1,443 @@
+{
+  "date_utc": "2026-10-21",
+  "mode": "Offline static analysis and bounded CPU emulation; no native Windows-program execution, process attachment or controller access",
+  "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+  "toolchain": {
+    "rea": "6.7.0",
+    "ghidra": "12.1.4",
+    "capstone": "5.0.6"
+  },
+  "entry": {
+    "va": "0x200260410",
+    "bytes_hex": "e928416700",
+    "direct_jump_target": "0x2008d453d"
+  },
+  "constant_wrappers": [
+    {
+      "wrapper_va": "0x2008c15df",
+      "source_file_offset": "0x8bb5df",
+      "source_bytes_hex": "ebfff0488d0597ef0300488d80a918ecffffe0",
+      "resolved_destination_va": "0x2007c1e29",
+      "proof": "Direct branch into overlapping push, followed by two LEAs with no runtime-dependent operands and JMP RAX; destination derived by constant arithmetic."
+    },
+    {
+      "wrapper_va": "0x2007e765c",
+      "source_file_offset": "0x7e165c",
+      "source_bytes_hex": "ebfff0488d05211eab0f488d8049aa57f0ffe0",
+      "resolved_destination_va": "0x200813ed0",
+      "proof": "Direct branch into overlapping push, followed by two LEAs with no runtime-dependent operands and JMP RAX; destination derived by constant arithmetic."
+    },
+    {
+      "wrapper_va": "0x20072d71a",
+      "source_file_offset": "0x72771a",
+      "source_bytes_hex": "ebfff0488d05e0d51508488d802571f3f7ffe0",
+      "resolved_destination_va": "0x2007c1e29",
+      "proof": "Same overlapping PUSH plus two constant LEAs as the previously checked wrappers. Shared destination, not a separate recovered unpacker."
+    }
+  ],
+  "normalization": {
+    "file": "address-wrapper.normalized.bin",
+    "bytes": 19,
+    "sha256": "e733250d48164e9afea53a21f909eb546d038051ee5fa52a3eed99dd55184106",
+    "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+    "source_file_offset": "0x8bb5df",
+    "source_analysis_address": "0x2008c15df",
+    "normalization": "Replace first byte EB by 90 in a separate analysis fragment: EB FF jumps into FF F0 at +1; NOP falls through to the same +1 instruction. Ordinary register/flag effects preserved for this entry path; no timing/debug equivalence claimed."
+  },
+  "rea_fragment_result": {
+    "input_sha256": "e733250d48164e9afea53a21f909eb546d038051ee5fa52a3eed99dd55184106",
+    "recovered_constant_destination": "0x2007c1e29",
+    "scope": "A 19-byte analysis fragment only; target body lies outside fragment. Decompiled call/return notation is not proof of complete original control-flow semantics."
+  },
+  "whole_runtime_attempt": {
+    "result": "provider_timeout",
+    "timeout_ms": 330000,
+    "scope": "No full-runtime Ghidra result was produced; not evidence that static recovery is impossible"
+  },
+  "progress": "Bootstrap callback-table initializer at 0x2010621e1 identified through six differential offline emulation runs; 18 preloader API slots mapped and seven native string loops decoded. Main code transformation and Windows HID callers remain unresolved.",
+  "next_static_work": "Continue after the observed initializer using the known preloader callback-table layout, with explicit emulator-only virtual changes and no invented API results; trace encoded API initialization and then attributable HID callers.",
+  "evidence": [
+    {
+      "path": "analysis/remoteplay-win/runtime-entry.json",
+      "bytes": 22699,
+      "sha256": "8464262ff910bc5c6d1518627ed761a3ba5d9403e74667da1ad3f6127f6c57a9"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-bootstrap-helper-walks.txt",
+      "bytes": 1675,
+      "sha256": "e4aac15ec5ad794575ed095407b1af84622e9ab6d6eef59f490538db4c783a39"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-static-branch-2008c15df.txt",
+      "bytes": 2167,
+      "sha256": "dc07de3e41eaec24406fd152a27dfd2a6b3dbf3da59e76baead7c14ad1ad66a7"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-static-branch-2007e765c.txt",
+      "bytes": 1035,
+      "sha256": "35bd9d4bb2bcf82026a415d9561765def03621671574fe7f0721893da07355c9"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/address-wrapper.original.bin",
+      "bytes": 19,
+      "sha256": "f630896cc1dfdde31e6be410e8985a902e891ef31cc7b258f7926f83c845dca8"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/address-wrapper.normalized.bin",
+      "bytes": 19,
+      "sha256": "e733250d48164e9afea53a21f909eb546d038051ee5fa52a3eed99dd55184106"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/address-wrapper.normalized.bin.json",
+      "bytes": 567,
+      "sha256": "266191a51ccb04db870a89dfa71984800ad1a71220b42151a02393ae8cef88b6"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/address-wrapper.rea.json",
+      "bytes": 4203,
+      "sha256": "b40d698b7c31210cb81fbbfe571c9bdb6d8d43052cfea64abcd887296913a472"
+    },
+    {
+      "path": "analysis/remoteplay-win/rea-providers.json",
+      "bytes": 31641,
+      "sha256": "8c3b9dacc0a27c43660e426929419f410ce1c864365347f9b93e4f2ab6f4099d"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-proven-paths.txt",
+      "bytes": 40890,
+      "sha256": "2e33aeff1b2363db718eeb16e55b6aaf785b3a02a88717861847cd26647aec89"
+    },
+    {
+      "path": "analysis/remoteplay-win/cfg-203972b41.txt",
+      "bytes": 989378,
+      "sha256": "2a16a35b5ec80b8b565ddefafbad470fc6402bc2b25f05539a141ea4cdb5097b"
+    },
+    {
+      "path": "analysis/remoteplay-win/cfg-2034eb007.txt",
+      "bytes": 1008622,
+      "sha256": "bb484ebeb383be49a32919af8896f4a2c8fe730018cef8639bf4e143fafc0418"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-rip-candidates.json",
+      "bytes": 1059,
+      "sha256": "05331c91b46cb86fa081ab1ab9fffc89ea3d9cdcbc462c7bff405b4aa04a4919"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-walk.py",
+      "bytes": 1986,
+      "sha256": "5d98262d34407738e5d6ecfdf14f7db95ffde1b65d711dc79a4c2a7f200a06dd"
+    },
+    {
+      "path": "analysis/remoteplay-win/runtime-cfg.py",
+      "bytes": 1330,
+      "sha256": "b99335f4f9c54ed8dfd657f8368a534c72c5988879a4dc69a3f5485b8d052459"
+    },
+    {
+      "path": "analysis/remoteplay-win/mba_simplify.py",
+      "bytes": 5570,
+      "sha256": "f83ce381664fd7f22acd5e59d9da4e7ef597c77b3bcecfec05e18f005b3fb0ff"
+    },
+    {
+      "path": "analysis/remoteplay-win/slice_helper.py",
+      "bytes": 7646,
+      "sha256": "c2fddcd716bb3fa08de3ef9c29cd1763554760390d8a1cde67bd730060f8e391"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/fragment-manifest.json",
+      "bytes": 4268,
+      "sha256": "5a311ec764971a3b340248d95dea64cf7ba49322ee38f72aca7ae9640524c14a"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/slice-203972b41.json",
+      "bytes": 2322,
+      "sha256": "15a8618713c6d8469b88c22349d36feefabcbad2d093aff01fc299b5c9ebbe71"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/mba-validation.json",
+      "bytes": 573,
+      "sha256": "a7f9ae674ec02903656f3c662f563748891a1880ad53be803a657786aae9acde"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/body-203972b41.rea.json",
+      "bytes": 302017,
+      "sha256": "1ff51cbff98152c31f2d978ef824e9abf4dd110b75373282535b8a376545862c"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/unwind-200188260.rea.json",
+      "bytes": 5251,
+      "sha256": "245e0ce7d5b4ded76536e4c47a46ae8427aa809dcfd7e0e3c62c8c29f39bb63c"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/unwind-200220980.rea.json",
+      "bytes": 7513,
+      "sha256": "de80b00df03e9d94dee6f0fbc0cc1d8895b498f03e78b61cdec5256834f10d73"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/body-2002bf2b0.rea.json",
+      "bytes": 7829,
+      "sha256": "f4a252c0da1dea97df0f009761ec21475e85b9e5270da30bca9680b6570331ab"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/unwind-200250990.rea.json",
+      "bytes": 7829,
+      "sha256": "c98c919d688b07ea64b721f3881137d9f4a0494e1c465ae31a96de7700cb413c"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/unwind-200236130.rea.json",
+      "bytes": 7605,
+      "sha256": "0f5a94ce2ad900217c69755a344393d7f2ae9e08cb6342d84eefba13d6f7372f"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/unwind-20017c140.rea.json",
+      "bytes": 7647,
+      "sha256": "a631f120c53c8d1f44a59abf2c867e04abf2348dab4fe168e316589d635dac83"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/body-2001c0390.rea.json",
+      "bytes": 28933,
+      "sha256": "5b4b481a596754d97310edfdf49d9b1da0094d5b2e6886192ec431308bf35540"
+    },
+    {
+      "path": "analysis/remoteplay-win/mba_controls.py",
+      "bytes": 1021,
+      "sha256": "515ff33dc55ca67f7471b86b2f7376639ed272dbe886e11afc2ac8478f27ae2a"
+    }
+  ],
+  "followup": {
+    "date_local": "2026-10-22",
+    "mode": "Offline static disassembly, decompilation and bounded mathematical lifting; no vendor native execution or USB access",
+    "startup_timeout_ms": 900000,
+    "timeout_scope": "Per REA invocation via REA_GHIDRA_STARTUP_TIMEOUT_MS; whole-DLL analysis was not repeated",
+    "fragment_manifest": [
+      {
+        "file": "body-2001c0390.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x1bdd90",
+        "source_va": "0x2001c0390",
+        "bytes": 1653,
+        "sha256": "d1de891f53af4efda195bc392034c80b84a99f713ad6c8bcdd9c9f32fb266b9d",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "body-2002bf2b0.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x2bccb0",
+        "source_va": "0x2002bf2b0",
+        "bytes": 428,
+        "sha256": "43fc813559bb738b1619ca8c240b1805ad6250e2ad78be62ecd0d798f2d7fbad",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "body-2034eb007.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x34e4207",
+        "source_va": "0x2034eb007",
+        "bytes": 62171,
+        "sha256": "ef4e389ae1f52705a6ea988b807ffcaf5a89d6386a7a08fd4751d247def3413c",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "body-203972b41.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x396bd41",
+        "source_va": "0x203972b41",
+        "bytes": 61312,
+        "sha256": "d10bf193797a85759d81a358422c8b77e50db001c6c14d174d5332f4cd2fe804",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "unwind-20017c140.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x179b40",
+        "source_va": "0x20017c140",
+        "bytes": 344,
+        "sha256": "5d26f59b22a5692851174e3708da4f4a457b4cd94d3c2ec84f9b21ae01704de3",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "unwind-200188260.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x185c60",
+        "source_va": "0x200188260",
+        "bytes": 271,
+        "sha256": "7e9a7e4d64e68084d36bd7b73b4a98f74e243bb16138b6c6278022485b87f2ce",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "unwind-200220980.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x21e380",
+        "source_va": "0x200220980",
+        "bytes": 667,
+        "sha256": "0cbda54263b94e1ee1f9875decc88d4418e0fcb1ed2e67eea7884547c543778a",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "unwind-200236130.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x233b30",
+        "source_va": "0x200236130",
+        "bytes": 711,
+        "sha256": "6761f51cced220f0e0507c1f1f747a53977d2b6cb037d13ec2b4167d051fb911",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      },
+      {
+        "file": "unwind-200250990.bin",
+        "source_sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87",
+        "source_file_offset": "0x24e390",
+        "source_va": "0x200250990",
+        "bytes": 344,
+        "sha256": "29a9d0ae9ad30c96e214226656fa5c0dc57678bf1a9d68785d287905289c4e0c",
+        "transformations": [],
+        "scope": "Contiguous copied bytes; Ghidra raw-binary mapping uses this preferred VA. External data and code outside the slice are absent."
+      }
+    ],
+    "new_rea_decompilations": 8,
+    "return_dispatch_paths": [
+      {
+        "helper_va": "0x2006d9b0e",
+        "local_body_va": "0x2006949c3",
+        "continuation_va": "0x2008d5ade"
+      },
+      {
+        "helper_va": "0x2008958ec",
+        "local_body_va": "0x2007d6532",
+        "continuation_va": "0x2008d45d7"
+      },
+      {
+        "helper_va": "0x2006da44a",
+        "local_body_va": "0x2008eea49",
+        "continuation_va": "0x2008d45ec"
+      }
+    ],
+    "predicate_proof": "TEST clears CF and OF. Immediately following JAE or JNO is taken; follow exact target bytes, including targets inside another instruction. Other conditions remain unresolved unless independently established.",
+    "decoder_difference": {
+      "va": "0x200813f40",
+      "bytes_hex": "63d1",
+      "capstone_5_0_6": "Rejected",
+      "iced_x86_1_21_0": "movsxd edx,ecx; length 2",
+      "limit": "Decoder disagreement is not proof of encrypted bytes or an exception mechanism."
+    },
+    "arithmetic_bodies": [
+      {
+        "state_saving_body_va": "0x2007c1e29",
+        "body_va": "0x203972b41",
+        "copied_bytes": 61312,
+        "direct_cfg_instructions": 14844,
+        "indirect_exit_va": "0x203981abf",
+        "indirect_exit_operand": "rcx",
+        "direct_calls": 0,
+        "rea_decompiled": true,
+        "pseudocode_lines": 2768
+      },
+      {
+        "state_saving_body_va": "0x200813ed0",
+        "body_va": "0x2034eb007",
+        "copied_bytes": 62171,
+        "direct_cfg_instructions": 15215,
+        "indirect_exit_va": "0x2034fa2e0",
+        "indirect_exit_operand": "rcx",
+        "direct_calls": 0,
+        "rea_decompiled": false
+      }
+    ],
+    "symbolic_slice": {
+      "scope": "Experimental conservative arithmetic/frame model, not a complete x86 emulator or whole-function proof",
+      "assumptions": {
+        "preferred_module_base": "0x200000000",
+        "entry_rcx": "0x200000000",
+        "entry_frame_qword_0x110": "0x0; relocation delta set by the first state-saving entry"
+      },
+      "constant_identity": {
+        "ending_instruction_va": "0x203972c9d",
+        "result": "0xc6c458b78e9631a3",
+        "input_words": 3,
+        "method": "Linear word arithmetic/Boolean truth-table identity"
+      },
+      "resolved_read": {
+        "instruction_va": "0x203974569",
+        "address_va": "0x200924940",
+        "initial_qword": "0x2ed"
+      },
+      "stopped_at": "0x203974ba5",
+      "lifted_instructions": 1942,
+      "stop_reason": "Input-dependent condition before division path; no branch direction assumed",
+      "synthetic_controls": {
+        "method": "Independent Z3 equivalence checks over 248 synthetic 4-bit and 8-bit expressions, including complements, mixed Boolean/arithmetic cancellation, constant masks and truncated shifts.",
+        "checks": 248,
+        "accepted_simplifications": 120,
+        "result": "Every equivalence check returned unsat for original != simplified.",
+        "limits": [
+          "Synthetic controls do not validate every instruction-lifting rule or establish the whole runtime helper semantics.",
+          "Earlier generic 64-bit SMT checks timed out with unknown; unknown was not accepted as proof."
+        ]
+      }
+    },
+    "ordinary_functions": [
+      {
+        "va": "0x2002bf2b0",
+        "interpretation": "CPU vendor/features initialization; CPUID and XGETBV; writes feature-selection globals"
+      },
+      {
+        "va": "0x2001c0390",
+        "interpretation": "Overlap-safe memory copy with size-indexed tables and SIMD paths; table data lies outside the raw slice"
+      },
+      {
+        "va": "0x20018ad20",
+        "interpretation": "Tail-forwards copy: destination 0x200318090, source qword[0x200318e88]+0x88, length 0x90"
+      }
+    ],
+    "exception_directory_ranges": 25842,
+    "context_reference_functions": [
+      "0x20017c140",
+      "0x200188260",
+      "0x200220980",
+      "0x200236130",
+      "0x200250990"
+    ],
+    "context_interpretation": "Context-shaped records, callback redirection, page bitmap and encoded pointer/syscall fields. Exact Windows API identities remain unestablished; these operations do not prove unpacking.",
+    "decoded_initial_sentinels": [
+      {
+        "global_va": "0x200318680",
+        "width": 64,
+        "encoded": "0x78b7524eb6c39d6c",
+        "xor": "0x413eb180a67f5f93",
+        "rotate_left": 7,
+        "add": "0x3b0e18f7a19e8064",
+        "decoded": "0x0"
+      },
+      {
+        "global_va": "0x200318d30",
+        "width": 64,
+        "encoded": "0x97561aed7f32ef72",
+        "xor": "0x54d3f300896f6456",
+        "rotate_left": 7,
+        "add": "0x3d0b0904d13a6d9f",
+        "decoded": "0x0"
+      },
+      {
+        "global_va": "0x200318b50",
+        "width": 32,
+        "encoded": "0x4932ef72",
+        "xor": "0x896f6456",
+        "rotate_left": 7,
+        "add": "0xd13a6d9f",
+        "decoded": "0xffffffff"
+      }
+    ],
+    "limits": [
+      "Raw fragments omit out-of-slice code/data and Windows ABI metadata; argument identities must be checked in assembly.",
+      "No application unpacker, complete API initialization or Windows HID handlers recovered.",
+      "No new factory or loader operation inferred or performed."
+    ]
+  },
+  "bootstrap_followup": "runtime-bootstrap-findings.json"
+}

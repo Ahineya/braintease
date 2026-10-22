@@ -86,6 +86,19 @@ const char *get_gamedir(void)
         s=replace(s, '    /* init sdl */', '''    /* Legacy bitmap artwork is more readable in a zoomed native window.
      * This affects this application only; callers can override the hint. */
     if (!getenv("SDL_GX_WINDOW_ZOOM")) putenv("SDL_GX_WINDOW_ZOOM=150");
+    /* A staged game and its PCM helper travel together. Installed packages
+     * instead resolve the normal /usr/bin or /bin helper. */
+    if (!getenv("SDL_MIXER_HELPER")) {
+        static char helper[600];
+        const char *slash = strrchr(argv[0], '/');
+        struct stat info;
+        if (slash && (size_t)(slash-argv[0])+32 < sizeof(helper)) {
+            strcpy(helper, "SDL_MIXER_HELPER=");
+            memcpy(helper+17, argv[0], (size_t)(slash-argv[0]));
+            strcpy(helper+17+(slash-argv[0]), "/sdl-mixerd.fxe");
+            if (stat(helper+17, &info)==0 && S_ISREG(info.st_mode)) putenv(helper);
+        }
+    }
     /* init sdl */''')
     s=s.replace('    eval_cmdline(argc, argv);','''    /* Fullscreen is not a GX window capability. */
     config.fullscreen = 0;
@@ -129,11 +142,8 @@ const char *get_gamedir(void)
     # Sound assets can fail independently of rendering. The upstream wrapper
     # dereferences the freed/NULL Wav on load failure; keep playback optional.
     path=source/'src/audio.c';text=path.read_text()
-    # Full bitmap dialog composition can exceed the upstream 256-frame period.
-    # A 1024-frame block gives the cooperative producer enough queued headroom.
-    text=replace(text,
-                 'Mix_OpenAudio( MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 256 )',
-                 'Mix_OpenAudio(MIX_DEFAULT_FREQUENCY, MIX_DEFAULT_FORMAT, MIX_DEFAULT_CHANNELS, 1024)')
+    # Keep upstream's short 256-frame blocks. The process producer continues
+    # filling them while the application composes bitmap dialogs.
     text=replace(text,'    Mix_CloseAudio();','    Mix_CloseAudio();\n    audio_ok = 0;')
     text=replace(text,'        Mix_Pause( -1 ); /* stop all sound channels */',
                  '        Mix_Pause(-1);\n    else\n        Mix_Resume(-1);')

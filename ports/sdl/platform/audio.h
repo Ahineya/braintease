@@ -8,6 +8,11 @@
 void SDL_C16AudioPump(void);
 Uint32 SDL_C16AudioWait(Uint32 maximum);
 Uint16 SDL_C16AudioMixFormat(void);
+/* Optional process mixer notifications, serviced on the application thread.
+ * The pump is nonblocking; quit releases the owned helper process. */
+extern void (*SDL_C16AudioAuxPump)(void);
+extern void (*SDL_C16AudioAuxQuit)(void);
+extern Uint32 (*SDL_C16AudioAuxWait)(Uint32);
 
 /* A device consumes copied, interleaved S16 sample cells. SDL callback and
  * conversion lengths remain logical octets, independent of sizeof(Sint16). */

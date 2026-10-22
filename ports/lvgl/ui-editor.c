@@ -965,7 +965,7 @@ void ui_editor_density(ui_editor *e) {
 }
 void ui_editor_focus(ui_editor *e) { if (e) lv_group_focus_obj(e->root); }
 int ui_editor_focused(ui_editor *e) {
-    return e && lv_group_get_focused(gx_lv_group()) == e->root;
+    return e && gx_lv_active() && lv_group_get_focused(gx_lv_group()) == e->root;
 }
 int ui_editor_ready(ui_editor *e) { return e && e->complete; }
 unsigned long ui_editor_display_rows(ui_editor *e) { return e ? e->count : 0; }

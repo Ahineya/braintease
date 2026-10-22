@@ -988,6 +988,7 @@ int main(int argc, char **argv) {
     if (initial_plot >= 0)
         prefs.plot = initial_plot;
     gx_lv_minimum(640, 420);
+    gx_lv_application("org.riplix.DataViewer", "Data Viewer", "grid-2x2");
     if (gx_lv_open("Data Viewer", screen_width, screen_height) < 0) {
         free(prefs.recent);
         free(paths);

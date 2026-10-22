@@ -41,6 +41,9 @@ def run(binary, data, output):
     wav = output / 'lgeneral.wav'
     wav.unlink(missing_ok=True)
     report = dict(executable_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), checks=[])
+    helper = binary.parent / 'sdl-mixerd.fxe'
+    if helper.exists():
+        report['mixer_helper_sha256'] = hashlib.sha256(helper.read_bytes()).hexdigest()
     expected = click_oracle(data / 'themes/default/click.wav')
     with tempfile.TemporaryDirectory(prefix='lgeneral-audio-', dir=output) as directory:
         old_capture = os.environ.get('RCC_NATIVE_AUDIO_WAV')

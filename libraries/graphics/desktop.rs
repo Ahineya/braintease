@@ -145,6 +145,24 @@ pub enum Action {
     Motion(u32, i32, i32),
     Button(u32, u16, bool, i32, i32),
 }
+/// Desktop requests shared by shell components and other policy adapters.
+/// Move and resize use content coordinates; resize dimensions are logical pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowCommand {
+    Activate,
+    Minimize,
+    Maximize,
+    Restore,
+    Move { x: i32, y: i32 },
+    Resize { width: u32, height: u32 },
+    Close,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandError {
+    NotFound,
+    Unsupported,
+    InvalidGeometry,
+}
 pub struct Actions {
     items: [Option<Action>; MAX_WINDOWS + 12],
     len: usize,
@@ -189,6 +207,9 @@ pub struct Desktop {
     pub width: i32,
     pub height: i32,
     pub focused: Option<u32>,
+    taskbar_height: i32,
+    top_height: i32,
+    taskbar_input: bool,
     stack: [Window; MAX_WINDOWS],
     len: usize,
     capture: Capture,
@@ -202,6 +223,9 @@ impl Desktop {
             width: width.clamp(320, 1920),
             height: height.clamp(240, 1080),
             focused: None,
+            taskbar_height: TASKBAR,
+            top_height: 0,
+            taskbar_input: true,
             stack: [Window::default(); MAX_WINDOWS],
             len: 0,
             capture: Capture::None,
@@ -211,6 +235,34 @@ impl Desktop {
         };
         s.invalidate(Rect::new(0, 0, s.width, s.height));
         s
+    }
+    /// Adapters may replace the fallback task list with a dock of another height.
+    /// Changing the reservation uses ordinary maximize/resize policy.
+    pub fn reserve_bottom(&mut self, height: i32) -> Actions {
+        self.reserve_edges(self.top_height, height.clamp(0, self.height / 2))
+    }
+    /// Reserve shell space independently of its floating visible footprint.
+    /// The adapter validates requested geometry; retain a usable client even
+    /// while the output is being resized. Repeating a reservation is inert.
+    pub fn reserve_edges(&mut self, top: i32, bottom: i32) -> Actions {
+        let available = (self.height - TITLE - BORDER - 48).max(0);
+        let top = top.clamp(0, available);
+        let bottom = bottom.clamp(0, available - top);
+        if (top, bottom) == (self.top_height, self.taskbar_height) {
+            return Actions::new();
+        }
+        self.top_height = top;
+        self.taskbar_height = bottom;
+        self.host_resize(self.width as u32, self.height as u32)
+    }
+    /// The fallback window task list owns its rectangular input region by
+    /// default. A shell with its own floating dock must route only its visible
+    /// footprint, independently of the maximized-window work-area reservation.
+    pub fn enable_taskbar_input(&mut self, enabled: bool) {
+        self.taskbar_input = enabled;
+    }
+    pub fn pointer_captured(&self) -> bool {
+        !matches!(self.capture, Capture::None)
     }
     pub fn windows(&self) -> &[Window] {
         &self.stack[..self.len]
@@ -250,15 +302,20 @@ impl Desktop {
         (self.damage, n)
     }
     fn bar(&self) -> Rect {
-        Rect::new(0, self.height - TASKBAR, self.width, TASKBAR)
+        Rect::new(
+            0,
+            self.height - self.taskbar_height,
+            self.width,
+            self.taskbar_height,
+        )
     }
     pub fn task_rect(&self, index: usize) -> Rect {
         let w = ((self.width - 16) / self.len.max(1) as i32).min(160);
         Rect::new(
             8 + index as i32 * w,
-            self.height - TASKBAR + 5,
+            self.height - self.taskbar_height + 5,
             w - 4,
-            TASKBAR - 10,
+            self.taskbar_height - 10,
         )
     }
     pub fn add(&mut self, id: u32, w: u32, h: u32, resizable: bool) -> Actions {
@@ -273,12 +330,15 @@ impl Desktop {
             w as i32
         };
         let ch = if resizable {
-            (h as i32).min(self.height - TITLE - TASKBAR - 40).max(48)
+            (h as i32)
+                .min(self.height - self.top_height - TITLE - self.taskbar_height - 40)
+                .max(48)
         } else {
             h as i32
         };
         let x = (22 + (i % 7) as i32 * 28).min((self.width - cw - 8).max(8));
-        let y = (46 + (i % 7) as i32 * 28).min((self.height - TASKBAR - ch - 8).max(TITLE + 8));
+        let y = (self.top_height + 46 + (i % 7) as i32 * 28)
+            .min((self.height - self.taskbar_height - ch - 8).max(self.top_height + TITLE + 8));
         let win = Window {
             id,
             content: Rect::new(x, y, cw, ch),
@@ -341,15 +401,17 @@ impl Desktop {
     pub fn maximized_bounds(&self) -> Rect {
         Rect::new(
             BORDER,
-            TITLE,
+            self.top_height + TITLE,
             self.width - 2 * BORDER,
-            self.height - TITLE - TASKBAR - BORDER,
+            self.height - self.top_height - TITLE - self.taskbar_height - BORDER,
         )
     }
     fn clamp_normal(&self, mut r: Rect) -> Rect {
         r.x = r.x.clamp(8, (self.width - 80).max(8));
-        r.y =
-            r.y.clamp(TITLE + 8, (self.height - TASKBAR - 40).max(TITLE + 8));
+        r.y = r.y.clamp(
+            self.top_height + TITLE + 8,
+            (self.height - self.taskbar_height - 40).max(self.top_height + TITLE + 8),
+        );
         r
     }
     fn toggle_maximize(&mut self, id: u32, a: &mut Actions) {
@@ -377,6 +439,25 @@ impl Desktop {
             now.content.w as u32,
             now.content.h as u32,
         ));
+    }
+    fn minimize(&mut self, id: u32, a: &mut Actions) {
+        let Some(i) = self.index(id) else {
+            return;
+        };
+        if self.stack[i].minimized {
+            return;
+        }
+        self.cancel_capture(id, a);
+        self.stack[i].minimized = true;
+        self.invalidate(self.stack[i].outer());
+        if self.focused == Some(id) {
+            self.focused = None;
+            a.push(Action::Focus(id, false));
+            if let Some(next) = self.windows().iter().rev().find(|w| !w.minimized).copied() {
+                self.focus(next.id, a);
+            }
+        }
+        self.invalidate(self.bar());
     }
     fn focus(&mut self, id: u32, a: &mut Actions) {
         let Some(i) = self.index(id) else {
@@ -407,6 +488,79 @@ impl Desktop {
         self.focus(id, &mut a);
         a
     }
+    /// Apply a window request using the same focus, damage and capture policy
+    /// as mouse controls. Errors leave the desktop unchanged. Maximize is
+    /// explicit, not a toggle; restore activates and returns to normal bounds.
+    /// Geometry requests preserve minimization, restore maximized windows, and
+    /// clamp movement so the title remains reachable. Positive resize requests
+    /// below 64x48 use that minimum; dimensions above 1920x1080 are rejected.
+    /// Close requests are delivered to the application without removing it.
+    pub fn command(&mut self, id: u32, command: WindowCommand) -> Result<Actions, CommandError> {
+        let i = self.index(id).ok_or(CommandError::NotFound)?;
+        let old = self.stack[i];
+        if matches!(
+            command,
+            WindowCommand::Maximize | WindowCommand::Resize { .. }
+        ) && !old.resizable
+        {
+            return Err(CommandError::Unsupported);
+        }
+        if let WindowCommand::Resize { width, height } = command {
+            if width == 0 || height == 0 || width > 1920 || height > 1080 {
+                return Err(CommandError::InvalidGeometry);
+            }
+        }
+        let mut a = Actions::new();
+        match command {
+            WindowCommand::Activate => self.focus(id, &mut a),
+            WindowCommand::Minimize => self.minimize(id, &mut a),
+            WindowCommand::Maximize => {
+                if !old.maximized {
+                    self.toggle_maximize(id, &mut a);
+                }
+                self.focus(id, &mut a);
+            }
+            WindowCommand::Restore => {
+                if old.maximized {
+                    self.toggle_maximize(id, &mut a);
+                }
+                self.focus(id, &mut a);
+            }
+            WindowCommand::Move { .. } | WindowCommand::Resize { .. } => {
+                self.cancel_capture(id, &mut a);
+                let mut r = if old.maximized {
+                    old.normal
+                } else {
+                    old.content
+                };
+                match command {
+                    WindowCommand::Move { x, y } => {
+                        r.x = x;
+                        r.y = y;
+                    }
+                    WindowCommand::Resize { width, height } => {
+                        r.w = width.max(64) as i32;
+                        r.h = height.max(48) as i32;
+                    }
+                    _ => unreachable!(),
+                }
+                r = self.clamp_normal(r);
+                self.stack[i].content = r;
+                self.stack[i].normal = r;
+                self.stack[i].maximized = false;
+                self.invalidate(old.outer());
+                self.invalidate(self.stack[i].outer());
+                if (old.content.w, old.content.h) != (r.w, r.h) {
+                    a.push(Action::Resize(id, r.w as u32, r.h as u32));
+                }
+            }
+            WindowCommand::Close => {
+                self.cancel_capture(id, &mut a);
+                a.push(Action::Close(id));
+            }
+        }
+        Ok(a)
+    }
     fn cancel_capture(&mut self, id: u32, a: &mut Actions) {
         match self.capture {
             Capture::Client { id: n, .. } if n == id => {
@@ -432,6 +586,9 @@ impl Desktop {
         let mut a = Actions::new();
         self.width = (w as i32).clamp(320, 1920);
         self.height = (h as i32).clamp(240, 1080);
+        let available = self.height - TITLE - BORDER - 48;
+        self.top_height = self.top_height.min(available);
+        self.taskbar_height = self.taskbar_height.min(available - self.top_height);
         for i in 0..self.len {
             if self.stack[i].maximized {
                 let r = self.maximized_bounds();
@@ -469,7 +626,8 @@ impl Desktop {
                     .map(|c| (w.id, c))
             })
     }
-    pub fn motion(&mut self, x: i32, y: i32) -> Actions {
+    /// Update chrome hover without delivering motion to a covered client.
+    pub fn point(&mut self, x: i32, y: i32) {
         let previous = self.hovered_control();
         self.pointer = (x, y);
         let current = self.hovered_control();
@@ -480,6 +638,9 @@ impl Desktop {
                 }
             }
         }
+    }
+    pub fn motion(&mut self, x: i32, y: i32) -> Actions {
+        self.point(x, y);
         let mut a = Actions::new();
         match self.capture {
             Capture::Move {
@@ -493,7 +654,10 @@ impl Desktop {
                     self.stack[i].content.x = (origin.x.saturating_add(x.saturating_sub(ox)))
                         .clamp(8, (self.width - 80).max(8));
                     self.stack[i].content.y = (origin.y.saturating_add(y.saturating_sub(oy)))
-                        .clamp(TITLE + 8, (self.height - TASKBAR - 40).max(TITLE + 8));
+                        .clamp(
+                            self.top_height + TITLE + 8,
+                            (self.height - self.taskbar_height - 40).max(self.top_height + TITLE + 8),
+                        );
                     self.stack[i].normal = self.stack[i].content;
                     self.invalidate(old);
                     self.invalidate(self.stack[i].outer());
@@ -569,7 +733,7 @@ impl Desktop {
         if !matches!(self.capture, Capture::None) {
             return a;
         }
-        if self.bar().contains(x, y) {
+        if self.taskbar_input && self.bar().contains(x, y) {
             if button == 0 {
                 if let Some(i) = (0..self.len).find(|&i| self.task_rect(i).contains(x, y)) {
                     self.focus(self.stack[i].id, &mut a);
@@ -626,17 +790,7 @@ impl Desktop {
         let chrome = w.chrome();
         match chrome.control_at(x, y) {
             Some(Control::Close) => a.push(Action::Close(w.id)),
-            Some(Control::Minimize) => {
-                let i = self.index(w.id).unwrap();
-                self.stack[i].minimized = true;
-                self.invalidate(w.outer());
-                self.focused = None;
-                a.push(Action::Focus(w.id, false));
-                if let Some(next) = self.windows().iter().rev().find(|w| !w.minimized).copied() {
-                    self.focus(next.id, &mut a);
-                }
-                self.invalidate(self.bar());
-            }
+            Some(Control::Minimize) => self.minimize(w.id, &mut a),
             Some(Control::Maximize) => self.toggle_maximize(w.id, &mut a),
             None => {
                 if chrome.drag.contains(x, y) {
@@ -768,6 +922,48 @@ pub fn blit(
                 Pixels::Rgba(p) => p[i],
                 Pixels::Rgb565(p) => rgba565(p[i]),
             };
+        }
+    }
+}
+
+/// Straight-alpha source-over into an opaque packed [R,G,B,A] destination.
+/// The rounding is shared by panel composition and its reference tests.
+pub fn source_over(source: u32, destination: u32) -> u32 {
+    let a = source >> 24;
+    if a == 0 { return destination; }
+    if a == 255 { return source | 0xff000000; }
+    let mix = |shift: u32| -> u32 {
+        let s = (source >> shift) & 255;
+        let d = (destination >> shift) & 255;
+        (s * a + d * (255-a) + 127) / 255
+    };
+    mix(0) | mix(8) << 8 | mix(16) << 16 | 0xff000000
+}
+/// Sample the published mask at the center of a logical input pixel. Input
+/// remains logical at either density; transparent/fringe-only pixels pass on.
+pub fn alpha_hit(source: &[u32], sw: u32, sh: u32, width: u32, height: u32, x: i32, y: i32) -> bool {
+    if width == 0 || height == 0 || sw == 0 || sh == 0 || source.len() != sw as usize * sh as usize
+        || x < 0 || y < 0 || x as u32 >= width || y as u32 >= height { return false; }
+    let sx = ((x as u64 * 2 + 1) * u64::from(sw) / (u64::from(width) * 2)).min(u64::from(sw)-1) as usize;
+    let sy = ((y as u64 * 2 + 1) * u64::from(sh) / (u64::from(height) * 2)).min(u64::from(sh)-1) as usize;
+    source[sy * sw as usize + sx] >> 24 >= 128
+}
+/// Composite one alpha surface over the union of its declared rectangles.
+/// Overlapping rectangles never apply coverage twice. Caller frames are
+/// immutable; no source or guest pointer is retained by this portable seam.
+pub fn blit_alpha(out: &mut [u32], width: u32, height: u32, scale: u32, dest: Rect,
+                  damage: Rect, source: &[u32], sw: u32, sh: u32, regions: &[Rect]) {
+    if !(1..=2).contains(&scale) || out.len() != width as usize * height as usize
+        || source.len() != sw as usize * sh as usize || dest.empty() || sw == 0 || sh == 0 { return; }
+    let r = dest.intersect(damage).intersect(Rect::new(0,0,(width/scale) as i32,(height/scale) as i32));
+    if r.empty() { return; }
+    for y in r.y as u32 * scale..(r.y+r.h) as u32 * scale {
+        let sy = ((y as i64-dest.y as i64*scale as i64)*sh as i64/(dest.h as i64*scale as i64)) as usize;
+        for x in r.x as u32 * scale..(r.x+r.w) as u32 * scale {
+            if !regions.iter().any(|r| r.contains((x/scale) as i32,(y/scale) as i32)) { continue; }
+            let sx = ((x as i64-dest.x as i64*scale as i64)*sw as i64/(dest.w as i64*scale as i64)) as usize;
+            let at = (y*width+x) as usize;
+            out[at] = source_over(source[sy*sw as usize+sx],out[at]);
         }
     }
 }
@@ -990,4 +1186,302 @@ mod tests {
             .iter()
             .all(|w| w.maximized && w.content == d.maximized_bounds()));
     }
+    #[test]
+    fn commands_reject_missing_windows_without_side_effects() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.take_damage();
+        for command in [
+            WindowCommand::Activate,
+            WindowCommand::Minimize,
+            WindowCommand::Maximize,
+            WindowCommand::Restore,
+            WindowCommand::Move { x: 50, y: 60 },
+            WindowCommand::Resize {
+                width: 400,
+                height: 250,
+            },
+            WindowCommand::Close,
+        ] {
+            assert_eq!(d.command(999, command).err(), Some(CommandError::NotFound));
+            assert_eq!(d.focused, Some(1));
+            assert_eq!(d.windows().len(), 1);
+            assert_eq!(d.take_damage().1, 0);
+        }
+    }
+    #[test]
+    fn explicit_maximize_is_idempotent_and_activate_preserves_it() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        let normal = d.get(1).unwrap().content;
+        let a = d.command(1, WindowCommand::Maximize).unwrap();
+        assert!(a.iter().any(|a| a == Action::Resize(1, 796, 536)));
+        let a = d.command(1, WindowCommand::Maximize).unwrap();
+        assert!(!a.iter().any(|a| matches!(a, Action::Resize(..))));
+        assert_eq!(d.get(1).unwrap().normal, normal);
+        d.command(1, WindowCommand::Minimize).unwrap();
+        let a = d.command(1, WindowCommand::Activate).unwrap();
+        let w = d.get(1).unwrap();
+        assert!(!w.minimized);
+        assert!(w.maximized);
+        assert_eq!(w.content, d.maximized_bounds());
+        assert!(!a.iter().any(|a| matches!(a, Action::Resize(..))));
+        d.command(1, WindowCommand::Minimize).unwrap();
+        let a = d.command(1, WindowCommand::Restore).unwrap();
+        let w = d.get(1).unwrap();
+        assert!(!w.minimized && !w.maximized);
+        assert_eq!(w.content, normal);
+        assert_eq!(d.focused, Some(1));
+        assert!(a.iter().any(|a| a == Action::Resize(1, 300, 200)));
+    }
+    #[test]
+    fn minimizing_cancels_capture_and_focuses_the_next_visible_window() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.add(2, 300, 200, true);
+        let w = d.get(2).unwrap();
+        d.motion(w.content.x + 4, w.content.y + 4);
+        d.button(0, true);
+        assert!(matches!(d.capture, Capture::Client { id: 2, .. }));
+        d.take_damage();
+        let actions: Vec<_> = d
+            .command(2, WindowCommand::Minimize)
+            .unwrap()
+            .iter()
+            .collect();
+        assert_eq!(
+            actions,
+            vec![
+                Action::Capture(2, false),
+                Action::Focus(2, false),
+                Action::Focus(1, true)
+            ]
+        );
+        assert!(matches!(d.capture, Capture::None));
+        assert!(d.get(2).unwrap().minimized);
+        assert_eq!(d.focused, Some(1));
+        assert!(d.take_damage().1 > 0);
+        assert_eq!(
+            d.command(2, WindowCommand::Minimize)
+                .unwrap()
+                .iter()
+                .count(),
+            0
+        );
+        assert_eq!(d.take_damage().1, 0);
+        d.command(1, WindowCommand::Minimize).unwrap();
+        assert_eq!(d.focused, None);
+    }
+    #[test]
+    fn minimizing_an_unfocused_window_preserves_focus() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.add(2, 300, 200, true);
+        let a = d.command(1, WindowCommand::Minimize).unwrap();
+        assert!(!a.iter().any(|a| matches!(a, Action::Focus(..))));
+        assert_eq!(d.focused, Some(2));
+    }
+    #[test]
+    fn programmatic_close_is_a_request_not_destruction_or_activation() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.add(2, 300, 200, true);
+        d.command(1, WindowCommand::Minimize).unwrap();
+        let a = d.command(1, WindowCommand::Close).unwrap();
+        assert_eq!(a.iter().collect::<Vec<_>>(), vec![Action::Close(1)]);
+        assert_eq!(d.windows().len(), 2);
+        assert!(d.get(1).unwrap().minimized);
+        assert_eq!(d.focused, Some(2));
+        // An application may refuse or defer closing and keep receiving input.
+        d.command(1, WindowCommand::Activate).unwrap();
+        let w = d.get(1).unwrap();
+        d.motion(w.content.x + 4, w.content.y + 4);
+        d.button(0, true);
+        let a = d.command(1, WindowCommand::Close).unwrap();
+        assert_eq!(
+            a.iter().collect::<Vec<_>>(),
+            vec![Action::Capture(1, false), Action::Close(1)]
+        );
+        assert!(d.get(1).is_some());
+        assert!(matches!(d.capture, Capture::None));
+    }
+    #[test]
+    fn move_restores_normal_dimensions_and_clamps_content_coordinates() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.command(1, WindowCommand::Maximize).unwrap();
+        d.command(1, WindowCommand::Minimize).unwrap();
+        let a = d
+            .command(
+                1,
+                WindowCommand::Move {
+                    x: i32::MIN,
+                    y: i32::MAX,
+                },
+            )
+            .unwrap();
+        let w = d.get(1).unwrap();
+        assert!(w.minimized);
+        assert!(!w.maximized);
+        assert_eq!(w.content, Rect::new(8, 526, 300, 200));
+        assert_eq!(w.normal, w.content);
+        assert!(a.iter().any(|a| a == Action::Resize(1, 300, 200)));
+        assert_eq!(d.focused, None);
+        let a = d
+            .command(
+                1,
+                WindowCommand::Move {
+                    x: i32::MAX,
+                    y: i32::MIN,
+                },
+            )
+            .unwrap();
+        assert_eq!(d.get(1).unwrap().content, Rect::new(720, 36, 300, 200));
+        assert!(!a.iter().any(|a| matches!(a, Action::Resize(..))));
+    }
+    #[test]
+    fn resize_validates_before_mutation_and_uses_pointer_resize_limits() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, true);
+        d.command(1, WindowCommand::Maximize).unwrap();
+        let before = d.get(1).unwrap();
+        d.take_damage();
+        for (width, height) in [
+            (0, 100),
+            (100, 0),
+            (1921, 100),
+            (100, 1081),
+            (u32::MAX, u32::MAX),
+        ] {
+            assert_eq!(
+                d.command(1, WindowCommand::Resize { width, height }).err(),
+                Some(CommandError::InvalidGeometry)
+            );
+            let w = d.get(1).unwrap();
+            assert!(w.maximized);
+            assert_eq!(w.content, before.content);
+            assert_eq!(w.normal, before.normal);
+            assert_eq!(d.take_damage().1, 0);
+        }
+        let a = d
+            .command(
+                1,
+                WindowCommand::Resize {
+                    width: 1,
+                    height: 1,
+                },
+            )
+            .unwrap();
+        let w = d.get(1).unwrap();
+        assert!(!w.maximized);
+        assert_eq!(
+            w.content,
+            Rect::new(before.normal.x, before.normal.y, 64, 48)
+        );
+        assert_eq!(w.normal, w.content);
+        assert!(a.iter().any(|a| a == Action::Resize(1, 64, 48)));
+        let a = d
+            .command(
+                1,
+                WindowCommand::Resize {
+                    width: 1920,
+                    height: 1080,
+                },
+            )
+            .unwrap();
+        assert!(a.iter().any(|a| a == Action::Resize(1, 1920, 1080)));
+    }
+    #[test]
+    fn fixed_windows_reject_geometry_size_commands_but_can_move_and_restore() {
+        let mut d = Desktop::new(800, 600);
+        d.add(1, 300, 200, false);
+        let before = d.get(1).unwrap();
+        d.take_damage();
+        for command in [
+            WindowCommand::Maximize,
+            WindowCommand::Resize {
+                width: 400,
+                height: 250,
+            },
+        ] {
+            assert_eq!(d.command(1, command).err(), Some(CommandError::Unsupported));
+            assert_eq!(d.get(1).unwrap().content, before.content);
+            assert_eq!(d.take_damage().1, 0);
+        }
+        d.command(1, WindowCommand::Move { x: 120, y: 100 })
+            .unwrap();
+        d.command(1, WindowCommand::Minimize).unwrap();
+        let a = d.command(1, WindowCommand::Restore).unwrap();
+        assert!(!d.get(1).unwrap().minimized);
+        assert_eq!(d.get(1).unwrap().content, Rect::new(120, 100, 300, 200));
+        assert!(!a.iter().any(|a| matches!(a, Action::Resize(..))));
+    }
+    #[test]
+    fn geometry_commands_cancel_drag_and_client_capture_without_stale_motion() {
+        for command in [
+            WindowCommand::Move { x: 200, y: 180 },
+            WindowCommand::Resize {
+                width: 400,
+                height: 250,
+            },
+        ] {
+            for client in [false, true] {
+                let mut d = Desktop::new(800, 600);
+                d.add(1, 300, 200, true);
+                let w = d.get(1).unwrap();
+                let (x, y) = if client {
+                    (w.content.x + 4, w.content.y + 4)
+                } else {
+                    (w.chrome().drag.x + 4, w.chrome().drag.y + 4)
+                };
+                d.motion(x, y);
+                d.button(0, true);
+                let a = d.command(1, command).unwrap();
+                assert!(matches!(d.capture, Capture::None));
+                assert_eq!(a.iter().any(|a| a == Action::Capture(1, false)), client);
+                let r = d.get(1).unwrap().content;
+                d.motion(x + 70, y + 40);
+                assert_eq!(d.get(1).unwrap().content, r);
+            }
+        }
+    }
+    #[test]
+    fn shell_edges_reserve_maximized_client_and_repeated_configuration_is_inert() {
+        let mut desktop = Desktop::new(800, 600);
+        desktop.add(1, 200, 100, true);
+        desktop.command(1, WindowCommand::Maximize).unwrap();
+        desktop.take_damage();
+        let actions = desktop.reserve_edges(40, 96);
+        assert_eq!(desktop.get(1).unwrap().content, Rect::new(2, 68, 796, 434));
+        assert!(actions.iter().any(|a| matches!(a, Action::Resize(1, 796, 434))));
+        desktop.take_damage();
+        assert_eq!(desktop.reserve_edges(40, 96).iter().count(), 0);
+        assert_eq!(desktop.take_damage().1, 0);
+        desktop.command(1, WindowCommand::Restore).unwrap();
+        assert!(desktop.get(1).unwrap().content.y >= 76);
+        desktop.host_resize(320, 240);
+        let bounds = desktop.maximized_bounds();
+        assert!(bounds.h >= 48);
+        assert!(bounds.y >= 68);
+        assert!(bounds.y + bounds.h <= 240 - BORDER);
+    }
+
+    #[test]
+    fn straight_alpha_edges_reveal_white_and_overlap_is_not_blended_twice() {
+        let white = 0xffffffff;
+        let half_black = 0x80000000;
+        assert_eq!(source_over(0,white),white);
+        assert_eq!(source_over(half_black,white),0xff7f7f7f);
+        assert_eq!(source_over(0xff332211,white),0xff332211);
+        let source = vec![0,half_black,0xff332211,0];
+        let mut pixels = vec![white;4];
+        let region = Rect::new(0,0,2,2);
+        blit_alpha(&mut pixels,2,2,1,region,region,&source,2,2,&[region,region]);
+        assert_eq!(pixels,vec![white,0xff7f7f7f,0xff332211,white]);
+        assert!(!alpha_hit(&source,2,2,2,2,0,0));
+        assert!(alpha_hit(&source,2,2,2,2,1,0));
+        assert!(!alpha_hit(&[0x7f000000],1,1,1,1,0,0));
+        assert!(alpha_hit(&[0x80000000;4],2,2,1,1,0,0));
+    }
+
 }

@@ -5,6 +5,27 @@ It uses shared LVGL components and the portable single-window desktop policy,
 with Fuse-X first and Riplix x64 when its graphics services are ready. The
 Nano-X/Slate work below is retained for existing RVM support, reusable assets
 and historical decisions; it is no longer the framework for new applications.
+The current [proposed FuseDE desktop contract](../graphics/graphite-roadmap.md#fusede-desktop-contract-proposed)
+defines application identity, the dock, virtual workspaces, optional tiling,
+fullscreen spaces and Activity Monitor, with Fuse-X implementation first and
+separate x64 integration acceptance. Application/session identities, the guest
+Graphite shell, [grouped pinned dock](../fuse-x/desktop.md#grouped-application-dock),
+searchable application catalog and regional top panels are implemented in nested
+Fuse-X. Workspaces, tiling, fullscreen spaces and Activity Monitor remain planned.
+
+Run `scripts/run-fuse-x.sh --desktop` to build/install the five Graphite apps,
+`fusedeshell` and `/usr/share/applications` catalog, then start the shell through
+`/init`. The dock begins with an Applications menu button, combines GUI and
+selected TUI launchers, and supplies per-app window/context menus and user pins.
+The top has separate Riplix and clock pills (`Wed 21 Oct 22:43`) with free space
+between them. Pins live at `$HOME/.config/fusede/pins.ini`; system installation
+does not overwrite them. Missing programs are marked unavailable; TUI metadata
+keeps their helper processes out of the dock. See the
+[catalog format](../../ports/fusede/README.md#graphite-application-catalog) and
+[current launch/panel behavior](../fuse-x/desktop.md#graphite-shell-and-application-catalog).
+`--run-only --desktop` requires an installed or explicitly staged shell/catalog;
+native-window and rescue sessions retain terminals. No x64 boot integration or
+exact desktop shortcut bindings are introduced.
 
 The original FuseDE plan targeted a custom desktop for Riplix on RVM. Its shared application UI,
 applications and dock must also compile for Fuse-X. The agreed direction on
@@ -26,7 +47,7 @@ window-management models.
 | [Graphics foundation](../graphics/README.md) | GX, Nano-X and existing graphics validation |
 | [Fuse-X desktop integration](../fuse-x/desktop.md) | Implemented native windows, menus and session lifetime |
 
-## Agreed decisions
+## Original agreed decisions
 
 - Port NXDSKTOP as a usable initial RVM desktop, retaining it as a lightweight
   alternative when FuseDE becomes available.
@@ -72,5 +93,6 @@ NanoWM now uses Slate decorations and provides border resizing, minimize,
 maximize/restore and Alt+Tab. The shared workspace service supplies stable client
 IDs, enumeration, change notifications and actions on both platforms, plus RVM
 panel reservations. See [workspace services](workspace.md) for controls,
-capabilities and the native fallback. The remaining companion apps, Nuklear
-evaluation, shared widget toolkit and custom shell/dock remain planned.
+capabilities and the native fallback. The remaining Nano-X companion-app and
+Nuklear ideas below belong to the earlier investigation. New shared widgets and
+shell/dock work use the implemented Graphite successor described above.

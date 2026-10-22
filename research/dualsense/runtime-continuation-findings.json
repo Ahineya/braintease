@@ -1,0 +1,929 @@
+{
+  "date": "2026-10-22",
+  "scope": "Offline Windows Remote Play bootstrap research; no native application launch or USB access",
+  "inputs": [
+    {
+      "path": "analysis/remoteplay-win/payload/Data1/runtime.dll",
+      "bytes": 62004632,
+      "sha256": "ae4ae997261fd9da4dddbba0edea6244bcefe2f24899221f793826b4da497e87"
+    },
+    {
+      "path": "analysis/remoteplay-win/payload/Data1/remoteplay.exe",
+      "bytes": 37795744,
+      "sha256": "d4e355c18bab988bdc3dc69ef4746d5064983cc7cac699ccda8d46b834291616"
+    },
+    {
+      "path": "analysis/remoteplay-win/payload/Data1/preloader.dll",
+      "bytes": 49568,
+      "sha256": "78f0f88ed59e6d8d26f3f149703d781cdf2b60edc81db59eca310f3d1c3301c7"
+    },
+    {
+      "path": "analysis/remoteplay-win/windows-data/ntdll-19041.207.dll",
+      "bytes": 2020080,
+      "sha256": "96edaf03c5c54e5e0f8892a4944020dc1d4ca8edeb8de3fa1dabf02c61812dda"
+    }
+  ],
+  "historical_evidence_verified": 17,
+  "differential_stages": {
+    "imports": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "steps": [
+        42583
+      ],
+      "boundary_offset": "0x88"
+    },
+    "module-pointer": {
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "steps": [
+        59122
+      ],
+      "boundary_offset": "0x20"
+    }
+  },
+  "table_flag_copy": {
+    "source_offset": "0x85",
+    "runtime_va": "0x200318078",
+    "mutation_control": "zero and one propagate to runtime copy"
+  },
+  "module_discovery": {
+    "preloader_source": {
+      "path": "analysis/remoteplay-win/payload/Data1/preloader.dll",
+      "bytes": 49568,
+      "sha256": "78f0f88ed59e6d8d26f3f149703d781cdf2b60edc81db59eca310f3d1c3301c7"
+    },
+    "invalid_pointer_call": {
+      "va": "0x180003546",
+      "rcx": 4,
+      "import": "ntdll.dll!MD5Init"
+    },
+    "exception_scope": [
+      "0x1",
+      "0x3546",
+      "0x3551",
+      "0x34c0",
+      "0x3586"
+    ],
+    "filter": {
+      "va": "0x1800034c0",
+      "bytes": "48b80000000000000000488b4908488b89f800000048898c0230000000b801000000c3",
+      "context_pointer_offset": "0x8",
+      "saved_RIP_offset": "0xf8",
+      "return": 1
+    },
+    "module_base_lookup": {
+      "va": "0x180003569",
+      "import": "ntdll.dll!RtlPcToFileHeader"
+    },
+    "ntdll_MD5Init": {
+      "rva": "0x7c320",
+      "first_instruction": "and dword ptr [rcx], 0",
+      "bytes": "832100"
+    },
+    "interpretation": "Static module-discovery chain using a handled invalid-pointer fault, not an observed native Windows exception or controller crypto operation"
+  },
+  "export_walk": {
+    "module_version": "10.0.19041.207",
+    "synthetic_base": "0x62000000",
+    "named_exports_examined": 2429,
+    "Zw_prefix_exports": 471,
+    "stack_allocation_bytes": 7536,
+    "inference": "Sorted Zw export-address/name-hash catalog; 470 standard stub service IDs match their catalog indices; ZwQuerySystemTime begins with a jump and is not checked by that prefix test",
+    "catalog_records": 471,
+    "independent_hash_matches": 471,
+    "catalog_index_matches_stub_id": 470,
+    "catalog_stack_va": "0x700fc210"
+  },
+  "extended_run": {
+    "seed": 0,
+    "steps": 48306552,
+    "seconds": 81.246716,
+    "stop": "helper exit before target instruction",
+    "last_va": "0x20098c72b",
+    "body_chain": [
+      {
+        "start": "0x20230b931",
+        "end": "0x20230d84f",
+        "at_step": 16752
+      },
+      {
+        "start": "0x20329b333",
+        "end": "0x20329d016",
+        "at_step": 18442
+      },
+      {
+        "start": "0x202f56b3d",
+        "end": "0x202f58d4c",
+        "at_step": 19992
+      },
+      {
+        "start": "0x201060d8f",
+        "end": "0x20106246e",
+        "at_step": 21758
+      },
+      {
+        "start": "0x202a3fb92",
+        "end": "0x202a41636",
+        "at_step": 37965
+      },
+      {
+        "start": "0x202a1f5ca",
+        "end": "0x202a210eb",
+        "at_step": 39409
+      },
+      {
+        "start": "0x200d8b105",
+        "end": "0x200d8d08f",
+        "at_step": 40772
+      },
+      {
+        "start": "0x202878619",
+        "end": "0x20287ab18",
+        "at_step": 57517
+      },
+      {
+        "start": "0x20088a6c9",
+        "end": "0x20088a77a",
+        "at_step": 59416
+      },
+      {
+        "start": "0x2008d3ff1",
+        "end": "0x2008d4088",
+        "at_step": 59449
+      },
+      {
+        "start": "0x2007366d2",
+        "end": "0x2007366e6",
+        "at_step": 59460
+      },
+      {
+        "start": "0x200810a35",
+        "end": "0x200810b56",
+        "at_step": 59465
+      },
+      {
+        "start": "0x2032300bd",
+        "end": "0x20323d860",
+        "at_step": 59529
+      },
+      {
+        "start": "0x20270332d",
+        "end": "0x2027050b3",
+        "at_step": 73087
+      },
+      {
+        "start": "0x2026ec449",
+        "end": "0x2026edc6b",
+        "at_step": 74679
+      },
+      {
+        "start": "0x201a7ab7c",
+        "end": "0x201a7bcbb",
+        "at_step": 75899
+      },
+      {
+        "start": "0x20098d225",
+        "end": "0x20098d22a",
+        "at_step": 76786,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2035861d6",
+        "end": "0x20358720f",
+        "at_step": 76787
+      },
+      {
+        "start": "0x202e7286f",
+        "end": "0x202e745f8",
+        "at_step": 77603
+      },
+      {
+        "start": "0x202e5796c",
+        "end": "0x202e598a8",
+        "at_step": 79171
+      },
+      {
+        "start": "0x20293adce",
+        "end": "0x20293c322",
+        "at_step": 80852
+      },
+      {
+        "start": "0x202929f0f",
+        "end": "0x20292b4f2",
+        "at_step": 81947
+      },
+      {
+        "start": "0x202916d25",
+        "end": "0x2029184b8",
+        "at_step": 83102
+      },
+      {
+        "start": "0x20290a78c",
+        "end": "0x20290ad3c",
+        "at_step": 84275
+      },
+      {
+        "start": "0x2028fda21",
+        "end": "0x2028ff3bd",
+        "at_step": 84609
+      },
+      {
+        "start": "0x2028eca5d",
+        "end": "0x2028ee913",
+        "at_step": 85907
+      },
+      {
+        "start": "0x2028c92b2",
+        "end": "0x2028cacda",
+        "at_step": 87493
+      },
+      {
+        "start": "0x20098dca7",
+        "end": "0x20098dcac",
+        "at_step": 88798,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2038fa6c2",
+        "end": "0x2038fc380",
+        "at_step": 88799
+      },
+      {
+        "start": "0x20098d0d1",
+        "end": "0x20098d0d6",
+        "at_step": 659515,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2038b6316",
+        "end": "0x2038b855c",
+        "at_step": 659516
+      },
+      {
+        "start": "0x20098dc3e",
+        "end": "0x20098dc43",
+        "at_step": 10344484,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2034a61dd",
+        "end": "0x2034a76d8",
+        "at_step": 10344485
+      },
+      {
+        "start": "0x20098d8ec",
+        "end": "0x20098d8f1",
+        "at_step": 14645936,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x20335caf1",
+        "end": "0x20335f036",
+        "at_step": 14645937
+      },
+      {
+        "start": "0x2008e93d4",
+        "end": "0x2008e94ec",
+        "at_step": 14647894
+      },
+      {
+        "start": "0x20076cb28",
+        "end": "0x20076cbdf",
+        "at_step": 14647950
+      },
+      {
+        "start": "0x200807647",
+        "end": "0x20080765b",
+        "at_step": 14647984
+      },
+      {
+        "start": "0x2025f5707",
+        "end": "0x2025f7d62",
+        "at_step": 14662880
+      },
+      {
+        "start": "0x200e4e5c5",
+        "end": "0x200e4f67a",
+        "at_step": 14664869
+      },
+      {
+        "start": "0x20098c884",
+        "end": "0x20098c889",
+        "at_step": 14665712,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2033f96c7",
+        "end": "0x2033fbbd3",
+        "at_step": 14665713
+      },
+      {
+        "start": "0x20098c294",
+        "end": "0x20098c299",
+        "at_step": 14667670,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2039f7e95",
+        "end": "0x2039fa187",
+        "at_step": 14667671
+      },
+      {
+        "start": "0x201e78e3f",
+        "end": "0x201e7a5de",
+        "at_step": 14669515
+      },
+      {
+        "start": "0x201d305ba",
+        "end": "0x201d32590",
+        "at_step": 14670689
+      },
+      {
+        "start": "0x201d1bfb3",
+        "end": "0x201d1d0df",
+        "at_step": 14672327
+      },
+      {
+        "start": "0x201cebef7",
+        "end": "0x201ced7b5",
+        "at_step": 14673242
+      },
+      {
+        "start": "0x201cda97b",
+        "end": "0x201cdaec3",
+        "at_step": 14674498
+      },
+      {
+        "start": "0x201cc08aa",
+        "end": "0x201cc2de5",
+        "at_step": 14674784
+      },
+      {
+        "start": "0x201a3b6f7",
+        "end": "0x201a3ce62",
+        "at_step": 14676755
+      },
+      {
+        "start": "0x2011d50de",
+        "end": "0x2011d7234",
+        "at_step": 14678063
+      },
+      {
+        "start": "0x20098da54",
+        "end": "0x20098da59",
+        "at_step": 14679864,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203a6600b",
+        "end": "0x203a683d1",
+        "at_step": 14679865
+      },
+      {
+        "start": "0x201a2a6fa",
+        "end": "0x201a2cacf",
+        "at_step": 15364133
+      },
+      {
+        "start": "0x20098ccc6",
+        "end": "0x20098cccb",
+        "at_step": 26978095,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x20321a7a0",
+        "end": "0x20321c00d",
+        "at_step": 26978096
+      },
+      {
+        "start": "0x20085b4f9",
+        "end": "0x20085b5b6",
+        "at_step": 26979302
+      },
+      {
+        "start": "0x2007d85f7",
+        "end": "0x2007d860b",
+        "at_step": 26979336
+      },
+      {
+        "start": "0x2006c8371",
+        "end": "0x2006c8494",
+        "at_step": 26979341
+      },
+      {
+        "start": "0x20376a12e",
+        "end": "0x2037779f2",
+        "at_step": 26979405
+      },
+      {
+        "start": "0x2010a13ca",
+        "end": "0x2010a2a07",
+        "at_step": 26992731
+      },
+      {
+        "start": "0x2008575a3",
+        "end": "0x2008576bb",
+        "at_step": 26993895
+      },
+      {
+        "start": "0x2002c5440",
+        "end": "0x2002c575c",
+        "at_step": 26993934
+      },
+      {
+        "start": "0x2008ca126",
+        "end": "0x2008ca1e3",
+        "at_step": 26994027
+      },
+      {
+        "start": "0x2006c8caf",
+        "end": "0x2006c8cc3",
+        "at_step": 26994061
+      },
+      {
+        "start": "0x200813ed0",
+        "end": "0x200813ff2",
+        "at_step": 26994066
+      },
+      {
+        "start": "0x2034eb007",
+        "end": "0x2034fa2e2",
+        "at_step": 26994128
+      },
+      {
+        "start": "0x202d79740",
+        "end": "0x202d7b35b",
+        "at_step": 27009323
+      },
+      {
+        "start": "0x2014295a3",
+        "end": "0x20142a8d0",
+        "at_step": 27010771
+      },
+      {
+        "start": "0x20098dc75",
+        "end": "0x20098dc7a",
+        "at_step": 27011779,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2035367c8",
+        "end": "0x2035382e3",
+        "at_step": 27011780
+      },
+      {
+        "start": "0x20287bc80",
+        "end": "0x20287cf9c",
+        "at_step": 48062894
+      },
+      {
+        "start": "0x200764e34",
+        "end": "0x200764eee",
+        "at_step": 48063889
+      },
+      {
+        "start": "0x200779b56",
+        "end": "0x200779b6a",
+        "at_step": 48063923
+      },
+      {
+        "start": "0x201c0aeae",
+        "end": "0x201c0cd76",
+        "at_step": 48078819
+      },
+      {
+        "start": "0x2007657ab",
+        "end": "0x2007658c3",
+        "at_step": 48080530
+      },
+      {
+        "start": "0x2002cd520",
+        "end": "0x2002ce0c4",
+        "at_step": 48080569
+      },
+      {
+        "start": "0x200816a9d",
+        "end": "0x200816b57",
+        "at_step": 48181572
+      },
+      {
+        "start": "0x2008d6e42",
+        "end": "0x2008d6e56",
+        "at_step": 48181606
+      },
+      {
+        "start": "0x201dadaa0",
+        "end": "0x201daecbc",
+        "at_step": 48196502
+      },
+      {
+        "start": "0x201d9fe7d",
+        "end": "0x201da0e39",
+        "at_step": 48197447
+      },
+      {
+        "start": "0x20098c0a5",
+        "end": "0x20098c0aa",
+        "at_step": 48198257,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2037c265c",
+        "end": "0x2037c4846",
+        "at_step": 48198258
+      },
+      {
+        "start": "0x20098ced3",
+        "end": "0x20098ced8",
+        "at_step": 48199917,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203173ee5",
+        "end": "0x203176330",
+        "at_step": 48199918
+      },
+      {
+        "start": "0x2027c09e6",
+        "end": "0x2027c2bb0",
+        "at_step": 48201880
+      },
+      {
+        "start": "0x2027a4e9c",
+        "end": "0x2027a75cd",
+        "at_step": 48203809
+      },
+      {
+        "start": "0x2020bd409",
+        "end": "0x2020bf346",
+        "at_step": 48205957
+      },
+      {
+        "start": "0x20098d5a9",
+        "end": "0x20098d5ae",
+        "at_step": 48207653,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203749dcd",
+        "end": "0x20374ce7c",
+        "at_step": 48207654
+      },
+      {
+        "start": "0x202b8ecea",
+        "end": "0x202b918d0",
+        "at_step": 48210303
+      },
+      {
+        "start": "0x201642038",
+        "end": "0x2016440f9",
+        "at_step": 48212661
+      },
+      {
+        "start": "0x20098db1c",
+        "end": "0x20098db21",
+        "at_step": 48214473,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203266b27",
+        "end": "0x203267f76",
+        "at_step": 48214474
+      },
+      {
+        "start": "0x200bb2f8b",
+        "end": "0x200bb470f",
+        "at_step": 48215610
+      },
+      {
+        "start": "0x2009f7f40",
+        "end": "0x2009fa2a2",
+        "at_step": 48216875
+      },
+      {
+        "start": "0x20191df83",
+        "end": "0x20191fca3",
+        "at_step": 48226436
+      },
+      {
+        "start": "0x2009e0abd",
+        "end": "0x2009e2921",
+        "at_step": 48228002
+      },
+      {
+        "start": "0x20098c596",
+        "end": "0x20098c59b",
+        "at_step": 48229632,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2034438a8",
+        "end": "0x203445e83",
+        "at_step": 48229633
+      },
+      {
+        "start": "0x202b01fe5",
+        "end": "0x202b037a5",
+        "at_step": 48231795
+      },
+      {
+        "start": "0x202aec17e",
+        "end": "0x202aedda0",
+        "at_step": 48233060
+      },
+      {
+        "start": "0x200d071c3",
+        "end": "0x200d0985e",
+        "at_step": 48234622
+      },
+      {
+        "start": "0x20098e1a7",
+        "end": "0x20098e1ac",
+        "at_step": 48244066,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203a13f8b",
+        "end": "0x203a159d0",
+        "at_step": 48244067
+      },
+      {
+        "start": "0x2029aeebc",
+        "end": "0x2029b1471",
+        "at_step": 48245544
+      },
+      {
+        "start": "0x2028fb31e",
+        "end": "0x2028fda21",
+        "at_step": 48247628
+      },
+      {
+        "start": "0x20195c9f4",
+        "end": "0x20195edb2",
+        "at_step": 48249695
+      },
+      {
+        "start": "0x200d8127a",
+        "end": "0x200d82b6a",
+        "at_step": 48251658
+      },
+      {
+        "start": "0x20098c541",
+        "end": "0x20098c546",
+        "at_step": 48253058,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x203822455",
+        "end": "0x20382426a",
+        "at_step": 48253059
+      },
+      {
+        "start": "0x200c74b90",
+        "end": "0x200c76bbf",
+        "at_step": 48254691
+      },
+      {
+        "start": "0x2019060f1",
+        "end": "0x2019085a0",
+        "at_step": 48287323
+      },
+      {
+        "start": "0x20098cb4f",
+        "end": "0x20098cb54",
+        "at_step": 48289349,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2030197c2",
+        "end": "0x20301be99",
+        "at_step": 48289350
+      },
+      {
+        "start": "0x203008800",
+        "end": "0x20300a728",
+        "at_step": 48291412
+      },
+      {
+        "start": "0x200db3c8f",
+        "end": "0x200db517a",
+        "at_step": 48293201
+      },
+      {
+        "start": "0x20098c15e",
+        "end": "0x20098c163",
+        "at_step": 48294379,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x20351b6ee",
+        "end": "0x20351c65c",
+        "at_step": 48294380
+      },
+      {
+        "start": "0x20098d46e",
+        "end": "0x20098d473",
+        "at_step": 48298753,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x20370ecef",
+        "end": "0x203710e8b",
+        "at_step": 48298754
+      },
+      {
+        "start": "0x20098c780",
+        "end": "0x20098c785",
+        "at_step": 48300668,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2036452bd",
+        "end": "0x203647afe",
+        "at_step": 48300669
+      },
+      {
+        "start": "0x20098cac8",
+        "end": "0x20098cacd",
+        "at_step": 48302884,
+        "kind": "observed direct jump to PE function start"
+      },
+      {
+        "start": "0x2034cb7b8",
+        "end": "0x2034cdb70",
+        "at_step": 48302885
+      },
+      {
+        "start": "0x20267a586",
+        "end": "0x20267c6ee",
+        "at_step": 48304804
+      },
+      {
+        "start": "0x20098c72b",
+        "end": "0x20098c730",
+        "at_step": 48306551,
+        "kind": "observed direct jump to PE function start"
+      }
+    ],
+    "stack_probes": [
+      {
+        "at": "0x2002c00b0",
+        "step": 14647933,
+        "allocation": "0x1d70",
+        "rsp": "0x700fdcc8"
+      }
+    ]
+  },
+  "extended_boundary": "0x202fc3533",
+  "main_image_read_count": 0,
+  "module_read_counts_by_pc": {
+    "0x2026ecd9c": 1,
+    "0x201a7b12d": 1,
+    "0x203586d31": 1,
+    "0x202e7304f": 1,
+    "0x202e584fd": 1,
+    "0x20293b470": 1,
+    "0x20292a4db": 1,
+    "0x20292a591": 1,
+    "0x202917667": 1,
+    "0x20290a9b1": 1,
+    "0x20290a9bb": 1,
+    "0x20290a9c6": 1,
+    "0x2028ff1fd": 2429,
+    "0x2028ed7bc": 2429,
+    "0x2028edaf9": 2429,
+    "0x2028ca969": 2429,
+    "0x2034a65de": 471,
+    "0x2033f9f63": 1,
+    "0x2039f8634": 1,
+    "0x201e7a2fc": 1,
+    "0x201d3213f": 1,
+    "0x201d1cbd0": 1,
+    "0x201d1cbec": 1,
+    "0x201cec7b0": 1,
+    "0x201cdac0b": 1,
+    "0x201cdac16": 1,
+    "0x201cdac29": 1,
+    "0x201cc0f02": 2429,
+    "0x201a3c9c1": 2429,
+    "0x201a3c9ea": 2429,
+    "0x2011d6b2e": 2429,
+    "0x20321aead": 471,
+    "0x2001a0110": 1619,
+    "0x2001a0131": 1232,
+    "0x2001a0149": 471,
+    "0x2002c55cb": 327,
+    "0x2002c55d9": 327,
+    "0x2002c55e8": 327,
+    "0x2002c55f7": 327,
+    "0x2002c546a": 143,
+    "0x2002c5477": 143,
+    "0x2002c5576": 12,
+    "0x2002c5584": 12,
+    "0x2002c5598": 12,
+    "0x2002c55aa": 12,
+    "0x2002c567d": 1,
+    "0x2002c5682": 1
+  },
+  "containment_controls": 22,
+  "unresolved": [
+    "Encoded API/syscall globals and catalog consumers",
+    "Main EXE unpacking and HID transport callers",
+    "Controller firmware decryption, custom code acceptance and RAM execution"
+  ],
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-context",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_pointers",
+    "https://github.com/m417z/winbindex/blob/main/winbindex.js"
+  ],
+  "evidence": [
+    {
+      "path": "emulate_runtime_continue.py",
+      "bytes": 21148,
+      "sha256": "86cfc0de9164d1ab39e611222b824a05872cd0d532ca79050d970ba5286462e9"
+    },
+    {
+      "path": "test_runtime_continuation.py",
+      "bytes": 5940,
+      "sha256": "29cc16da913d2fc91734cf2e1fe72d032018010a09679a8cb745823b0a9cd201"
+    },
+    {
+      "path": "check_runtime_bootstrap.py",
+      "bytes": 1393,
+      "sha256": "19922d9c67f7a600f77463862ab3e30c68f63b87740fe11ecfaf0556d347d66e"
+    },
+    {
+      "path": "analyze_runtime_continuation.py",
+      "bytes": 7972,
+      "sha256": "d389b25aa3176eb9337421feb7f20ea8b5ef85809d079080479355a2b36a37ed"
+    },
+    {
+      "path": "analyze_runtime_catalog.py",
+      "bytes": 5756,
+      "sha256": "138af99a0b1ecafd51d362705c21222905214db83845dc43ee9d5ae4e10c6ff6"
+    },
+    {
+      "path": "fetch_windows_data.py",
+      "bytes": 1199,
+      "sha256": "0e594e6da1605eb2f5ca355c03b5b5357cc9d7e609211c5c3781205a9042a273"
+    },
+    {
+      "path": "windows-data-source.json",
+      "bytes": 1322,
+      "sha256": "e57f7ed833b255732a49d3b64094e5785ad8ed2bec89e05841d8c73501d4064d"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-continuation-imports.json",
+      "bytes": 93608,
+      "sha256": "8ba61cb2757852bd1d9b7e40817dbbcba5ecf69ee08805e16df73dcb0dd2e08c"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-continuation-module-pointer.json",
+      "bytes": 145579,
+      "sha256": "d4cb62688be0480d9b3f227636eb4ffa632f73326264f88a9b91f5cab0f0a063"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-continuation-module-data.json",
+      "bytes": 3393328,
+      "sha256": "abc33a0b64b30c8916112be0e2acfcc8f0da225825397495a6e3bcfc40f5a8c2"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-continuation-mutations.json",
+      "bytes": 51829,
+      "sha256": "1f03cf4cbffdb6bf5dbcfd0a359aa220b1d23f67e31ea32cda97534fc6f4f019"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/continuation-policy-controls.json",
+      "bytes": 1222,
+      "sha256": "416425d4ecd628c35652c0cc7df481a6bac19adc9147564868a7329660632f2b"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/preloader-module-base-proof.json",
+      "bytes": 1001,
+      "sha256": "cf6df55ef13f33ef7170e74601e72a7ac73a1427b6de1cc5d6618cb1fa83315b"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/zw-export-catalog.json",
+      "bytes": 163049,
+      "sha256": "6e888072f75622b92f274d1a79a2765fb78d2995f297ad18e57a328d0bf2633b"
+    },
+    {
+      "path": "analysis/remoteplay-win/derived/context-continuation-module-data-seed0.stack.bin",
+      "bytes": 1048576,
+      "sha256": "0c7ee9af8f0b1db121fb009051ef0150c37b3388e3bb9719e52f565cc7d8d2a8"
+    }
+  ]
+}

@@ -1,5 +1,10 @@
 # FuseDE workspace services
 
+This is the implemented Nano-X/Slate compatibility service. The successor
+[Graphite FuseDE desktop contract](../graphics/graphite-roadmap.md#fusede-desktop-contract-proposed)
+is a proposal for independent GX clients; request 252 and this service's window
+roles do not already provide its manager authority or virtual workspaces.
+
 FuseDE applications can enumerate windows, observe workspace changes and request
 activation, minimization, restoration or close through
 [`fde_workspace.h`](../../ports/fusede/include/fde_workspace.h). NanoWM adds Slate

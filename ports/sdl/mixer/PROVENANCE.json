@@ -4,7 +4,15 @@
   "source_api": "Bounded subset of SDL_mixer 1.2 effect-channel APIs",
   "api_reference": "https://www.libsdl.org/projects/old/SDL_mixer/docs/SDL_mixer.html",
   "license": "LGPL-2.1-or-later",
-  "files": ["SDL_mixer.h", "mixer.c"],
+  "files": [
+    "SDL_mixer.h",
+    "mixer.c",
+    "chunk.inc",
+    "client.c",
+    "helper.c",
+    "ipc.h"
+  ],
   "dependency": "Pinned SDL 1.2.15 PCM WAV and AudioCVT implementation; see ../PROVENANCE.json",
-  "limits": "Signed 16-bit channel/count ABI (32767); checked dynamic allocation; uncompressed PCM WAV and raw PCM; no music/compressed codecs; cooperative SDL callbacks"
+  "limits": "Signed 16-bit channel/count ABI (32767); checked dynamic allocation; uncompressed PCM WAV and raw PCM; no music/compressed codecs; local callbacks cooperative, optional effects helper independently scheduled with one exclusive PCM lease",
+  "process_profile": "Optional finite effects IPC helper; no general SDL threads or arbitrary callback execution"
 }

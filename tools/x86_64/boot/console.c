@@ -7,8 +7,11 @@ static const uint8_t *font_alpha;
 #endif
 static unsigned font_width = 8, font_height = 16;
 static unsigned console_ready;
+static unsigned graphics_owns_display;
+void console_graphics(unsigned active);
 void boot_diagnostic(const char *message, uint64_t status) {
     if (!console_ready) return;
+    console_graphics(0);
     screen_status("Kernel panic; machine stopped");
     const char *prefix = "\n[KERNEL PANIC] ";
     while (*prefix) console_write(*prefix++);
@@ -58,7 +61,7 @@ static void present_rectangle(unsigned x, unsigned y, unsigned width, unsigned h
     presented_bytes += (uint64_t)width * height * 4;
 }
 void console_flush(void) {
-    if (!shadow) return;
+    if (!shadow || graphics_owns_display) return;
     unsigned visible = console_ready && cursor_visible;
     unsigned x = console_x, y = console_y;
     /* A pending autowrap position belongs to the last cell, not the margin. */
@@ -87,6 +90,16 @@ void console_flush(void) {
     __asm__ volatile("sfence" : : : "memory");
 #endif
     ++present_count; dirty = 0; last_present = rdtsc();
+}
+void console_graphics(unsigned active) {
+    if (active) {
+        if (!graphics_owns_display) console_flush();
+        graphics_owns_display = 1;
+    } else if (graphics_owns_display) {
+        graphics_owns_display = 0; cursor_presented = 0;
+        damage(0,0,boot.width,boot.height);
+        console_flush();
+    }
 }
 void console_report(void) {
     serial("CONSOLE_BATCHED_OK presents="); hex(present_count);
