@@ -1,3 +1,12 @@
+HISTORICAL USB BOOT JOURNAL — superseded for current operations
+==============================================================
+Start with README.md in this directory for the reconciled 2026-10-22 baseline.
+Later combined networking, 1GiB root, internal EFI boot, terminal packages and
+GUI/touchpad acceptance supersede the older pending/current-state statements
+below. These dated payloads remain provenance, not the current default image
+or a live report of which OS is running. Use ssh.md and efi-updates.md for
+current connection and publication procedures; keep USB as recovery media.
+
 OFFLINE CLI USB REFRESH — 2026-10-19
 ====================================
 105 selected CLI commands plus diagnostics are installed on the grown 128MiB

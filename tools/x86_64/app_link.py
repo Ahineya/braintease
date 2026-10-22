@@ -7,6 +7,7 @@ ELF load segments, checked RELATIVE relocations and bounded binary metadata.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -99,7 +100,7 @@ def link(inputs, output):
     with tempfile.TemporaryDirectory(prefix='.riplix-link-', dir=output.parent) as temporary:
         directory = Path(temporary)
         obj, manifest = directory / 'app.o', directory / 'manifest.json'
-        subprocess.run([str(ROOT / 'target/release/rcc-native-object'), '--triple', 'x86_64-unknown-none',
+        subprocess.run([os.environ.get('RIPLIX_NATIVE_OBJECT', str(ROOT / 'target/release/rcc-native-object')), '--triple', 'x86_64-unknown-none',
                         '--application', str(manifest), *map(str, inputs), '-o', str(obj)], check=True)
         meta = json.loads(manifest.read_text())
         if (meta['arch'], meta['os'], meta['abi']) != ('x86_64', 'none', 2) or meta.get('module'):

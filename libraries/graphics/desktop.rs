@@ -206,6 +206,8 @@ enum Capture {
 pub struct Desktop {
     pub width: i32,
     pub height: i32,
+    max_width: i32,
+    max_height: i32,
     pub focused: Option<u32>,
     taskbar_height: i32,
     top_height: i32,
@@ -219,9 +221,18 @@ pub struct Desktop {
 }
 impl Desktop {
     pub fn new(width: i32, height: i32) -> Self {
+        Self::with_limits(width, height, 1920, 1080)
+    }
+    /// Backend resource bounds, independent of the initial output geometry.
+    /// Hosted callers retain their existing profile through `new`.
+    pub fn with_limits(width: i32, height: i32, max_width: i32, max_height: i32) -> Self {
+        let max_width = max_width.clamp(320, 8192);
+        let max_height = max_height.clamp(240, 8192);
         let mut s = Self {
-            width: width.clamp(320, 1920),
-            height: height.clamp(240, 1080),
+            width: width.clamp(320, max_width),
+            height: height.clamp(240, max_height),
+            max_width,
+            max_height,
             focused: None,
             taskbar_height: TASKBAR,
             top_height: 0,
@@ -493,7 +504,7 @@ impl Desktop {
     /// explicit, not a toggle; restore activates and returns to normal bounds.
     /// Geometry requests preserve minimization, restore maximized windows, and
     /// clamp movement so the title remains reachable. Positive resize requests
-    /// below 64x48 use that minimum; dimensions above 1920x1080 are rejected.
+    /// below 64x48 use that minimum; dimensions above the backend limits fail.
     /// Close requests are delivered to the application without removing it.
     pub fn command(&mut self, id: u32, command: WindowCommand) -> Result<Actions, CommandError> {
         let i = self.index(id).ok_or(CommandError::NotFound)?;
@@ -506,7 +517,7 @@ impl Desktop {
             return Err(CommandError::Unsupported);
         }
         if let WindowCommand::Resize { width, height } = command {
-            if width == 0 || height == 0 || width > 1920 || height > 1080 {
+            if width == 0 || height == 0 || width > self.max_width as u32 || height > self.max_height as u32 {
                 return Err(CommandError::InvalidGeometry);
             }
         }
@@ -584,8 +595,8 @@ impl Desktop {
     }
     pub fn host_resize(&mut self, w: u32, h: u32) -> Actions {
         let mut a = Actions::new();
-        self.width = (w as i32).clamp(320, 1920);
-        self.height = (h as i32).clamp(240, 1080);
+        self.width = (w as i32).clamp(320, self.max_width);
+        self.height = (h as i32).clamp(240, self.max_height);
         let available = self.height - TITLE - BORDER - 48;
         self.top_height = self.top_height.min(available);
         self.taskbar_height = self.taskbar_height.min(available - self.top_height);
@@ -671,8 +682,8 @@ impl Desktop {
             } => {
                 if let Some(i) = self.index(id) {
                     let old = self.stack[i].outer();
-                    let w = (origin.w.saturating_add(x.saturating_sub(ox))).clamp(64, 1920);
-                    let h = (origin.h.saturating_add(y.saturating_sub(oy))).clamp(48, 1080);
+                    let w = (origin.w.saturating_add(x.saturating_sub(ox))).clamp(64, self.max_width);
+                    let h = (origin.h.saturating_add(y.saturating_sub(oy))).clamp(48, self.max_height);
                     self.stack[i].content.w = w;
                     self.stack[i].content.h = h;
                     self.stack[i].normal = self.stack[i].content;
@@ -971,6 +982,17 @@ pub fn blit_alpha(out: &mut [u32], width: u32, height: u32, scale: u32, dest: Re
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_geometry_limits_allow_taller_outputs_without_changing_hosted_defaults() {
+        let mut native = Desktop::with_limits(1920, 1200, 1920, 1200);
+        assert_eq!(native.height, 1200);
+        native.add(1, 800, 600, true);
+        assert!(native.command(1, WindowCommand::Resize { width: 1900, height: 1150 }).is_ok());
+        assert!(native.command(1, WindowCommand::Resize { width: 1900, height: 1201 }).is_err());
+        native.host_resize(1920, 1200);
+        assert_eq!(native.height, 1200);
+        assert_eq!(Desktop::new(1920, 1200).height, 1080);
+    }
     #[test]
     fn stacking_capture_and_focus() {
         let mut d = Desktop::new(800, 600);

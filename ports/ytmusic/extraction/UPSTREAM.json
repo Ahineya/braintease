@@ -1,0 +1,32 @@
+{
+  "ejs": {
+    "repository": "https://github.com/yt-dlp/ejs.git",
+    "commit": "6f8587bb7009a1fc81038538071d2cb66b8b8ed0",
+    "license": "Unlicense",
+    "scope": "Unmodified solver, parser integration and upstream expected-output fixtures"
+  },
+  "youtubejs": {
+    "repository": "https://github.com/LuanRT/YouTube.js.git",
+    "commit": "c4a7b3f876114fea656de3d26ca9dfade94aa034",
+    "license": "MIT",
+    "scope": "Pristine dependency-aware JsAnalyzer/JsExtractor and nsigMatcher only"
+  },
+  "build_dependencies": {"astring": "1.9.0", "meriyah": "6.1.4", "esbuild": "0.28.1", "meriyah-ytjs": "npm:meriyah@7.3.1"},
+  "players": [
+    {
+      "id": "74edf1a3",
+      "variant": "main",
+      "backends": ["ejs"],
+      "url": "https://www.youtube.com/s/player/74edf1a3/player_ias.vflset/en_US/base.js",
+      "sha256": "ed9a4ea0646332a6b6c973ebe5a915c62c43db89bb2bb1a31eba07d906ef8ff7"
+    },
+    {
+      "id": "74edf1a3",
+      "variant": "es6",
+      "backends": ["youtubejs"],
+      "filename": "player-74edf1a3-es6.js",
+      "url": "https://www.youtube.com/s/player/74edf1a3/player_es6.vflset/en_US/base.js",
+      "sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e"
+    }
+  ]
+}

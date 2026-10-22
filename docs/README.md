@@ -17,6 +17,10 @@ The [Riplix x64 master plan](x64-master-plan.md) connects the laptop and GUI
 vision to boot, applications, input, drivers, execution isolation, native ABIs,
 storage and parallel implementation milestones.
 
+For physical HP work, start with the [x64 development handoff](../tools/x86_64/hardware/README.md):
+recorded boot baseline, retained acceptance receipts, pinned SSH connections and
+the repeat EFI publication procedure. Older hardware journals preserve history.
+
 | Topic | Document |
 |-------|----------|
 | Machine model, banks, toolchain | [arch/overview.md](arch/overview.md) |
@@ -53,6 +57,7 @@ How to build and run: [`TOOLCHAIN.md`](../TOOLCHAIN.md). C language coverage: [`
 | [unix-utilities.md](unix-utilities.md) | Installed Unix utility coverage, missing upstream commands and porting priorities |
 | [networking/README.md](networking/README.md) | Guest Ethernet, DHCP, UDP/DNS, running examples, tests and TCP/HTTP roadmap |
 | [networking/terminal-browser.md](networking/terminal-browser.md) | Terminal browser feasibility, Lynx/Links porting decisions, curses and HTTP milestones |
+| [networking/youtube-music.md](networking/youtube-music.md) | Self-contained YouTube Music client, guest extraction proof, media libraries and C16/native x64 ABI migration |
 | [networking/select.md](networking/select.md) | Planned C16 select API, descriptor readiness, kernel wakeups and acceptance criteria |
 | [ir.md](ir.md) | Textual IR syntax, tutorials, and lowering rules |
 | [self-hosting/README.md](self-hosting/README.md) | Portable C compiler, cproc frontend, C11 direction and Riplix/Fuse-X self-hosting plan |

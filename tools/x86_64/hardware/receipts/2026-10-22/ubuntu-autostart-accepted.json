@@ -1,0 +1,21 @@
+{
+  "boot_id": "499ce2ee-4f8b-473b-8497-f8c56ed4f4cf",
+  "enabled": true,
+  "active": true,
+  "boot": "BootCurrent: 0001\nTimeout: 0 seconds\nBootOrder: 0001,0000,2001,2005,2002,2004\nBoot0000* Riplix development\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\Riplix\\BOOTX64.EFI\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 52 00 69 00 70 00 6c 00 69 00 78 00 5c 00 42 00 4f 00 4f 00 54 00 58 00 36 00 34 00 2e 00 45 00 46 00 49 00 00 00 / 7f ff 04 00\nBoot0001* ubuntu\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\ubuntu\\shimx64.efi\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 75 00 62 00 75 00 6e 00 74 00 75 00 5c 00 73 00 68 00 69 00 6d 00 78 00 36 00 34 00 2e 00 65 00 66 00 69 00 00 00 / 7f ff 04 00\nBoot2001* EFI USB Device\tRC\n      dp: 7f ff 04 00\n    data: 52 43\nBoot2005* Internal Hard Disk or Solid State Disk\tRC\n      dp: 7f ff 04 00\n    data: 52 43",
+  "user_script_preserved": true,
+  "status": "Ubuntu-automatic-root-SSH-after-real-reboot-verified",
+  "utc": "2026-10-21T15:16:52.147887+00:00",
+  "previous_boot_id": "0add759f-1d6f-4a15-969b-8834a65dcc4a",
+  "checks": [
+    {
+      "returncode": 255
+    },
+    {
+      "returncode": 255
+    },
+    {
+      "returncode": 0
+    }
+  ]
+}

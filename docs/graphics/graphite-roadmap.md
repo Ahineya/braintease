@@ -493,6 +493,26 @@ initial read-only monitor needs no new kernel interface or x64 change.
 
 ### Delivery and x64 boundary
 
+The first opt-in native x64 implementation is now under
+[`tools/x86_64/graphics`](../../tools/x86_64/graphics/README.md#opt-in-native-desktop-profile).
+It links this shared window policy into the existing freestanding native
+runtime and supplies the GX session/panel adapter over native retained frames
+and GOP presentation. It leaves process mappings, scheduling, LP64 and ring 3
+work independent. Native applications include the shell, calculator, file
+selector, gallery, Data Viewer, editor and terminal. The test root is generated
+from public source/apps, never from the owner's personal images. Physical
+acceptance and the selected HP candidate belong in the hardware handoff;
+compilation or a disposable VM alone does not certify them.
+
+The [2026-10-22 HP trial](../../tools/x86_64/hardware/receipts/2026-10-22/graphite-native-trial.json)
+boots the desktop at 1920×1200, but hover/click instability, roughly 15-second
+Calculator startup and lag remain. A repeated panel-configuration revision
+loop is fixed and host-tested in source, **not deployed** in the running trial.
+First validate the new idle-watch check in a VM and a fresh hardware candidate,
+then profile cold startup and full-resolution composition separately. The
+retained renderer/A8 adapter and hardware scroll/gesture input follow measured
+needs. The software fallback does not inherit Fuse-X's performance claims.
+
 Keep this sequence independent of the worksheet and application milestones:
 
 1. Define the versioned session registry, manager authority and launch metadata;

@@ -36,8 +36,26 @@ after resumption. Liveness follows control-flow edges, including the selected
 inputs of phi nodes and loop back edges. Dead temporaries and call-only
 arguments are discarded. The new call result is supplied by the callee, and
 immutable parameters are recovered from the frame's original arguments.
+Fixed local-allocation addresses are reconstructed from the current logical
+frame base and their compile-time offsets, rather than saved/reloaded through
+per-slot runtime calls. These are logical addresses; fork and scheduling retain
+the frame base, and no host pointer is stored in a continuation.
 Resumption reloads only the values needed at that continuation, rather than
 every temporary in the function. Slots from an earlier suspension are cleared.
+
+Bounded acyclic helpers can use ordinary native calls inside resumable programs.
+The compiler limits the longest executable path, including direct callees, to
+256 IR instructions. Mutually exclusive branches do not consume that budget
+simultaneously. Cycles, recursion, unknown/indirect calls and services stay on
+the continuation path; pointer/aggregate returns retain their existing frame
+lifetime handling. Public function tokens still use resumable entry points.
+
+Loop checkpoints follow a DFS feedback-edge set in the actual control-flow
+graph. Every directed cycle crosses a checkpoint; backward jumps that only
+join an acyclic path no longer save a continuation unnecessarily. Analysis
+includes unreachable and irreducible loops and uses an explicit work stack.
+Native dispatch fusion retains a checkpoint if any comparison edge it skips
+belongs to that feedback set. Call boundaries and explicit yields are unchanged.
 
 Recursive calls, internal function pointers, variadic arguments, floating
 values, and pointers into outer C frames survive suspension. Taking a runtime

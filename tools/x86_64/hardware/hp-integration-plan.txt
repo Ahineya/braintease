@@ -1,6 +1,13 @@
 HP RIPLIX X64 INTEGRATION PLAN — agreed 2026-10-20
 ================================================
 
+HISTORICAL PLANNING AND ACCEPTANCE JOURNAL. Do not use its older "current"
+snapshots as the boot/SSH runbook. The reconciled start point is README.md in
+this directory, with ssh.md, efi-updates.md and retained receipts. As of the
+2026-10-22 reconciliation, internal boot, terminal packages, native GX and
+touchpad movement/clicks have passed their recorded gates; GUI entry0003
+supersedes the terminal0002 candidate. This is not a live HP-state claim.
+
 The user accepted proceeding with the roadmap on 2026-10-21. The maintained
 master plan is docs/x64-master-plan.md; retain this file for operational
 decisions and dated hardware/install receipts. Adopt an established filesystem
@@ -8,12 +15,12 @@ rather than inventing a new disk format; selection/porting evaluation is open.
 
 2026-10-21 roadmap reconciliation — proposed next order
 ------------------------------------------------------
-This section supersedes historical status snapshots below, not their receipts.
+This was the 2026-10-21 planning snapshot, superseded by the current handoff.
 It matches the user's modern, fast, cohesive GUI OS goal to existing plans.
 The sequence below is a proposal for discussion, not a new source delegation,
 filesystem choice, ABI change or authorization to overwrite installed apps.
 
-Current physical baseline:
+Physical baseline at that planning snapshot:
 - Fast GOP console, NVMe persistence, offline apps, combined default USB boot,
   service supervision, pkg installation and SSH/SFTP/Telnet have worked on HP.
   Dedicated p3 reserves 30 GiB; the current C16 V3 filesystem uses 1 GiB.

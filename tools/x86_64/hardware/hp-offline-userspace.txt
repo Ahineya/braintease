@@ -1,3 +1,10 @@
+HISTORICAL OFFLINE-APP ACCEPTANCE — current handoff is README.md
+===============================================================
+The 2026-10-19 scope below predates the 1GiB root, live networking/services,
+internal EFI installation and accepted terminal/graphics packages. Old pending
+statements and payload locations apply only to the dated stages. Use README.md,
+ssh.md and efi-updates.md for current development operations.
+
 HP OFFLINE CLI USERSPACE — PHYSICALLY ACCEPTED
 =============================================
 2026-10-19
@@ -10,8 +17,9 @@ networking, with BUILT-IN AX211 WI-FI as the physical target; see hp-wifi.txt.
 
 Installed 105 selected CLI command names plus appcheck/abicheck/timercheck/
 diskcheck, retaining prelinked hello/check/pipecheck. GUI/network clients,
-separate RFL editor packaging and the graphics-dependent multiplexer remain
-excluded. The portable guest toolchain is not installed by this milestone.
+separate RFL editor packaging and mux were excluded from this offline milestone.
+mux has no graphics dependency; it and the editors passed a later package wave.
+The portable guest toolchain is not installed by this milestone.
 Compilation covers the selected inventory; runtime tests cover the smoke script
 and core process suite, not every interactive UI or command option.
 

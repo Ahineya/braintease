@@ -33,6 +33,9 @@ APPS := $(addprefix $(BUILD)/port/,$(addsuffix .ir,userlib init shell process-ch
 HEADERS := $(wildcard include/*.h $(K)/include/*.h $(ROOT)/ports/fuzix/ripple/*.h $(ROOT)/runtime/include/*.h)
 HEADERS += $(wildcard $(ROOT)/ports/fuzix/ripple/*.inc)
 FLAGS += -I$(ROOT)/ports/graphics/include
+ifneq ($(FUSE_X_GX_MAX_HEIGHT),)
+FLAGS += -DGX_HOSTED_MAX_HEIGHT=$(FUSE_X_GX_MAX_HEIGHT)
+endif
 HEADERS += $(ROOT)/ports/graphics/include/gx.h
 HEAP_STAMP := $(shell python3 heap_profile.py --build '$(BUILD)' --profile '$(FUSE_X_HEAP_PROFILE)')
 ifeq ($(strip $(HEAP_STAMP)),)

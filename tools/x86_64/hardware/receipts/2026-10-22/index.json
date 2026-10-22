@@ -1,0 +1,32 @@
+{
+  "schema": "riplix-retained-hardware-evidence",
+  "version": 1,
+  "retained_date": "2026-10-22",
+  "scope": "Exact local receipt copies; not a live machine check or binary archive",
+  "files": [
+    {
+      "file": "graphics-installed.json",
+      "original_path": "build/x86_64-graphics-wave/physical/installed.json",
+      "bytes": 4051,
+      "sha256": "fdbfc76acee6a538d9cc39ed4d9470782ab6a8426c8ea336f796c9991e821e40"
+    },
+    {
+      "file": "touchpad-acceptance.json",
+      "original_path": "build/x86_64-graphics-wave/physical/touchpad-acceptance.json",
+      "bytes": 1013,
+      "sha256": "2511fbae924459ef2a35511deba772789b923e27b20643daa0e4e7f6504bd4b0"
+    },
+    {
+      "file": "terminal-acceptance.json",
+      "original_path": "build/x86_64-terminal-wave32/physical-acceptance.json",
+      "bytes": 1512,
+      "sha256": "2401719454a022db2020345a2b5df938f3ef10ccb0bd9c3cd93236f87fb57352"
+    },
+    {
+      "file": "ubuntu-autostart-accepted.json",
+      "original_path": "build/x86_64-terminal-wave/physical/ubuntu-autostart-accepted.json",
+      "bytes": 1531,
+      "sha256": "5bc96cdcd816c092645e38f6ec5fd3afe1437158eda3af2d1807e74274206c64"
+    }
+  ]
+}

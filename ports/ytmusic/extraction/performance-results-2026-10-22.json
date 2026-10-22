@@ -1,0 +1,177 @@
+{
+  "recorded": "2026-10-22",
+  "status": "prepared-passed-cold-blocked",
+  "machine": "macOS-15.6-arm64-arm-64bit",
+  "cpu": "Apple M4",
+  "native_memory_mode": "read-v1",
+  "conditions": "Sequential single guest, same private kernel for original/final compiler and QuickJS comparison. Single runs, not statistically established speedups. Cold final run was not sampled.",
+  "cases": {
+    "ejs-prepared": {
+      "before": {
+        "status": "passed",
+        "guest_seconds": 46.969683208999996,
+        "phases_ms": {
+          "prepare": 0,
+          "compile": 42000,
+          "solve": 0
+        },
+        "resources": {
+          "peak_cells": 43752679,
+          "polls": 6,
+          "live": 0
+        },
+        "exact_checks": 5,
+        "negative_control": "passed",
+        "filesystem": "passed",
+        "fixture_sha256": "ed9a4ea0646332a6b6c973ebe5a915c62c43db89bb2bb1a31eba07d906ef8ff7",
+        "input_sha256": "42a182913439baf44473678b6fc78106901e7117e21149feff1cdf81eed4b8c0",
+        "solver_sha256": "69e679b1ece98e88ce4f871a2b16ac7ec7c5b4574b1521d2c34f425bb46c166f",
+        "compiler_sha256": "491d8c3b1908946a9d98f6cca66bb7dc54d5aa217765d6cd4251bec20e85c76b",
+        "engine_sha256": "67002373029b9037d204c683bce0a00bccb9c451ad11191a62ebbe6d01698f62",
+        "probe_sha256": "53c6aa49cb8e71559641ee7c29d6706aa6bb31c47db97cf9faea049ab0207e63",
+        "libc_sha256": "52c10501027d0975b5e116a2052ffc1d8ed7f57ad71d1638cb685d946b28fa58",
+        "kernel_sha256": "a11f963c22e13e4bd3325576e0be8f8f71c537221fb63a4cc1fbf2d823fe2b7d"
+      },
+      "after": {
+        "status": "passed",
+        "guest_seconds": 46.59222925,
+        "phases_ms": {
+          "prepare": 0,
+          "compile": 39000,
+          "solve": 0
+        },
+        "resources": {
+          "peak_cells": 43752689,
+          "polls": 6,
+          "live": 0
+        },
+        "exact_checks": 5,
+        "negative_control": "passed",
+        "filesystem": "passed",
+        "fixture_sha256": "ed9a4ea0646332a6b6c973ebe5a915c62c43db89bb2bb1a31eba07d906ef8ff7",
+        "input_sha256": "42a182913439baf44473678b6fc78106901e7117e21149feff1cdf81eed4b8c0",
+        "solver_sha256": "69e679b1ece98e88ce4f871a2b16ac7ec7c5b4574b1521d2c34f425bb46c166f",
+        "compiler_sha256": "9f847d8786b20555cbe8363c52fb99f9cb459ed3f0280c31880eb695dd695fec",
+        "engine_sha256": "0bc36c8d7da5185a7c53001dbcb72b3850be258cf1bd77943d3f62eece2dd97a",
+        "probe_sha256": "34cb66758b4b07f4f866e40deef0c7afad1ef5b5168942b1b07ab027a3429113",
+        "libc_sha256": "7c167633d4665daf8bf7b362f08e5d0567605c9117ac0ffb5d92fb73c33ea210",
+        "kernel_sha256": "a11f963c22e13e4bd3325576e0be8f8f71c537221fb63a4cc1fbf2d823fe2b7d"
+      }
+    },
+    "youtubejs-prepared": {
+      "before": {
+        "status": "passed",
+        "guest_seconds": 6.532380708000002,
+        "phases_ms": {
+          "prepare": 0,
+          "compile": 3000,
+          "solve": 0
+        },
+        "resources": {
+          "peak_cells": 2996626,
+          "polls": 5,
+          "live": 0
+        },
+        "exact_checks": 5,
+        "negative_control": "passed",
+        "filesystem": "passed",
+        "fixture_sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e",
+        "input_sha256": "50f3a943b094eab036571c23a7f316b0341d16bcffd8fa89f619a6a20ce88822",
+        "solver_sha256": "b8e6547aa7951247aba469538292923240ee975243a5852381fef8d2f4c0da53",
+        "compiler_sha256": "491d8c3b1908946a9d98f6cca66bb7dc54d5aa217765d6cd4251bec20e85c76b",
+        "engine_sha256": "67002373029b9037d204c683bce0a00bccb9c451ad11191a62ebbe6d01698f62",
+        "probe_sha256": "9769a88c7758855fb1d09d11650173bb4fb9760e34abf976a3e85b3f3c6c0f39",
+        "libc_sha256": "52c10501027d0975b5e116a2052ffc1d8ed7f57ad71d1638cb685d946b28fa58",
+        "kernel_sha256": "a11f963c22e13e4bd3325576e0be8f8f71c537221fb63a4cc1fbf2d823fe2b7d"
+      },
+      "after": {
+        "status": "passed",
+        "guest_seconds": 6.0903491249999995,
+        "phases_ms": {
+          "prepare": 0,
+          "compile": 2000,
+          "solve": 1000
+        },
+        "resources": {
+          "peak_cells": 2996636,
+          "polls": 5,
+          "live": 0
+        },
+        "exact_checks": 5,
+        "negative_control": "passed",
+        "filesystem": "passed",
+        "fixture_sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e",
+        "input_sha256": "50f3a943b094eab036571c23a7f316b0341d16bcffd8fa89f619a6a20ce88822",
+        "solver_sha256": "b8e6547aa7951247aba469538292923240ee975243a5852381fef8d2f4c0da53",
+        "compiler_sha256": "9f847d8786b20555cbe8363c52fb99f9cb459ed3f0280c31880eb695dd695fec",
+        "engine_sha256": "0bc36c8d7da5185a7c53001dbcb72b3850be258cf1bd77943d3f62eece2dd97a",
+        "probe_sha256": "e59a245c0ce1614624872abe57250c802e93b5bcf8cc475d7756b46946006439",
+        "libc_sha256": "7c167633d4665daf8bf7b362f08e5d0567605c9117ac0ffb5d92fb73c33ea210",
+        "kernel_sha256": "a11f963c22e13e4bd3325576e0be8f8f71c537221fb63a4cc1fbf2d823fe2b7d"
+      }
+    }
+  },
+  "cold_youtubejs": {
+    "status": "blocked",
+    "guest_seconds": 603.527300584,
+    "phases_ms": null,
+    "resources": {
+      "peak_cells": 53831447,
+      "polls": 2970,
+      "live": 0
+    },
+    "exact_checks": null,
+    "negative_control": "not run",
+    "filesystem": "passed",
+    "fixture_sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e",
+    "input_sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e",
+    "solver_sha256": "b8e6547aa7951247aba469538292923240ee975243a5852381fef8d2f4c0da53",
+    "compiler_sha256": "9f847d8786b20555cbe8363c52fb99f9cb459ed3f0280c31880eb695dd695fec",
+    "engine_sha256": "0bc36c8d7da5185a7c53001dbcb72b3850be258cf1bd77943d3f62eece2dd97a",
+    "probe_sha256": "6bf452c6bf10150f41b47fedbd5f5b934865f6d92492e6f282c932d0b56077ed",
+    "libc_sha256": "d88da7d03ba47801f28675afdaad46cc3616052fa7f37675a9bf3c4f037e70d9",
+    "kernel_sha256": "a11f963c22e13e4bd3325576e0be8f8f71c537221fb63a4cc1fbf2d823fe2b7d"
+  },
+  "older_kernel_control": {
+    "status": "passed",
+    "guest_seconds": 47.790771791,
+    "phases_ms": {
+      "prepare": 0,
+      "compile": 40000,
+      "solve": 0
+    },
+    "resources": {
+      "peak_cells": 43752689,
+      "polls": 6,
+      "live": 0
+    },
+    "exact_checks": 5,
+    "negative_control": "passed",
+    "filesystem": "passed",
+    "fixture_sha256": "ed9a4ea0646332a6b6c973ebe5a915c62c43db89bb2bb1a31eba07d906ef8ff7",
+    "input_sha256": "42a182913439baf44473678b6fc78106901e7117e21149feff1cdf81eed4b8c0",
+    "solver_sha256": "69e679b1ece98e88ce4f871a2b16ac7ec7c5b4574b1521d2c34f425bb46c166f",
+    "compiler_sha256": "9f847d8786b20555cbe8363c52fb99f9cb459ed3f0280c31880eb695dd695fec",
+    "engine_sha256": "0bc36c8d7da5185a7c53001dbcb72b3850be258cf1bd77943d3f62eece2dd97a",
+    "probe_sha256": "34cb66758b4b07f4f866e40deef0c7afad1ef5b5168942b1b07ab027a3429113",
+    "libc_sha256": "7c167633d4665daf8bf7b362f08e5d0567605c9117ac0ffb5d92fb73c33ea210",
+    "kernel_sha256": "9a630fdb5bd86d5f1d0beaf975aa67e2b2c41a4dab8372c8d8b1828add7eef29"
+  },
+  "validation": {
+    "frontend_unit_checks": 128,
+    "native_backend_unit_checks": 12,
+    "native_process_integration_checks": 18,
+    "native_switch_integration": "passed",
+    "memory_view_gep_differential": "passed",
+    "runtime_unit_checks": 151,
+    "runtime_ignored": 2,
+    "rfl_native_checks": 11,
+    "freestanding_object_checks": 3,
+    "dispatch_phi_host_execution_and_x64_object": "passed",
+    "quickjs_foundation_checks": 223,
+    "quickjs_numbers_checks": 379,
+    "quickjs_full_context_checks": 145,
+    "quickjs_frame_allocation_failure_checks": 28,
+    "quickjs_frame_semantics_reference_and_adapted_checks_each": 38
+  }
+}

@@ -3,6 +3,12 @@
 Updated 2026-10-22. Direction accepted by the user; individual implementation
 slices advance through the gates below.
 
+For operations, use the [HP development handoff](../tools/x86_64/hardware/README.md),
+its [SSH recipes](../tools/x86_64/hardware/ssh.md) and
+[repeat EFI update procedure](../tools/x86_64/hardware/efi-updates.md).
+This baseline is reconciled from retained receipts, not a live HP inspection.
+The dated implementation-wave narrative below preserves history.
+
 Riplix x64 is becoming a modern graphical operating system with fast interaction,
 consistent applications and a usable laptop environment. Keep shared kernel,
 library and application sources with Ripple and Fuse-X where their semantics
@@ -24,15 +30,15 @@ their own prerequisites rather than delaying the first useful desktop.
 | Networking | AX211 association, WPA2, protected traffic, IPv4/DNS and remote services work on HP. Userland recovery policy exists; native protocol handling and an embedded test profile remain. |
 | Key refresh | A real GTK refresh was observed with association generation and connection attempts unchanged, without rejected frames. Periodic snapshots establish reachability afterward; a held SSH session across a rotation remains a separate acceptance gate. Fresh pairwise handshakes still use reconnect fallback. |
 | Services and packages | Nine terminal/data packages are published, installed through HP pkg and persisted after reboot. Seven executable/alias hashes, native entry probes and SSH PTY editor/Commander checks passed. Local display acceptance remains pending. Application packages and kernel/EFI updates have different installation paths. |
-| Power and boot | The unattended Ubuntu → Riplix → Ubuntu → Riplix loop passed, including automatic Ubuntu root SSH on port 2222. HP is running Riplix; Ubuntu remains the user-authorized temporary default. Shutdown syncs and stops but does not yet power the laptop off. Ubuntu and USB recovery remain available. |
+| Power and boot | The unattended Ubuntu → Riplix → Ubuntu → Riplix loop passed, including automatic Ubuntu root SSH on port 2222. Latest recorded accepted candidate: GUI entry `0003`, `EFI/Riplix-gui`; Ubuntu is the user-authorized temporary default. This does not identify the currently booted OS. Shutdown syncs and stops but does not yet power the laptop off. Ubuntu and USB recovery are retained. |
 | Execution | Native instructions retain C16 layouts, logical pointers, private calls and checkpoint scheduling at ring 0 on one CPU. The isolated process-memory model has host tests; it does not install production mappings. |
 | GUI and audio | Native software GX presentation, screenshots and the LVGL calculator work on HP. User verified touchpad movement and clicks. Multi-window desktop integration and native audio remain ahead. |
 | Toolchain | Guest compilation and portable image tools have substantial staged progress. The [bootstrap inventory](../rcc-portable/native-sdk/OS_BOOTSTRAP.md) still distinguishes guest-built stages from the host platform/loader capsule and pending end-to-end acceptance. |
 
-Current device identities come from the [HP inventory](../tools/x86_64/hardware/hp-envy-16-ac0xxx.txt).
+Recorded device identities come from the [HP inventory](../tools/x86_64/hardware/hp-envy-16-ac0xxx.txt).
 Its initial Secure Boot, partition and acceptance descriptions are historical;
-the [integration receipts](../tools/x86_64/hardware/hp-integration-plan.txt) and
-[x64 implementation notes](../tools/x86_64/README.md) record later progress.
+the [retained receipts](../tools/x86_64/hardware/receipts/2026-10-22/README.md)
+and [current handoff](../tools/x86_64/hardware/README.md) record later progress.
 Later monitoring found increased connection generations/attempts; the recovery
 log includes prolonged beacon loss and scans temporarily missing the SSID before
 successful recovery. Sustained radio reliability therefore remains active work.
@@ -46,7 +52,7 @@ promotion of physical boot candidates remain coordinated.
 | --- | --- | --- |
 | Reliable remote development | Current Wi-Fi and services | Held SSH survives a real GTK rotation; traffic, idle operation, fallback recovery and manual pause/resume behave correctly. |
 | Dependable terminal applications | Keyboard decoder, console geometry, terminal/PTY contracts | Escape, navigation and F keys work locally; full-screen apps restore terminal state; remote PTYs retain independent sizes. |
-| Internal boot and remote updates | Stable NVMe root, verified EFI candidate and recovery | Trial internal boot alongside Ubuntu, then default Riplix; failed update recovery and remote reboot/reconnect tested. |
+| Internal boot and remote updates | Stable NVMe root, verified EFI candidate and recovery | Initial internal trial/default boot and unattended development loop passed. Use fresh-namespace publication in Ubuntu; automatic failed-boot recovery remains open. |
 | Protected and preemptible execution | Process backing, helper privilege boundaries, saved contexts | Faulty apps and syscall-free busy loops leave the shell/kernel usable; lifecycle tests reclaim all resources. |
 | Pointer and initial desktop | Input events, a pointer transport, framebuffer/GX backend | Shared GUI apps receive correct input and compose bounded damage without busy polling or interfering with other windows. |
 | Audio and laptop controls | HP codec/DSP/amp investigation, DMA and ACPI interfaces | PCM playback under network/UI load, actual power-off, usable battery/lid/backlight controls. |
@@ -97,27 +103,24 @@ same requested passwordless root access on port 2222; its authentication method
 is `none`, not key-only. The original home-directory script is preserved.
 A real Ubuntu-to-Ubuntu reboot verified a fresh boot ID, pinned SSH access and
 the enabled/active service, recorded in the
-[autostart receipt](../build/x86_64-terminal-wave/physical/ubuntu-autostart-accepted.json).
+[autostart receipt](../tools/x86_64/hardware/receipts/2026-10-22/ubuntu-autostart-accepted.json).
 
 From Ubuntu, verified EFI publication remains a root-run staging operation.
-The new terminal candidate has its own `EFI/Riplix-tui` namespace and entry
-`0002`, selected once with `BootNext=0002`; entry `0000` remains the previous
-accepted Riplix fallback. All eleven pre-existing ESP files and GPT metadata
-were preserved, and Ubuntu remains the persistent default. The
-[staging receipt](../build/x86_64-terminal-wave32/physical/installed.json)
-records that boundary; staging itself did not write the Riplix root partition.
-The new EFI booted on HP and reached pinned SSH and running services; three
-gateway pings and two DNS-resolved external pings passed, recorded in the
-[first-boot receipt](../build/x86_64-terminal-wave32/physical/first-riplix.json)
-and [traffic check](../build/x86_64-terminal-wave32/physical/first-riplix-traffic.json).
+The latest [GUI installation receipt](../tools/x86_64/hardware/receipts/2026-10-22/graphics-installed.json)
+records `EFI/Riplix-gui`, entry `0003`, candidate
+`4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c`,
+preserved other ESP payloads/GPT metadata and no p3 installation write. The separate
+[touchpad acceptance](../tools/x86_64/hardware/receipts/2026-10-22/touchpad-acceptance.json)
+binds that hash to boot/service/calculator readiness and user-confirmed movement
+and clicks. These records do not establish the HP's present boot state.
 
-The full unattended Ubuntu → Riplix → Ubuntu → Riplix round trip has passed:
-Ubuntu returned with a fresh boot ID and automatic root SSH on port 2222, and
-all nine package versions persisted with Rift's exact hash checked again.
-HP is now running Riplix; Ubuntu remains the temporary default. The
-[final physical receipt](../build/x86_64-terminal-wave32/physical-acceptance.json)
-records this acceptance and the preserved ESP/GPT state. This is
-a development loop, with no Riplix ESP writer or automatic health rollback.
+The earlier terminal candidate at `EFI/Riplix-tui`, entry `0002`, passed the
+full unattended Ubuntu → Riplix → Ubuntu → Riplix round trip: Ubuntu returned
+with a fresh boot ID and automatic SSH2222; nine package versions persisted
+with Rift's exact hash checked again. Its
+[physical receipt](../tools/x86_64/hardware/receipts/2026-10-22/terminal-acceptance.json)
+is retained as historical acceptance, not the current candidate selection.
+This is a development loop, with no Riplix ESP writer or automatic health rollback.
 The [Ubuntu development-loop procedure](../tools/x86_64/hardware/ubuntu-dev-loop.txt)
 records the exact authentication scope, HP-only root-setting restoration,
 service removal and boot commands. Each new candidate still requires its own
@@ -126,7 +129,8 @@ physical acceptance.
 For remote kernel updates, stage and verify a candidate, retain a previous
 working image and confirm health after boot. Specify a real recovery mechanism
 for a candidate that hangs before confirming health; BootOrder/BootNext alone
-does not provide it. Implement ESP access and update publication explicitly.
+does not provide it. Use the [repeat-update runbook](../tools/x86_64/hardware/efi-updates.md)
+with a fresh namespace and maintained stager; a guest-owned ESP writer remains future work.
 Keep filesystem/root upgrades separate from EFI rollback: an old EFI using the
 current root is not a rollback of installed data.
 
@@ -152,10 +156,11 @@ and TIOCGWINSZ. Check ANSI cursor/erase/scroll behavior, termios, PTY resize and
 restoration after signals or exit. Levee's own size limits are distinct from
 platform geometry. These fixes improve the existing shell/application stack.
 
-Bring [mux](terminal-multiplexer.md), Commander with its `mc` alias and
-[Rift](../rfl/apps/rift/README.md) first. mux is a terminal application and has no
-GPU dependency. Build against the matching x64 C16 SDK and supply resources,
-PTY/job-control behavior and package dependencies. Reuse the
+The first [mux](terminal-multiplexer.md), Commander/`mc` and
+[Rift](../rfl/apps/rift/README.md) package wave is accepted as described below;
+extend coverage and complete local display checks next. mux is a terminal
+application and has no GPU dependency. Build against the matching x64 C16 SDK
+and supply resources, PTY/job-control behavior and package dependencies. Reuse the
 [retained-rendering improvements](rfl/commander-rift-performance.md).
 
 The current terminal set contains `mux`, Commander (`rfl-fm`/`mc`), `rift`/`vi`,
@@ -175,7 +180,7 @@ catalog entries, and installed through the HP's actual `pkg` commands.
 The [HP installation receipt](../build/x86_64-terminal-wave32/physical/packages-installed.json)
 records seven exact executable/alias hashes (`levee`, `keycheck`, `mux`,
 `rfl-fm`, `mc`, `rift`, `vi`), native entry probes and post-install network health.
-The [final physical receipt](../build/x86_64-terminal-wave32/physical-acceptance.json)
+The [physical receipt](../tools/x86_64/hardware/receipts/2026-10-22/terminal-acceptance.json)
 adds package persistence after the unattended round trip and successful SSH PTY
 Levee motion/save, Commander F10 exit and Rift insertion/save checks. Local
 framebuffer/cursor display acceptance remains pending.
@@ -187,6 +192,14 @@ and wavplay need the PCM backend. Existing hosted GUI executables are not
 freestanding HP packages. Keep the user's [package catalog](packages/README.md)
 and [pkg implementation](../ports/pkg/README.md) as the delivery mechanism,
 installing useful groups incrementally.
+
+The [YouTube Music and guest media plan](networking/youtube-music.md) develops
+QuickJS extraction, streaming HTTPS, WebM demuxing and Opus decoding as reusable
+userspace components. Current C16 packages and future native ELF64/LP64 builds
+share upstream sources with explicit target adapters. Static native ELF is the
+first loader milestone; native dynamic linking and separately packaged shared
+libraries remain the destination. Audio/TLS capabilities and each native ABI
+retain their own acceptance gates.
 
 ## Memory isolation preemption and native applications
 
@@ -252,13 +265,17 @@ ACPI/resource/interrupt and transport support in bounded modules, sharing HID
 decoding where appropriate. Touchscreen gestures, calibration, rotation and
 tablet mode follow the first dependable pointer path.
 
-Start the HP GUI with software rendering and bounded damage presentation over
-the firmware framebuffer. Preserve shared surface formats, window lifetimes,
-input, clipboard and presentation contracts while the user develops LVGL.
+The first HP software GX backend over the firmware framebuffer and the LVGL
+calculator have passed their recorded hardware checks, including touchpad
+movement/clicks. Extend this single-active-surface backend into the desktop;
+it does not yet compose multiple windows. Preserve shared surface formats,
+window lifetimes, input, clipboard and presentation contracts while the user
+develops LVGL.
 Reuse the [LVGL work](graphics/lvgl-and-x11.md),
 [graphics roadmap](graphics/roadmap.md), [FuseDE plan](fusede/implementation-plan.md)
 and [Fuse-X contracts](fuse-x/roadmap.md). Their hosted/RVM backends are reusable
-reference implementations; the HP needs its own backend.
+reference implementations; extend the native HP adapter rather than treating
+hosted acceptance as hardware-driver proof.
 
 A responsive multi-app desktop requires bounded rendering and execution
 isolation/preemption. Native Intel graphics has distinct display/modesetting,
@@ -341,7 +358,9 @@ Linux compatibility layer or guesses about packed device structures.
 
 ## First implementation wave
 
-Started 2026-10-21:
+Historical sequence, started 2026-10-21. “First/next” below describes that
+sequence, not a new task list. Use the baseline and delivery gates above for
+current planning; detailed ignored build links may be absent in a clean checkout.
 
 - Keyboard agent: pure host-testable decoder, i8042 input integration and focused
   tests. No shared runtime/compiler or LVGL edits.
@@ -393,13 +412,13 @@ RXE1 limit. Four console pixel suites, loader-boundary/rollback/reclamation
 checks, two exact QEMU persistence boots with firmware reset, and the nine
 managed terminal/data packages have passed. Candidate EFI
 `32d71c89df9ed6ed8e0a039faa19b931d1a1ef529770c8a64a70ad6fc5790691`
-is identified by the [current acceptance receipt](../build/x86_64-terminal-wave32/acceptance.json).
+is identified by its [dated build acceptance receipt](../build/x86_64-terminal-wave32/acceptance.json).
 Its separate `EFI/Riplix-tui` entry `0002` has since booted on HP with pinned
 SSH, services and gateway/DNS traffic. Nine packages are published and installed,
 with seven exact executable/alias hashes and native entry probes verified.
 The unattended Ubuntu → Riplix → Ubuntu → Riplix round trip and SSH PTY Levee,
 Commander and Rift checks have since passed, as recorded in the
-[final physical receipt](../build/x86_64-terminal-wave32/physical-acceptance.json).
+[physical receipt](../tools/x86_64/hardware/receipts/2026-10-22/terminal-acceptance.json).
 All nine package versions persisted; Rift's hash was rechecked after reboot.
 Local framebuffer/cursor display still needs user acceptance. The user's
 separate physical key check passed Escape, all four arrows and F1–F12; Fn/media
@@ -429,6 +448,18 @@ Captures are row-wise; they do not guarantee an atomic moving frame. This is a
 single-active-surface backend, not the complete FuseDE compositor. The user's
 LVGL/FuseDE/SDL work remains independent.
 
+An opt-in [native Graphite desktop profile](../tools/x86_64/graphics/README.md#opt-in-native-desktop-profile)
+now adds software composition and the existing GX session/panel contracts over
+the shared Rust window policy. It builds the shell and Graphite application set
+as static RXE1 images, with a separate disposable root and native integration
+test. The initial accepted calculator entry remains the retained baseline;
+the later desktop trial is entry `0004`, EFI `a889571f…`, recorded in the
+[hardware handoff](../tools/x86_64/hardware/README.md). It boots at 1920×1200,
+but unstable hover/clicks and slow app startup remain. An idle panel revision
+loop is fixed and host-tested only in source, not in that running EFI; the next
+VM/hardware trial must establish the improvement. This work does not enable
+ring 3, process page tables, LP64, preemption or automatic native desktop startup.
+
 Touchpad controller/HID initialization, physical movement and clicks now pass on
 the HP; the user confirmed movement and calculator button clicks. Native diagnostics found the
 I2C controller's BAR unassigned before and after D0; Linux's PCI resource setup
@@ -449,7 +480,10 @@ has booted with SSH/Wi-Fi/services healthy. The user confirmed physical pointer
 movement and calculator clicks; gestures, scrolling and additional pointer
 transports remain separate work.
 All updates use the internal EFI/SSH loop with Ubuntu as the development default;
-the USB remains recovery media. Audio, ring 3 and filesystem durability retain
+the USB remains recovery media. The latest install/input receipts are retained
+in the [tracked evidence index](../tools/x86_64/hardware/receipts/2026-10-22/README.md).
+New candidates use the maintained fresh-namespace update runbook rather than
+the historical local in-place graphics scripts. Audio, ring 3 and filesystem durability retain
 their separate target tests.
 
 ## Performance and acceptance records

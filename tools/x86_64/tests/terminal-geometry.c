@@ -80,12 +80,12 @@ int main(void) {
     unsigned rows = 123, columns = 456;
     assert(!console_dimensions(&rows, &columns) && rows == 123 && columns == 456);
     assert(!console_dimensions(0, &columns));
-    geometry(128, 128, 1, 12);
-    geometry(641, 481, 23, 76);
-    geometry(800, 600, 31, 96);
-    geometry(1920, 1080, 27, 116);
-    geometry(1920, 1200, 31, 116);
-    geometry(3840, 2160, 27, 116);
+    geometry(128, 128, 3, 12);
+    geometry(641, 481, 25, 76);
+    geometry(800, 600, 33, 96);
+    geometry(1920, 1080, 29, 116);
+    geometry(1920, 1200, 33, 116);
+    geometry(3840, 2160, 29, 116);
     assert(x64_terminal_size_reply(0, 4, 24, 80) == 4);
     for (size_t cells = 0; cells < 4; ++cells) rejected(1, 4, 0, 0, cells, 24, 80, 4);
     rejected(0, 4, 0, 0, 4, 24, 80, 2);

@@ -1,0 +1,17 @@
+{
+  "schema": "riplix-graphite-evidence-index",
+  "version": 1,
+  "records": [
+    {
+      "path": "graphite-native-trial.json",
+      "bytes": 6433,
+      "sha256": "6e5410d609b85a1143bd7c56d19f7b3bb58da36507559a82e2f960efcabbe518"
+    },
+    {
+      "path": "graphite-kvm.json",
+      "bytes": 475,
+      "sha256": "ebcd01be1b97683bba9163b215b424aa390d4825766f8e978e87e40dcd5d57ca"
+    }
+  ],
+  "scope": "Separate from original four reconciliation receipts; native trial is a new synthesis, KVM result is an exact retained copy."
+}

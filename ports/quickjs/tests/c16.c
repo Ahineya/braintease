@@ -115,6 +115,21 @@ int main(void)
     check(from_surrogate(0xd83dUL, 0xde00UL) == 0x1f600UL, "UTF-16 surrogate pair");
     check(clz32(1UL) == 31L && ctz32(0x80000000UL) == 31L &&
           clz64(1ULL) == 63L && ctz64(1ULL << 63) == 63L, "32/64-bit bit scans");
+    {
+        unsigned bit;
+        for (bit = 0; bit < 32; ++bit) {
+            uint32_t value = (uint32_t)1 << bit;
+            check(clz32(value) == 31L - bit && ctz32(value) == bit, "all 32-bit scan positions");
+            check(clz32(value | (value - 1)) == 31L - bit, "32-bit leading scan with lower bits");
+        }
+        for (bit = 0; bit < 64; ++bit) {
+            uint64_t value = (uint64_t)1 << bit;
+            check(clz64(value) == 63L - bit && ctz64(value) == bit, "all 64-bit scan positions");
+            check(clz64(value | (value - 1)) == 63L - bit, "64-bit leading scan with lower bits");
+        }
+        check(clz32(0) == 32 && ctz32(0) == 32 && clz64(0) == 64 && ctz64(0) == 64,
+              "zero scans terminate with the operand width");
+    }
 
     dbuf_init(&buffer);
     check(dbuf_put_u16(&buffer, 0x89abU) == 0 && buffer.size == 2 &&

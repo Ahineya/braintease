@@ -69,6 +69,23 @@ fn program() -> Module {
     module
 }
 
+// Compile each lowering mode in a subprocess; environment selection must not
+// race unrelated compiler tests in the same Rust process.
+#[test]
+#[ignore = "subprocess emitter for GEP differential test"]
+fn emit_gep_object() {
+    let path = PathBuf::from(std::env::var_os("GEP_OBJECT").unwrap());
+    std::fs::write(path, rcc_native::compile_object(&program()).unwrap()).unwrap();
+    let object = rcc_native::compile_freestanding_object(&program(), "x86_64-unknown-none");
+    if std::env::var("RCC_NATIVE_MEMORY").unwrap() == "checked" {
+        assert_eq!(&object.unwrap()[..6], b"\x7fELF\x02\x01");
+    } else {
+        assert!(object
+            .unwrap_err()
+            .contains("freestanding read-v1 runtime support is pending"));
+    }
+}
+
 #[test]
 fn same_bank_arithmetic_bypasses_helpers_and_other_cases_preserve_checks() {
     let stamp = std::time::SystemTime::now()
@@ -78,72 +95,91 @@ fn same_bank_arithmetic_bypasses_helpers_and_other_cases_preserve_checks() {
     let fixture =
         Fixture(std::env::temp_dir().join(format!("native-gep-{}-{stamp}", std::process::id(),)));
     std::fs::create_dir_all(&fixture.0).unwrap();
-    let object = fixture.0.join("probe.o");
-    std::fs::write(&object, rcc_native::compile_object(&program()).unwrap()).unwrap();
-    let executable = fixture.0.join("probe");
-    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gep-reference.c");
-    let mut linker = Command::new("cc");
-    linker
-        .args(["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"])
-        .arg(source)
-        .arg(object)
-        .arg("-o")
-        .arg(&executable);
-    if cfg!(target_os = "macos") {
-        let sdk = Command::new("xcrun")
-            .args(["--sdk", "macosx", "--show-sdk-path"])
-            .output()
-            .unwrap();
-        assert!(sdk.status.success());
-        let sdk = String::from_utf8(sdk.stdout).unwrap();
-        linker.arg("-isysroot").arg(sdk.trim());
-    }
-    let linked = linker.output().unwrap();
-    assert!(
-        linked.status.success(),
-        "{}",
-        String::from_utf8_lossy(&linked.stderr)
-    );
-
-    for banks in ["256", "65536"] {
-        let output = Command::new(&executable)
-            .env("GEP_BANKS", banks)
-            .env_remove("GEP_FAULT")
+    for mode in ["checked", "read-v1"] {
+        let object = fixture.0.join(format!("{mode}.o"));
+        let result = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "emit_gep_object", "--ignored"])
+            .env("GEP_OBJECT", &object)
+            .env("RCC_NATIVE_MEMORY", mode)
             .output()
             .unwrap();
         assert!(
-            output.status.success(),
-            "banks={banks}: {}",
-            String::from_utf8_lossy(&output.stderr)
+            result.status.success(),
+            "{mode}: {} {}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
         );
-        assert!(String::from_utf8_lossy(&output.stdout).contains("GEP differential paths passed"));
-        let faults = [
-            "bad-offset",
-            "bad-offset-recovery",
-            "bad-bank",
-            "underflow",
-            "overflow",
-            "min-delta",
-            "max-delta",
-            "high-carrier",
-        ];
-        for fault in faults {
-            let output = Command::new(&executable)
-                .env("GEP_BANKS", banks)
-                .env("GEP_FAULT", fault)
+        let executable = fixture.0.join(mode);
+        let source =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gep-reference.c");
+        let mut linker = Command::new("cc");
+        linker
+            .args(["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"])
+            .arg(&source)
+            .arg(object)
+            .arg("-o")
+            .arg(&executable);
+        if cfg!(target_os = "macos") {
+            let sdk = Command::new("xcrun")
+                .args(["--sdk", "macosx", "--show-sdk-path"])
                 .output()
                 .unwrap();
-            assert_eq!(
-                output.status.code(),
-                Some(86),
-                "{banks}/{fault}: {output:?}"
+            assert!(sdk.status.success());
+            let sdk = String::from_utf8(sdk.stdout).unwrap();
+            linker.arg("-isysroot").arg(sdk.trim());
+        }
+        if mode == "read-v1" {
+            linker.arg("-DFAST_BANKS=65536");
+        }
+        let linked = linker.output().unwrap();
+        assert!(
+            linked.status.success(),
+            "{}",
+            String::from_utf8_lossy(&linked.stderr)
+        );
+
+        let ceilings: &[&str] = if mode == "read-v1" {
+            &["65536"]
+        } else {
+            &["256", "65536"]
+        };
+        for banks in ceilings {
+            let output = Command::new(&executable)
+                .env("GEP_BANKS", banks)
+                .env_remove("GEP_FAULT")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "banks={banks}: {}",
+                String::from_utf8_lossy(&output.stderr)
             );
-            assert!(String::from_utf8_lossy(&output.stderr).contains("checked-gep:"));
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains("GEP differential paths passed")
+            );
+            let faults = [
+                "bad-offset",
+                "bad-offset-recovery",
+                "bad-bank",
+                "underflow",
+                "overflow",
+                "min-delta",
+                "max-delta",
+                "high-carrier",
+            ];
+            for fault in faults {
+                let output = Command::new(&executable)
+                    .env("GEP_BANKS", banks)
+                    .env("GEP_FAULT", fault)
+                    .output()
+                    .unwrap();
+                assert_eq!(
+                    output.status.code(),
+                    Some(86),
+                    "{banks}/{fault}: {output:?}"
+                );
+                assert!(String::from_utf8_lossy(&output.stderr).contains("checked-gep:"));
+            }
         }
     }
-
-    // The same lowering must verify and emit for the separate x64 runtime.
-    let object =
-        rcc_native::compile_freestanding_object(&program(), "x86_64-unknown-none").unwrap();
-    assert_eq!(&object[..6], b"\x7fELF\x02\x01");
 }

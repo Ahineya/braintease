@@ -180,6 +180,21 @@ behaviour. The pointer policy clears group focus without changing traversal
 order and respects frozen groups. Its pinned private access to LVGL 9.6's
 group focus/editing fields is isolated in `ui.c`, alongside theme font roles.
 
+Window activation is separate from the remembered keyboard target. Losing
+window focus hides active borders, keyboard outlines and carets, and dims text
+selection without discarding its range, caret position or editing mode. The
+same enabled, visible control resumes on activation. Deleted, hidden or disabled
+targets cannot regain focus. `gx_lv_active()` lets custom widgets follow this
+policy; `ui_focus_suspend()` and `ui_focus_resume()` handle stock control states
+without generating control blur/focus callbacks. App window-blur observers run
+before suspension so editor autosave still sees the outgoing active document.
+Inactive windows discard typing, commands and key repeat.
+
+Pointer exit sends LVGL's normal hover-leave event, including when leaving a
+shell panel's painted hit regions for transparent desktop space. It leaves
+captured drags and keyboard focus intact. Re-entry refreshes the hover target
+even at the same coordinates; tabs and their close controls follow this lifecycle.
+
 GX reports physical key transitions. The shared adapter repeats navigation and
 editing keys (arrows, Home/End, Page Up/Down, Backspace and Delete) after 500 ms,
 then every 100 ms. Raw app filters receive repeated presses; the event-driven
@@ -829,6 +844,7 @@ python3 ports/lvgl/gallery-data-test.py
 python3 ports/lvgl/workspace-test.py
 python3 ports/lvgl/document-model-test.py
 python3 ports/lvgl/ui-editor-test.py
+python3 ports/lvgl/focus-test.py
 python3 ports/lvgl/font-data-test.py
 python3 ports/lvgl/browser-scan-test.py
 python3 ports/lvgl/editor-test.py

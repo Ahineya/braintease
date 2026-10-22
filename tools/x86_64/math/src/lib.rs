@@ -1,5 +1,8 @@
 #![no_std]
 mod scalar;
+#[cfg(feature = "desktop")]
+#[path = "../../graphics/desktop-core.rs"]
+mod desktop;
 
 #[cfg(not(test))]
 extern "C" {

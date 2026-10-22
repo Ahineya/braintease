@@ -5,7 +5,8 @@ use rcc_ir::ir::{IrBinaryOp as Op, IrType, Value};
 impl Cg<'_, '_> {
     /// Normalize the common same-bank case without entering the runtime.
     /// Both hosted and freestanding runtimes back the original 256 banks.
-    /// Higher banks, bank crossings and malformed inputs retain the checked
+    /// Hosted read-v1 additionally requires the expanded 65536-bank runtime.
+    /// Bank crossings and malformed inputs retain the checked
     /// helper, including its target-specific limits and diagnostics. GEP does
     /// not access memory or poll; this adds no COW/view/scheduling obligations.
     pub(super) fn logical_gep(
@@ -17,7 +18,8 @@ impl Cg<'_, '_> {
         let bank = self.b.ins().ushr_imm_u(pointer, 16);
         let offset = self.b.ins().band_imm_u(pointer, 65535);
         let next = self.b.ins().iadd(offset, delta);
-        let valid_bank = self.b.ins().icmp_imm_u(IntCC::UnsignedLessThan, bank, 256);
+        let bank_limit = if self.compiler.read_views { 65536 } else { 256 };
+        let valid_bank = self.b.ins().icmp_imm_u(IntCC::UnsignedLessThan, bank, bank_limit);
         let valid_offset = self
             .b
             .ins()

@@ -1,6 +1,15 @@
 HP AX211 LIVE ETHERNET / IP HANDOFF — 2026-10-20
 ================================================
 
+HISTORICAL DRIVER/PROFILE JOURNAL. This file preserves the early live RAM-root
+profile and successive recovery fixes. Its stopped/unsupported/pending claims
+are scoped to those dated candidates, not today's combined system. Later
+internal boot, services, radio recovery and GTK-refresh results are reconciled
+in README.md in this directory and docs/x64-master-plan.md. Use ssh.md for
+connections and efi-updates.md for publication; do not replay an early profile
+as the accepted default. Sustained reliability/held-session GTK acceptance
+remains open; bounded traffic tests below do not close that gate.
+
 LATEST PHYSICAL RESULT — sustained local Wi-Fi accepted, 2026-10-20
 -----------------------------------------------------------------
 After the user booted the corrected USB and reported Telnet up, the Mac ran

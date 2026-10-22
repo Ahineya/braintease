@@ -1,6 +1,12 @@
 Initial internal EFI staging (2026-10-21)
 =======================================
 
+Maintained tool contract below; dated physical sections afterward are history.
+Current recorded baseline: README.md (entry0003, EFI/Riplix-gui as of the
+2026-10-22 reconciliation). SSH: ssh.md. Repeated candidate publication:
+efi-updates.md uses a fresh namespace per candidate with this same tool.
+It does not turn apply into an in-place updater.
+
 tools/x86_64/internal_boot.py stages an initial Riplix trial on an explicitly
 selected, already mounted ESP. It does not discover disks, mount partitions,
 run efibootmgr, change BootOrder/BootNext, reboot, or copy the root filesystem.
@@ -25,7 +31,8 @@ of the default Riplix. Both apply and inspect require the same selection; paths
 in the manifest and interrupted-stage prefixes follow it. Names must be exactly
 Riplix or Riplix- followed by1 to48 ASCII letters/digits/hyphens, starting with a
 letter or digit. Existing other namespaces remain untouched; this does not
-enable replacement, updates or firmware selection.
+enable replacement or firmware selection. New candidates can be published in
+fresh namespaces; the maintained procedure is efi-updates.md.
 
 No EFI/ubuntu, EFI/BOOT or recovery payload is replaced. There is no full ESP
 backup and no private key/root image copy. The known-good EFI uses its embedded
@@ -109,7 +116,7 @@ user reopened its temporary root SSH listener on2222. Ubuntu clears /tmp at
 boot, so exact hash-verified installer inputs were restored before promotion;
 no root filesystem payload or private SSH key was exported.
 
-Riplix entry0000 is now first in BootOrder0000,2001,0001,2005. All existing
+At this dated trial, entry0000 became first in BootOrder0000,2001,0001,2005. All existing
 prior entries retain their relative order. Firmware had stale references2002
 and2004 with no corresponding Boot#### variables; efibootmgr rejected them,
 so only these nonexistent references were removed. Ubuntu's original entry,
@@ -122,7 +129,8 @@ still needs physical keyboard/display and sustained-radio acceptance.
 
 Keep Ubuntu and USB recovery. Use firmware's boot selector for either;
 a Riplix command to select a one-time Ubuntu boot is not implemented here.
-Remote EFI update publication/health rollback remains separate future work.
+Later Ubuntu-mediated EFI publication is documented in efi-updates.md.
+A Riplix-owned ESP writer and automatic health rollback remain future work.
 
 
 Terminal candidate and unattended development loop — later 2026-10-21
@@ -159,7 +167,7 @@ local acceptance gate. Standard local Escape/arrows/F1-F12 already passed;
 Fn/media support remains deferred.
 
 Final receipt: build/x86_64-terminal-wave32/physical-acceptance.json.
-HP is left running the new Riplix candidate. Ubuntu remains the persistent
+At this dated trial HP was left running the terminal candidate. Ubuntu remained the persistent
 default; ordinary Riplix reboot returns it for the next update. This is not
 automatic rollback for a hung candidate. Old EFI fallback and installed-app
 rollback are separate: the preceding16MiB loader cannot execute current Rift.

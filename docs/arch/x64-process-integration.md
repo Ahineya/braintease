@@ -1,9 +1,12 @@
 # x64 process backing: production integration boundary
 
-Status: source audit and proposed integration contract, 2026-10-21. No production
-mapping, execution ABI, scheduler or ownership transfer is enabled by this
-document. The first implementation slice below is deliberately narrower than
-ring-3 execution. It preserves the working C16 boot and remote development path.
+Status: source audit and proposed integration contract, 2026-10-21; fixture
+progress reconciled 2026-10-22. The inactive real-allocator/PTE fixture has passed
+on the HP's KVM; see the [recorded result](../../build/x86_64-process-memory-fixture/hp-kvm-result.json)
+and [master plan](../x64-master-plan.md). Production mappings, ring 3 and
+timer-driven userspace preemption remain unimplemented. This document enables
+no execution ABI, scheduler or ownership transfer. Its audit describes the
+dated source baseline; recheck production code before integrating the next slice.
 
 This refines [native-x64.md](native-x64.md), the exact subtree agreement in
 [native-memory-coordination.txt](native-memory-coordination.txt), and the
@@ -205,11 +208,12 @@ callback may retain a window alias across this boundary; native DMA remains in
 driver-owned physical buffers. User-copy pinning/cancel rules come before
 future blocking native syscalls or ring-3 preemption.
 
-## The next bounded implementation slice
+## Accepted inactive platform fixture
 
-Implement an **inactive platform backing/plan adapter fixture** in a disposable
-QEMU build, after exact paths/API ownership are acknowledged. This is the first
-production integration boundary, not yet the default process representation:
+The **inactive platform backing/plan adapter fixture** is implemented and has
+passed on the HP's KVM. It exercises the first platform integration seam without
+changing the default process representation. Retain this scope as a regression
+checklist:
 
 1. Wrap the real `page_alloc/page_free` with an adapter allocation ledger and
    per-space page budget. Use the existing isolated model APIs unchanged.
@@ -228,12 +232,15 @@ production integration boundary, not yet the default process representation:
    regressions and verify the unrelaxed shutdown ownership guard. Keep the
    fixture disabled in the normal image.
 
-This validates the allocator/PTE construction seam using real platform pages.
-It does **not** measure switching, change the kernel's run queue, run apps at
-ring 3 or test AX211 DMA concurrency. Host model results remain host results;
-QEMU uses its actual platform allocator, but HP acceptance is still separate.
+This acceptance validates the allocator/PTE construction seam using real pages
+from the guest platform allocator. It does **not** measure switching, change
+the kernel's run queue, run apps at ring 3 or test AX211 DMA concurrency. Host
+model results remain host results; QEMU/KVM on the HP does not certify physical
+device behavior or active production mappings.
 
-The following slice can add a reviewed materialization/mapping-lease contract,
+## Next slice: mapping leases and checkpoint selection
+
+The next bounded slice needs a reviewed materialization/mapping-lease contract,
 the reserved window, per-switch instrumentation and checkpoint-only selection.
 Acceptance then requires both values/continuations and zero **ordinary switch
 payload copies**, plus fork/exec/failure/reclamation/blocked-I/O regressions and

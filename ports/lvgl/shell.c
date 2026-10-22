@@ -976,6 +976,7 @@ int main(int argc, char **argv) {
     struct gx_session q;
     int probe, status;
     const char *directory = getenv("FUSEDE_APPLICATIONS");
+    const char *terminal = getenv("FUSEDE_TERMINAL");
     trace = argc > 1 && !strcmp(argv[1], "--trace");
     if (argc > 1 && !trace) { puts("Usage: fusedeshell [--trace]"); return !strcmp(argv[1], "--help") ? 0 : 1; }
     catalog = shell_catalog_new();
@@ -983,7 +984,12 @@ int main(int argc, char **argv) {
     if (!directory) directory = "/usr/share/applications";
     if (shell_catalog_load(catalog, directory) < 0)
         shell_error("Applications", shell_catalog_error(catalog));
-    shell_catalog_terminal(catalog, "/bin/gterm", "/mnt/host/gterm.fxe");
+    if (shell_catalog_terminal(catalog, terminal ? terminal : "/bin/gterm",
+                               terminal ? "" : "/mnt/host/gterm.fxe") < 0) {
+        fputs("FuseDE: invalid terminal path\n", stderr);
+        shell_catalog_free(catalog);
+        return 1;
+    }
     if (prepare_pins() < 0) shell_error("Pin configuration", strerror(errno));
     else if (shell_pins_load(catalog, pins_path) < 0) shell_error("Pins", shell_catalog_error(catalog));
     probe = open("/dev/gfx", O_RDWR | O_CLOEXEC);

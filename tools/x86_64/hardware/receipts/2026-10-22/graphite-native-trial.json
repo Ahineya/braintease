@@ -1,0 +1,153 @@
+{
+  "schema": "riplix-graphite-native-trial",
+  "version": 1,
+  "recorded_utc": "2026-10-22T13:23:23.402346+00:00",
+  "status": "booted-and-staged; physical interaction issues remain",
+  "machine": "HP Envy x360 16-ac0xxx",
+  "entry": "0004",
+  "namespace": "Riplix-trial-a889571f688c",
+  "candidate_path": "EFI/Riplix-trial-a889571f688c/BOOTX64.EFI",
+  "candidate_sha256": "a889571f688c595d098da5c3d50618f98d7ba4f5a8d5d0e75822632b6df88a6d",
+  "fallback_sha256": "4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c",
+  "manifest_sha256": "ce3d064cb34dfa1312b2aefd6b5c1a43afbf1554d9b8deeb50635ec8a4f91596",
+  "manifest_state": "staged-not-boot-validated (original staging record retained)",
+  "source_identity": {
+    "git_revision": "c8852c00499372ccc352e3c6baa8f3b62c400b72",
+    "compiler_sha256": "d0b1dee70cc9fdbf52bc7573fc52fafbf297f49a07259f88ee97889ce7298b32",
+    "emitter_sha256": "d1ab056931a9a02e1b88b991bf952d529edb78fc19b211457662d0433a40f01c",
+    "versions": {
+      "clang": "Apple clang version 17.0.0 (clang-1700.0.13.5)",
+      "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+    }
+  },
+  "source_caveat": "Dirty workspace build; revision alone does not reproduce candidate. Later idle-loop source changes are not in this EFI or staged probe.",
+  "preservation": {
+    "status": "verified",
+    "gpt_unchanged": true,
+    "existing_esp_files_unchanged": true,
+    "boot_entries_and_order_unchanged": true,
+    "new_files": [
+      "EFI/Riplix-trial-a889571f688c/BOOTGOOD.EFI",
+      "EFI/Riplix-trial-a889571f688c/BOOTX64.EFI",
+      "EFI/Riplix-trial-a889571f688c/manifest.json"
+    ],
+    "p3_written_by_efi_staging": false
+  },
+  "boot_policy": {
+    "unchanged_order": "0001,0000,2001,2005,2002,2004",
+    "trial_selection": "BootNext 0004; one shot",
+    "accepted_gui_entry_retained": "0003"
+  },
+  "applications": {
+    "lvcalc": {
+      "sha256": "103602c02221843005e7ff37ca8702ddcbefd8f1a736e9bf0a957c084e2e61f9",
+      "bytes": 18043584,
+      "path": "/root/graphite-test/lvcalc.fxe"
+    },
+    "lvselect": {
+      "sha256": "cd1d6d75a88916ce0c479f3997ca5c237d2c8a98a6b0b1a0fda8091089268462",
+      "bytes": 18449904,
+      "path": "/root/graphite-test/lvselect.fxe"
+    },
+    "lvgallery": {
+      "sha256": "be5d8af3c8fccbe86d8d8a8727d2790afa8cd167e22adf38972e1a41c76b8b28",
+      "bytes": 22967320,
+      "path": "/root/graphite-test/lvgallery.fxe"
+    },
+    "lvdata": {
+      "sha256": "11f43c0af7bc64ccf243c3fe330fac5917f75094414a0a0f46e0ee6f33e5109c",
+      "bytes": 21460720,
+      "path": "/root/graphite-test/lvdata.fxe"
+    },
+    "lvedit": {
+      "sha256": "00cc22254e92ecfc43021f5223fb510e14250a0babd70d08aed74747fd324564",
+      "bytes": 22248992,
+      "path": "/root/graphite-test/lvedit.fxe"
+    },
+    "fusedeshell": {
+      "sha256": "d1863097b7470ed4ca7647da0a951d04a1329f9556ab98740241432e49022925",
+      "bytes": 19333200,
+      "path": "/root/graphite-test/fusedeshell.fxe"
+    },
+    "gterm": {
+      "sha256": "da447a0d3bee2b23d96c7a06f4ed117a75c0f99de0c88ea8bd73be2f9d69b5f6",
+      "bytes": 2482496,
+      "path": "/root/graphite-test/gterm.fxe"
+    },
+    "screenshot": {
+      "sha256": "1827b273e7ef8ad404f1b998467a74d474151ccceb3f69fd5eb606306ab583dc",
+      "bytes": 243664,
+      "path": "/root/graphite-test/screenshot.fxe"
+    },
+    "desktop-probe": {
+      "sha256": "d461c927db303078033845b92f7da04999c278228b036c661095a6430bfa7b60",
+      "bytes": 187240,
+      "path": "/root/graphite-test/desktop-probe.fxe"
+    }
+  },
+  "application_transfer": {
+    "status": "all-verified",
+    "method": "pkg HTTP downloader; pinned SHA-256 carried over pinned SSH; atomic temporary-file publication",
+    "mismatch_test": "rejected before publication",
+    "directory": "/root/graphite-test",
+    "existing_installed_apps_replaced": false
+  },
+  "kvm": {
+    "status": "passed",
+    "accelerator": "kvm",
+    "seconds": 176.484,
+    "candidate": "eccdbfe546ff2b0f63be8fb82f356a79810b0149cb9f66bbcca41e6b1cfa0a07",
+    "checks": [
+      "FuseDE native alpha panel and catalog",
+      "calculator physical keyboard arithmetic",
+      "editor file load and cooperative close",
+      "focus returns to calculator",
+      "data viewer and plot",
+      "graphical terminal",
+      "shutdown and context-page accounting"
+    ],
+    "physical_acceptance": false
+  },
+  "physical": {
+    "boot_verified": true,
+    "session_publication": "FuseDE, window 16, pid 59, 1920x1200",
+    "ssh_services_wifi": "healthy at final inspection",
+    "screenshot": "reduced capture completed on HP; not an interaction acceptance test",
+    "user_report": [
+      "Desktop visible",
+      "Dock buttons repeatedly lose hover and clicks",
+      "Applications menu and keyboard Enter launched Calculator",
+      "Calculator appeared after approximately 15 seconds",
+      "Overall laggy"
+    ],
+    "interaction_accepted": false
+  },
+  "known_limits": [
+    "Software GOP composition; no GPU acceleration",
+    "Native retained-strip/A8 operations 29/30 unsupported; existing software fallbacks",
+    "1x density; maximum client storage 1920x1200",
+    "Performance not certified at 30 FPS; app startup not profiled",
+    "Existing ring-0 C16 scheduling and process model unchanged"
+  ],
+  "pending_not_deployed": {
+    "fix": "Idempotent GXP_CONFIGURE no longer changes desktop revision or repaints; inactive modal panel no longer suppresses normal focus",
+    "suspected_impact": "Repeated identical panel configuration wakes session watches and rebuilds dock; likely contributor to hover instability and load, not yet established on hardware",
+    "verification": "Host native desktop regression with fatal UBSan passed, including unchanged revision/present on repeated config and hidden-modal focus",
+    "diagnostic": "New desktop-probe --idle and VM idle check added to source, not built/staged or VM/hardware tested"
+  },
+  "handoff": {
+    "user_requested_stop": true,
+    "hp_left_running": true,
+    "additional_reboot_performed_after_user_report": false,
+    "launch": "sh /root/graphite-test/startgraphite.sh",
+    "temporary_transfer_server": "stopped",
+    "main_private_images": "not used"
+  },
+  "local_optional_evidence": [
+    "build/x86_64-graphite/hp-desktop-boot.log",
+    "build/x86_64-graphite/hp-graphite-start.log",
+    "build/x86_64-graphite/hp-preview.log",
+    "build/x86_64-graphite/checks-final.log",
+    "build/x86_64-graphite/kvm-final-results/"
+  ]
+}

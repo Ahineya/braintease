@@ -1,7 +1,8 @@
 //! Read-only native capabilities, confined to straight-line IR regions. A
 //! denied/missed grant is not reacquired for every subsequent scalar access.
 use super::emit::Cg;
-use cranelift_codegen::ir::{condcodes::IntCC, types, InstBuilder, MemFlagsData, Value};
+use cranelift_codegen::ir::{condcodes::IntCC, types, Endianness, InstBuilder, MemFlagsData, Value};
+use cranelift_module::Module;
 use rcc_ir::ir::Instruction as I;
 
 #[derive(Clone, Copy)]
@@ -200,18 +201,26 @@ impl Cg<'_, '_> {
         self.runtime("rcc_native_poll", &[])?;
         let bytes = self.b.ins().ishl_imm_u(delta, 1);
         let address = self.b.ins().iadd(view.base, bytes);
-        let mut value = self.k(0);
-        for cell in 0..cells {
-            let word = self.b.ins().load(
-                types::I16,
-                MemFlagsData::trusted(),
-                address,
-                (cell * 2) as i32,
-            );
-            let word = self.b.ins().uextend(types::I64, word);
-            let shifted = self.b.ins().ishl_imm_u(word, (cell * 16) as i64);
-            value = self.b.ins().bor(value, shifted);
-        }
+        let value = if self.compiler.object.isa().endianness() == Endianness::Little
+            && matches!(cells, 1 | 2 | 4)
+        {
+            // The full span has already been granted and checked. C16 cells
+            // occupy adjacent u16s, so a little-endian native load constructs
+            // the same scalar without loading/masking each cell separately.
+            // A logical pointer guarantees only u16 alignment, not u32/u64.
+            let ty = match cells { 1 => types::I16, 2 => types::I32, _ => types::I64 };
+            let value = self.b.ins().load(ty, MemFlagsData::new().with_notrap(), address, 0);
+            if cells == 4 { value } else { self.b.ins().uextend(types::I64, value) }
+        } else {
+            let mut value = self.k(0);
+            for cell in 0..cells {
+                let word = self.b.ins().load(types::I16, MemFlagsData::trusted(), address, (cell * 2) as i32);
+                let word = self.b.ins().uextend(types::I64, word);
+                let shifted = self.b.ins().ishl_imm_u(word, (cell * 16) as i64);
+                value = self.b.ins().bor(value, shifted);
+            }
+            value
+        };
         let mut result = vec![value.into()];
         result.extend(view.values().map(cranelift_codegen::ir::BlockArg::from));
         self.b.ins().jump(done, &result);

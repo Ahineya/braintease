@@ -29,7 +29,15 @@ int main(void) {
         JS_SetMemoryLimit(rt,1024*1024);
         value=JS_Call(ctx,funcs[i],JS_UNDEFINED,0,NULL);
         C(!JS_IsException(value) && JS_IsNumber(value) && JS_VALUE_GET_INT(value)==42);
-        JS_FreeValue(ctx,value); JS_FreeValue(ctx,funcs[i]);
+        JS_FreeValue(ctx,value);
+        /* Warm frame reuse must respect a newly lowered memory budget too. */
+        JS_SetMemoryLimit(rt,0); before=callbacks;
+        value=JS_Call(ctx,funcs[i],JS_UNDEFINED,0,NULL);
+        C(JS_IsException(value)); C(callbacks==before);
+        error=JS_GetException(ctx); C(!JS_IsUndefined(error));
+        JS_FreeValue(ctx,error); JS_FreeValue(ctx,value);
+        JS_SetMemoryLimit(rt,1024*1024);
+        JS_FreeValue(ctx,funcs[i]);
     }
     JS_FreeContext(ctx); JS_FreeRuntime(rt);
     printf("QUICKJS_FRAMES checks=%u failures=%u\n",checks,failures);

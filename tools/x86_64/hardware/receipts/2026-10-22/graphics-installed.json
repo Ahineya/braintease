@@ -1,0 +1,56 @@
+{
+  "status": "existing-graphics-EFI-refreshed-one-shot-selected",
+  "entry": "0003",
+  "candidate_sha256": "4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c",
+  "previous_candidate_sha256": "62527fb68a963a1b93ece8a2ab61ddb783ad83b93c0a8344d8709f783792ce30",
+  "known_good_sha256": "32d71c89df9ed6ed8e0a039faa19b931d1a1ef529770c8a64a70ad6fc5790691",
+  "namespace": "Riplix-gui",
+  "previous_ESP_files_unchanged": true,
+  "GPT_unchanged": true,
+  "installer_p3_written": false,
+  "Ubuntu_default_preserved": true,
+  "boot": "BootNext: 0003\nBootCurrent: 0001\nTimeout: 0 seconds\nBootOrder: 0001,0000,2001,2005,2002,2004\nBoot0000* Riplix development\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\Riplix\\BOOTX64.EFI\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 52 00 69 00 70 00 6c 00 69 00 78 00 5c 00 42 00 4f 00 4f 00 54 00 58 00 36 00 34 00 2e 00 45 00 46 00 49 00 00 00 / 7f ff 04 00\nBoot0001* ubuntu\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\ubuntu\\shimx64.efi\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 34 00 5c 00 45 00 46 00 49 00 5c 00 75 00 62 00 75 00 6e 00 74 00 75 00 5c 00 73 00 68 00 69 00 6d 00 78 00 36 00 34 00 2e 00 65 00 66 00 69 00 00 00 / 7f ff 04 00\nBoot0002* Riplix terminal test\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\Riplix-tui\\BOOTX64.EFI\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 3c 00 5c 00 45 00 46 00 49 00 5c 00 52 00 69 00 70 00 6c 00 69 00 78 00 2d 00 74 00 75 00 69 00 5c 00 42 00 4f 00 4f 00 54 00 58 00 36 00 34 00 2e 00 45 00 46 00 49 00 00 00 / 7f ff 04 00\nBoot0003* Riplix graphics test\tHD(1,GPT,5b46a40c-54be-48b3-8a20-59d35a5d5165,0x800,0x219800)/\\EFI\\Riplix-gui\\BOOTX64.EFI\n      dp: 04 01 2a 00 01 00 00 00 00 08 00 00 00 00 00 00 00 98 21 00 00 00 00 00 0c a4 46 5b be 54 b3 48 8a 20 59 d3 5a 5d 51 65 02 02 / 04 04 3c 00 5c 00 45 00 46 00 49 00 5c 00 52 00 69 00 70 00 6c 00 69 00 78 00 2d 00 67 00 75 00 69 00 5c 00 42 00 4f 00 4f 00 54 00 58 00 36 00 34 00 2e 00 45 00 46 00 49 00 00 00 / 7f ff 04 00\nBoot2001* EFI USB Device\tRC\n      dp: 7f ff 04 00\n    data: 52 43\nBoot2005* Internal Hard Disk or Solid State Disk\tRC\n      dp: 7f ff 04 00\n    data: 52 43",
+  "stage": {
+    "manifest_sha256": "a7b03c11e6c05aa4927f9b3d26972ea4a7fac749f810449f5af8dc0a65cb6d54",
+    "manifest": {
+      "caller_verified_esp_identity": "PARTUUID=5b46a40c-54be-48b3-8a20-59d35a5d5165",
+      "created_utc": "2026-10-21T21:04:26.172944+00:00",
+      "files": {
+        "candidate": {
+          "bytes": 6446592,
+          "path": "EFI/Riplix-gui/BOOTX64.EFI",
+          "pe": {
+            "entry_rva": 4672,
+            "image_bytes": 6463488,
+            "machine": "AMD64",
+            "optional_header": "PE32+",
+            "sections": 4,
+            "subsystem": "EFI_APPLICATION"
+          },
+          "sha256": "4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c"
+        },
+        "known_good": {
+          "bytes": 6397440,
+          "path": "EFI/Riplix-gui/BOOTGOOD.EFI",
+          "pe": {
+            "entry_rva": 4672,
+            "image_bytes": 6410240,
+            "machine": "AMD64",
+            "optional_header": "PE32+",
+            "sections": 4,
+            "subsystem": "EFI_APPLICATION"
+          },
+          "sha256": "32d71c89df9ed6ed8e0a039faa19b931d1a1ef529770c8a64a70ad6fc5790691"
+        }
+      },
+      "schema": "riplix-internal-efi-stage",
+      "state": "staged-not-boot-validated",
+      "version": 1
+    },
+    "action": "owned-GUI-candidate-and-manifest-refreshed",
+    "state": "staged-not-boot-validated",
+    "esp_directory": "/boot/efi",
+    "staging_directories": [],
+    "firmware_changed": false
+  }
+}

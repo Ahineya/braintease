@@ -193,7 +193,7 @@ unsafe extern "C" fn rcc_native_load(ctx: *mut Runtime, ptr: u64, words: u64) ->
     value
 }
 #[no_mangle]
-unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, words: u64) -> u64 {
+pub(super) unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, words: u64) -> u64 {
     let runtime = unsafe { &mut *ctx };
     runtime.poll();
     if !(1..=4).contains(&words) {
@@ -206,6 +206,10 @@ unsafe extern "C" fn rcc_native_store(ctx: *mut Runtime, ptr: u64, value: u64, w
     {
         fatal("native store out of bounds");
     }
+    // Generated code ends its read capability before this call. Retaining
+    // that optimization's Arc here would manufacture sharing and force a
+    // 1 KiB COW copy on the next write to otherwise exclusively owned RAM.
+    runtime.read_view.invalidate();
     if start >= BANK {
         if words == 1 {
             runtime.memory.write(start, value as u16);

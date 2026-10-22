@@ -462,25 +462,9 @@ void console_boot_status(unsigned status, const char *message, const char *detai
     console_g0=g0; console_g1=g1; console_shift=shift;
 }
 void screen_status(const char *message) {
-    unsigned top = (font_height + 24) * console_scale;
-    rectangle(console_margin, top, boot.width - 2 * console_margin,
-              2 * cell_height, color(15, 26, 43));
-    for (unsigned row = 0; *message && row < 2; ++row) {
-        unsigned count = 0, last_space = 0;
-        while (count < console_columns && message[count]) {
-            if (message[count] == ' ') last_space = count;
-            ++count;
-        }
-        if (message[count] && last_space) count = last_space;
-        for (unsigned column = 0; column < count; ++column) {
-            char value[2] = {message[column], 0};
-            text(console_margin + column * cell_width, top + row * cell_height,
-                 value, console_scale, color(160, 225, 195));
-        }
-        message += count;
-        while (*message == ' ') ++message;
-    }
-    console_flush();
+    /* Boot diagnostics do not reserve rows in the interactive console. */
+    serial(message);
+    serial("\n");
 }
 void console_init(void) {
     if (!boot.framebuffer || boot.pixel_format > 1 || boot.framebuffer % 4 ||
@@ -523,12 +507,12 @@ void console_init(void) {
     }
     /* Even a manual override must leave room for the header and console. */
     unsigned limit = boot.width / (20 * font_width + 32);
-    if (limit > boot.height / (7 * font_height + 52)) limit = boot.height / (7 * font_height + 52);
+    if (limit > boot.height / (5 * font_height + 52)) limit = boot.height / (5 * font_height + 52);
     if (console_scale > limit) console_scale = limit;
     if (!console_scale) console_scale = 1;
     console_margin = 16 * console_scale;
     cell_width = font_width * console_scale; cell_height = font_height * console_scale;
-    console_top = (3 * font_height + 36) * console_scale;
+    console_top = (font_height + 36) * console_scale;
     if (boot.height <= console_top + console_margin) fail("framebuffer too small for font", font_height);
     console_columns = (boot.width - 2 * console_margin) / cell_width;
     console_rows = (boot.height - console_margin - console_top) / cell_height;

@@ -55,9 +55,10 @@ pub(super) fn hosted(module: &Module) -> bool {
 fn continuation_slots(
     live: &BTreeSet<u32>,
     parameters: &BTreeMap<u32, usize>,
+    allocas: &BTreeMap<u32, u64>,
 ) -> BTreeMap<u32, u64> {
     live.iter()
-        .filter(|id| !parameters.contains_key(id))
+        .filter(|id| !parameters.contains_key(id) && !allocas.contains_key(id))
         .enumerate()
         .map(|(index, id)| (*id, index as u64))
         .collect()
@@ -69,9 +70,15 @@ impl Cg<'_, '_> {
         live: &BTreeSet<u32>,
         parameters: &BTreeMap<u32, usize>,
     ) -> Result<(), String> {
-        let slots = continuation_slots(live, parameters);
+        let slots = continuation_slots(live, parameters, &self.allocas);
         for id in live {
-            let value = if let Some(index) = parameters.get(id) {
+            let value = if let Some(offset) = self.allocas.get(id).copied() {
+                // A frame's logical base survives calls, fork and scheduling.
+                // Its fixed local addresses need neither saved slots nor
+                // per-slot runtime calls on either side of a suspension.
+                let offset = self.k(offset as i64);
+                self.logical_gep(self.frame, offset)?
+            } else if let Some(index) = parameters.get(id) {
                 let index = self.k(*index as i64);
                 self.runtime("rcc_native_process_arg", &[index])?
             } else {
@@ -101,7 +108,7 @@ impl Cg<'_, '_> {
         let proceed = self.b.create_block();
         self.b.ins().brif(due, suspend, &[], proceed, &[]);
         self.b.switch_to_block(suspend);
-        let slots = continuation_slots(live, parameters);
+        let slots = continuation_slots(live, parameters, &self.allocas);
         self.save_continuation(pc, &slots, None)?;
         let op = self.k(15);
         let zero = self.k(0);
@@ -174,7 +181,7 @@ impl Cg<'_, '_> {
             values.truncate(*fixed);
             values.push(base);
         }
-        let slots = continuation_slots(live, parameters);
+        let slots = continuation_slots(live, parameters, &self.allocas);
         self.save_continuation(pc, &slots, *result)?;
         // Zero discards the result; compact slot zero is encoded as one.
         let slot = self.k(result
@@ -250,6 +257,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
     // Hosted kernel units remain uninterrupted. Independently loaded user code
     // and standalone process programs provide bounded scheduling opportunities.
     let checkpoints = compiler.application || !hosted(&compiler.ir);
+    let cycle_edges = super::cycles::checkpoint_edges(function);
     let liveness = super::liveness::Liveness::analyze(function)?;
     let parameters: BTreeMap<_, _> = function
         .parameters
@@ -362,6 +370,7 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             owns_stack: false,
             allocas,
             edges: Vec::new(),
+            dispatches: super::dispatch::analyze(function),
             va_input: None,
             var_area,
             bound_globals: BTreeMap::new(),
@@ -403,18 +412,15 @@ pub(super) fn emit_function(compiler: &mut Compiler, function: &Function) -> Res
             for (position, instruction) in block.instructions.iter().enumerate() {
                 cg.read_region = regions[position];
                 if !cg.read_region { cg.read_view = None; }
-                let backward = |target: &u32| {
-                    function.blocks[..=block_index]
-                        .iter()
-                        .any(|b| b.id == *target)
-                };
+                let backward = |target: &u32| cycle_edges.contains(&(block.id, *target));
                 let loop_edge = match instruction {
                     I::Branch(to) => backward(to),
                     I::BranchCond {
                         true_label,
                         false_label,
                         ..
-                    } => backward(true_label) || backward(false_label),
+                    } => backward(true_label) || backward(false_label)
+                        || cg.dispatches.get(&block.id).is_some_and(|p| p.backward),
                     _ => false,
                 };
                 if checkpoints && loop_edge {
@@ -478,9 +484,13 @@ mod tests {
         let live = BTreeSet::from([3, 1000, 1000000, u32::MAX]);
         let parameters = BTreeMap::from([(1000, 0)]);
         assert_eq!(
-            continuation_slots(&live, &parameters),
+            continuation_slots(&live, &parameters, &BTreeMap::new()),
             BTreeMap::from([(3, 0), (1000000, 1), (u32::MAX, 2)])
         );
-        assert!(continuation_slots(&BTreeSet::from([1000]), &parameters).is_empty());
+        assert!(continuation_slots(&BTreeSet::from([1000]), &parameters, &BTreeMap::new()).is_empty());
+        assert_eq!(
+            continuation_slots(&live, &parameters, &BTreeMap::from([(1000000, 48)])),
+            BTreeMap::from([(3, 0), (u32::MAX, 1)])
+        );
     }
 }

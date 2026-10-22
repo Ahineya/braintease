@@ -1,0 +1,11 @@
+{
+  "name": "bundler",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "astring": "1.9.0",
+    "meriyah": "6.1.4",
+    "esbuild": "0.28.1",
+    "meriyah-ytjs": "npm:meriyah@7.3.1"
+  }
+}

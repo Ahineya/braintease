@@ -1,5 +1,11 @@
 # Riplix on x86_64
 
+**Physical HP development: [start here](hardware/README.md).** That handoff
+records the latest accepted GUI/touchpad candidate, pinned SSH recipes, retained
+receipts and the repeat EFI publication procedure. It was reconciled from local
+evidence on 2026-10-22, not by checking the live HP. Dated checkpoint descriptions
+below retain their narrower historical/test scope.
+
 Riplix boots as freestanding x86_64 code in QEMU: the shared kernel mounts a
 writable virtual disk root, runs `/init` as PID 1 and loads the existing V7 Bourne shell
 from `/bin/sh`. Both virtio and NVMe virtual disks pass persistent-root acceptance. The QEMU window accepts a polled PS/2 keyboard. Independent
@@ -35,6 +41,15 @@ and compilers. It also separates hosting the Rust-based RFL compiler from the
 ABI it emits. These are planned stages; current package and runtime contracts
 remain unchanged.
 
+The opt-in [native Graphite desktop profile](graphics/README.md#opt-in-native-desktop-profile)
+now reuses Fuse-X's shared Rust window policy, with native retained client
+frames, window controls, session registry and alpha shell panels over GOP.
+Its separate app builder produces the Graphite shell, calculator, file selector,
+gallery, Data Viewer, editor and terminal. Disposable VM tests and physical HP
+staging have separate receipts; consult the hardware handoff for the selected
+trial. This profile does not change the default boot/startup policy or the
+ongoing process-memory, LP64 and ring-3 work.
+
 The freestanding build explicitly selects the `bounded` heap profile for both
 kernel and SDK/application compilation: banks 48..239. Its current runtime
 backs only 256 banks. The hosted profile uses sparse high banks and remains
@@ -44,14 +59,17 @@ apps against the hosted heap would halt on an unsupported bank-256 access.
 
 ## Unified HP system candidate
 
-The [integration plan and current handoff](hardware/hp-integration-plan.txt)
-records the agreed route to automatic networking/services, packages and internal
-dual boot. The prepared default USB now combines AX211 with the dedicated NVMe
-root, supervised IP/Telnet/SSH services and the signed Mac mini pkg bootstrap.
+The [current handoff](hardware/README.md) records accepted work and remaining
+gates; the [integration journal](hardware/hp-integration-plan.txt) preserves the
+earlier planning/trial history. The combined system brings AX211 with the
+dedicated NVMe root, supervised IP/Telnet/SSH services and the signed Mac mini
+pkg bootstrap.
 Its filesystem is1GiB with8192 inodes inside the unchanged30GiB reservation.
 Physical combined networking, package installation, pinned SSH/SFTP and three
-forced radio-stop recoveries have passed. Recovery remains on the USB;
-internal EFI/NVRAM installation has not happened yet.
+forced radio-stop recoveries have passed. Internal EFI/NVRAM installation and
+an unattended Ubuntu/Riplix reboot loop also passed. The latest recorded GUI
+candidate is entry `0003`, `EFI/Riplix-gui`; Ubuntu remains the temporary default
+and USB remains recovery media. Verify live entries/hashes before boot selection.
 
 `--apps system --system-services --root-mib 1024 --root-source OLD_ROOT`
 installs the small integration set while retaining existing clean-root apps.
@@ -78,8 +96,11 @@ acknowledges retries without reinstalling keys. `wifi status` reports refresh,
 duplicate and rejection counters. Host tests cover 1,200 synthetic rotations,
 queue wrap/reuse and failure handling; real router rotation and SSH continuity
 still require physical acceptance. A new pairwise four-way handshake retains
-the reconnect fallback. Selectable profiles, full userspace authentication,
-DHCP, internal default boot and verified kernel updates remain subsequent stages.
+the reconnect fallback. Selectable profiles, full userspace authentication and
+DHCP remain integration work. Internal trial/default boot and the Ubuntu/Riplix
+development loop have passed; use the [current handoff](hardware/README.md) and
+[fresh-namespace EFI publication procedure](hardware/efi-updates.md) for updates.
+A guest-owned ESP writer and automatic failed-boot recovery remain future work.
 
 `reboot` requests existing orderly service shutdown/filesystem sync, then a
 firmware-described FADT reset after native cleanup. QEMU reset passes; the user
@@ -110,9 +131,11 @@ QEMU does not emulate the AX211 radio or certify physical HP firmware reset.
 `--apps offline` builds 105 existing CLI commands plus four diagnostic tools
 as static checked/bounded RXE1 packages. It requires persistent root; the tiny
 `minimal` profile remains the default for bootstrap/RAM tests. GUI/network
-clients, the separate RFL editor packaging and the graphics-dependent multiplexer
-are excluded explicitly in `application-report.json`. Building the collection
-is strict: a failed app removes its stale success/manifest and fails the build.
+clients and the separately packaged RFL editor and terminal multiplexer
+are excluded explicitly in `application-report.json`. mux has no graphics
+dependency; it and Commander/Rift were accepted in the later terminal package
+wave. Building the collection is strict: a failed app removes its stale
+success/manifest and fails the build.
 Interactive editors/games still need their own UI acceptance.
 
 ```sh
@@ -143,8 +166,9 @@ power base case, tied to expected-correct RED rct regression
 
 ## Networking and the HP Wi-Fi target
 
-Current live-interface build, controls, acceptance and limits: [live Wi-Fi](hardware/hp-wifi-live.txt).
-The individual stopped checkpoints below retain their earlier regression roles.
+Live-interface build notes and dated driver/profile history:
+[live Wi-Fi](hardware/hp-wifi-live.txt). Use the current handoff for combined
+system status; stopped checkpoints below retain their earlier regression roles.
 
 The HP target is its **built-in Intel AX211 Wi-Fi**. QEMU's virtual Ethernet
 card is a way to accept the shared TCP/IP stack and remote shells without a
@@ -152,9 +176,10 @@ cable. Native AX211 firmware initialization, NVM readback and dual-band passive 
 have passed on the HP, including the user-confirmed 5 GHz AP. Initial 802.11
 authentication and association now pass physically (AID 10, all three firmware
 updates). The WPA2 key handshake and protected unicast ARP have also passed physically.
-The next experimental profile keeps the radio alive and attaches it to the existing
-IP stack; see the [live Wi-Fi handoff](hardware/hp-wifi-live.txt). Sustained physical
-IP/Telnet acceptance remains pending. The working recovery image has
+The live profile keeps the radio alive and attaches it to the existing
+IP stack; see the [live Wi-Fi handoff](hardware/hp-wifi-live.txt). Physical
+IP/Telnet/SSH/SFTP and recovery checks have passed; sustained radio reliability
+and held SSH continuity through actual GTK rotation remain open. The recovery image has
 been inspected: it uses Linux iwlwifi, the matching firmware family,
 NetworkManager/nmtui and wpa_supplicant. See [the Wi-Fi findings and driver
 gates](hardware/hp-wifi.txt). A similar curses setup UI is planned after the
@@ -180,11 +205,13 @@ AX211 firmware and tests only startup/ALIVE, then stops the device before the
 shell. It requires `--ram-root` and cannot be combined with a disk/NVMe probe
 or QEMU networking. It has native DMA/PCI guards and host tests; **physical
 ALIVE, initialization, NVM, dual-band passive scans, authentication and association
-have passed on the HP, followed by WPA2 and protected unicast ARP. Live IP
-acceptance is pending**. Bounded checkpoint profiles stop; the explicit
+have passed on the HP, followed by WPA2 and protected unicast ARP**. These are
+historical stopped checkpoints, not the limit of the accepted live system.
+Bounded checkpoint profiles stop; the explicit
 `--network wifi` profile transfers the running radio to the NIC adapter instead. The optional USB entry
 is `EFI/BOOT/BOOTWIFI.EFI`; select it through the HP's **Boot From EFI File**
-menu. The default USB entry remains the accepted offline system. See the
+menu. The offline-default USB description belongs to those earlier checkpoints;
+later combined USB and internal boot are recorded in the current handoff. See the
 [exact candidate, test results and hardware steps](hardware/hp-wifi.txt).
 
 ```sh
@@ -580,7 +607,8 @@ The code remains resident across fork and parked contexts and is released when
 no process or staged exec owns it. Static guest libc enters kernel syscalls;
 there is no host libc, dynamic library resolver or firmware call after boot.
 Hosted FXE files and shared-library packages are different containers and are
-rejected. RXE1 currently limits each package to 16 MiB.
+rejected. RXE1 currently limits the entire package to 32 MiB, including metadata,
+alignment and code; older retained EFI loaders may still have the 16 MiB limit.
 
 Saved jump buffers capture guest continuations and frame identities, preserving
 memory changes across `longjmp` and surviving fork. Returned frames invalidate
@@ -738,8 +766,9 @@ Those are DISPOSABLE FIXTURE identities, not HP install coordinates. For example
 after the 512-byte-sector test, its `test-root-identity.json` and
 `test/test-root.img` can be used with run and the same output directory.
 The HP now has the approved dedicated 30GiB p3 and accepted native persistence.
-Internal EFI installation and boot-entry changes remain separate work. Consult
-the current payload/fallback record before selecting a physical boot file.
+Internal EFI installation and boot-entry trials have since passed. Consult
+the [current payload/fallback record](hardware/README.md) before selecting a
+physical boot file, and keep root updates separate from EFI publication.
 The [dedicated storage record](hardware/hp-nvme-persistence.txt) retains the
 allocation, backups, identities and physical acceptance history.
 
@@ -949,25 +978,21 @@ is copied for every run; the installed template is never modified.
 ## Next milestones
 
 The [Riplix x64 master plan](../../docs/x64-master-plan.md) is the main delivery
-roadmap, including parallel ownership and acceptance gates. Keyboard/terminal
-work and a concrete process integration contract are the first active slices.
-The first console candidate passes host checks and exact two-boot QEMU
-acceptance: Escape/navigation/function-key octets, real terminal geometry,
-bounded ANSI/colors/line drawing, persistence and firmware reset. HP input
-acceptance and installation remain pending; details are in the master plan.
-
-The [2026-10-21 roadmap reconciliation](hardware/hp-integration-plan.txt) maps
-the user's GUI/laptop wishlist to current code, dependencies and proposed
-parallel scopes. Its current-state section supersedes older handoff snapshots.
+roadmap, including parallel ownership and acceptance gates. Physical standard
+keys, terminal-package installation/SSH PTY checks, internal boot, native GX and
+touchpad movement/clicks have passed their recorded gates. Local full-screen
+terminal rendering, broader input and the execution integration contract retain
+separate gates. See the [current handoff](hardware/README.md) and its retained
+receipts; the 2026-10-21 integration journal is historical planning context.
 
 1. Finish physical GTK-rotation acceptance and the reliable remote development
    loop. NVMe persistence, apps, Wi-Fi/IP, services, SSH/SFTP/pkg and orderly
-   reboot have already worked on HP. The latest candidate passed a ten-minute
-   held SSH session. A later periodic check observed a real GTK refresh without
+    reboot have already worked on HP. An earlier Wi-Fi candidate passed a ten-minute
+    held SSH session. A later periodic check observed a real GTK refresh without
    reassociation; held-session continuity across rotation remains open. Profiles/DHCP and
    user-facing network selection remain integration work.
-2. Fix physical keyboard and terminal geometry, then bring mux, Commander/mc,
-   Rift and other supported applications through the existing package catalog.
+2. Complete local full-screen terminal/display acceptance and extend package
+   coverage beyond the accepted mux, Commander/mc, Rift and Levee subset.
    mux does not require graphics. Audio and crypto-dependent applications need
    their respective bare-metal services, not merely an executable rebuild.
 3. In parallel, follow the accepted [execution priority](../../docs/arch/native-x64.md):
@@ -976,11 +1001,11 @@ parallel scopes. Its current-state section supersedes older handoff snapshots.
    userspace preemption. This no longer waits for all heavier applications.
    The process-memory subtree remains an isolated prototype until integration
    is explicitly reviewed; LP64 is not required for C16 isolation.
-4. Add an independently tested internal EFI boot alongside Ubuntu and retained
-   USB recovery, then verified candidate updates and failed-boot recovery.
-   Internal boot need not wait for GUI, LP64 or a replacement filesystem.
-5. Develop pointer transports/input, a software-rendered HP GX desktop, PCM
-   audio and laptop power support in bounded coordinated scopes. Reuse the
+4. Use the documented [fresh-namespace EFI update loop](hardware/efi-updates.md)
+   alongside accepted internal boot and retained Ubuntu/USB recovery. Automatic
+   failed-boot recovery and a guest-owned ESP writer remain future work.
+5. Validate and optimize the opt-in native Graphite multi-window
+   HP desktop, broader pointer input, PCM audio and laptop power support. Reuse the
    shared GUI/LVGL/terminal contracts; hosted backends are not HP drivers.
    Bluetooth follows USB/HCI and audio support. GPU acceleration is a later
    backend behind stable surface/presentation contracts.

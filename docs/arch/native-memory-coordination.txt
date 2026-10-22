@@ -3949,3 +3949,65 @@ broader code-size/performance acceptance and x64 runtime support are complete.
 For future x64 NetSurf builds, enable RIPPLE_NETSURF_HOSTED for core, image
 adapter and frontend, and NXR_HOSTED for the server. These are browser/resource
 profiles; they do NOT authorize read-v1 or change its existing x64 rejection.
+
+QUICKJS / YOUTUBE PERFORMANCE WORK — 2026-10-22
+------------------------------------------------
+User explicitly requested compiler/runtime/QuickJS optimizations against the
+pinned YouTube extraction catastrophes. Initial scope: portable C switch
+dispatch in rcc-frontend, focused native code generation/runtime improvements
+only where measurements and existing poll/view contracts justify them, and
+QuickJS call-frame handling plus reproducible extraction performance fixtures.
+Preserve checked/read-v1 import gating, exactly-one scalar poll, COW/MMIO/bank
+boundaries, continuation/checkpoint responsiveness and existing loader ABI.
+No tools/x86_64 production/driver/loader sources, reserved freestanding tests,
+or user disks are being changed. Native-memory/runtime files were released in
+the handoff above; current compiler/runtime sources are clean before this work.
+Performance outputs use build/ytmusic-extraction; retain small receipts and
+remove redundant large artifacts. Results and touched files will follow.
+
+2026-10-22 optimization pass completed; compiler/runtime files released.
+Touched: rcc-frontend switch generation/tests; rcc-native dispatch/cycles,
+process continuation reconstruction, direct-call cost analysis, read-view loads
+and logical GEP; rcc-native-runtime memview/scalar-store pin release; focused
+native_switch, GEP/memview fixtures/tests; ports/quickjs adaptations/tests;
+ports/ytmusic/extraction fixtures, regression runner and results receipt.
+No tools/x86_64 production/driver/loader sources or reserved freestanding tests
+were edited. No installed user kernel, package, or disk was replaced.
+
+Contracts: no new IR opcode, native helper or executable/loader ABI. Native
+switch fusion skips only pure comparison nodes and restores predicate/phi edge
+values; unknown keys retain original dispatch. CFG feedback edges cover every
+cycle, with skipped-edge checkpoints retained by fusion. Bounded acyclic direct
+calls retain the 256-instruction longest-path limit. Fixed Alloca addresses are
+reconstructed from the current logical frame, not stored as host pointers.
+read-v1 still opts in explicitly and remains rejected by freestanding builds.
+Wide validated little-endian reads retain exactly one poll, whole-span bounds
+and checked denial/MMIO/COW fallbacks. Same-bank GEP expands to 65536 banks only
+under hosted read-v1; checked/freestanding retain the existing 256-bank shortcut.
+Scalar-store barriers release the expired read Arc before writing; real fork
+sharing still detaches. No scheduling/view-validity guarantee was weakened.
+
+Validation: frontend 128 checks; native backend 12; runtime 151 passed/2 ignored;
+18 process integration checks plus executable switch tests; memview/GEP
+checked-fast differential checks; RFL native 11; freestanding 3 plus x64
+resumable switch/phi object emission and host phi/poll execution oracle.
+QuickJS foundation 223, numeric conversion 379, full context 145, frame-failure
+28 and reference/adapted frame semantics 38 each passed. Fork/longjmp,
+scheduling, negative controls, allocator teardown and disposable-disk checks
+remain exercised. Final FXE also passed on the older installed kernel.
+
+Controlled Apple M4 mini, sequential single-guest runs, same private kernel and
+read-v1: prepared EJS wall 46.97 -> 46.59 s; prepared YouTube.js 6.53 -> 6.09 s.
+These single runs show small end-to-end changes, NOT the large speedup suggested
+by earlier contended laptop runs. Final cold YouTube.js still hit the 600 s JS
+deadline during parsing; peak tracked allocation 53831447 cells, live=0 after
+teardown, filesystem clean. This is a BLOCKED cold gate, not extraction success.
+Full cold EJS was not rerun on the final compiler. Profiling found continuation
+slot transfers and repeated dynamic global binding hot; batching/ABI changes
+are future work, not part of this pass. Retained concise evidence:
+ports/ytmusic/extraction/performance-results-2026-10-22.json and README.md.
+About 200 MiB of redundant owned local test products were removed. One matching
+probe/library/source pair, the private kernel, source pins and small logs remain.
+The isolated mini workspace was removed after collecting its completed reports.
+Wrap-up checkpoint and next-stage boundaries are recorded in
+docs/networking/youtube-music.md (Checkpoint, 2026-10-22).

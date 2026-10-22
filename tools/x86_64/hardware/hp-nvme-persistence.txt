@@ -1,3 +1,13 @@
+HISTORICAL STORAGE PROVISIONING AND ACCEPTANCE RECORD
+=====================================================
+Retains physical disk/partition identities and the original shrink/seed history.
+Do not repeat the allocation or seeding steps on the installed system.
+The reconciled baseline is README.md in this directory: later progress includes
+a 1GiB root within the unchanged 30GiB reservation, internal EFI boot, networking,
+terminal packages and graphics/input acceptance. Older "pending/current" claims
+below describe their dated milestones, not the live HP state. EFI updates use
+efi-updates.md and never re-provision p3.
+
 OFFLINE CLI FOLLOW-UP — 2026-10-19
 ==================================
 The dedicated filesystem is now 128MiB within the same 30GiB reservation, with

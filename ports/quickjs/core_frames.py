@@ -20,13 +20,20 @@ def transform_function(source, name, transform):
 
 def heap_frames(source):
     source=replace(source, 'struct JSRuntime {',
-                   'struct JSRuntime {\n    size_t c16_frame_cells; /* active call frames charged to the stack budget */')
+                   '''struct JSRuntime {
+    size_t c16_frame_cells; /* active call frames charged to the stack budget */
+    struct QJSCallFrameHeader *c16_frame_cache[5]; /* at most 992 allocation units */''')
     source=replace(source, 'typedef struct JSCFunctionDataRecord {', """static JSValue JS_ThrowStackOverflow(JSContext *ctx);
-typedef struct QJSCallFrameHeader { size_t charge; } QJSCallFrameHeader;
+typedef struct QJSCallFrameHeader { size_t charge; size_t capacity; } QJSCallFrameHeader;
+static int js_c16_frame_bucket(size_t charge) {
+    return charge <= 32 ? 0 : charge <= 64 ? 1 : charge <= 128 ? 2 :
+           charge <= 256 ? 3 : charge <= 512 ? 4 : 5;
+}
 static void *js_c16_frame_alloc(JSContext *ctx, size_t size) {
     JSRuntime *rt = ctx->rt;
     QJSCallFrameHeader *header;
     size_t charge;
+    int bucket;
     if (size > SIZE_MAX - sizeof(*header)) {
         JS_ThrowOutOfMemory(ctx); return NULL;
     }
@@ -35,18 +42,41 @@ static void *js_c16_frame_alloc(JSContext *ctx, size_t size) {
         js_check_stack_overflow(rt, charge + rt->c16_frame_cells)) {
         JS_ThrowStackOverflow(ctx); return NULL;
     }
-    header = js_malloc(ctx, charge);
-    if (!header) return NULL;
+    /* A lowered budget must still stop calls, even if a frame is cached. */
+    if (rt->malloc_ctx.malloc_state.malloc_size > rt->malloc_ctx.malloc_state.malloc_limit) {
+        JS_ThrowOutOfMemory(ctx); return NULL;
+    }
+    bucket = js_c16_frame_bucket(charge);
+    header = bucket < 5 ? rt->c16_frame_cache[bucket] : NULL;
+    if (header && header->capacity >= charge) {
+        rt->c16_frame_cache[bucket] = NULL;
+    } else {
+        /* Allocate the exact request, so size classes do not turn a valid
+         * near-limit allocation into an avoidable out-of-memory failure. */
+        header = js_malloc(ctx, charge);
+        if (!header) return NULL;
+        header->capacity = charge;
+    }
     header->charge = charge;
     rt->c16_frame_cells += charge;
     return header + 1;
 }
 static void js_c16_frame_free(JSRuntime *rt, void *ptr) {
-    QJSCallFrameHeader *header;
+    QJSCallFrameHeader *header, *old;
+    int bucket;
     if (!ptr) return;
     header = (QJSCallFrameHeader *)ptr - 1;
     assert(header->charge <= rt->c16_frame_cells);
     rt->c16_frame_cells -= header->charge;
+    bucket = js_c16_frame_bucket(header->capacity);
+    if (bucket < 5) {
+        old = rt->c16_frame_cache[bucket];
+        if (!old || old->capacity < header->capacity) {
+            rt->c16_frame_cache[bucket] = header;
+            js_free_rt(rt, old);
+            return;
+        }
+    }
     js_free_rt(rt, header);
 }
 
@@ -96,6 +126,13 @@ typedef struct JSCFunctionDataRecord {""")
     /* Generator/async frames are owned by their suspended state, not this call. */
     js_c16_frame_free(rt, owned_locals);''')
     source=transform_function(source,'JS_CallInternal',internal)
-    source=transform_function(source, 'JS_FreeRuntime', lambda body: '\n    assert(rt->c16_frame_cells == 0);\n'+body)
+    source=transform_function(source, 'JS_FreeRuntime', lambda body: '''
+    int c16_bucket;
+    assert(rt->c16_frame_cells == 0);
+    for (c16_bucket = 0; c16_bucket < 5; ++c16_bucket) {
+        js_free_rt(rt, rt->c16_frame_cache[c16_bucket]);
+        rt->c16_frame_cache[c16_bucket] = NULL;
+    }
+'''+body)
     if 'alloca(' in source: raise ValueError('Unexpected remaining alloca site')
     return source

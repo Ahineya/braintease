@@ -2,6 +2,7 @@
 #include "ui.h"
 #include "ui-data.h"
 #include "ui-editor.h"
+#include "ui-tabs.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,15 @@ static uint32_t pixel(int32_t x,int32_t y) {
     assert(x>=0&&y>=0&&(unsigned)x<width&&(unsigned)y<height);
     return (uint32_t)p[0]<<16|(uint32_t)p[1]<<8|p[2];
 }
+static unsigned colour_pixels(lv_obj_t *object,uint32_t colour) {
+    lv_area_t area;
+    int32_t x,y;
+    unsigned count=0;
+    lv_obj_get_coords(object,&area);
+    for(y=area.y1;y<=area.y2;y++)for(x=area.x1;x<=area.x2;x++)
+        if(x>=0&&y>=0&&(unsigned)x<width&&(unsigned)y<height&&pixel(x,y)==colour)count++;
+    return count;
+}
 static void observed(lv_event_t *event) {
     lv_event_code_t code=lv_event_get_code(event);
     if(code==LV_EVENT_FOCUSED)focus_events++;
@@ -51,18 +61,25 @@ static void input_checks(void) {
     lv_label_set_text_selection_end(lv_textarea_get_label(input),7);
     lv_obj_add_event_cb(input,observed,LV_EVENT_ALL,NULL);
     saved=lv_obj_get_state(input);
+    lv_refr_now(lv_display_get_default());
+    assert(colour_pixels(lv_textarea_get_label(input),0x394e70)>10*gx_lv_density()*gx_lv_density());
     gx_lv_host_active(0);ui_focus_suspend(group);
     assert(lv_group_get_focused(group)==input&&lv_group_get_editing(group));
     assert(!(lv_obj_get_state(input)&(LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY|LV_STATE_EDITED)));
     assert(lv_obj_get_style_border_width(input,LV_PART_CURSOR)==0);
     assert(lv_color_eq(lv_obj_get_style_bg_color(input,LV_PART_SELECTED),lv_color_hex(0x30343c)));
     selected(input);assert(!focus_events&&!blur_events&&!click_events);
-    lv_refr_now(lv_display_get_default());before=flushes;
+    lv_refr_now(lv_display_get_default());
+    assert(colour_pixels(lv_textarea_get_label(input),0x30343c)>10*gx_lv_density()*gx_lv_density());
+    assert(!colour_pixels(lv_textarea_get_label(input),0x394e70));before=flushes;
     ui_focus_suspend(group);lv_refr_now(lv_display_get_default());assert(flushes==before);
     gx_lv_host_active(1);ui_focus_resume(group);
     assert(lv_obj_get_state(input)==saved&&lv_group_get_editing(group));selected(input);
     assert(lv_obj_get_style_border_width(input,LV_PART_CURSOR)==gx_lv_px(1));
     assert(!focus_events&&!blur_events&&!click_events);
+    lv_refr_now(lv_display_get_default());
+    assert(colour_pixels(lv_textarea_get_label(input),0x394e70)>10*gx_lv_density()*gx_lv_density());
+    assert(!colour_pixels(lv_textarea_get_label(input),0x30343c));
     /* Frozen traversal still suspends and restores without being unfrozen. */
     other=ui_button(lv_screen_active(),"Other",UI_BUTTON);gx_lv_pos(other,16,56);
     lv_group_focus_freeze(group,true);gx_lv_host_active(0);ui_focus_suspend(group);
@@ -121,13 +138,73 @@ static void editor_checks(void) {
     assert(selection[0]==0&&selection[1]==1&&!text_modified(buffer));
     lv_obj_delete(ui_editor_object(editor));text_free(buffer);
 }
+static unsigned tab_actions;
+static void tab_action(unsigned id,int close,void *user) {
+    (void)id;(void)close;(void)user;tab_actions++;
+}
+static void tab_checks(void) {
+    struct ui_tab_spec spec={1,"Focus fixture",0,1};
+    ui_tabs *tabs=ui_tabs_create(lv_screen_active(),tab_action,NULL);
+    lv_group_t *group=gx_lv_group(),*temporary;
+    lv_obj_t *button,*close,*other;
+    unsigned focused,blurred,clicked;
+    assert(tabs&&ui_tabs_bind(tabs,&spec,1,1));
+    button=lv_obj_get_child(ui_tabs_object(tabs),0);
+    close=lv_obj_get_child(button,1);
+    lv_group_focus_obj(button);lv_group_set_editing(group,false);
+    lv_obj_add_state(button,LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY);
+    lv_obj_add_event_cb(button,observed,LV_EVENT_ALL,NULL);
+    focused=focus_events;blurred=blur_events;clicked=click_events;
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_COVER);
+    gx_lv_host_active(0);ui_focus_suspend(group);
+    assert(lv_group_get_focused(group)==button&&ui_tabs_selected(tabs)==1);
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_TRANSP);
+    assert(focus_events==focused&&blur_events==blurred&&click_events==clicked&&!tab_actions);
+    /* An inactive editing update restores only part of the stripped state.
+     * The next suspension must retain the original keyboard-focus bits. */
+    lv_group_set_editing(group,true);ui_focus_suspend(group);
+    assert(!(lv_obj_get_state(button)&(LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY|LV_STATE_EDITED)));
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_TRANSP);
+    focused=focus_events;blurred=blur_events;clicked=click_events;
+    gx_lv_host_active(1);ui_focus_resume(group);
+    assert((lv_obj_get_state(button)&(LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY|LV_STATE_EDITED))==
+           (LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY|LV_STATE_EDITED));
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_COVER);
+    assert(focus_events==focused&&blur_events==blurred&&click_events==clicked&&!tab_actions);
+    /* Neither visual suspension itself nor state-driven close affordances
+     * synthesize focus/blur, select another document, or invoke a close. */
+    gx_lv_host_active(0);ui_focus_suspend(group);
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_TRANSP);
+    lv_group_set_editing(group,false);ui_focus_suspend(group);
+    focused=focus_events;blurred=blur_events;clicked=click_events;
+    gx_lv_host_active(1);ui_focus_resume(group);
+    assert((lv_obj_get_state(button)&(LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY))==
+           (LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY));
+    assert(!lv_obj_has_state(button,LV_STATE_EDITED));
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_COVER);
+    assert(focus_events==focused&&blur_events==blurred&&click_events==clicked&&!tab_actions);
+    /* A background modal may replace the current group. Returning to a
+     * suspended main group after activation restores that group's state. */
+    gx_lv_host_active(0);ui_focus_suspend(group);
+    temporary=lv_group_create();gx_lv_set_group(temporary);
+    other=ui_button(lv_screen_active(),"Temporary",UI_BUTTON);lv_group_focus_obj(other);
+    gx_lv_set_group(temporary);assert(!lv_obj_has_state(other,LV_STATE_FOCUSED));
+    gx_lv_host_active(1);ui_focus_resume(temporary);
+    assert(lv_obj_has_state(other,LV_STATE_FOCUSED));
+    gx_lv_set_group(group);assert(lv_group_get_focused(group)==button);
+    assert((lv_obj_get_state(button)&(LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY))==
+           (LV_STATE_FOCUSED|LV_STATE_FOCUS_KEY));
+    assert(lv_obj_get_style_opa(close,0)==LV_OPA_COVER&&!tab_actions);
+    lv_obj_delete(other);lv_group_delete(temporary);
+    lv_obj_delete(ui_tabs_object(tabs));
+}
 int main(void) {
     lv_display_t *display;
     assert(!gx_lv_open("Window focus checks",480,320));ui_screen();
     display=lv_display_get_default();width=480*gx_lv_density();height=320*gx_lv_density();
     frame=calloc((unsigned long)width*height*3,1);assert(frame);
     original_flush=lv_display_get_flush_cb(display);lv_display_set_flush_cb(display,capture);
-    input_checks();editor_checks();gx_lv_close();free(frame);
-    puts("FOCUS passed retained input selection/editing, exact visual restoration, idle, frozen groups, deletion/modal lifetime, hidden/disabled controls and editor caret pixels");
+    input_checks();editor_checks();tab_checks();gx_lv_close();free(frame);
+    puts("FOCUS passed retained input selection/editing, exact visual restoration, idle, frozen groups, deletion/modal lifetime, hidden/disabled controls, editor caret pixels and tab affordances after partial background state updates");
     return 0;
 }

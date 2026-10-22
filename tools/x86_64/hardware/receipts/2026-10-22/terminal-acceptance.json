@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "utc": "2026-10-21T17:18:20.330742+00:00",
+  "efi_sha256": "32d71c89df9ed6ed8e0a039faa19b931d1a1ef529770c8a64a70ad6fc5790691",
+  "current_os": "Riplix",
+  "persistent_default": "Ubuntu",
+  "current_riplix_entry": "0002",
+  "previous_riplix_entry": "0000",
+  "ubuntu_entry": "0001",
+  "root_ssh_2222_autostart_real_reboots": true,
+  "round_trip": "Ubuntu -> Riplix -> Ubuntu -> Riplix",
+  "previous_eleven_ESP_files_unchanged": true,
+  "GPT_unchanged": true,
+  "new_ESP_files": 3,
+  "packages_installed_and_persisted": 9,
+  "exact_native_hashes_before_reboot": 7,
+  "rift_hash_after_reboot": true,
+  "ssh_PTY_acceptance": [
+    "Levee right-arrow/delete/save exact ac\\n",
+    "Commander F10 exit",
+    "Rift insert/Escape/save exact PTY_RIFT_OK"
+  ],
+  "receipts": [
+    "first-riplix.json",
+    "first-riplix-traffic.json",
+    "packages-installed.json",
+    "pty-c4ad7bcf3aca4555/result.json",
+    "return-ubuntu.json",
+    "ubuntu-return-ESP.json",
+    "final-riplix.json",
+    "after-reboot-packages.out"
+  ],
+  "pty_test_sha256": "90addc7217051707f20bae97c0a19c49db85517cd8d366389d879d492a1560f3",
+  "limitations": [
+    "Physical framebuffer cursor and local full-screen display need user acceptance",
+    "No automatic health rollback for a hung EFI candidate",
+    "Earlier fallback loader cannot execute the current large Rift image",
+    "Snapshots do not prove uninterrupted SSH across GTK rotation"
+  ],
+  "usb": "Recovery USB stayed on Mac; no update required this wave"
+}

@@ -90,10 +90,16 @@ def prepare(destination):
     h = h[:start] + '#include "octets.inc"\n\n' + h[end:]
     for name, width, direction in [('clz32', 32, 'left'), ('clz64', 64, 'left'),
                                     ('ctz32', 32, 'right'), ('ctz64', 64, 'right')]:
-        if direction == 'left':
-            body = f'    long n = 0;\n    while (!(a & ((uint{width}_t)1 << {width - 1}))) {{ ++n; a <<= 1; }}\n    return n;'
-        else:
-            body = '    long n = 0;\n    while (!(a & 1)) { ++n; a >>= 1; }\n    return n;'
+        # A bounded acyclic search is also eligible for native direct calls;
+        # the old bit-at-a-time loops forced resumable calls for each helper.
+        lines = [f'    long n = 0;\n    if (!a) return {width};']
+        step = width // 2
+        while step:
+            mask = ((1 << step) - 1) << (width - step) if direction == 'left' else (1 << step) - 1
+            shift = '<<' if direction == 'left' else '>>'
+            lines.append(f'    if (!(a & (uint{width}_t)0x{mask:x}ULL)) {{ n += {step}; a {shift}= {step}; }}')
+            step //= 2
+        body = '\n'.join(lines) + '\n    return n;'
         h = function_body(h, name, body)
     for width in (16, 32, 64):
         c = function_body(c, f'__dbuf_put_u{width}',

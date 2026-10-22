@@ -6,54 +6,73 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_COST: usize = 256;
 
-fn acyclic(function: &Function) -> bool {
+/// Bound work along an executable path, including complete direct callees.
+/// Mutually exclusive branches do not all execute during one invocation.
+fn bounded_cost(function: &Function, callees: &BTreeMap<String, usize>) -> Option<usize> {
+    if function.blocks.is_empty() || function.blocks.len() > MAX_COST {
+        return None;
+    }
+    let mut blocks = BTreeMap::new();
+    for block in &function.blocks {
+        let successors = match block.instructions.last()? {
+            I::Branch(to) => vec![*to],
+            I::BranchCond {
+                true_label,
+                false_label,
+                ..
+            } => vec![*true_label, *false_label],
+            I::Return(_) => vec![],
+            _ => return None,
+        };
+        let mut cost = 0usize;
+        for instruction in &block.instructions {
+            cost = cost.checked_add(1)?;
+            match instruction {
+                I::Call {
+                    function: Value::Global(name) | Value::Function(name),
+                    ..
+                } => cost = cost.checked_add(*callees.get(name)?)?,
+                I::Call { .. } | I::InlineAsm { .. } => return None,
+                _ => {}
+            }
+            if cost > MAX_COST {
+                return None;
+            }
+        }
+        blocks.insert(block.id, (cost, successors));
+    }
     fn visit(
         id: u32,
-        edges: &BTreeMap<u32, Vec<u32>>,
+        blocks: &BTreeMap<u32, (usize, Vec<u32>)>,
         active: &mut BTreeSet<u32>,
-        done: &mut BTreeSet<u32>,
-    ) -> bool {
-        if done.contains(&id) {
-            return true;
+        done: &mut BTreeMap<u32, usize>,
+    ) -> Option<usize> {
+        if let Some(cost) = done.get(&id) {
+            return Some(*cost);
         }
         if !active.insert(id) {
-            return false;
+            return None;
         }
-        let Some(next) = edges.get(&id) else {
-            return false;
-        };
-        if next.iter().any(|to| !visit(*to, edges, active, done)) {
-            return false;
+        let (own, successors) = blocks.get(&id)?;
+        let mut tail = 0;
+        for successor in successors {
+            tail = tail.max(visit(*successor, blocks, active, done)?);
+        }
+        let cost = own.checked_add(tail)?;
+        if cost > MAX_COST {
+            return None;
         }
         active.remove(&id);
-        done.insert(id);
-        true
+        done.insert(id, cost);
+        Some(cost)
     }
-    if function.blocks.len() > MAX_COST {
-        return false;
+    let mut done = BTreeMap::new();
+    let mut maximum = 0;
+    // Reject cycles/unknown targets even in unreachable source fragments.
+    for block in &function.blocks {
+        maximum = maximum.max(visit(block.id, &blocks, &mut BTreeSet::new(), &mut done)?);
     }
-    let edges = function
-        .blocks
-        .iter()
-        .map(|block| {
-            let successors = match block.instructions.last() {
-                Some(I::Branch(to)) => vec![*to],
-                Some(I::BranchCond {
-                    true_label,
-                    false_label,
-                    ..
-                }) => vec![*true_label, *false_label],
-                Some(I::Return(_)) => vec![],
-                _ => vec![u32::MAX], // Malformed CFGs never qualify.
-            };
-            (block.id, successors)
-        })
-        .collect();
-    let mut done = BTreeSet::new();
-    function
-        .blocks
-        .iter()
-        .all(|block| visit(block.id, &edges, &mut BTreeSet::new(), &mut done))
+    Some(maximum)
 }
 
 pub(super) fn direct_functions(module: &Module) -> BTreeSet<String> {
@@ -69,32 +88,10 @@ pub(super) fn direct_functions(module: &Module) -> BTreeSet<String> {
                     function.return_type,
                     IrType::FatPtr(_) | IrType::Struct { .. } | IrType::Array { .. }
                 )
-                || !acyclic(function)
             {
                 continue;
             }
-            let mut cost = 0usize;
-            let safe = function
-                .blocks
-                .iter()
-                .flat_map(|b| &b.instructions)
-                .all(|inst| {
-                    cost = cost.saturating_add(1);
-                    if let I::Call {
-                        function: Value::Global(name) | Value::Function(name),
-                        ..
-                    } = inst
-                    {
-                        let Some(callee) = costs.get(name) else {
-                            return false;
-                        };
-                        cost = cost.saturating_add(*callee);
-                    } else if matches!(inst, I::Call { .. } | I::InlineAsm { .. }) {
-                        return false;
-                    }
-                    cost <= MAX_COST
-                });
-            if safe {
+            if let Some(cost) = bounded_cost(function, &costs) {
                 costs.insert(function.name.clone(), cost);
             }
         }
@@ -158,5 +155,41 @@ mod tests {
         aggregate.return_type = IrType::FatPtr(Box::new(IrType::I16));
         module.add_function(aggregate);
         assert_eq!(direct_functions(&module), BTreeSet::from(["leaf".into()]));
+    }
+
+    #[test]
+    fn exclusive_branches_use_longest_path_without_weakening_the_bound() {
+        let mut diamond = function(
+            "diamond",
+            vec![I::BranchCond {
+                condition: Value::Constant(1),
+                true_label: 1,
+                false_label: 2,
+            }],
+        );
+        for id in [1, 2] {
+            let mut block = BasicBlock::new(id);
+            block.instructions = vec![I::Comment("work".into()); 180];
+            block
+                .instructions
+                .push(I::Return(Some(Value::Constant(42))));
+            diamond.blocks.push(block);
+        }
+        assert_eq!(bounded_cost(&diamond, &BTreeMap::new()), Some(182));
+        let mut module = Module::new("branches".into());
+        module.add_function(diamond.clone());
+        module.add_function(function("parent", vec![call("diamond"), I::Return(None)]));
+        // Two bounded calls on one path still exceed the original 256 limit.
+        module.add_function(function(
+            "twice",
+            vec![call("diamond"), call("diamond"), I::Return(None)],
+        ));
+        assert_eq!(
+            direct_functions(&module),
+            BTreeSet::from(["diamond".into(), "parent".into()])
+        );
+        diamond.blocks[2].instructions = vec![I::Comment("work".into()); MAX_COST];
+        diamond.blocks[2].instructions.push(I::Return(None));
+        assert_eq!(bounded_cost(&diamond, &BTreeMap::new()), None);
     }
 }

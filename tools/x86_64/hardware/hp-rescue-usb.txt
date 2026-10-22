@@ -1,5 +1,10 @@
 HP RESCUE FOLLOW-UP — PHYSICAL PROVISIONING COMPLETE, 2026-10-19
 ==============================================================
+Historical rescue/provisioning record. Later NVMe persistence and internal EFI
+boot passed; start with README.md in this directory for the reconciled state.
+For complete current SSH recipes and key recovery use ssh.md. The instructions
+below do not establish the HP's current booted OS or attached USB state.
+
 The user recovered the black graphical session with a text VT/nmtui and joined
 Wi-Fi at 192.168.100.107. Rescue SSH works on port 22 with the maintenance key.
 Port 2222 was a child of autorun and died when that job ended: the earlier VM
@@ -18,10 +23,10 @@ passed offline FAT checks and are now unmounted; NVMe is guarded read-only in
 rescue. Main USB now boots the dedicated NVMe root, BOOTOLD the accepted
 read-only probe, BOOTRAM the earlier fast RAM root. Rescue EFI is unchanged.
 
-Current SSH command (private key remains on the Mac):
-  ssh -i build/x86_64-rescue/private/id_ed25519 -p 22 \
-    -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-    -o UserKnownHostsFile=build/x86_64-rescue/private/hp-rescue-known-hosts \
+Pinned rescue SSH command from the repository root (private key stays local):
+  ssh -F /dev/null -i build/x86_64-rescue/private/id_ed25519 -p 22 \
+    -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile=tools/x86_64/hardware/ssh/rescue-known-hosts \
     root@192.168.100.107
 
 HISTORICAL RESCUE PREPARATION — the port-2222/GUI descriptions below are old

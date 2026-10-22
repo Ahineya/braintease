@@ -261,7 +261,7 @@ def guest_test(build, target, binary, kind='foundation'):
             output = guest.shell(binary.stem + arguments + '; echo QJS_STATUS:$?',
                                  60 if kind in ('runtime', 'eval', 'full') else 180)
             marker = {'numbers': 'QUICKJS_NUMBERS checks=379 failures=0',
-                      'foundation': 'QUICKJS_C16 checks=30 failures=0',
+                      'foundation': 'QUICKJS_C16 checks=223 failures=0',
                       'support': 'QUICKJS_SUPPORT checks=',
                       'platform': 'QUICKJS_PLATFORM checks=',
                       'storage': 'QUICKJS_STORAGE checks=',

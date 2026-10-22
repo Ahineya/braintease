@@ -4,6 +4,8 @@
 //! a hidden runtime context and one u64 carrier per scalar. Carriers preserve
 //! the declared integer width or IEEE bits; they are not host C declarations.
 mod application;
+mod cycles;
+mod dispatch;
 mod arithmetic;
 mod emit;
 mod entry;

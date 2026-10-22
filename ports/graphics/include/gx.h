@@ -6,8 +6,12 @@
  * All buffers are borrowed only for the duration of the synchronous call. */
 #define GX_VERSION 1
 /* Hosted surface bounds; the VM desktop advertises its own GX_INFO geometry. */
+#ifndef GX_HOSTED_MAX_WIDTH
 #define GX_HOSTED_MAX_WIDTH 1920
+#endif
+#ifndef GX_HOSTED_MAX_HEIGHT
 #define GX_HOSTED_MAX_HEIGHT 1080
+#endif
 #define GX_RGB565 1
 /* Opaque eight-bit RGB channels. Colour values are 0x00RRGGBB; the
  * representation of a host framebuffer is deliberately not part of GX. */
@@ -216,6 +220,7 @@ struct gx_clipboard {
 #define GX_TEXT 11 /* committed Unicode scalar in dx */
 #define GX_TEXT_KEY 32 /* suppress HID-to-text translation; GX_TEXT follows */
 #define GX_DOWN 1
+#define GX_INSIDE 4
 #define GX_FOCUSED 8
 struct gx_info {
     uint16_t version, flags, max_width, max_height, max_windows, format;

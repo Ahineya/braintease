@@ -125,6 +125,9 @@ impl Cg<'_, '_> {
                 self.b.ins().jump(target, &[]);
             }
             I::BranchCond { condition, true_label, false_label } => {
+                if let Some(plan) = self.dispatches.get(&block).cloned() {
+                    self.dispatch(&plan)?;
+                }
                 self.runtime("rcc_native_poll", &[])?;
                 let condition = self.value(condition)?;
                 let condition = self.b.ins().icmp_imm_s(IntCC::NotEqual, condition, 0);

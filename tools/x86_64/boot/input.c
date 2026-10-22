@@ -64,7 +64,7 @@ void input_init(void) {
     goto devices;
 unavailable:
     serial("PS2_KEYBOARD_UNAVAILABLE serial_input_only\n");
-devices:
+devices:;
 #ifdef BOOT_TOUCHPAD
     /* PCI/I2C input is independent of an absent or failed PS/2 controller. */
     touchpad_init();

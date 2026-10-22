@@ -73,6 +73,14 @@ recompile source to change a target-dependent stdlib selection.
 
 ## Compatibility layout and ABI
 
+The C frontend emits balanced comparisons for large switches, evaluating the
+selector once with its promoted integer width. The native backend recognizes
+pure comparison graphs and uses native switch dispatch for known keys in
+graphs with at least eight cases. Misses retain the original comparisons;
+fast edges restore skipped predicate values and the original phi predecessor.
+Effectful comparison blocks are never skipped. This needs no new IR opcode or
+executable ABI and preserves source-order case fallthrough and goto labels.
+
 This milestone deliberately retains the existing data model: 16-bit cells,
 16-bit C `int`/`char`, 32-bit logical bank/offset pointers, and 64,000 cells per
 bank. `rcc-ir::target::DataLayout` owns checked IR storage sizing. Logical memory
@@ -93,10 +101,13 @@ reads 1–4 little-endian cells directly, retaining one poll per load. A denial 
 range miss uses the existing helper without an extra poll or per-load retry.
 Calls, stores, IR edges and continuation/checkpoint boundaries end the view;
 only the reviewed non-suspending polling helper preserves it. Inline GEP keeps
-the view; GEP's checked helper branch ends it. No raw address enters guest IR
+the view; GEP's checked helper branch ends it. Hosted read-v1 validates same-bank
+GEP throughout its 65,536-bank address space; checked/freestanding builds retain
+the conservative 256-bank shortcut. No raw address enters guest IR
 storage or a continuation. Writes, volatile/device/shared reads and flat
-non-process backing remain checked. High-bank GEP still uses its helper, which
-limits reuse for those expressions. Loop-wide hoisting and direct writes are
+non-process backing remain checked. A scalar-store helper releases its expired
+read pin before writing, so the optimization cannot itself force a private-page
+copy; actual fork sharing still performs COW. Loop-wide hoisting and direct writes are
 future work. Freestanding opt-in is rejected until its runtime is implemented.
 Checked builds emit no acquisition import and remain compatible with existing
 runtimes; opt-in FXE manifests explicitly require `rcc_native_memview_v1/3`.

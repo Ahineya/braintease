@@ -102,9 +102,9 @@ uint64_t rcc_native_start(uint64_t entry) {
     if(rcc_user_storebarrier(NULL,p,q)!=expected||polls-bp!=5||loads-bl!=(FAST?0:4)||acquires-ba!=(FAST?2:0))return 3;
     bp=polls;ba=acquires;bl=loads;
     if(rcc_user_geppair(NULL,p,q)!=reference(p,1)+reference(logical(dense(p)+1),1)||polls-bp!=2||loads-bl!=(FAST?0:2)||acquires-ba!=(FAST?1:0))return 4;
-    // High-bank GEP uses its existing helper, which ends the first grant.
+    // Hosted read-v1 also keeps valid high-bank same-bank arithmetic inline.
     p=logical(256*BANK+8);bp=polls;ba=acquires;bl=loads;
-    if(rcc_user_geppair(NULL,p,q)!=reference(p,1)+reference(logical(dense(p)+1),1)||polls-bp!=2||loads-bl!=(FAST?1:2)||acquires-ba!=(FAST?1:0))return 5;
+    if(rcc_user_geppair(NULL,p,q)!=reference(p,1)+reference(logical(dense(p)+1),1)||polls-bp!=2||loads-bl!=(FAST?0:2)||acquires-ba!=(FAST?1:0))return 5;
     if(getenv("VIEW_BENCH")) {
         p=logical(BANK+32);uint64_t sum=0;clock_t start=clock();
         for(unsigned i=0;i<1000000;i++)sum+=rcc_user_many(NULL,p,0);

@@ -20,6 +20,15 @@ environment/process APIs, timers and the `select()` loop.
 Broader conformance, reusable embedding/RFL wrappers and browser bindings remain
 future gates.
 
+The C16 call-frame adapter reuses one released small frame per size class in
+each runtime, with at most 992 allocation units of cached block capacity plus
+allocator overhead. Active frames still count against the stack budget;
+lowered memory limits, exception cleanup, generator ownership and runtime
+teardown remain checked. Larger frames use the regular allocator. The
+host reference/failure gate is `python3 ports/quickjs/tests/test_core_frames.py`.
+The [YouTube extraction regressions](../ytmusic/extraction/README.md) exercise
+the complete guest engine with realistic large scripts and retained timings.
+
 The [jpipe tools](../jpipe/README.md) reuse this engine for streaming JSON Lines,
 text adapters, map/filter/reduce, stable sorting and fused single-process pipelines.
 They are a separate frontend; piped input to `js` continues to mean source code.
@@ -180,7 +189,7 @@ bindings, browser compatibility or full ECMAScript conformance.
 Three negative controls verify that assertion failures, rejected Promises and
 invalid native callback arguments produce a failing process status.
 
-The separate guest fixture runs 30 checks against the adapted upstream
+The separate guest fixture runs 223 checks against the adapted upstream
 `cutils.c`, `cutils.h` and the value-related parts of `quickjs.h`:
 
 - 32-bit signed values and reference counts, double/NaN boxing, special tags,
@@ -189,6 +198,9 @@ The separate guest fixture runs 30 checks against the adapted upstream
   run reproduced this misclassification before widening the tag operations.
 - Explicit octet truncation/sign extension and unaligned 16/32/64-bit operands,
   including an operand crossing a real 64,000-cell bank boundary.
+- All leading/trailing bit-scan positions, mixed lower bits and terminating
+  zero scans. The portable helpers use bounded binary decisions rather than
+  bit-at-a-time loops, keeping native direct-call eligibility.
 - Supplementary Unicode conversion, surrogate pairs, malformed UTF-8 rejection,
   bit scans, dynamic buffer growth beyond one bank, allocation failure and sort.
 

@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "accelerator": "kvm",
+  "seconds": 176.484,
+  "candidate": "eccdbfe546ff2b0f63be8fb82f356a79810b0149cb9f66bbcca41e6b1cfa0a07",
+  "checks": [
+    "FuseDE native alpha panel and catalog",
+    "calculator physical keyboard arithmetic",
+    "editor file load and cooperative close",
+    "focus returns to calculator",
+    "data viewer and plot",
+    "graphical terminal",
+    "shutdown and context-page accounting"
+  ],
+  "physical_acceptance": false
+}

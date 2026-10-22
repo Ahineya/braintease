@@ -8,6 +8,32 @@ mod tests {
     use crate::codegen::TypedCodeGenerator;
 
     #[test]
+    fn large_switch_has_bounded_decision_depth() {
+        use crate::ir::Instruction;
+        use std::collections::BTreeMap;
+        let cases: String = (0..256).map(|v| format!("case {v}: return {};", v * 3)).collect();
+        let module = Frontend::compile_to_ir(&format!(
+            "int choose(unsigned x) {{ switch(x) {{ {cases} default: return -1; }} }}"
+        ), "dispatch").unwrap();
+        let function = &module.functions[0];
+        let blocks: BTreeMap<_, _> = function.blocks.iter().map(|b| (b.id, b)).collect();
+        fn depth(id: u32, blocks: &BTreeMap<u32, &crate::ir::BasicBlock>, memo: &mut BTreeMap<u32, usize>) -> usize {
+            if let Some(depth) = memo.get(&id) { return *depth; }
+            let depth = match blocks[&id].instructions.last().unwrap() {
+                Instruction::Branch(to) => depth(*to, blocks, memo),
+                Instruction::BranchCond { true_label, false_label, .. } =>
+                    1 + depth(*true_label, blocks, memo).max(depth(*false_label, blocks, memo)),
+                Instruction::Return(_) => 0,
+                other => panic!("unexpected terminator: {other:?}"),
+            };
+            memo.insert(id, depth);
+            depth
+        }
+        assert!(depth(function.blocks[0].id, &blocks, &mut BTreeMap::new()) <= 10,
+                "256 cases must not regress to a linear comparison chain");
+    }
+
+    #[test]
     fn floating_constants_cast_to_static_integer_values() {
         let module = Frontend::compile_to_ir(r#"
             long triangle = (long)(-.867 * 65536L);

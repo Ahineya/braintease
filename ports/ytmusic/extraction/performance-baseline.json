@@ -1,0 +1,27 @@
+{
+  "recorded": "2026-10-22",
+  "native_memory_mode": "read-v1",
+  "scope": "Historical single-run ARM64 Mac measurements; compare timings only on the same machine. Cold extraction exceeded 600 seconds.",
+  "cases": {
+    "ejs-prepared": {
+      "player": "74edf1a3",
+      "fixture_sha256": "ed9a4ea0646332a6b6c973ebe5a915c62c43db89bb2bb1a31eba07d906ef8ff7",
+      "input_sha256": "42a182913439baf44473678b6fc78106901e7117e21149feff1cdf81eed4b8c0",
+      "solver_sha256": "bce24c47f26cde9039a011de45e5cba87b6f12acaf5645e4ca9782e751522da5",
+      "probe_sha256": "41d533d045631bea3cdfedafc886e754b36589c84422bc8b29912619aaaca1d3",
+      "guest_seconds": 119.51500812498853,
+      "guest_milliseconds": 103000,
+      "peak_cells": 43752563
+    },
+    "youtubejs-prepared": {
+      "player": "74edf1a3",
+      "fixture_sha256": "3b9b3f051417dd2653169381a7e25bba985f97846e62aaf3ad7dfc19464a9c8e",
+      "input_sha256": "50f3a943b094eab036571c23a7f316b0341d16bcffd8fa89f619a6a20ce88822",
+      "solver_sha256": "9a2943546a7ca84eeba251017262fdde7176f7fedf9c7331c236fe672c02d52d",
+      "probe_sha256": "f60b5d3f5270b25a8bf12edbea876c4fcd73fc1f2ef8b2117e67461866a29afe",
+      "guest_seconds": 7.228008250007406,
+      "guest_milliseconds": 3000,
+      "peak_cells": 2997334
+    }
+  }
+}

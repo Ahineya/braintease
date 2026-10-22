@@ -17,6 +17,7 @@
 #include "src/draw/lv_draw_private.h"
 #include "src/draw/sw/blend/lv_draw_sw_blend_private.h"
 #include "src/misc/lv_area_private.h"
+#include "src/indev/lv_indev_private.h"
 
 #define MAX_WIDTH GX_HOSTED_MAX_WIDTH
 #define MAX_HEIGHT GX_HOSTED_MAX_HEIGHT
@@ -35,6 +36,7 @@ static lv_display_t *display;
 static lv_indev_t *pointer, *keyboard;
 static lv_group_t *group;
 static lv_indev_data_t pointer_state, keyboard_state;
+static int window_active = 1, pointer_inside = 1;
 static uint8_t *draw;
 static uint16_t *pixels;
 static void (*on_text)(uint32_t);
@@ -110,6 +112,14 @@ void gx_lv_minimum(unsigned width, unsigned height) {
 void gx_lv_shortcuts(int (*key)(unsigned, int, unsigned)) { on_key = key; }
 void gx_lv_finish(void) { finished = 1; }
 void gx_lv_close_request(int (*request)(void)) { on_close_request = request; }
+int gx_lv_active(void) { return window_active; }
+static void refresh_focus(lv_event_t *e) {
+    (void)e;
+    /* Timers and app callbacks can focus controls while the window is inactive.
+     * Remove their active appearance before this refresh collects dirty areas. */
+    if (!window_active)
+        ui_focus_suspend(group);
+}
 static void log_message(lv_log_level_t level, const char *message) {
     (void)level;
     fputs(message, stderr);
@@ -674,6 +684,7 @@ static int open_window(const char *title, unsigned width, unsigned height) {
     struct gx_render render;
     profiling = getenv("LVGL_PROFILE") != NULL;
     failed = finished = 0;
+    window_active = pointer_inside = 1;
     target_cap = target_state = 0;
     profile_rects = profile_pixels = profile_frames = 0;
     profile_convert = profile_upload = profile_present = 0;
@@ -789,6 +800,7 @@ static int open_window(const char *title, unsigned width, unsigned height) {
         lv_display_set_color_format(display, panel_alpha ? LV_COLOR_FORMAT_ARGB8888 : LV_COLOR_FORMAT_RGB888);
         lv_display_set_buffers(display, draw, NULL, draw_cells, LV_DISPLAY_RENDER_MODE_PARTIAL);
         lv_display_set_flush_cb(display, flush);
+        lv_display_add_event_cb(display, refresh_focus, LV_EVENT_REFR_START, NULL);
         gx_lv_apply_density(scale);
         /* Installing the shared theme styles LVGL's bottom layer as a canvas.
          * A transparent active screen alone would still flatten every panel
@@ -883,6 +895,10 @@ void gx_lv_set_group(lv_group_t *next) {
     lv_indev_set_group(keyboard, next);
     lv_indev_reset(keyboard, NULL);
     keyboard_group_changed = 1;
+    if (!window_active)
+        ui_focus_suspend(group);
+    else
+        ui_focus_resume(group);
 }
 
 int gx_lv_clipboard(char *text, unsigned capacity, int write) {
@@ -910,15 +926,37 @@ int gx_lv_clipboard(char *text, unsigned capacity, int write) {
     return 0;
 }
 
+static void clear_pointer_hover(void) {
+    lv_obj_t *hovered = pointer ? pointer->pointer.last_hovered : NULL;
+    if (!hovered)
+        return;
+    /* Resetting the indev alone drops this pointer without sending LEAVE.
+     * Clear it first: a normal leave handler may delete its own widget. */
+    pointer->pointer.last_hovered = NULL;
+    if (lv_obj_send_event(hovered, LV_EVENT_HOVER_LEAVE, pointer) == LV_RESULT_OK)
+        lv_indev_send_event(pointer, LV_EVENT_HOVER_LEAVE, hovered);
+}
+
+static void refresh_pointer_hover(void) {
+    if (pointer_inside && pointer_state.state == LV_INDEV_STATE_RELEASED) {
+        /* A same-position re-entry needs a fresh hit test. Never interrupt a
+         * captured press/drag just because it crosses a client boundary. */
+        lv_indev_wait_release(pointer);
+        lv_indev_read(pointer);
+    }
+}
+
 static void release_inputs(void) {
     gx_lv_cancel_key_repeat();
     reset_wheel();
+    clear_pointer_hover();
     lv_indev_reset(pointer, NULL);
     lv_indev_wait_release(pointer);
     lv_indev_reset(keyboard, NULL);
     lv_indev_wait_release(keyboard);
     pointer_state.state = LV_INDEV_STATE_RELEASED;
     lv_indev_read(pointer);
+    clear_pointer_hover();
     keyboard_state.state = LV_INDEV_STATE_RELEASED;
     lv_indev_read(keyboard);
     keyboard_release_pending = 0;
@@ -1061,6 +1099,40 @@ static void wheel(struct gx_event *e) {
 static void dispatch_event(struct gx_event *e) {
     uint32_t k;
     settle_keyboard();
+    /* Lifecycle notifications cannot be swallowed by an app filter. Let its
+     * blur observer see the outgoing active control (e.g. editor autosave). */
+    if (e->type == GX_FOCUS) {
+        if (on_event)
+            on_event(e);
+        if (e->flags & GX_FOCUSED) {
+            window_active = 1;
+            ui_focus_resume(group);
+            refresh_pointer_hover();
+        } else {
+            window_active = 0;
+            release_inputs();
+            ui_focus_suspend(group);
+        }
+        return;
+    }
+    if (e->type == GX_ENTER) {
+        if (on_event)
+            on_event(e);
+        pointer_inside = (e->flags & GX_INSIDE) != 0;
+        if (pointer_inside)
+            refresh_pointer_hover();
+        else {
+            reset_wheel();
+            clear_pointer_hover();
+        }
+        return;
+    }
+    if (e->type == GX_OVERFLOW) {
+        if (on_event)
+            on_event(e);
+        release_inputs();
+        return;
+    }
     if (on_event && on_event(e))
         return;
     if (e->type == GX_MOTION || e->type == GX_BUTTON) {
@@ -1080,12 +1152,12 @@ static void dispatch_event(struct gx_event *e) {
             pointer_state.point.y = gx_lv_px(window.height) - 1;
         pointer_state.state = (e->buttons & 1) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
         lv_indev_read(pointer);
+        if (!pointer_inside)
+            clear_pointer_hover();
+        else if (e->type == GX_BUTTON && pointer_state.state == LV_INDEV_STATE_RELEASED)
+            refresh_pointer_hover();
     } else if (e->type == GX_WHEEL)
         wheel(e);
-    else if (e->type == GX_FOCUS && !(e->flags & GX_FOCUSED))
-        release_inputs();
-    else if (e->type == GX_OVERFLOW)
-        release_inputs();
     else if (e->type == GX_TEXT) {
         if (!ui_overlay_text(e->dx) && on_text)
             on_text(e->dx);
@@ -1190,6 +1262,8 @@ static int repeatable(unsigned code) {
 
 static void event(struct gx_event *e) {
     int arm = 0;
+    if (!window_active && (e->type == GX_KEY || e->type == GX_TEXT || e->type == GX_ACTION))
+        return;
     if (!repeating) {
         /* Cancel before a raw filter can consume the real release. */
         if ((e->type == GX_KEY && !(e->flags & GX_DOWN) && e->code == repeat_code) ||
@@ -1219,6 +1293,10 @@ static void event(struct gx_event *e) {
 static void repeat_key(void) {
     struct gx_event e;
     if (!repeat_code) return;
+    if (!window_active) {
+        gx_lv_cancel_key_repeat();
+        return;
+    }
     if (repeat_group != group || !repeat_focus || lv_group_get_focused(group) != repeat_focus) {
         gx_lv_cancel_key_repeat();
         return;

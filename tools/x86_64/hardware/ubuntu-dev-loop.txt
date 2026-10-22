@@ -1,16 +1,23 @@
-Temporary HP remote development loop — 2026-10-21
+Temporary HP remote development loop — reconciled 2026-10-22
 ================================================
+
+Start with README.md and ssh.md in this directory. The state below
+comes from retained receipts, not a live HP check. efi-updates.md is the repeat
+publication runbook; this file describes the development boot/service policy.
 
 The user authorized Ubuntu as the temporary default while we develop Riplix.
 This lets a Riplix reboot return to Ubuntu automatically, where the internal
 EFI files can be updated remotely. USB recovery remains available. This
 temporarily supersedes the Riplix-first order recorded in internal-boot.txt.
 
-On this HP, entry 0001 is Ubuntu, entry 0000 is the preceding Riplix development
-build, and entry 0002 is the current Riplix terminal test in EFI/Riplix-tui. The
-configured BootOrder is 0001,0000,2001,2005. HP firmware may append stale 2002/
-2004 references; these do not represent newly installed boot payloads.
-Check efibootmgr before changing entries; these numbers belong to this HP.
+Latest recorded entries on this HP: 0001 Ubuntu, 0000 earlier Riplix development,
+0002 terminal test in EFI/Riplix-tui, and 0003 accepted graphics/touchpad
+candidate in EFI/Riplix-gui. Candidate SHA256:
+  4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c
+Recorded BootOrder: 0001,0000,2001,2005,2002,2004. HP firmware may append stale
+2002/2004 references; these do not represent newly installed boot payloads.
+Check live efibootmgr output, partition identity and payload hash before using
+an entry number. These numbers belong to this HP, not every installation.
 
 Ubuntu SSH service
 ------------------
@@ -41,14 +48,22 @@ neither copied to the Mac nor printed in logs.
 
 Boot and update loop
 --------------------
-1. Connect to Ubuntu root SSH on port 2222. Verify the HP disk/ESP identity and the
-   accepted candidate hashes, then publish the candidate from a root-run
-   Ubuntu staging operation. Preserve Ubuntu's EFI files and Riplix fallback.
-2. In Ubuntu, select Riplix for one boot and reboot:
+1. Connect to Ubuntu root SSH on port 2222 using ssh.md. For a new EFI, follow
+   efi-updates.md: verify disk/ESP identity, stage into a fresh namespace with
+   internal_boot.py, and read back the new firmware entry. Do not try to update
+   an existing namespace with the initial-staging tool.
+2. To boot the already accepted GUI image, first verify live entry 0003 and its
+   exact payload hash against the baseline. Then select it for one boot:
 
-     efibootmgr -n 0002
+     efibootmgr -n 0003
+     efibootmgr -v
+
+   Require BootNext 0003 and Ubuntu-first BootOrder before deliberately running:
+
      systemctl reboot
 
+   For a newly published candidate, use its independently read-back entry
+   number instead; neither 0002 nor 0003 is a reusable allocation constant.
 3. Reconnect to Riplix at 192.168.100.107:22 and run the acceptance checks.
    BootNext has been consumed; the persistent default remains Ubuntu.
 4. In Riplix, run reboot. Ubuntu boots, and its SSH service on port 2222 returns
@@ -75,34 +90,43 @@ If removing the installed wrapper and unit as well, after a successful stop:
   rm /usr/local/sbin/riplix-dev-ssh
   systemctl daemon-reload
 
-The temporary BootOrder is separate from service removal. To restore the
-Riplix-first order on this HP, first accept the current candidate and verify
-the entries, then select that accepted entry (currently 0002):
-
-  efibootmgr -o 0002,2001,0001,0000,2005
-
-This promotion is not part of the temporary development loop. Entry0000 and
+The temporary BootOrder is separate from service removal. Riplix-first
+promotion is not part of this loop. If later requested, verify the live accepted
+entry and construct the full desired order while retaining Ubuntu/recovery;
+do not replay an old fixed BootOrder command. Latest accepted entry is recorded
+as 0003, not the older terminal entry 0002. Entry0000 and
 EFI/Riplix remain the previous accepted build. The older EFI's16MiB app limit
 cannot run the current large Rift image; its retained shell/recovery role is
 separate from rollback of installed applications.
 
-Acceptance state
-----------------
+Historical terminal/service acceptance — 2026-10-21
+--------------------------------------------------
+These observations describe that dated trial, not the current booted OS.
 Physical Ubuntu-to-Ubuntu reboot passed on 2026-10-21: a fresh boot ID,
 automatic pinned root SSH on port 2222, enabled/active service, Ubuntu BootCurrent 0001,
 Ubuntu-first BootOrder and no BootNext were verified. Receipt:
-  build/x86_64-terminal-wave/physical/ubuntu-autostart-accepted.json
+  receipts/2026-10-22/ubuntu-autostart-accepted.json
 
 The terminal candidate subsequently passed the full unattended
 Ubuntu -> Riplix -> Ubuntu -> Riplix round trip. Ubuntu returned with a fresh
 boot ID and automatic SSH2222, with BootNext consumed and Ubuntu still first.
 All eleven preceding ESP files and both GPT copies remained hash-identical.
-The HP was left running candidate entry0002, with Wi-Fi and services ready;
+At the end of that trial HP was left running entry0002, with Wi-Fi/services ready;
 an ordinary Riplix reboot returns Ubuntu for the next remote update.
 
 Nine terminal/data packages were installed through HP pkg and persisted across
 the round trip. Exact executable hashes and Levee/Commander/Rift SSH PTY
 edit/exit checks passed. Physical framebuffer cursor/display acceptance remains
 separate. Combined receipt:
-  build/x86_64-terminal-wave32/physical-acceptance.json
-See internal-boot.txt and docs/x64-master-plan.md for broader milestones.
+  receipts/2026-10-22/terminal-acceptance.json
+
+Later graphics/input acceptance — 2026-10-22
+------------------------------------------
+The GUI installation receipt records entry0003 in EFI/Riplix-gui and preserves
+Ubuntu-first policy. The separate touchpad receipt binds the same 4444d916...171c
+candidate to a successful boot, network/service/calculator readiness and the
+user's movement/click confirmation:
+  receipts/2026-10-22/graphics-installed.json
+  receipts/2026-10-22/touchpad-acceptance.json
+See README.md for current evidence precedence and remaining gates;
+internal-boot.txt retains the earlier staging/trial history.

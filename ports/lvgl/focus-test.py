@@ -44,7 +44,7 @@ def compile(path):
     return target
 inputs=[*sources(build/'src'),*[PORT/'fonts'/f'font-{n}.c' for n in json.loads((PORT/'fonts/generated.json').read_text())['sizes']],
         PORT/'fonts/symbols.c',PORT/'icons/data.c',PORT/'ui-scale.c',PORT/'ui.c',PORT/'ui-data.c',
-        PORT/'ui-editor.c',ROOT/'libraries/text/text.c',ROOT/'libraries/unicode/unicode.c',
+        PORT/'ui-editor.c',PORT/'ui-tabs.c',ROOT/'libraries/text/text.c',ROOT/'libraries/unicode/unicode.c',
         PORT/'host-gx.c',PORT/'focus-test.c']
 with ThreadPoolExecutor(max_workers=4) as pool:objects=list(pool.map(compile,inputs))
 program=output/'focus-test'

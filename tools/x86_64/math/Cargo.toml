@@ -8,6 +8,8 @@ publish = false
 crate-type = ["staticlib", "rlib"]
 [dependencies]
 libm = "=0.2.16"
+[features]
+desktop = []
 [profile.release]
 panic = "abort"
 opt-level = 2

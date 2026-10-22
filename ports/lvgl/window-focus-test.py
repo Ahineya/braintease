@@ -93,7 +93,9 @@ def input_metrics(image, rectangle, scale):
             pixel = image[2][(py*image[0]+px)*3:(py*image[0]+px)*3+3]
             blue_inside += accent(pixel)
             bright_inside += min(pixel) > 210
-            selection += pixel == bytes((0x39, 0x4e, 0x70))
+            # Current LVGL labels paint a white selection fill; accept the
+            # shared theme's blue fill too. Ordinary text/caret is off-white.
+            selection += pixel in (bytes((0x39, 0x4e, 0x70)), bytes((255, 255, 255)))
     return dict(accent_border_fraction=round(accent_border/max(1, border), 4),
                 blue_inside=blue_inside, bright_inside=bright_inside, selected_pixels=selection)
 
@@ -122,6 +124,11 @@ def native_editor(ui, scale, probe=False):
     assert focused['accent_border_fraction'] > .8 and focused['blue_inside'] > 10*scale*scale, focused
     if not probe:
         assert inactive['accent_border_fraction'] == 0 and inactive['blue_inside'] == 0, inactive
+        ignored_at = len(ui.g.log)
+        ui.text(wid, '9')
+        ui.send(wid, action=2, clipboard='8')
+        ui.pause(.1)
+        assert b'EDIT_CHANGE ' not in ui.g.log[ignored_at:], 'Inactive editor accepted text or clipboard input'
     ui.focus_window(wid, True)
     resumed = editor_visual(ui, wid, scale, 'resumed')
     assert resumed['accent_border_fraction'] > .8 and resumed['blue_inside'] > 10*scale*scale, resumed
@@ -151,7 +158,8 @@ def native_editor(ui, scale, probe=False):
         ui.focus_window(wid, True)
     ui.finish(wid)
     result = dict(scale=scale, focused=focused, inactive=inactive, resumed=resumed,
-                  autosave='passed', caret_position='preserved')
+                  autosave='passed', caret_position='preserved',
+                  selection='not tested in baseline' if probe else 'preserved and replaced after resume')
     print('WINDOW_FOCUS native editor '+json.dumps(result, sort_keys=True), flush=True)
     return result
 
@@ -169,6 +177,12 @@ def calculator_resume(ui, wid, rectangle, scale, lose, gain):
     inactive = calculator_visual(ui, wid, rectangle, scale, 'inactive-empty')
     assert focused['accent_border_fraction'] > .8 and focused['bright_inside'] > 10*scale*scale, focused
     assert inactive['accent_border_fraction'] == 0 and inactive['bright_inside'] == 0, inactive
+    if not ui.nested:
+        ignored_at = len(ui.g.log)
+        ui.text(wid, '9')
+        ui.send(wid, action=2, clipboard='8')
+        ui.pause(.1)
+        assert b'CALC_INPUT ' not in ui.g.log[ignored_at:], 'Inactive calculator accepted text or clipboard input'
     gain()
     at = len(ui.g.log)
     ui.text(target, '12345')
@@ -259,6 +273,56 @@ def exercise(args, nested):
     return dict(mode='desktop' if nested else 'native', cases=results, private_fsck='passed')
 
 
+def captured_drag(args):
+    ui = FocusGUI(args, False)
+    cases = []
+    try:
+        for scale in (1, 2):
+            path = f'/data/alpha-{scale}.txt'
+            wid = ui.launch(path)
+            ui.density(wid, scale)
+            ui.frame(wid, width=880, height=600, scale=scale)
+            ui.replace(wid, 'abcdefghij')
+            left, top, _, _ = ui.rectangles()['editor']
+            first, middle, end, y = left+10, left+35, left+200, top+18
+            ui.send(wid, input=dict(type='enter', inside=True))
+            ui.pointer(wid, first, y)
+            ui.send(wid, input=dict(type='button', button=0, down=True, x=first, y=y))
+            ui.pointer(wid, middle, y)
+            ui.pointer(wid, -20, y)
+            ui.send(wid, input=dict(type='enter', inside=False))
+            ui.send(wid, input=dict(type='enter', inside=True))
+            ui.pointer(wid, end, y)
+            ui.send(wid, input=dict(type='button', button=0, down=False, x=end, y=y))
+            ui.capture(wid, f'captured-selection-reentered-{scale}x', 880, 600, scale)
+            at = len(ui.g.log)
+            ui.text(wid, 'Z')
+            values = ui.wait(lambda: re.findall(rb'EDIT_CHANGE bytes=(\d+) dirty=1\r?\n', ui.g.log[at:]))
+            assert int(values[-1]) == 1, 'Pointer exit ended or changed the captured selection'
+            at = len(ui.g.log)
+            ui.focus_window(wid, False)
+            ui.autosaved(path, at)
+            assert 'Z\n' not in ui.disk(path) and 'Z' in ui.disk(path)
+            ui.focus_window(wid, True)
+            ui.local_click(wid, end, y)
+            ui.pointer(wid, first, y)
+            at = len(ui.g.log)
+            ui.text(wid, 'Q')
+            values = ui.wait(lambda: re.findall(rb'EDIT_CHANGE bytes=(\d+) dirty=1\r?\n', ui.g.log[at:]))
+            assert int(values[-1]) == 2, 'A completed drag stayed captured after button release'
+            at = len(ui.g.log)
+            ui.focus_window(wid, False)
+            ui.autosaved(path, at)
+            assert 'ZQ' in ui.disk(path)
+            ui.focus_window(wid, True)
+            ui.finish(wid)
+            cases.append(dict(scale=scale, captured_exit_reentry='selection preserved',
+                              actual_release='next click and motion no longer drag'))
+    finally:
+        ui.close()
+    return dict(mode='native captured drag', cases=cases, private_fsck='passed')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build', type=Path, required=True)
@@ -266,6 +330,7 @@ def main():
     parser.add_argument('--kernel', type=Path)
     parser.add_argument('--output', type=Path, default=ROOT/'build/lvgl/window-focus-tests')
     parser.add_argument('--probe', action='store_true', help='Capture one baseline editor focus transition')
+    parser.add_argument('--drag-only', action='store_true', help='Check a captured selection across pointer exit/reentry')
     args = parser.parse_args()
     args.kernel = args.kernel or args.guest_build/'fuse-x'
     for key in ('build', 'guest_build', 'kernel', 'output'):
@@ -273,9 +338,10 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output/'result.json').unlink(missing_ok=True)
     runner_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-    runs = [exercise(args, nested) for nested in ((False,) if args.probe else (False, True))]
+    runs = [captured_drag(args)] if args.drag_only else \
+        [exercise(args, nested) for nested in ((False,) if args.probe else (False, True))]
     assert hashlib.sha256(Path(__file__).read_bytes()).hexdigest() == runner_hash, 'Runner changed during acceptance'
-    result = dict(status='observed' if args.probe else 'passed', runs=runs,
+    result = dict(status='observed' if args.probe else 'passed', scope='captured drag' if args.drag_only else 'window focus', runs=runs,
                   private_images_only=True, networking='off', runner_sha256=runner_hash,
                   executable_sha256={name: hashlib.sha256((args.build/(name+'.fxe')).read_bytes()).hexdigest()
                                      for name in ('lvedit', 'lvcalc')},

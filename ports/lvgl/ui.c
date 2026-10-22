@@ -139,7 +139,10 @@ void ui_focus_suspend(lv_group_t *group) {
         record->next=suspended_focus;suspended_focus=record;
         lv_obj_add_event_cb(focused,focus_deleted,LV_EVENT_DELETE,record);
         changed=1;
-    } else if(state)record->state=state;
+    /* Background focus/editing updates may restore only a subset of the
+     * visual bits. Keep the saved keyboard-focus appearance; resume resolves
+     * EDITED from the group's current editing mode. */
+    } else if(state)record->state|=state;
     if(state) {
         lv_obj_remove_state(focused,FOCUS_VISUAL_STATES);
         changed=1;
@@ -171,7 +174,16 @@ void ui_attach_pointer(lv_indev_t *pointer) {
     lv_indev_add_event_cb(pointer, pointer_pressed, LV_EVENT_PRESSED, NULL);
 }
 static void input_defocused(lv_event_t *event) {
-    if (lv_event_get_code(event) == LV_EVENT_DEFOCUSED)
+    lv_event_code_t code=lv_event_get_code(event);
+    lv_obj_t *input=lv_event_get_current_target_obj(event);
+    if(code==LV_EVENT_STATE_CHANGED &&
+       ((lv_event_get_prev_state(event)^lv_obj_get_state(input))&LV_STATE_FOCUSED)) {
+        lv_obj_t *label=lv_textarea_get_label(input);
+        /* Selection is painted by the label. Its background does not inherit
+         * from the textarea's selected part, nor does its focused state. */
+        if(label)lv_obj_set_state(label,LV_STATE_FOCUSED,lv_obj_has_state(input,LV_STATE_FOCUSED));
+    }
+    if (code == LV_EVENT_DEFOCUSED)
         lv_textarea_clear_selection(lv_event_get_target_obj(event));
     ui_overlay_input_event(event);
 }
@@ -220,6 +232,12 @@ static void apply(lv_theme_t *th, lv_obj_t *obj) {
         lv_obj_add_style(obj, &styles[SMALL], LV_PART_TEXTAREA_PLACEHOLDER);
         lv_obj_add_style(obj, &styles[SELECTION_INACTIVE], LV_PART_SELECTED);
         lv_obj_add_style(obj, &styles[SELECTION], LV_PART_SELECTED | LV_STATE_FOCUSED);
+    } else if (lv_obj_check_type(obj, &lv_label_class) &&
+               lv_obj_check_type(lv_obj_get_parent(obj), &lv_textarea_class)) {
+        lv_obj_add_style(obj, &styles[SELECTION_INACTIVE], LV_PART_SELECTED);
+        lv_obj_add_style(obj, &styles[SELECTION], LV_PART_SELECTED | LV_STATE_FOCUSED);
+        lv_obj_set_state(obj, LV_STATE_FOCUSED,
+                         lv_obj_has_state(lv_obj_get_parent(obj), LV_STATE_FOCUSED));
     } else if (lv_obj_check_type(obj, &lv_checkbox_class)) {
         lv_obj_add_style(obj, &styles[STACK], 0);
         lv_obj_add_style(obj, &styles[CHECK], LV_PART_INDICATOR);

@@ -103,6 +103,10 @@ lv_group_t *gx_lv_group(void) { return group; }
 void gx_lv_set_group(lv_group_t *next) {
     group = next;
     lv_group_set_default(next);
+    if (window_active)
+        ui_focus_resume(group);
+    else
+        ui_focus_suspend(group);
 }
 void gx_lv_handlers(void (*text)(uint32_t), void (*action)(unsigned),
                     void (*resize)(unsigned, unsigned)) {

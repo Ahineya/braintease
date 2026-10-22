@@ -70,11 +70,11 @@ for profile,path in [('reference',PORT/'upstream/quickjs.c'),('heap-frames',buil
         p=build/(label+'.js');p.write_text(source)
         negative=subprocess.run([str(binary),str(p)],capture_output=True,timeout=30)
         assert negative.returncode==1 and b'QUICKJS_REFERENCE' not in negative.stdout
-# The only retained-size difference is the runtime's active-frame counter.
+# Runtime metadata adds an active-frame counter and five bounded cache slots.
 import ctypes
 fields=lambda text: dict(re.findall(r'(\w+)=(\d+)',text))
 a,b=map(fields,[results['reference'],results['heap-frames']])
-assert int(b.pop('memory'))-int(a.pop('memory'))==ctypes.sizeof(ctypes.c_size_t),results
+assert int(b.pop('memory'))-int(a.pop('memory'))==ctypes.sizeof(ctypes.c_size_t)+5*ctypes.sizeof(ctypes.c_void_p),results
 assert a==b,results
 (build/'report.json').write_text(json.dumps(results,indent=2)+'\n')
 
@@ -89,7 +89,7 @@ command=[os.environ.get('CC','cc'),*flags,PORT/'tests/frames.c',no_arenas,
 with (build/'failure-build.log').open('w') as log:
     subprocess.run(list(map(str,command)),check=True,stdout=log,stderr=subprocess.STDOUT)
 output=subprocess.check_output([str(build/'frame-failures')],text=True,timeout=30)
-assert 'QUICKJS_FRAMES checks=16 failures=0' in output,output
+assert 'QUICKJS_FRAMES checks=28 failures=0' in output,output
 print(output,flush=True)
 results['allocation_failures']=output.strip()
 (build/'report.json').write_text(json.dumps(results,indent=2)+'\n')

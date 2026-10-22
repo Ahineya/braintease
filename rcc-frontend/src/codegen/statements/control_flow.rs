@@ -283,26 +283,27 @@ pub fn generate_switch(
         default: default_label,
     });
 
-    // Dispatch: compare against each case, then default or end.
+    // Read once with the promoted width. Every dispatch block uses this SSA
+    // value, so a large switch does not repeatedly access logical stack RAM.
+    let selector = Value::Temp(gen.builder.build_load(switch_ptr, switch_ir_type.clone())?);
     let mut case_list: Vec<(i64, LabelId)> = cases.into_iter().collect();
-    case_list.sort_by_key(|(v, _)| *v);
-    for (value, label) in case_list {
-        let loaded = gen.builder.build_load(switch_ptr.clone(), switch_ir_type.clone())?;
-        let eq = gen.builder.build_binary(
-            IrBinaryOp::Eq,
-            Value::Temp(loaded),
-            Value::Constant(value),
-            IrType::I16,
-        )?;
-        let next = gen.builder.new_label();
-        gen.builder.build_branch_cond(Value::Temp(eq), label, next)?;
-        gen.builder.create_block(next)?;
+    let bits = match switch_ir_type { IrType::I64 => 64, IrType::I32 => 32, _ => 16 };
+    let unsigned = switch_type.is_unsigned_integer();
+    // Case constants are converted to the promoted selector type before
+    // ordering. For example, -1 sorts last for an unsigned control, not first.
+    let key = |value: i64| {
+        let mask = u64::MAX >> (64 - bits);
+        ((value as u64) & mask) ^ if unsigned { 0 } else { 1u64 << (bits - 1) }
+    };
+    case_list.sort_by_key(|(v, _)| key(*v));
+    if case_list.windows(2).any(|pair| key(pair[0].0) == key(pair[1].0)) {
+        return Err(CodegenError::UnsupportedConstruct {
+            construct: "duplicate case value after conversion to switch type".into(),
+            location: rcc_common::SourceLocation::new_simple(0, 0),
+        }.into());
     }
-    if let Some(d) = default_label {
-        gen.builder.build_branch(d)?;
-    } else {
-        gen.builder.build_branch(end_label)?;
-    }
+    generate_switch_dispatch(gen, &selector, &case_list,
+                             default_label.unwrap_or(end_label), unsigned)?;
 
     // Unreachable block for any prefix statements before the first case.
     let prefix = gen.builder.new_label();
@@ -315,6 +316,45 @@ pub fn generate_switch(
     gen.builder.create_block(end_label)?;
     gen.break_labels.pop();
     gen.switch_contexts.pop();
+    Ok(())
+}
+
+/// Small leaves keep dispatch compact; larger switches have logarithmic
+/// decision depth on every backend, without adding a new serialized IR opcode.
+/// Body labels stay in source order, preserving fallthrough, goto and nesting.
+fn generate_switch_dispatch(
+    gen: &mut TypedStatementGenerator,
+    selector: &Value,
+    cases: &[(i64, LabelId)],
+    fallback: LabelId,
+    unsigned: bool,
+) -> Result<(), CompilerError> {
+    if cases.len() > 3 {
+        let middle = cases.len() / 2;
+        let left = gen.builder.new_label();
+        let right = gen.builder.new_label();
+        let less = gen.builder.build_binary(
+            if unsigned { IrBinaryOp::Ult } else { IrBinaryOp::Slt },
+            selector.clone(), Value::Constant(cases[middle].0), IrType::I16,
+        )?;
+        gen.builder.build_branch_cond(Value::Temp(less), left, right)?;
+        gen.builder.create_block(left)?;
+        generate_switch_dispatch(gen, selector, &cases[..middle], fallback, unsigned)?;
+        gen.builder.create_block(right)?;
+        return generate_switch_dispatch(gen, selector, &cases[middle..], fallback, unsigned);
+    }
+    for &(value, label) in cases {
+        let eq = gen.builder.build_binary(
+            IrBinaryOp::Eq,
+            selector.clone(),
+            Value::Constant(value),
+            IrType::I16,
+        )?;
+        let next = gen.builder.new_label();
+        gen.builder.build_branch_cond(Value::Temp(eq), label, next)?;
+        gen.builder.create_block(next)?;
+    }
+    gen.builder.build_branch(fallback)?;
     Ok(())
 }
 

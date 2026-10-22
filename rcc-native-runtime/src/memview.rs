@@ -23,6 +23,17 @@ pub(super) struct ReadView {
     page: Option<Arc<Page>>,
 }
 
+impl ReadView {
+    pub(super) fn invalidate(&mut self) {
+        // Checked-mode stores never acquired a pin: keep that path to one
+        // empty-option check rather than clearing a descriptor on every write.
+        if self.page.is_some() {
+            self.page = None;
+            self.record.fields = [0; 5];
+        }
+    }
+}
+
 #[no_mangle]
 unsafe extern "C" fn rcc_native_memview_v1(
     ctx: *mut Runtime,
@@ -32,8 +43,7 @@ unsafe extern "C" fn rcc_native_memview_v1(
 ) -> u64 {
     let rt = unsafe { &mut *ctx };
     // Another acquisition ends the previous grant, even on denial.
-    rt.read_view.page = None;
-    rt.read_view.record.fields = [0; 5];
+    rt.read_view.invalidate();
     let bank = hint >> 16;
     let offset = hint & 65535;
     if flags != 1
@@ -67,6 +77,29 @@ unsafe extern "C" fn rcc_native_memview_v1(
 mod tests {
     use super::super::{address_space, memory::pointer};
     use super::*;
+
+    #[test]
+    fn scalar_store_releases_dead_view_without_breaking_real_fork_cow() {
+        let mut rt = Runtime::new();
+        rt.enable_process_memory();
+        let start = BANK + 24;
+        rt.memory.write(start, 1);
+        unsafe { assert_ne!(rcc_native_memview_v1(&mut rt, pointer(start), 1, 1), 0); }
+        let original = Arc::as_ptr(rt.read_view.page.as_ref().unwrap());
+        unsafe { super::super::memory::rcc_native_store(&mut rt, pointer(start), 2, 1); }
+        assert!(rt.read_view.page.is_none());
+        assert_eq!(rt.read_view.record.fields, [0; 5]);
+        assert_eq!(Arc::as_ptr(&rt.memory.read_page(start).unwrap()), original,
+                   "an expired read pin must not force a private-page copy");
+        assert_eq!(rt.memory.read(start), 2);
+
+        let sibling = rt.memory.clone();
+        unsafe { assert_ne!(rcc_native_memview_v1(&mut rt, pointer(start), 1, 1), 0); }
+        unsafe { super::super::memory::rcc_native_store(&mut rt, pointer(start), 3, 1); }
+        assert_ne!(Arc::as_ptr(&rt.memory.read_page(start).unwrap()), original);
+        assert_eq!(rt.memory.read(start), 3);
+        assert_eq!(sibling.read(start), 2);
+    }
 
     #[test]
     fn slow_poll_with_a_live_grant_still_terminates_on_deadline() {

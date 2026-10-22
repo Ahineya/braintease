@@ -99,6 +99,9 @@ static void tab_affordance(lv_event_t *event) {
     struct tab_entry *entry = lv_event_get_user_data(event);
     unsigned part = lv_event_get_target_obj(event) == entry->close ? 2 : 1;
     lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_STATE_CHANGED &&
+        !((lv_event_get_prev_state(event) ^ lv_obj_get_state(entry->button)) & LV_STATE_FOCUS_KEY))
+        return;
     /* LVGL sends the new target's HOVER_OVER before the old target's LEAVE.
      * Track both targets so crossing into the close child keeps it visible. */
     if (code == LV_EVENT_HOVER_OVER)
@@ -267,6 +270,7 @@ int ui_tabs_bind(ui_tabs *tabs, const struct ui_tab_spec *specs, unsigned count,
             lv_obj_add_event_cb(entry->button, tab_affordance, LV_EVENT_HOVER_LEAVE, entry);
             lv_obj_add_event_cb(entry->button, tab_affordance, LV_EVENT_FOCUSED, entry);
             lv_obj_add_event_cb(entry->button, tab_affordance, LV_EVENT_DEFOCUSED, entry);
+            lv_obj_add_event_cb(entry->button, tab_affordance, LV_EVENT_STATE_CHANGED, entry);
             lv_obj_add_event_cb(entry->close, tab_affordance, LV_EVENT_HOVER_OVER, entry);
             lv_obj_add_event_cb(entry->close, tab_affordance, LV_EVENT_HOVER_LEAVE, entry);
             if (entry->closable) {

@@ -115,6 +115,13 @@ int ripple_gfx_ioctl(uint_fast8_t m,uarg_t req,char *user) {
         info.flags|=GX_CAP_BGR888_UPLOAD|GX_CAP_BACKING_SCALE|GX_CAP_BGR888_RASTER;
         info.flags|=GX_CAP_PRESENTATION_ZOOM;
         if(rcc_hosted_gx(21,a)>=0)info.flags|=GX_CAP_TERMINAL;
+        /* Optional native output profile; older hosted backends retain the
+         * established defaults. The native adapter advertises actual support. */
+        memset(a,0,sizeof(a));
+        if(rcc_hosted_gx(0,a)==0){
+            info.flags=a[0];info.max_width=a[1];info.max_height=a[2];
+            info.max_windows=a[3];info.max_surface_cells=(unsigned long)info.max_width*info.max_height;
+        }
         return uput(&info,user,sizeof(info));
     }
     if(req==GX_FORMATS) {

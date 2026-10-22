@@ -1,6 +1,9 @@
 /* An instrumented oracle for pure logical pointer arithmetic, not a memory
  * runtime. The emitted object must not acquire any new runtime dependency. */
 #include <stdint.h>
+#ifndef FAST_BANKS
+#define FAST_BANKS 256
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,7 +49,7 @@ static void check(Step step, uint64_t p, uint64_t index, unsigned stride, unsign
     if (!reference(p, delta, &expected)) return;
     uint64_t before = calls, before_polls = polls;
     uint64_t actual = step(NULL, p, raw_index);
-    int fast = (p >> 16) < 256 && (expected >> 16) == (p >> 16);
+    int fast = (p >> 16) < FAST_BANKS && (expected >> 16) == (p >> 16);
     if (fast) fasts++;
     if (actual != expected || calls - before != (uint64_t)!fast || polls != before_polls) {
         fprintf(stderr, "GEP mismatch: p=%llx i=%llx stride=%u bits=%u result=%llx expected=%llx calls=%llu fast=%d polls=%llu\n",

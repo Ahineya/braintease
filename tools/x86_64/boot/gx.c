@@ -7,7 +7,11 @@
 #define WINDOWS 16
 #define EVENTS 64
 #define MAX_WIDTH 1920
+#ifdef BOOT_DESKTOP
+#define MAX_HEIGHT 1200
+#else
 #define MAX_HEIGHT 1080
+#endif
 #define EINVAL_ (-22)
 #define ENOMEM_ (-12)
 #define EPERM_ (-1)
@@ -22,11 +26,27 @@ typedef struct {
     int32_t x,y;
     Event events[EVENTS];
     unsigned head,count,overflow;
+#ifdef BOOT_DESKTOP
+    uint32_t *front,process;
+    unsigned pid,mapped,focused,captured,closing;
+    unsigned pending_width,pending_height;
+    int32_t left,top,right,bottom;
+    char title[64];
+#endif
 } Surface;
 static GxPlatform platform;
 static Surface surfaces[WINDOWS];
 static uint32_t generation,sequence;
 static Surface *visible;
+#ifdef BOOT_DESKTOP
+static void desktop_publish(Surface *);
+static void desktop_destroy(Surface *);
+static void desktop_init(void);
+static void desktop_key(unsigned,int);
+static void desktop_pointer(int32_t,int32_t,uint32_t,int32_t);
+static int desktop_active(void);
+static void desktop_owner_release(uint64_t);
+#endif
 static void zero(void *destination,size_t size) { unsigned char *p=destination;while(size--)*p++=0; }
 static uint16_t *span(const GxGuest *g,uint32_t p,size_t n,int write) {
     return g && g->span ? g->span(g->opaque,p,n,write) : 0;
@@ -50,11 +70,18 @@ static Surface *owned(uint64_t owner,uint32_t handle,int32_t *error) {
     *error=EINVAL_;return 0;
 }
 static void publish(Surface *s) {
+#ifdef BOOT_DESKTOP
+    desktop_publish(s);
+#else
     if(s->flags&2)return;
     visible=s;
     if(platform.present)platform.present(s->pixels,s->width,s->height);
+#endif
 }
 static void destroy(Surface *s) {
+#ifdef BOOT_DESKTOP
+    desktop_destroy(s);
+#endif
     int was_visible=visible==s;
     if(was_visible)visible=0;
     if(s->pixels && platform.release)platform.release(s->pixels,(size_t)s->width*s->height*4);
@@ -64,11 +91,23 @@ static void destroy(Surface *s) {
 void gx_bind(const GxPlatform *p) {
     for(unsigned i=0;i<WINDOWS;i++)if(surfaces[i].handle)destroy(&surfaces[i]);
     platform=*p;
+#ifdef BOOT_DESKTOP
+    desktop_init();
+#endif
 }
 void gx_release(uint64_t owner) {
     for(unsigned i=0;i<WINDOWS;i++)if(surfaces[i].handle && surfaces[i].owner==owner)destroy(&surfaces[i]);
+#ifdef BOOT_DESKTOP
+    desktop_owner_release(owner);
+#endif
 }
-int gx_active(void) { return visible!=0; }
+int gx_active(void) {
+#ifdef BOOT_DESKTOP
+    return desktop_active();
+#else
+    return visible!=0;
+#endif
+}
 static void enqueue(Surface *s,Event event) {
     event.sequence=++sequence;
     if(s->count==EVENTS) { s->head=(s->head+1)%EVENTS;--s->count;s->overflow=1; }
@@ -76,6 +115,10 @@ static void enqueue(Surface *s,Event event) {
 }
 void gx_key(unsigned usage,int down,unsigned modifiers) {
     (void)modifiers;
+#ifdef BOOT_DESKTOP
+    desktop_key(usage,down);
+    return;
+#endif
     if(!visible || usage>=256)return;
     unsigned bit=1U<<(usage&15);
     if(down)visible->held[usage/16]|=bit;else visible->held[usage/16]&=~bit;
@@ -86,6 +129,10 @@ void gx_key(unsigned usage,int down,unsigned modifiers) {
     enqueue(visible,(Event){.type=1,.flags=down?1:0,.code=usage});
 }
 void gx_pointer(int32_t x,int32_t y,uint32_t buttons,int32_t wheel) {
+#ifdef BOOT_DESKTOP
+    desktop_pointer(x,y,buttons,wheel);
+    return;
+#endif
     Surface *s=visible;if(!s)return;
     buttons&=7;
     if(x!=s->x || y!=s->y)enqueue(s,(Event){.type=2,.buttons=buttons,.x=x,.y=y});
@@ -138,6 +185,10 @@ static int32_t blend_bgr(uint32_t a[12],const GxGuest *g) {
     }
     return 0;
 }
+#ifdef BOOT_DESKTOP
+#include "gx-desktop.inc"
+#define gx_call gx_basic_call
+#endif
 int32_t gx_call(uint64_t owner,unsigned op,uint32_t a[12],const GxGuest *g) {
     int32_t error=0;
     if(!owner)return EPERM_;
@@ -251,3 +302,9 @@ int32_t gx_call(uint64_t owner,unsigned op,uint32_t a[12],const GxGuest *g) {
     }
     return EOPNOTSUPP_;
 }
+#ifdef BOOT_DESKTOP
+#undef gx_call
+int32_t gx_call(uint64_t owner,unsigned op,uint32_t a[12],const GxGuest *g) {
+    return desktop_call(owner,op,a,g);
+}
+#endif

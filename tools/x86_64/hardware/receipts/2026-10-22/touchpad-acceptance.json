@@ -1,0 +1,27 @@
+{
+  "status": "HP-touchpad-movement-and-clicks-user-accepted",
+  "utc": "2026-10-22T03:46:47.111887+00:00",
+  "candidate_sha256": "4444d9166e54be07dfa2e0ff54512f52375f42018e3857917db5aca17ccd171c",
+  "resource_inventory_complete": true,
+  "native_measured_GPU_BAR2_bytes": 268435456,
+  "native_measured_audio_BAR4_bytes": 2097152,
+  "firmware_target_cache": {
+    "base": 309660028928,
+    "length": 4096
+  },
+  "touchpad_state": "Touchpad ready; reports 0; malformed 0; I2C abort 0; pointer 960,600\nBAR before D0 00000000:00000004; after D0 00000000:00000004",
+  "network_services": "healthy after reboot",
+  "calculator": "running; CALC_READY observed",
+  "physical_movement_and_clicks": "user confirmed: Movement and clicks works",
+  "source_audits": [
+    "build/x86_64-touchpad/source-audit.json",
+    "build/x86_64-pci-uefi/audit.json"
+  ],
+  "user_confirmation_utc": "2026-10-22T10:04:35.721652+00:00",
+  "remaining_input_scope": [
+    "gestures",
+    "scrolling",
+    "USB mice",
+    "touchscreen"
+  ]
+}
